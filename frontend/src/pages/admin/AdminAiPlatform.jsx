@@ -2000,6 +2000,42 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     </div>
                     <button type="button" onClick={() => mediaInputRef.current?.click()} disabled={mediaImporting} className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500 disabled:opacity-40">{mediaImporting ? "Импорт..." : "+ файл"}</button>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => mediaInputRef.current?.click()}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        mediaInputRef.current?.click();
+                      }
+                    }}
+                    onDragOver={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      if (event.dataTransfer) event.dataTransfer.dropEffect = "copy";
+                      setMediaDragActive(true);
+                    }}
+                    onDragLeave={(event) => {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      setMediaDragActive(false);
+                    }}
+                    onDrop={handleMediaDrop}
+                    disabled={mediaImporting}
+                    className={cn(
+                      "mt-3 w-full rounded-2xl border border-dashed px-3 py-3 text-left transition disabled:opacity-50",
+                      mediaDragActive
+                        ? "border-emerald-400 bg-emerald-50 ring-2 ring-emerald-100"
+                        : "border-slate-200 bg-slate-50 hover:border-emerald-300 hover:bg-emerald-50/70"
+                    )}
+                  >
+                    <div className="text-xs font-black text-slate-950">
+                      {mediaImporting ? "Импортирую файл..." : "Перетащи файлы сюда или нажми для импорта"}
+                    </div>
+                    <div className="mt-1 text-[10px] font-bold text-slate-500">
+                      Картинки, видео и звук попадут в медиатеку. Потом перетащи карточку на дорожку Video, SFX, Text или Images.
+                    </div>
+                  </button>
                   <div className="mt-3 flex flex-wrap gap-1">
                     {[
                       ["all", "Все", mediaLibrary.length],
@@ -2021,6 +2057,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         {label} {count}
                       </button>
                     ))}
+                  </div>
+                  <div className="mt-2 grid gap-2 text-[10px] font-black text-slate-600 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                      Выбрано: {selectedMedia ? (selectedMedia.label || selectedMedia.originalName || "Медиа") : "нет"}
+                    </div>
+                    <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                      Показано: {filteredMediaLibrary.length ? Math.min(filteredMediaLibrary.length, 10) : 0} / {filteredMediaLibrary.length}
+                    </div>
                   </div>
                   <input
                     value={assetBinQuery}
@@ -2049,6 +2093,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </button>
                     ))}
                   </div>
+                  {filteredMediaLibrary.length > 10 ? (
+                    <div className="mt-2 rounded-2xl bg-amber-50 px-3 py-2 text-[10px] font-black text-amber-700 ring-1 ring-amber-100">
+                      Показаны первые 10 файлов. Используй поиск, фильтр или сортировку, чтобы быстро найти нужный asset.
+                    </div>
+                  ) : null}
                   <div className="mt-3 max-h-[260px] space-y-2 overflow-y-auto pr-1">
                     {filteredMediaLibrary.length ? filteredMediaLibrary.slice(0, 10).map((media) => {
                       const mediaKey = getMediaKey(media);
