@@ -2273,6 +2273,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       {canReplaceSelectedClipWithMedia(selectedMedia) ? (
                         <button type="button" onClick={() => replaceSelectedClipWithMedia(selectedMedia)} className="rounded-xl bg-amber-300 px-2 py-1.5 text-[10px] font-black text-slate-950 hover:bg-amber-200">Заменить</button>
                       ) : null}
+                      <button type="button" onClick={() => toggleMediaPreview(selectedMedia)} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">
+                        {previewMediaKey === getMediaKey(selectedMedia) ? "Скрыть" : "Превью"}
+                      </button>
                       <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-slate-300 ring-1 ring-white/10 hover:bg-white/15">Снять</button>
                     </div>
                   ) : null}
