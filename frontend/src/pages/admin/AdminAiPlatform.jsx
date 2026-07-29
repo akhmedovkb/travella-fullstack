@@ -2797,8 +2797,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       <button type="button" onClick={() => useAudioMediaAsMusic(selectedMedia)} className="rounded-xl bg-cyan-500 px-3 py-2 text-xs font-black text-white hover:bg-cyan-400">Как музыку</button>
                     ) : null}
                     <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-3 py-2 text-center text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Открыть</a>
+                    <button type="button" onClick={copySelectedMediaUrl} className="rounded-xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Копия URL</button>
                     <button type="button" onClick={() => removeMediaFromLibrary(selectedMedia)} className="rounded-xl bg-rose-500/15 px-3 py-2 text-xs font-black text-rose-100 ring-1 ring-rose-400/20 hover:bg-rose-500/25">Убрать</button>
                   </div>
+                  {mediaToolbarNotice ? (
+                    <div className="rounded-xl bg-emerald-400/15 px-3 py-2 text-xs font-black text-emerald-100 ring-1 ring-emerald-300/20">{mediaToolbarNotice}</div>
+                  ) : null}
                 </div>
               ) : null}
               {selectedItem ? (
