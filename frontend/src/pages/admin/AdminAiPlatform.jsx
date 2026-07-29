@@ -2277,6 +2277,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         {previewMediaKey === getMediaKey(selectedMedia) ? "Скрыть" : "Превью"}
                       </button>
                       <a href={selectedMedia.url} target="_blank" rel="noreferrer" className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Открыть</a>
+                      <button type="button" onClick={() => navigator.clipboard?.writeText(selectedMedia.url || "")} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-white ring-1 ring-white/10 hover:bg-white/15">Копия URL</button>
                       <button type="button" onClick={() => setSelectedMediaKey("")} className="rounded-xl bg-white/10 px-2 py-1.5 text-[10px] font-black text-slate-300 ring-1 ring-white/10 hover:bg-white/15">Снять</button>
                     </div>
                   ) : null}
