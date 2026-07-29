@@ -1361,6 +1361,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (media?.type === "image") addImageMediaToTrack(media, targetTime);
     if (media?.type === "audio") addAudioMediaAsSfx(media, targetTime);
     if (media?.type === "video") addVideoMediaToTrack(media, targetTime);
+    if (media?.type === "image" || media?.type === "audio" || media?.type === "video") {
+      setMediaToolbarNotice(`Добавлено на ${roundTimelineTime(targetTime)}s`);
+      window.setTimeout(() => setMediaToolbarNotice(""), 1600);
+    }
   };
   const addMediaToTimelineEnd = (media) => {
     addMediaToTimeline(media, Math.max(0, duration - getMediaDefaultDuration(media)));
