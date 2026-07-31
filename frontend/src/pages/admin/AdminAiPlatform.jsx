@@ -1002,6 +1002,44 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const span = Math.max(0.1, groupEnd - groupStart);
     moveSelectedClipToTime(Math.max(0, duration - span));
   };
+  const getTimelineClipRanges = () => [
+    ...videoClips.map((item, index) => ({ type: "video", index, item })),
+    ...effects.map((item, index) => ({ type: "sfx", index, item })),
+    ...textOverlays.map((item, index) => ({ type: "text", index, item })),
+    ...imageOverlays.map((item, index) => ({ type: "image", index, item })),
+  ]
+    .filter(({ item }) => item)
+    .map((clip) => {
+      const start = Number(clip.item?.time || 0);
+      const length = getClipDurationForType(clip.type, clip.item);
+      return {
+        ...clip,
+        key: getClipKey(clip.type, clip.index),
+        start,
+        end: roundTimelineTime(start + length),
+      };
+    });
+  const getNearestTimelineClip = (direction) => {
+    const selected = new Set(selectedClipKeys);
+    const groupStart = getSelectedGroupStart();
+    const groupEnd = getSelectedGroupEnd();
+    const candidates = getTimelineClipRanges().filter((clip) => !selected.has(clip.key));
+    if (direction === "previous") {
+      return candidates
+        .filter((clip) => clip.end <= groupStart)
+        .sort((left, right) => right.end - left.end)[0] || null;
+    }
+    return candidates
+      .filter((clip) => clip.start >= groupEnd)
+      .sort((left, right) => left.start - right.start)[0] || null;
+  };
+  const moveSelectedClipToNeighbor = (direction) => {
+    const neighbor = getNearestTimelineClip(direction);
+    if (!neighbor) return;
+    const span = Math.max(0.1, getSelectedGroupEnd() - getSelectedGroupStart());
+    const target = direction === "previous" ? neighbor.end : Math.max(0, neighbor.start - span);
+    moveSelectedClipToTime(target);
+  };
   const trimSelectedClipStartToPlayhead = () => {
     if (selectedClipKeys.length > 1 || !selectedItem) return;
     const start = Number(selectedItem.time || 0);
@@ -3012,6 +3050,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     <button type="button" onClick={duplicateSelectedClip} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Дубль</button>
                     <button type="button" onClick={() => moveSelectedClipToTime(0)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">В начало</button>
                     <button type="button" onClick={() => moveSelectedClipToTime(currentTime)} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">На курсор</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => moveSelectedClipToNeighbor("previous")} disabled={!getNearestTimelineClip("previous")} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">После левого</button>
+                    <button type="button" onClick={() => moveSelectedClipToNeighbor("next")} disabled={!getNearestTimelineClip("next")} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">Перед правым</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={copySelectedClips} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Копировать</button>
