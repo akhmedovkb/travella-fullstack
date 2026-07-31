@@ -1040,6 +1040,22 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const target = direction === "previous" ? neighbor.end : Math.max(0, neighbor.start - span);
     moveSelectedClipToTime(target);
   };
+  const getTrackBoundaryClip = (boundary) => {
+    const selected = new Set(selectedClipKeys);
+    const sameTrackClips = getTimelineClipRanges().filter((clip) => clip.type === selectedClip.type && !selected.has(clip.key));
+    if (!sameTrackClips.length) return null;
+    return boundary === "start"
+      ? [...sameTrackClips].sort((left, right) => left.start - right.start)[0]
+      : [...sameTrackClips].sort((left, right) => right.end - left.end)[0];
+  };
+  const moveSelectedClipToTrackBoundary = (boundary) => {
+    const span = Math.max(0.1, getSelectedGroupEnd() - getSelectedGroupStart());
+    const boundaryClip = getTrackBoundaryClip(boundary);
+    const target = boundary === "start"
+      ? Math.max(0, Number(boundaryClip?.start || 0) - span)
+      : Number(boundaryClip?.end || 0);
+    moveSelectedClipToTime(target);
+  };
   const trimSelectedClipStartToPlayhead = () => {
     if (selectedClipKeys.length > 1 || !selectedItem) return;
     const start = Number(selectedItem.time || 0);
@@ -3054,6 +3070,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button" onClick={() => moveSelectedClipToNeighbor("previous")} disabled={!getNearestTimelineClip("previous")} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">После левого</button>
                     <button type="button" onClick={() => moveSelectedClipToNeighbor("next")} disabled={!getNearestTimelineClip("next")} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">Перед правым</button>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button type="button" onClick={() => moveSelectedClipToTrackBoundary("start")} className="rounded-xl bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white">В начало дорожки</button>
+                    <button type="button" onClick={() => moveSelectedClipToTrackBoundary("end")} className="rounded-xl bg-indigo-50 px-3 py-2 text-xs font-black text-indigo-800 ring-1 ring-indigo-100 hover:bg-white">В конец дорожки</button>
                   </div>
                   <div className="grid grid-cols-3 gap-2">
                     <button type="button" onClick={copySelectedClips} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Копировать</button>
