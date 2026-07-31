@@ -2895,8 +2895,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">До конца</span>{selectedClipRemainingToTimelineEnd}s</div>
                     </div>
                     <div className="mt-2 grid gap-1 text-[10px] font-bold text-slate-300">
-                      <div className="truncate rounded-xl bg-white/5 px-2 py-1.5 ring-1 ring-white/10">Слева: {getClipSummaryLabel(getNearestTimelineClip("previous")) || "нет клипа"}</div>
-                      <div className="truncate rounded-xl bg-white/5 px-2 py-1.5 ring-1 ring-white/10">Справа: {getClipSummaryLabel(getNearestTimelineClip("next")) || "нет клипа"}</div>
+                      {[
+                        ["previous", "Слева", "end"],
+                        ["next", "Справа", "start"],
+                      ].map(([direction, label, seekPoint]) => {
+                        const neighbor = getNearestTimelineClip(direction);
+                        return (
+                          <div key={direction} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-xl bg-white/5 px-2 py-1.5 ring-1 ring-white/10">
+                            <span className="truncate">{label}: {getClipSummaryLabel(neighbor) || "нет клипа"}</span>
+                            <button type="button" onClick={() => seekTimeline(seekPoint === "end" ? neighbor.end : neighbor.start)} disabled={!neighbor} className="rounded-lg bg-white/10 px-2 py-1 text-[9px] font-black text-white hover:bg-white/15 disabled:opacity-30">Курсор</button>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                   {selectedClipKeys.length > 1 ? (
