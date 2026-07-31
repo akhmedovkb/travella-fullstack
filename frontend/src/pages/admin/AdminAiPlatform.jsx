@@ -485,16 +485,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   };
   const selectedMediaUsage = selectedMedia ? getMediaTimelineUsage(selectedMedia) : [];
   const selectedMediaDropTarget = selectedMedia ? getMediaDropTargetLabel(selectedMedia) : "";
+  const showMediaToolbarNotice = (message) => {
+    setMediaToolbarNotice(message);
+    window.setTimeout(() => setMediaToolbarNotice(""), 1600);
+  };
   const copySelectedMediaUrl = async () => {
     if (!selectedMedia?.url) return;
     try {
       if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable");
       await navigator.clipboard.writeText(selectedMedia.url);
-      setMediaToolbarNotice("URL скопирован");
+      showMediaToolbarNotice("URL скопирован");
     } catch {
-      setMediaToolbarNotice("Не удалось скопировать");
+      showMediaToolbarNotice("Не удалось скопировать");
     }
-    window.setTimeout(() => setMediaToolbarNotice(""), 1600);
   };
   const getMediaDefaultDuration = (media) => {
     if (media?.type === "video") return Math.min(12, Math.max(1, Number(media.durationSeconds || 5)));
@@ -1362,8 +1365,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (media?.type === "audio") addAudioMediaAsSfx(media, targetTime);
     if (media?.type === "video") addVideoMediaToTrack(media, targetTime);
     if (media?.type === "image" || media?.type === "audio" || media?.type === "video") {
-      setMediaToolbarNotice(`Добавлено на ${roundTimelineTime(targetTime)}s`);
-      window.setTimeout(() => setMediaToolbarNotice(""), 1600);
+      showMediaToolbarNotice(`Добавлено на ${roundTimelineTime(targetTime)}s`);
     }
   };
   const addMediaToTimelineEnd = (media) => {
@@ -1385,6 +1387,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         mimeType: media.mimeType || "",
         note: selectedItem?.note || "Импортированный аудио-клип.",
       });
+      showMediaToolbarNotice("Клип заменён");
       return;
     }
     if (media.type === "image") {
@@ -1392,6 +1395,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         label,
         url: media.url,
       });
+      showMediaToolbarNotice("Клип заменён");
       return;
     }
     if (media.type === "video") {
@@ -1401,6 +1405,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         mimeType: media.mimeType || "",
         sourceStart: Number(selectedItem?.sourceStart || 0),
       });
+      showMediaToolbarNotice("Клип заменён");
     }
   };
   const removeMediaFromLibrary = (media) => {
