@@ -82,6 +82,15 @@ function normalizeVideoClip(item = {}, index = 0) {
   };
 }
 
+function normalizeEditTrim(soundPlan = {}) {
+  const trim = soundPlan.edit?.trim || {};
+  const start = Math.max(0, safeNumber(trim.start, 0));
+  const end = Math.max(0, safeNumber(trim.end, 0));
+  const estimate = Math.max(0.1, safeNumber(soundPlan.durationEstimateSeconds, 60));
+  const duration = Math.max(0.1, estimate - start - end);
+  return { start, end, duration, enabled: start > 0 || end > 0 };
+}
+
 function escapeDrawtext(value = "") {
   return String(value || "")
     .replace(/\\/g, "\\\\")
@@ -106,6 +115,7 @@ function getToneForEffect(assetId = "") {
 
 function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = [], videoInputs = [], audioInputs = {} }) {
   const musicVolume = Math.max(0, Math.min(0.5, safeNumber(soundPlan.music?.volume, 0.1) * 1.4));
+  const editTrim = normalizeEditTrim(soundPlan);
   const effects = (Array.isArray(soundPlan.effects) ? soundPlan.effects : [])
     .slice(0, 8)
     .map(normalizeEffect)
@@ -217,8 +227,19 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
     hasVideoFilters = true;
   });
 
+  if (editTrim.enabled) {
+    const out = "[vtrim]";
+    filterParts.push(`${videoLabel}trim=start=${editTrim.start}:duration=${editTrim.duration},setpts=PTS-STARTPTS${out}`);
+    videoLabel = out;
+    hasVideoFilters = true;
+  }
+
   const inputCount = audioLabels.length;
-  filterParts.push(`${audioLabels.join("")}amix=inputs=${inputCount}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95[aout]`);
+  const audioMixLabel = editTrim.enabled ? "[amixraw]" : "[aout]";
+  filterParts.push(`${audioLabels.join("")}amix=inputs=${inputCount}:duration=first:dropout_transition=0:normalize=0,alimiter=limit=0.95${audioMixLabel}`);
+  if (editTrim.enabled) {
+    filterParts.push(`${audioMixLabel}atrim=start=${editTrim.start}:duration=${editTrim.duration},asetpts=PTS-STARTPTS[aout]`);
+  }
   args.push(
     "-filter_complex",
     filterParts.join(";"),
