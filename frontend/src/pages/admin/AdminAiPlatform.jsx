@@ -1040,6 +1040,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const target = direction === "previous" ? neighbor.end : Math.max(0, neighbor.start - span);
     moveSelectedClipToTime(target);
   };
+  const getClipSummaryLabel = (clip) => {
+    if (!clip) return "";
+    const name = clip.item?.label || clip.item?.text || clip.item?.assetId || (clip.type === "sfx" ? "SFX" : clip.type === "text" ? "Текст" : clip.type === "image" ? "Картинка" : "Видео");
+    return `${name} · ${roundTimelineTime(clip.start)}-${roundTimelineTime(clip.end)}s`;
+  };
   const getTrackBoundaryClip = (boundary) => {
     const selected = new Set(selectedClipKeys);
     const sameTrackClips = getTimelineClipRanges().filter((clip) => clip.type === selectedClip.type && !selected.has(clip.key));
@@ -2888,6 +2893,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">Длина</span>{roundTimelineTime(selectedClipDuration)}s</div>
                       <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">Курсор</span>{roundTimelineTime(currentTime)}s</div>
                       <div className="rounded-xl bg-white/10 px-2 py-2 ring-1 ring-white/10"><span className="block uppercase text-slate-500">До конца</span>{selectedClipRemainingToTimelineEnd}s</div>
+                    </div>
+                    <div className="mt-2 grid gap-1 text-[10px] font-bold text-slate-300">
+                      <div className="truncate rounded-xl bg-white/5 px-2 py-1.5 ring-1 ring-white/10">Слева: {getClipSummaryLabel(getNearestTimelineClip("previous")) || "нет клипа"}</div>
+                      <div className="truncate rounded-xl bg-white/5 px-2 py-1.5 ring-1 ring-white/10">Справа: {getClipSummaryLabel(getNearestTimelineClip("next")) || "нет клипа"}</div>
                     </div>
                   </div>
                   {selectedClipKeys.length > 1 ? (
