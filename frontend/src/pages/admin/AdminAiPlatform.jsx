@@ -1374,6 +1374,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             mimeType: media.mimeType || "",
             time: Math.round(Number(targetTime || 0) * 10) / 10,
             sourceStart: 0,
+            sourceDuration: Number(media.durationSeconds || 0),
             duration: clipDuration,
             enabled: true,
             x: 50,
@@ -1473,6 +1474,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         url: media.url,
         mimeType: media.mimeType || "",
         sourceStart: Number(selectedItem?.sourceStart || 0),
+        sourceDuration: Number(media.durationSeconds || selectedItem?.sourceDuration || 0),
       });
       showMediaToolbarNotice("Клип заменён");
     }
@@ -2073,7 +2075,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           }}
                           title="Перетащи видео-вставку. Потяни маркер — изменить размер."
                         >
-                          <video src={item.url} muted autoPlay loop playsInline className="pointer-events-none h-full w-full object-cover" />
+                          <video src={`${item.url}#t=${Math.max(0, Number(item.sourceStart || 0))}`} muted autoPlay loop playsInline className="pointer-events-none h-full w-full object-cover" />
                           <span className="pointer-events-none absolute left-2 top-2 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black text-white">{item.label || "Видео-вставка"}</span>
                           <span
                             onPointerDown={(event) => startScaleOverlayOnPreview(event, "video", index)}
@@ -2990,8 +2992,43 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </label>
                       <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                         <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Старт исходника</span>
-                        <input type="number" min="0" step="0.1" value={Number(selectedItem.sourceStart || 0)} onChange={(e) => updateSelectedClip({ sourceStart: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                        <input
+                          type="number"
+                          min="0"
+                          max={Number(selectedItem.sourceDuration || 0) > 0 ? Math.max(0, Number(selectedItem.sourceDuration || 0) - Number(selectedItem.duration || 0.1)) : undefined}
+                          step="0.1"
+                          value={Number(selectedItem.sourceStart || 0)}
+                          onChange={(e) => {
+                            const sourceLimit = Number(selectedItem.sourceDuration || 0) > 0 ? Math.max(0, Number(selectedItem.sourceDuration || 0) - Number(selectedItem.duration || 0.1)) : 9999;
+                            updateSelectedClip({ sourceStart: Math.max(0, Math.min(sourceLimit, Number(e.target.value))) });
+                          }}
+                          className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none"
+                        />
                       </label>
+                      <div className="rounded-xl bg-sky-50 p-2 text-xs font-black text-sky-900 ring-1 ring-sky-100">
+                        <div className="grid grid-cols-3 gap-2">
+                          <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-sky-100">
+                            <span className="block text-[9px] uppercase tracking-wide text-sky-400">Берём с</span>
+                            {Math.max(0, Number(selectedItem.sourceStart || 0)).toFixed(1)}s
+                          </div>
+                          <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-sky-100">
+                            <span className="block text-[9px] uppercase tracking-wide text-sky-400">До</span>
+                            {(Math.max(0, Number(selectedItem.sourceStart || 0)) + Number(selectedItem.duration || 0)).toFixed(1)}s
+                          </div>
+                          <div className="rounded-lg bg-white px-2 py-1.5 ring-1 ring-sky-100">
+                            <span className="block text-[9px] uppercase tracking-wide text-sky-400">Исходник</span>
+                            {Number(selectedItem.sourceDuration || 0) > 0 ? `${Number(selectedItem.sourceDuration || 0).toFixed(1)}s` : "неизв."}
+                          </div>
+                        </div>
+                        <div className="mt-2 grid grid-cols-3 gap-2">
+                          <button type="button" onClick={() => updateSelectedClip({ sourceStart: Math.max(0, Number(selectedItem.sourceStart || 0) - 0.5) })} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-sky-800 ring-1 ring-sky-100 hover:bg-sky-100">-0.5s</button>
+                          <button type="button" onClick={() => updateSelectedClip({ sourceStart: 0 })} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">С начала</button>
+                          <button type="button" onClick={() => {
+                            const sourceLimit = Number(selectedItem.sourceDuration || 0) > 0 ? Math.max(0, Number(selectedItem.sourceDuration || 0) - Number(selectedItem.duration || 0.1)) : 9999;
+                            updateSelectedClip({ sourceStart: Math.max(0, Math.min(sourceLimit, Number(selectedItem.sourceStart || 0) + 0.5)) });
+                          }} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-sky-800 ring-1 ring-sky-100 hover:bg-sky-100">+0.5s</button>
+                        </div>
+                      </div>
                     </>
                   ) : null}
                   <div className="grid grid-cols-3 gap-2">
