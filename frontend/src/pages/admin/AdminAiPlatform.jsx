@@ -1373,6 +1373,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             sourceStart: 0,
             duration: clipDuration,
             enabled: true,
+            x: 50,
+            y: 50,
+            width: 72,
+            scale: 1,
+            zIndex: 15 + items.length,
             note: "Импортированный видео-клип. Вставляется поверх основного HeyGen video без собственного звука.",
           },
         ],
@@ -1760,11 +1765,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const startDragPreviewGroup = (event, type, index) => {
     const clickedKey = getClipKey(type, index);
     const overlayItems = selectedClipItems
-      .filter((clip) => clip.type === "text" || clip.type === "image")
+      .filter((clip) => clip.type === "text" || clip.type === "image" || clip.type === "video")
       .map((clip) => ({
         ...clip,
         x: Number(clip.item.x ?? 50),
-        y: Number(clip.item.y ?? (clip.type === "text" ? 78 : 72)),
+        y: Number(clip.item.y ?? (clip.type === "text" ? 78 : clip.type === "video" ? 50 : 72)),
       }));
     if (overlayItems.length <= 1 || !selectedClipKeys.includes(clickedKey)) return false;
     const rect = previewFrameRef.current?.getBoundingClientRect();
@@ -1805,6 +1810,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
           ...base,
           textOverlays: moveItems(base.textOverlays, "text"),
           imageOverlays: moveItems(base.imageOverlays, "image"),
+          videoClips: moveItems(base.videoClips, "video"),
         };
       });
     };
@@ -2044,20 +2050,29 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         <button
                           key={`preview_video_${item.id || index}`}
                           type="button"
-                          onPointerDown={(event) => {
-                            event.preventDefault();
-                            event.stopPropagation();
-                            if (event.shiftKey) {
-                              toggleClipSelection("video", index);
-                              return;
-                            }
-                            selectSingleClip("video", index);
+                          onPointerDown={(event) => startDragOverlayOnPreview(event, "video", index)}
+                          className={cn(
+                            "absolute -translate-x-1/2 -translate-y-1/2 cursor-grab overflow-hidden rounded-xl bg-black/70 shadow-2xl ring-2 ring-transparent active:cursor-grabbing",
+                            ((selectedClip.type === "video" && selectedClip.index === index) || isClipMultiSelected("video", index)) && "ring-white"
+                          )}
+                          style={{
+                            left: `${Number(item.x ?? 50)}%`,
+                            top: `${Number(item.y ?? 50)}%`,
+                            width: `${Number(item.width || 72) * Number(item.scale || 1)}%`,
+                            zIndex: getOverlayLayer("video", item, index),
                           }}
-                          className={cn("absolute inset-0 cursor-pointer overflow-hidden rounded-xl ring-2 ring-transparent", (selectedClip.type === "video" && selectedClip.index === index) || isClipMultiSelected("video", index) ? "ring-white" : "")}
-                          title="Видео-вставка: двигай её на дорожке видео."
+                          title="Перетащи видео-вставку. Потяни маркер — изменить размер."
                         >
-                          <video src={item.url} muted autoPlay loop playsInline className="h-full w-full object-cover" />
-                          <span className="absolute left-2 top-2 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black text-white">{item.label || "Видео-вставка"}</span>
+                          <video src={item.url} muted autoPlay loop playsInline className="pointer-events-none h-full w-full object-cover" />
+                          <span className="pointer-events-none absolute left-2 top-2 rounded-lg bg-black/70 px-2 py-1 text-[10px] font-black text-white">{item.label || "Видео-вставка"}</span>
+                          <span
+                            onPointerDown={(event) => startScaleOverlayOnPreview(event, "video", index)}
+                            className={cn(
+                              "absolute -bottom-2 -right-2 h-4 w-4 cursor-nwse-resize rounded-full bg-white shadow ring-2 ring-slate-950/20",
+                              selectedClip.type === "video" && selectedClip.index === index ? "block" : "hidden"
+                            )}
+                            title="Изменить размер видео"
+                          />
                         </button>
                       ))}
                     </div>
