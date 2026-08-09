@@ -205,7 +205,9 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
     const out = `[vtext${index}]`;
     const enable = `between(t\\,${item.time}\\,${item.time + item.duration})`;
     const fontSize = Math.round(item.fontSize * item.scale);
-    filterParts.push(`${videoLabel}drawtext=text='${escapeDrawtext(item.text)}':x=(w-text_w)*${item.x / 100}:y=(h-text_h)*${item.y / 100}:fontsize=${fontSize}:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:enable='${enable}'${out}`);
+    const textX = `min(max(0\\,w*${item.x / 100}-text_w/2)\\,w-text_w)`;
+    const textY = `min(max(0\\,h*${item.y / 100}-text_h/2)\\,h-text_h)`;
+    filterParts.push(`${videoLabel}drawtext=text='${escapeDrawtext(item.text)}':x='${textX}':y='${textY}':fontsize=${fontSize}:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:enable='${enable}'${out}`);
     videoLabel = out;
     hasVideoFilters = true;
   });
@@ -216,8 +218,10 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
     const enable = `between(t\\,${item.time}\\,${item.time + item.duration})`;
     const boxW = Math.round(item.width * item.scale);
     const boxH = Math.max(8, Math.round(boxW * 0.32));
+    const labelX = `min(max(0\\,w*${item.x / 100}-text_w/2)\\,w-text_w)`;
+    const labelY = `min(max(0\\,h*${item.y / 100}-text_h/2)\\,h-text_h)`;
     filterParts.push(`${videoLabel}drawbox=x=w*${item.x / 100}-w*${boxW / 200}:y=h*${item.y / 100}-h*${boxH / 200}:w=w*${boxW / 100}:h=h*${boxH / 100}:color=purple@0.75:t=fill:enable='${enable}'${boxOut}`);
-    filterParts.push(`${boxOut}drawtext=text='${escapeDrawtext(item.label)}':x=(w-text_w)*${item.x / 100}:y=(h-text_h)*${item.y / 100}:fontsize=28:fontcolor=white:enable='${enable}'${textOut}`);
+    filterParts.push(`${boxOut}drawtext=text='${escapeDrawtext(item.label)}':x='${labelX}':y='${labelY}':fontsize=28:fontcolor=white:enable='${enable}'${textOut}`);
     videoLabel = textOut;
     hasVideoFilters = true;
   });
@@ -228,8 +232,10 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
     const out = `[vimg${index}]`;
     const targetWidth = Math.round(360 * (normalized.width / 34) * normalized.scale);
     const enable = `between(t\\,${normalized.time}\\,${normalized.time + normalized.duration})`;
+    const imageX = `min(max(0\\,main_w*${normalized.x / 100}-overlay_w/2)\\,main_w-overlay_w)`;
+    const imageY = `min(max(0\\,main_h*${normalized.y / 100}-overlay_h/2)\\,main_h-overlay_h)`;
     filterParts.push(`[${item.inputIndex}:v]scale=${targetWidth}:-1${scaled}`);
-    filterParts.push(`${videoLabel}${scaled}overlay=x=(main_w-overlay_w)*${normalized.x / 100}:y=(main_h-overlay_h)*${normalized.y / 100}:enable='${enable}'${out}`);
+    filterParts.push(`${videoLabel}${scaled}overlay=x='${imageX}':y='${imageY}':enable='${enable}'${out}`);
     videoLabel = out;
     hasVideoFilters = true;
   });
