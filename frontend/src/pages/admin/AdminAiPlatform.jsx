@@ -405,6 +405,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [selectedClipKeys, setSelectedClipKeys] = React.useState(["sfx:0"]);
   const [editorOpen, setEditorOpen] = React.useState(false);
   const [currentTime, setCurrentTime] = React.useState(0);
+  const [isPreviewPlaying, setIsPreviewPlaying] = React.useState(false);
   const [editingTextIndex, setEditingTextIndex] = React.useState(null);
   const [historyTick, setHistoryTick] = React.useState(0);
   const [timelineZoom, setTimelineZoom] = React.useState(1);
@@ -663,6 +664,21 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const syncTimelineFromPreview = (value) => {
     setSnapGuideTime(null);
     setCurrentTime(Math.max(0, Math.min(duration, Number(value) || 0)));
+  };
+  const pausePreviewPlayback = () => {
+    previewVideoRef.current?.pause?.();
+    setIsPreviewPlaying(false);
+  };
+  const togglePreviewPlayback = () => {
+    const player = previewVideoRef.current;
+    if (!player) return;
+    if (!player.paused) {
+      pausePreviewPlayback();
+      return;
+    }
+    const targetTime = Math.max(0, Math.min(Number.isFinite(player.duration) ? player.duration : duration, currentTime));
+    if (Math.abs(player.currentTime - targetTime) > 0.15) player.currentTime = targetTime;
+    player.play().then(() => setIsPreviewPlaying(true)).catch(() => setIsPreviewPlaying(false));
   };
   const startScrubTimeline = (event) => {
     event.preventDefault();
@@ -1305,6 +1321,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if ((event.ctrlKey || event.metaKey) && String(event.key).toLowerCase() === "v") {
         event.preventDefault();
         pasteTimelineClipboard();
+        return;
+      }
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.code === "Space") {
+        event.preventDefault();
+        togglePreviewPlayback();
         return;
       }
       if (event.key === "Escape" && selectedClipKeys.length > 1) {
@@ -2096,6 +2117,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         onLoadedMetadata={(event) => syncTimelineFromPreview(Math.min(currentTime, event.currentTarget.duration || currentTime))}
                         onTimeUpdate={(event) => syncTimelineFromPreview(event.currentTarget.currentTime)}
                         onSeeked={(event) => syncTimelineFromPreview(event.currentTarget.currentTime)}
+                        onPlay={() => setIsPreviewPlaying(true)}
+                        onPause={() => setIsPreviewPlaying(false)}
+                        onEnded={() => setIsPreviewPlaying(false)}
                         className="aspect-[9/16] max-h-[520px] w-full bg-black object-contain"
                       />
                       {textOverlays.map((item, index) => {
@@ -2482,6 +2506,15 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <div className="text-xs font-black">Видео · Голос · Музыка · SFX · Текст · Картинки · сейчас {Math.round(currentTime * 10) / 10}s / {Math.round(duration)}s{selectedClipKeys.length > 1 ? ` · выбрано ${selectedClipKeys.length}` : ""}</div>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={togglePreviewPlayback}
+                    disabled={!previewUrl}
+                    className="rounded-2xl bg-emerald-600 px-3 py-2 text-xs font-black text-white hover:bg-emerald-500 disabled:opacity-40"
+                    title="Space — play/pause preview"
+                  >
+                    {isPreviewPlaying ? "Пауза" : "Play"}
+                  </button>
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
                   <button type="button" onClick={selectAllTimelineClips} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Все клипы</button>
                   <button type="button" onClick={copySelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Копировать</button>
