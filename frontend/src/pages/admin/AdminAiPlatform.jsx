@@ -1501,12 +1501,46 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (!key) return;
     setPreviewMediaKey((current) => (current === key ? "" : key));
   };
+  const readLocalMediaDuration = (file) => new Promise((resolve) => {
+    if (!file?.type?.startsWith("audio/") && !file?.type?.startsWith("video/")) return resolve(null);
+    const element = document.createElement(file.type.startsWith("video/") ? "video" : "audio");
+    const url = URL.createObjectURL(file);
+    const cleanup = () => {
+      URL.revokeObjectURL(url);
+      element.removeAttribute("src");
+      element.load?.();
+    };
+    const done = (value) => {
+      cleanup();
+      resolve(Number.isFinite(value) && value > 0 ? Math.round(value * 10) / 10 : null);
+    };
+    element.preload = "metadata";
+    element.onloadedmetadata = () => done(element.duration);
+    element.onerror = () => done(null);
+    window.setTimeout(() => done(null), 2500);
+    element.src = url;
+  });
+  const hydrateImportedMediaDuration = (media, durationSeconds) => {
+    if (!media?.id || !durationSeconds || Number(media.durationSeconds || 0) > 0) return;
+    setDraft((prev) => {
+      const base = prev || {};
+      const mediaLibrary = Array.isArray(base.mediaLibrary) ? base.mediaLibrary : [];
+      return {
+        ...base,
+        mediaLibrary: mediaLibrary.map((item) => item?.id === media.id ? { ...item, durationSeconds } : item),
+      };
+    });
+  };
   const importMediaFile = async (file, targetTime = currentTime) => {
     if (!file || !onImportMedia) return;
+    const localDuration = await readLocalMediaDuration(file);
     const result = await onImportMedia(job, file);
-    const media = result?.media;
+    const media = localDuration && result?.media && !Number(result.media.durationSeconds || 0)
+      ? { ...result.media, durationSeconds: localDuration }
+      : result?.media;
     if (!media) return;
     if (result?.output?.soundPlan) setDraft(result.output.soundPlan);
+    hydrateImportedMediaDuration(media, localDuration);
     if (media.type === "image") addImageMediaToTrack(media, targetTime);
     if (media.type === "audio") addAudioMediaAsSfx(media, targetTime);
     if (media.type === "video") addVideoMediaToTrack(media, targetTime);
