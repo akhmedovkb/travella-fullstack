@@ -1484,12 +1484,20 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       return;
     }
     if (media.type === "video") {
+      const sourceDuration = Number(media.durationSeconds || selectedItem?.sourceDuration || 0);
+      const currentDuration = Number(selectedItem?.duration || getMediaDefaultDuration(media));
+      const currentStart = Number(selectedItem?.time || 0);
+      const sourceStartLimit = sourceDuration > 0 ? Math.max(0, sourceDuration - 0.1) : Infinity;
+      const sourceStart = Math.max(0, Math.min(sourceStartLimit, Number(selectedItem?.sourceStart || 0)));
+      const sourceRemaining = sourceDuration > 0 ? Math.max(0.1, sourceDuration - sourceStart) : Infinity;
+      const clipDuration = Math.round(Math.max(0.1, Math.min(currentDuration, Math.max(0.1, duration - currentStart), sourceRemaining)) * 10) / 10;
       updateSelectedClip({
         label,
         url: media.url,
         mimeType: media.mimeType || "",
-        sourceStart: Number(selectedItem?.sourceStart || 0),
-        sourceDuration: Number(media.durationSeconds || selectedItem?.sourceDuration || 0),
+        sourceStart: Math.round(sourceStart * 10) / 10,
+        sourceDuration,
+        duration: clipDuration,
       });
       showMediaToolbarNotice("Клип заменён");
     }
