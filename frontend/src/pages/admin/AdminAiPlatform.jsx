@@ -1321,7 +1321,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         ...base,
         imageOverlays: [
           ...items,
-          { id: `image_${Date.now()}`, label: "Product card", time: Math.min(5, duration), duration: 4, enabled: true, x: 50, y: 72, scale: 1, opacity: 1, width: 34, zIndex: 20 + items.length },
+          { id: `image_${Date.now()}`, label: "Product card", time: Math.min(5, duration), duration: 4, enabled: true, x: 50, y: 72, scale: 1, opacity: 1, rotation: 0, width: 34, zIndex: 20 + items.length },
         ],
       };
     });
@@ -1348,6 +1348,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             y: 72,
             scale: 1,
             opacity: 1,
+            rotation: 0,
             width: 34,
             zIndex: 20 + items.length,
           },
@@ -1380,6 +1381,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             width: 72,
             scale: 1,
             opacity: 1,
+            rotation: 0,
             zIndex: 15 + items.length,
             note: "Импортированный видео-клип. Вставляется поверх основного HeyGen video без собственного звука.",
           },
@@ -2037,6 +2039,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             top: `${Number(item.y ?? 72)}%`,
                             width: `${Number(item.width || 34) * Number(item.scale || 1)}%`,
                             opacity: Number(item.opacity ?? 1),
+                            transform: `translate(-50%, -50%) rotate(${Number(item.rotation || 0)}deg)`,
                             zIndex: getOverlayLayer("image", item, index),
                           }}
                         >
@@ -2065,6 +2068,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             top: `${Number(item.y ?? 50)}%`,
                             width: `${Number(item.width || 72) * Number(item.scale || 1)}%`,
                             opacity: Number(item.opacity ?? 1),
+                            transform: `translate(-50%, -50%) rotate(${Number(item.rotation || 0)}deg)`,
                             zIndex: getOverlayLayer("video", item, index),
                           }}
                           title="Перетащи видео-вставку. Потяни маркер — изменить размер."
@@ -3047,6 +3051,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Прозрачность · {Math.round(Number(selectedItem.opacity ?? 1) * 100)}%</span>
                         <input type="range" min="0.1" max="1" step="0.05" value={Number(selectedItem.opacity ?? 1)} onChange={(e) => updateSelectedClip({ opacity: Number(e.target.value) })} className="mt-2 w-full accent-slate-600" />
                       </label>
+                      {(selectedClip.type === "image" || selectedClip.type === "video") ? (
+                        <div className="rounded-xl bg-slate-50 p-2 ring-1 ring-slate-100">
+                          <label className="block px-1">
+                            <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Поворот · {Math.round(Number(selectedItem.rotation || 0))}°</span>
+                            <input type="range" min="-180" max="180" step="1" value={Number(selectedItem.rotation || 0)} onChange={(e) => updateSelectedClip({ rotation: Number(e.target.value) })} className="mt-2 w-full accent-sky-600" />
+                          </label>
+                          <div className="mt-2 grid grid-cols-3 gap-2">
+                            <button type="button" onClick={() => updateSelectedClip({ rotation: Math.max(-180, Number(selectedItem.rotation || 0) - 15) })} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">-15°</button>
+                            <button type="button" onClick={() => updateSelectedClip({ rotation: 0 })} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">0°</button>
+                            <button type="button" onClick={() => updateSelectedClip({ rotation: Math.min(180, Number(selectedItem.rotation || 0) + 15) })} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">+15°</button>
+                          </div>
+                        </div>
+                      ) : null}
                       <div className="rounded-xl bg-slate-50 p-2 ring-1 ring-slate-100">
                         <div className="mb-2 flex items-center justify-between gap-2 px-1">
                           <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Слой</span>

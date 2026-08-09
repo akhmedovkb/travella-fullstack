@@ -69,6 +69,7 @@ function normalizeImageOverlay(item = {}, index = 0) {
     width: clampNumber(item.width, 4, 95, 34),
     scale: clampNumber(item.scale, 0.2, 4, 1),
     opacity: clampNumber(item.opacity, 0.05, 1, 1),
+    rotation: clampNumber(item.rotation, -180, 180, 0),
     zIndex: safeNumber(item.zIndex, 20 + index),
     enabled: item.enabled === false ? false : true,
   };
@@ -87,6 +88,7 @@ function normalizeVideoClip(item = {}, index = 0) {
     width: clampNumber(item.width, 4, 95, 72),
     scale: clampNumber(item.scale, 0.2, 4, 1),
     opacity: clampNumber(item.opacity, 0.05, 1, 1),
+    rotation: clampNumber(item.rotation, -180, 180, 0),
     zIndex: safeNumber(item.zIndex, 10 + index),
     enabled: item.enabled === false ? false : true,
   };
@@ -222,11 +224,12 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
       const ref = `[vclipref${orderIndex}]`;
       const out = `[vclip${orderIndex}]`;
       const widthRatio = Math.max(0.04, Math.min(2, (item.width * item.scale) / 100));
+      const rotationRadians = (item.rotation * Math.PI) / 180;
       const overlayX = `min(max(0\\,main_w*${item.x / 100}-overlay_w/2)\\,main_w-overlay_w)`;
       const overlayY = `min(max(0\\,main_h*${item.y / 100}-overlay_h/2)\\,main_h-overlay_h)`;
       filterParts.push(`[${overlay.input.inputIndex}:v]trim=start=${item.sourceStart}:duration=${item.duration},setpts=PTS-STARTPTS+${item.time}/TB${trimmed}`);
       filterParts.push(`${trimmed}${videoLabel}scale2ref=w=main_w*${widthRatio}:h=-2${scaled}${ref}`);
-      filterParts.push(`${scaled}format=rgba,colorchannelmixer=aa=${item.opacity}${alpha}`);
+      filterParts.push(`${scaled}format=rgba,colorchannelmixer=aa=${item.opacity},rotate=${rotationRadians}:ow=rotw(iw):oh=roth(ih):c=black@0${alpha}`);
       filterParts.push(`${ref}${alpha}overlay=x='${overlayX}':y='${overlayY}':enable='${enable}'${out}`);
       videoLabel = out;
       hasVideoFilters = true;
@@ -264,9 +267,10 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
       const scaled = `[img${orderIndex}]`;
       const out = `[vimg${orderIndex}]`;
       const targetWidth = Math.round(360 * (item.width / 34) * item.scale);
+      const rotationRadians = (item.rotation * Math.PI) / 180;
       const imageX = `min(max(0\\,main_w*${item.x / 100}-overlay_w/2)\\,main_w-overlay_w)`;
       const imageY = `min(max(0\\,main_h*${item.y / 100}-overlay_h/2)\\,main_h-overlay_h)`;
-      filterParts.push(`[${overlay.input.inputIndex}:v]scale=${targetWidth}:-1,format=rgba,colorchannelmixer=aa=${item.opacity}${scaled}`);
+      filterParts.push(`[${overlay.input.inputIndex}:v]scale=${targetWidth}:-1,format=rgba,colorchannelmixer=aa=${item.opacity},rotate=${rotationRadians}:ow=rotw(iw):oh=roth(ih):c=black@0${scaled}`);
       filterParts.push(`${videoLabel}${scaled}overlay=x='${imageX}':y='${imageY}':enable='${enable}'${out}`);
       videoLabel = out;
       hasVideoFilters = true;
