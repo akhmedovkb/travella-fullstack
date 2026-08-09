@@ -770,13 +770,13 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     updateEffect(selectedClip.index, patch);
   };
   const moveSelectedOverlayPosition = (dx = 0, dy = 0) => {
-    if (selectedClip.type !== "text" && selectedClip.type !== "image") return;
+    if (selectedClip.type !== "text" && selectedClip.type !== "image" && selectedClip.type !== "video") return;
     const nextX = Math.max(0, Math.min(100, Math.round((Number(selectedItem?.x ?? 50) + dx) * 10) / 10));
-    const nextY = Math.max(0, Math.min(100, Math.round((Number(selectedItem?.y ?? 70) + dy) * 10) / 10));
+    const nextY = Math.max(0, Math.min(100, Math.round((Number(selectedItem?.y ?? (selectedClip.type === "video" ? 50 : 70)) + dy) * 10) / 10));
     updateSelectedClip({ x: nextX, y: nextY });
   };
   const centerSelectedOverlay = () => {
-    if (selectedClip.type !== "text" && selectedClip.type !== "image") return;
+    if (selectedClip.type !== "text" && selectedClip.type !== "image" && selectedClip.type !== "video") return;
     updateSelectedClip({ x: 50, y: 50 });
   };
   const getOverlayLayer = (type, item, index) => {
@@ -784,8 +784,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     return Number(item?.zIndex ?? (base + index));
   };
   const updateSelectedOverlayLayer = (action) => {
-    if (selectedClip.type !== "text" && selectedClip.type !== "image") return;
+    if (selectedClip.type !== "text" && selectedClip.type !== "image" && selectedClip.type !== "video") return;
     const overlays = [
+      ...videoClips.map((item, index) => ({ type: "video", index, layer: getOverlayLayer("video", item, index) })),
       ...textOverlays.map((item, index) => ({ type: "text", index, layer: getOverlayLayer("text", item, index) })),
       ...imageOverlays.map((item, index) => ({ type: "image", index, layer: getOverlayLayer("image", item, index) })),
     ];
@@ -3007,7 +3008,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       }} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
                   </div>
-                  {(selectedClip.type === "text" || selectedClip.type === "image") ? (
+                  {(selectedClip.type === "text" || selectedClip.type === "image" || selectedClip.type === "video") ? (
                     <>
                       <div className="grid grid-cols-2 gap-2">
                         <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
@@ -3016,7 +3017,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         </label>
                         <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                           <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Y</span>
-                          <input type="number" min="0" max="100" step="1" value={Number(selectedItem.y ?? 70)} onChange={(e) => updateSelectedClip({ y: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                          <input type="number" min="0" max="100" step="1" value={Number(selectedItem.y ?? (selectedClip.type === "video" ? 50 : 70))} onChange={(e) => updateSelectedClip({ y: Number(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                         </label>
                       </div>
                       <div className="rounded-xl bg-slate-50 p-2 ring-1 ring-slate-100">
@@ -3056,8 +3057,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         </label>
                       ) : (
                         <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Ширина · {Number(selectedItem.width || 34)}%</span>
-                          <input type="range" min="10" max="90" step="1" value={Number(selectedItem.width || 34)} onChange={(e) => updateSelectedClip({ width: Number(e.target.value) })} className="mt-2 w-full accent-fuchsia-500" />
+                          <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Ширина · {Number(selectedItem.width || (selectedClip.type === "video" ? 72 : 34))}%</span>
+                          <input type="range" min="10" max={selectedClip.type === "video" ? "120" : "90"} step="1" value={Number(selectedItem.width || (selectedClip.type === "video" ? 72 : 34))} onChange={(e) => updateSelectedClip({ width: Number(e.target.value) })} className={cn("mt-2 w-full", selectedClip.type === "video" ? "accent-sky-500" : "accent-fuchsia-500")} />
                         </label>
                       )}
                     </>

@@ -51,6 +51,7 @@ function normalizeTextOverlay(item = {}, index = 0) {
     y: clampNumber(item.y, 0, 100, 78),
     fontSize: clampNumber(item.fontSize, 10, 96, 22),
     scale: clampNumber(item.scale, 0.2, 4, 1),
+    zIndex: safeNumber(item.zIndex, 30 + index),
     enabled: item.enabled === false ? false : true,
   };
 }
@@ -66,6 +67,7 @@ function normalizeImageOverlay(item = {}, index = 0) {
     y: clampNumber(item.y, 0, 100, 72),
     width: clampNumber(item.width, 4, 95, 34),
     scale: clampNumber(item.scale, 0.2, 4, 1),
+    zIndex: safeNumber(item.zIndex, 20 + index),
     enabled: item.enabled === false ? false : true,
   };
 }
@@ -82,6 +84,7 @@ function normalizeVideoClip(item = {}, index = 0) {
     y: clampNumber(item.y, 0, 100, 50),
     width: clampNumber(item.width, 4, 95, 72),
     scale: clampNumber(item.scale, 0.2, 4, 1),
+    zIndex: safeNumber(item.zIndex, 10 + index),
     enabled: item.enabled === false ? false : true,
   };
 }
@@ -184,60 +187,83 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
   let videoLabel = "[0:v]";
   let hasVideoFilters = false;
 
-  videoInputs.forEach((item, index) => {
-    const normalized = normalizeVideoClip(item.clip, index);
-    const trimmed = `[vcliptrim${index}]`;
-    const scaled = `[vclipscaled${index}]`;
-    const ref = `[vclipref${index}]`;
-    const out = `[vclip${index}]`;
-    const widthRatio = Math.max(0.04, Math.min(2, (normalized.width * normalized.scale) / 100));
-    const overlayX = `min(max(0\\,main_w*${normalized.x / 100}-overlay_w/2)\\,main_w-overlay_w)`;
-    const overlayY = `min(max(0\\,main_h*${normalized.y / 100}-overlay_h/2)\\,main_h-overlay_h)`;
-    const enable = `between(t\\,${normalized.time}\\,${normalized.time + normalized.duration})`;
-    filterParts.push(`[${item.inputIndex}:v]trim=start=${normalized.sourceStart}:duration=${normalized.duration},setpts=PTS-STARTPTS+${normalized.time}/TB${trimmed}`);
-    filterParts.push(`${trimmed}${videoLabel}scale2ref=w=main_w*${widthRatio}:h=-2${scaled}${ref}`);
-    filterParts.push(`${ref}${scaled}overlay=x='${overlayX}':y='${overlayY}':enable='${enable}'${out}`);
-    videoLabel = out;
-    hasVideoFilters = true;
+  const visualOverlays = [
+    ...videoInputs.map((input, index) => ({
+      type: "video",
+      index,
+      input,
+      item: normalizeVideoClip(input.clip, index),
+    })),
+    ...stickerLabels.map((item, index) => ({ type: "sticker", index, item })),
+    ...imageInputs.map((input, index) => ({
+      type: "image",
+      index,
+      input,
+      item: normalizeImageOverlay(input.overlay, index),
+    })),
+    ...textOverlays.map((item, index) => ({ type: "text", index, item })),
+  ].sort((left, right) => {
+    const layerDiff = safeNumber(left.item?.zIndex, 0) - safeNumber(right.item?.zIndex, 0);
+    if (layerDiff) return layerDiff;
+    return left.index - right.index;
   });
 
-  textOverlays.forEach((item, index) => {
-    const out = `[vtext${index}]`;
+  visualOverlays.forEach((overlay, orderIndex) => {
+    const item = overlay.item;
     const enable = `between(t\\,${item.time}\\,${item.time + item.duration})`;
-    const fontSize = Math.round(item.fontSize * item.scale);
-    const textX = `min(max(0\\,w*${item.x / 100}-text_w/2)\\,w-text_w)`;
-    const textY = `min(max(0\\,h*${item.y / 100}-text_h/2)\\,h-text_h)`;
-    filterParts.push(`${videoLabel}drawtext=text='${escapeDrawtext(item.text)}':x='${textX}':y='${textY}':fontsize=${fontSize}:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:enable='${enable}'${out}`);
-    videoLabel = out;
-    hasVideoFilters = true;
-  });
 
-  stickerLabels.forEach((item, index) => {
-    const boxOut = `[vstickerbox${index}]`;
-    const textOut = `[vsticker${index}]`;
-    const enable = `between(t\\,${item.time}\\,${item.time + item.duration})`;
-    const boxW = Math.round(item.width * item.scale);
-    const boxH = Math.max(8, Math.round(boxW * 0.32));
-    const labelX = `min(max(0\\,w*${item.x / 100}-text_w/2)\\,w-text_w)`;
-    const labelY = `min(max(0\\,h*${item.y / 100}-text_h/2)\\,h-text_h)`;
-    filterParts.push(`${videoLabel}drawbox=x=w*${item.x / 100}-w*${boxW / 200}:y=h*${item.y / 100}-h*${boxH / 200}:w=w*${boxW / 100}:h=h*${boxH / 100}:color=purple@0.75:t=fill:enable='${enable}'${boxOut}`);
-    filterParts.push(`${boxOut}drawtext=text='${escapeDrawtext(item.label)}':x='${labelX}':y='${labelY}':fontsize=28:fontcolor=white:enable='${enable}'${textOut}`);
-    videoLabel = textOut;
-    hasVideoFilters = true;
-  });
+    if (overlay.type === "video") {
+      const trimmed = `[vcliptrim${orderIndex}]`;
+      const scaled = `[vclipscaled${orderIndex}]`;
+      const ref = `[vclipref${orderIndex}]`;
+      const out = `[vclip${orderIndex}]`;
+      const widthRatio = Math.max(0.04, Math.min(2, (item.width * item.scale) / 100));
+      const overlayX = `min(max(0\\,main_w*${item.x / 100}-overlay_w/2)\\,main_w-overlay_w)`;
+      const overlayY = `min(max(0\\,main_h*${item.y / 100}-overlay_h/2)\\,main_h-overlay_h)`;
+      filterParts.push(`[${overlay.input.inputIndex}:v]trim=start=${item.sourceStart}:duration=${item.duration},setpts=PTS-STARTPTS+${item.time}/TB${trimmed}`);
+      filterParts.push(`${trimmed}${videoLabel}scale2ref=w=main_w*${widthRatio}:h=-2${scaled}${ref}`);
+      filterParts.push(`${ref}${scaled}overlay=x='${overlayX}':y='${overlayY}':enable='${enable}'${out}`);
+      videoLabel = out;
+      hasVideoFilters = true;
+      return;
+    }
 
-  imageInputs.forEach((item, index) => {
-    const normalized = normalizeImageOverlay(item.overlay, index);
-    const scaled = `[img${index}]`;
-    const out = `[vimg${index}]`;
-    const targetWidth = Math.round(360 * (normalized.width / 34) * normalized.scale);
-    const enable = `between(t\\,${normalized.time}\\,${normalized.time + normalized.duration})`;
-    const imageX = `min(max(0\\,main_w*${normalized.x / 100}-overlay_w/2)\\,main_w-overlay_w)`;
-    const imageY = `min(max(0\\,main_h*${normalized.y / 100}-overlay_h/2)\\,main_h-overlay_h)`;
-    filterParts.push(`[${item.inputIndex}:v]scale=${targetWidth}:-1${scaled}`);
-    filterParts.push(`${videoLabel}${scaled}overlay=x='${imageX}':y='${imageY}':enable='${enable}'${out}`);
-    videoLabel = out;
-    hasVideoFilters = true;
+    if (overlay.type === "text") {
+      const out = `[vtext${orderIndex}]`;
+      const fontSize = Math.round(item.fontSize * item.scale);
+      const textX = `min(max(0\\,w*${item.x / 100}-text_w/2)\\,w-text_w)`;
+      const textY = `min(max(0\\,h*${item.y / 100}-text_h/2)\\,h-text_h)`;
+      filterParts.push(`${videoLabel}drawtext=text='${escapeDrawtext(item.text)}':x='${textX}':y='${textY}':fontsize=${fontSize}:fontcolor=white:box=1:boxcolor=black@0.65:boxborderw=14:enable='${enable}'${out}`);
+      videoLabel = out;
+      hasVideoFilters = true;
+      return;
+    }
+
+    if (overlay.type === "sticker") {
+      const boxOut = `[vstickerbox${orderIndex}]`;
+      const textOut = `[vsticker${orderIndex}]`;
+      const boxW = Math.round(item.width * item.scale);
+      const boxH = Math.max(8, Math.round(boxW * 0.32));
+      const labelX = `min(max(0\\,w*${item.x / 100}-text_w/2)\\,w-text_w)`;
+      const labelY = `min(max(0\\,h*${item.y / 100}-text_h/2)\\,h-text_h)`;
+      filterParts.push(`${videoLabel}drawbox=x=w*${item.x / 100}-w*${boxW / 200}:y=h*${item.y / 100}-h*${boxH / 200}:w=w*${boxW / 100}:h=h*${boxH / 100}:color=purple@0.75:t=fill:enable='${enable}'${boxOut}`);
+      filterParts.push(`${boxOut}drawtext=text='${escapeDrawtext(item.label)}':x='${labelX}':y='${labelY}':fontsize=28:fontcolor=white:enable='${enable}'${textOut}`);
+      videoLabel = textOut;
+      hasVideoFilters = true;
+      return;
+    }
+
+    if (overlay.type === "image") {
+      const scaled = `[img${orderIndex}]`;
+      const out = `[vimg${orderIndex}]`;
+      const targetWidth = Math.round(360 * (item.width / 34) * item.scale);
+      const imageX = `min(max(0\\,main_w*${item.x / 100}-overlay_w/2)\\,main_w-overlay_w)`;
+      const imageY = `min(max(0\\,main_h*${item.y / 100}-overlay_h/2)\\,main_h-overlay_h)`;
+      filterParts.push(`[${overlay.input.inputIndex}:v]scale=${targetWidth}:-1${scaled}`);
+      filterParts.push(`${videoLabel}${scaled}overlay=x='${imageX}':y='${imageY}':enable='${enable}'${out}`);
+      videoLabel = out;
+      hasVideoFilters = true;
+    }
   });
 
   if (editTrim.enabled) {
