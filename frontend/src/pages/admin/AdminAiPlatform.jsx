@@ -547,7 +547,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const selectedClipRangeLabel = `${Math.round(selectedClipStart * 10) / 10}s-${selectedClipEnd}s`;
   const roundTimelineTime = (value) => Math.round(Number(value || 0) * 10) / 10;
   const clampTimelineTime = (value, min = 0, max = duration) => Math.max(min, Math.min(max, roundTimelineTime(value)));
-  const clampClipDuration = (value, start = selectedClipStart) => Math.max(0.1, Math.min(Math.max(0.1, duration - start), roundTimelineTime(value)));
+  const getVideoSourceRemaining = (item) => {
+    const sourceDuration = Number(item?.sourceDuration || 0);
+    if (sourceDuration <= 0) return Infinity;
+    return Math.max(0.1, roundTimelineTime(sourceDuration - Number(item?.sourceStart || 0)));
+  };
+  const clampClipDuration = (value, start = selectedClipStart, item = selectedItem) => {
+    const timelineLimit = Math.max(0.1, duration - start);
+    const sourceLimit = selectedClip.type === "video" ? getVideoSourceRemaining(item) : Infinity;
+    return Math.max(0.1, Math.min(timelineLimit, sourceLimit, roundTimelineTime(value)));
+  };
+  const selectedClipMaxDuration = Math.max(0.1, Math.min(Math.max(0.1, duration - selectedClipStart), selectedClip.type === "video" ? getVideoSourceRemaining(selectedItem) : Infinity));
+  const selectedClipMaxEnd = roundTimelineTime(selectedClipStart + selectedClipMaxDuration);
   const getClipKey = (type, index) => `${type}:${index}`;
   const isClipMultiSelected = (type, index) => selectedClipKeys.includes(getClipKey(type, index));
   const shiftClipTime = (item, amount = 0.7) => {
@@ -1676,14 +1687,19 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (edge === "left") {
       const nextStart = Math.max(0, Math.min(end - 0.2, pointerTime));
       const delta = nextStart - start;
+      const nextSourceStart = type === "video" ? Math.max(0, Math.round((Number(source.sourceStart || 0) + delta) * 10) / 10) : 0;
+      const sourceLimit = type === "video" ? getVideoSourceRemaining({ ...source, sourceStart: nextSourceStart }) : Infinity;
+      const nextDuration = Math.min(Math.round((end - nextStart) * 10) / 10, sourceLimit);
       updateOverlay(type, index, {
         time: Math.round(nextStart * 10) / 10,
-        duration: Math.round((end - nextStart) * 10) / 10,
-        ...(type === "video" ? { sourceStart: Math.max(0, Math.round((Number(source.sourceStart || 0) + delta) * 10) / 10) } : {}),
+        duration: Math.max(0.1, nextDuration),
+        ...(type === "video" ? { sourceStart: nextSourceStart } : {}),
       });
       return;
     }
-    const nextEnd = Math.max(start + 0.2, Math.min(duration, pointerTime));
+    const sourceLimit = type === "video" ? getVideoSourceRemaining(source) : Infinity;
+    const maxEnd = Math.min(duration, start + sourceLimit);
+    const nextEnd = Math.max(start + 0.2, Math.min(maxEnd, pointerTime));
     updateOverlay(type, index, { duration: Math.round((nextEnd - start) * 10) / 10 });
   };
   const startDragSelectedGroup = (event, type, index) => {
@@ -3054,6 +3070,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             {Number(selectedItem.sourceDuration || 0) > 0 ? `${Number(selectedItem.sourceDuration || 0).toFixed(1)}s` : "неизв."}
                           </div>
                         </div>
+                        <div className="mt-2 rounded-lg bg-white px-2 py-1.5 text-[10px] font-black text-sky-700 ring-1 ring-sky-100">
+                          Доступно после старта: {Number.isFinite(selectedClipMaxDuration) ? `${selectedClipMaxDuration.toFixed(1)}s` : "неизв."}
+                        </div>
                         <div className="mt-2 grid grid-cols-3 gap-2">
                           <button type="button" onClick={() => updateSelectedClip({ sourceStart: Math.max(0, Number(selectedItem.sourceStart || 0) - 0.5) })} className="rounded-xl bg-white px-3 py-2 text-xs font-black text-sky-800 ring-1 ring-sky-100 hover:bg-sky-100">-0.5s</button>
                           <button type="button" onClick={() => updateSelectedClip({ sourceStart: 0 })} className="rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white hover:bg-slate-800">С начала</button>
@@ -3078,12 +3097,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                     </label>
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                       <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Длительность</span>
-                      <input type="number" min="0.1" max={Math.max(0.1, duration - selectedClipStart)} step="0.1" value={selectedClipDuration} onChange={(e) => updateSelectedClip({ duration: clampClipDuration(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
+                      <input type="number" min="0.1" max={selectedClipMaxDuration} step="0.1" value={selectedClipDuration} onChange={(e) => updateSelectedClip({ duration: clampClipDuration(e.target.value) })} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
                     <label className="rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                       <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Конец</span>
-                      <input type="number" min={Math.round((selectedClipStart + 0.1) * 10) / 10} max={duration} step="0.1" value={selectedClipEnd} onChange={(e) => {
-                        const nextEnd = clampTimelineTime(e.target.value, selectedClipStart + 0.1, duration);
+                      <input type="number" min={Math.round((selectedClipStart + 0.1) * 10) / 10} max={selectedClipMaxEnd} step="0.1" value={selectedClipEnd} onChange={(e) => {
+                        const nextEnd = clampTimelineTime(e.target.value, selectedClipStart + 0.1, selectedClipMaxEnd);
                         updateSelectedClip({ duration: Math.round((nextEnd - selectedClipStart) * 10) / 10 });
                       }} className="mt-1 w-full bg-transparent text-xs font-black text-slate-950 outline-none" />
                     </label>
