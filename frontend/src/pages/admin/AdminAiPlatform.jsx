@@ -710,6 +710,23 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     previewVideoRef.current?.pause?.();
     setIsPreviewPlaying(false);
   };
+  const playPreviewFrom = (value = currentTime) => {
+    const player = previewVideoRef.current;
+    if (!player) return;
+    const maxTime = Number.isFinite(player.duration) ? player.duration : duration;
+    const targetTime = Math.max(0, Math.min(maxTime, Number(value) || 0));
+    seekTimeline(targetTime);
+    if (Math.abs(player.currentTime - targetTime) > 0.15) player.currentTime = targetTime;
+    scheduleTimelineSfxFrom(targetTime);
+    player.play().then(() => setIsPreviewPlaying(true)).catch(() => {
+      clearTimelinePlaybackAudio();
+      setIsPreviewPlaying(false);
+    });
+  };
+  const stopPreviewPlayback = () => {
+    pausePreviewPlayback();
+    seekTimeline(0);
+  };
   const togglePreviewPlayback = () => {
     const player = previewVideoRef.current;
     if (!player) return;
@@ -717,13 +734,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       pausePreviewPlayback();
       return;
     }
-    const targetTime = Math.max(0, Math.min(Number.isFinite(player.duration) ? player.duration : duration, currentTime));
-    if (Math.abs(player.currentTime - targetTime) > 0.15) player.currentTime = targetTime;
-    scheduleTimelineSfxFrom(targetTime);
-    player.play().then(() => setIsPreviewPlaying(true)).catch(() => {
-      clearTimelinePlaybackAudio();
-      setIsPreviewPlaying(false);
-    });
+    playPreviewFrom(currentTime);
   };
   const startScrubTimeline = (event) => {
     event.preventDefault();
@@ -1377,6 +1388,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if (!event.ctrlKey && !event.metaKey && !event.altKey && event.code === "Space") {
         event.preventDefault();
         togglePreviewPlayback();
+        return;
+      }
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key === "Enter") {
+        event.preventDefault();
+        playPreviewFrom(0);
         return;
       }
       if (event.key === "Escape" && selectedClipKeys.length > 1) {
@@ -2578,6 +2594,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   >
                     {isPreviewPlaying ? "Пауза" : "Play"}
                   </button>
+                  <button type="button" onClick={() => playPreviewFrom(0)} disabled={!previewUrl} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100 disabled:opacity-40" title="Enter — play from start">С начала</button>
+                  <button type="button" onClick={stopPreviewPlayback} disabled={!previewUrl} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15 disabled:opacity-40">Стоп</button>
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
                   <button type="button" onClick={selectAllTimelineClips} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Все клипы</button>
                   <button type="button" onClick={copySelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Копировать</button>
