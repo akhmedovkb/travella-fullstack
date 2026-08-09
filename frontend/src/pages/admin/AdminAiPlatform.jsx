@@ -539,6 +539,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const playheadLeft = Math.max(0, Math.min(100, (currentTime / duration) * 100));
   const timelineMinWidth = Math.round(620 * timelineZoom);
   const setTimelineZoomPreset = (value) => setTimelineZoom(Math.max(1, Math.min(3, Number(value) || 1)));
+  const zoomTimelineBy = (delta) => setTimelineZoom((value) => Math.max(1, Math.min(3, Math.round((Number(value || 1) + Number(delta || 0)) * 4) / 4)));
   const selectedClipLabel = selectedClip.type === "sfx" ? "SFX" : selectedClip.type === "text" ? "Текст" : selectedClip.type === "image" ? "Картинка" : "Видео";
   const selectedClipFallbackDuration = selectedClip.type === "video" ? 5 : selectedClip.type === "image" ? 4 : selectedClip.type === "text" ? 3 : 0.3;
   const selectedClipDuration = Number(selectedItem?.duration || selectedClipFallbackDuration);
@@ -1396,6 +1397,16 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key === "Enter") {
         event.preventDefault();
         playPreviewFrom(0);
+        return;
+      }
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && (event.key === "+" || event.key === "=")) {
+        event.preventDefault();
+        zoomTimelineBy(0.25);
+        return;
+      }
+      if (!event.ctrlKey && !event.metaKey && !event.altKey && event.key === "-") {
+        event.preventDefault();
+        zoomTimelineBy(-0.25);
         return;
       }
       if (event.key === "Escape" && selectedClipKeys.length > 1) {
@@ -2669,6 +2680,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       className="w-20 accent-indigo-400"
                     />
                   </label>
+                  <button type="button" onClick={() => zoomTimelineBy(-0.25)} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15" title="- — уменьшить масштаб">−</button>
+                  <button type="button" onClick={() => zoomTimelineBy(0.25)} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15" title="+ — увеличить масштаб">+</button>
                 </div>
               </div>
               <input ref={mediaInputRef} type="file" accept="image/*,audio/*,video/*" multiple onChange={handleMediaInput} className="hidden" />
