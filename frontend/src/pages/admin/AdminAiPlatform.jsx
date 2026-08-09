@@ -566,6 +566,29 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const clipDuration = Math.max(0.1, getClipDurationForType(type, item));
     return Math.max(0, Math.min(Math.max(0, duration - clipDuration), roundTimelineTime(value)));
   };
+  const getTimelineSnapPoints = (excludeKeys = []) => {
+    const exclude = new Set(excludeKeys);
+    const points = [0, duration, currentTime];
+    const collect = (items, type) => (Array.isArray(items) ? items : []).forEach((item, index) => {
+      if (!item || exclude.has(getClipKey(type, index))) return;
+      const start = Number(item.time || 0);
+      const end = start + getClipDurationForType(type, item);
+      points.push(roundTimelineTime(start), roundTimelineTime(end));
+    });
+    collect(effects, "sfx");
+    collect(textOverlays, "text");
+    collect(imageOverlays, "image");
+    collect(videoClips, "video");
+    return points;
+  };
+  const snapTimelineTime = (value, excludeKeys = [], threshold = 0.25) => {
+    const rounded = roundTimelineTime(value);
+    const nearest = getTimelineSnapPoints(excludeKeys).reduce((best, point) => {
+      const distance = Math.abs(point - rounded);
+      return distance < best.distance ? { point, distance } : best;
+    }, { point: rounded, distance: Infinity });
+    return nearest.distance <= threshold ? roundTimelineTime(nearest.point) : rounded;
+  };
   const shiftClipTime = (type, item, amount = 0.7) => {
     const current = Number(item?.time || 0);
     return clampClipStartForType(type, item, current + amount);
@@ -1659,15 +1682,17 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const source = effects[index];
     if (pointerTime === null || !source) return;
     const clipDuration = Number(source.duration || getSoundPreset(source.assetId).tone?.duration || 0.3);
-    const target = Math.max(0, Math.min(duration - Math.max(0.1, clipDuration), pointerTime - grabOffset));
-    updateEffect(index, { time: Math.round(target * 10) / 10 });
+    const rawTarget = Math.max(0, Math.min(duration - Math.max(0.1, clipDuration), pointerTime - grabOffset));
+    const snappedTarget = snapTimelineTime(rawTarget, [getClipKey("sfx", index)]);
+    updateEffect(index, { time: clampClipStartForType("sfx", source, snappedTarget) });
   };
   const resizeEffectToClientX = (index, edge, clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
     const source = effects[index];
     if (!rect?.width || !source) return;
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const pointerTime = Math.round(ratio * duration * 10) / 10;
+    const rawPointerTime = Math.round(ratio * duration * 10) / 10;
+    const pointerTime = snapTimelineTime(rawPointerTime, [getClipKey("sfx", index)]);
     const start = Number(source.time || 0);
     const clipDuration = Number(source.duration || getSoundPreset(source.assetId).tone?.duration || 0.3);
     const end = start + Math.max(0.1, clipDuration);
@@ -1688,15 +1713,17 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (pointerTime === null || !source) return;
     const fallbackDuration = type === "video" ? 5 : type === "image" ? 4 : 3;
     const clipDuration = Number(source.duration || fallbackDuration);
-    const target = Math.max(0, Math.min(duration - Math.max(0.1, clipDuration), pointerTime - grabOffset));
-    updateOverlay(type, index, { time: Math.round(target * 10) / 10 });
+    const rawTarget = Math.max(0, Math.min(duration - Math.max(0.1, clipDuration), pointerTime - grabOffset));
+    const snappedTarget = snapTimelineTime(rawTarget, [getClipKey(type, index)]);
+    updateOverlay(type, index, { time: clampClipStartForType(type, source, snappedTarget) });
   };
   const resizeOverlayToClientX = (type, index, edge, clientX) => {
     const rect = timelineRef.current?.getBoundingClientRect();
     const source = getOverlayItems(type)[index];
     if (!rect?.width || !source) return;
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    const pointerTime = Math.round(ratio * duration * 10) / 10;
+    const rawPointerTime = Math.round(ratio * duration * 10) / 10;
+    const pointerTime = snapTimelineTime(rawPointerTime, [getClipKey(type, index)]);
     const start = Number(source.time || 0);
     const clipDuration = Number(source.duration || (type === "video" ? 5 : type === "image" ? 4 : 3));
     const end = start + Math.max(0.1, clipDuration);
@@ -1743,7 +1770,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       const nextPointerTime = clientXToTimelineTime(clientX);
       if (nextPointerTime === null) return;
       const requestedDelta = Math.round((nextPointerTime - grabOffset - clicked.start) * 10) / 10;
-      const boundedDelta = Math.max(-groupStart, Math.min(duration - groupEnd, requestedDelta));
+      const rawDelta = Math.max(-groupStart, Math.min(duration - groupEnd, requestedDelta));
+      const snappedGroupStart = snapTimelineTime(groupStart + rawDelta, selectedClipKeys);
+      const boundedDelta = Math.max(-groupStart, Math.min(duration - groupEnd, roundTimelineTime(snappedGroupStart - groupStart)));
       const moveItems = (items, itemType) => (Array.isArray(items) ? items : []).map((item, itemIndex) => {
         const key = getClipKey(itemType, itemIndex);
         if (!initialByKey.has(key)) return item;
