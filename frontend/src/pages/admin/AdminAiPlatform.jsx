@@ -408,6 +408,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [editingTextIndex, setEditingTextIndex] = React.useState(null);
   const [historyTick, setHistoryTick] = React.useState(0);
   const [timelineZoom, setTimelineZoom] = React.useState(1);
+  const [snapGuideTime, setSnapGuideTime] = React.useState(null);
   const [timelineClipboard, setTimelineClipboard] = React.useState([]);
   const [previewMediaKey, setPreviewMediaKey] = React.useState("");
   const [mediaDragActive, setMediaDragActive] = React.useState(false);
@@ -546,6 +547,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     : selectedItem?.label || selectedItem?.text || selectedItem?.assetId || selectedClipLabel;
   const selectedClipRangeLabel = `${Math.round(selectedClipStart * 10) / 10}s-${selectedClipEnd}s`;
   const roundTimelineTime = (value) => Math.round(Number(value || 0) * 10) / 10;
+  const snapGuideLeft = snapGuideTime === null ? null : Math.max(0, Math.min(100, (snapGuideTime / duration) * 100));
   const clampTimelineTime = (value, min = 0, max = duration) => Math.max(min, Math.min(max, roundTimelineTime(value)));
   const getVideoSourceRemaining = (item) => {
     const sourceDuration = Number(item?.sourceDuration || 0);
@@ -581,13 +583,16 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     collect(videoClips, "video");
     return points;
   };
-  const snapTimelineTime = (value, excludeKeys = [], threshold = 0.25) => {
+  const snapTimelineTime = (value, excludeKeys = [], threshold = 0.25, options = {}) => {
     const rounded = roundTimelineTime(value);
     const nearest = getTimelineSnapPoints(excludeKeys).reduce((best, point) => {
       const distance = Math.abs(point - rounded);
       return distance < best.distance ? { point, distance } : best;
     }, { point: rounded, distance: Infinity });
-    return nearest.distance <= threshold ? roundTimelineTime(nearest.point) : rounded;
+    const didSnap = nearest.distance <= threshold;
+    const snapped = didSnap ? roundTimelineTime(nearest.point) : rounded;
+    if (options.showGuide) setSnapGuideTime(didSnap ? snapped : null);
+    return snapped;
   };
   const shiftClipTime = (type, item, amount = 0.7) => {
     const current = Number(item?.time || 0);
@@ -644,6 +649,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     });
   };
   const seekTimeline = (value) => {
+    setSnapGuideTime(null);
     setCurrentTime(Math.max(0, Math.min(duration, Number(value) || 0)));
   };
   const startScrubTimeline = (event) => {
@@ -1683,7 +1689,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (pointerTime === null || !source) return;
     const clipDuration = Number(source.duration || getSoundPreset(source.assetId).tone?.duration || 0.3);
     const rawTarget = Math.max(0, Math.min(duration - Math.max(0.1, clipDuration), pointerTime - grabOffset));
-    const snappedTarget = snapTimelineTime(rawTarget, [getClipKey("sfx", index)]);
+    const snappedTarget = snapTimelineTime(rawTarget, [getClipKey("sfx", index)], 0.25, { showGuide: true });
     updateEffect(index, { time: clampClipStartForType("sfx", source, snappedTarget) });
   };
   const resizeEffectToClientX = (index, edge, clientX) => {
@@ -1692,7 +1698,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (!rect?.width || !source) return;
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const rawPointerTime = Math.round(ratio * duration * 10) / 10;
-    const pointerTime = snapTimelineTime(rawPointerTime, [getClipKey("sfx", index)]);
+    const pointerTime = snapTimelineTime(rawPointerTime, [getClipKey("sfx", index)], 0.25, { showGuide: true });
     const start = Number(source.time || 0);
     const clipDuration = Number(source.duration || getSoundPreset(source.assetId).tone?.duration || 0.3);
     const end = start + Math.max(0.1, clipDuration);
@@ -1714,7 +1720,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const fallbackDuration = type === "video" ? 5 : type === "image" ? 4 : 3;
     const clipDuration = Number(source.duration || fallbackDuration);
     const rawTarget = Math.max(0, Math.min(duration - Math.max(0.1, clipDuration), pointerTime - grabOffset));
-    const snappedTarget = snapTimelineTime(rawTarget, [getClipKey(type, index)]);
+    const snappedTarget = snapTimelineTime(rawTarget, [getClipKey(type, index)], 0.25, { showGuide: true });
     updateOverlay(type, index, { time: clampClipStartForType(type, source, snappedTarget) });
   };
   const resizeOverlayToClientX = (type, index, edge, clientX) => {
@@ -1723,7 +1729,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     if (!rect?.width || !source) return;
     const ratio = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
     const rawPointerTime = Math.round(ratio * duration * 10) / 10;
-    const pointerTime = snapTimelineTime(rawPointerTime, [getClipKey(type, index)]);
+    const pointerTime = snapTimelineTime(rawPointerTime, [getClipKey(type, index)], 0.25, { showGuide: true });
     const start = Number(source.time || 0);
     const clipDuration = Number(source.duration || (type === "video" ? 5 : type === "image" ? 4 : 3));
     const end = start + Math.max(0.1, clipDuration);
@@ -1771,7 +1777,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if (nextPointerTime === null) return;
       const requestedDelta = Math.round((nextPointerTime - grabOffset - clicked.start) * 10) / 10;
       const rawDelta = Math.max(-groupStart, Math.min(duration - groupEnd, requestedDelta));
-      const snappedGroupStart = snapTimelineTime(groupStart + rawDelta, selectedClipKeys);
+      const snappedGroupStart = snapTimelineTime(groupStart + rawDelta, selectedClipKeys, 0.25, { showGuide: true });
       const boundedDelta = Math.max(-groupStart, Math.min(duration - groupEnd, roundTimelineTime(snappedGroupStart - groupStart)));
       const moveItems = (items, itemType) => (Array.isArray(items) ? items : []).map((item, itemIndex) => {
         const key = getClipKey(itemType, itemIndex);
@@ -1791,6 +1797,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     };
     const handleMove = (moveEvent) => moveGroup(moveEvent.clientX);
     const handleUp = () => {
+      setSnapGuideTime(null);
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
@@ -1812,6 +1819,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const grabOffset = source && pointerTime !== null ? Math.max(0, pointerTime - Number(source.time || 0)) : 0;
     const handleMove = (moveEvent) => moveEffectToClientXWithOffset(index, moveEvent.clientX, grabOffset);
     const handleUp = () => {
+      setSnapGuideTime(null);
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
@@ -1825,6 +1833,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     resizeEffectToClientX(index, edge, event.clientX);
     const handleMove = (moveEvent) => resizeEffectToClientX(index, edge, moveEvent.clientX);
     const handleUp = () => {
+      setSnapGuideTime(null);
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
@@ -1845,6 +1854,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const grabOffset = source && pointerTime !== null ? Math.max(0, pointerTime - Number(source.time || 0)) : 0;
     const handleMove = (moveEvent) => moveOverlayToClientXWithOffset(type, index, moveEvent.clientX, grabOffset);
     const handleUp = () => {
+      setSnapGuideTime(null);
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
@@ -1858,6 +1868,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     resizeOverlayToClientX(type, index, edge, event.clientX);
     const handleMove = (moveEvent) => resizeOverlayToClientX(type, index, edge, moveEvent.clientX);
     const handleUp = () => {
+      setSnapGuideTime(null);
       window.removeEventListener("pointermove", handleMove);
       window.removeEventListener("pointerup", handleUp);
     };
@@ -2737,6 +2748,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       </button>
                       <div className="pointer-events-none absolute right-1 top-1/2 min-w-12 -translate-y-1/2 rounded-lg bg-slate-800 px-2 py-1 text-center text-[10px] font-black text-white ring-1 ring-white/10">{Math.round(currentTime * 10) / 10}s</div>
                       <div className="pointer-events-none absolute top-7 z-20 h-[330px] w-0.5 -translate-x-1/2 bg-rose-400 shadow-[0_0_0_1px_rgba(255,255,255,.7)]" style={{ left: `${playheadLeft}%` }} />
+                      {snapGuideLeft !== null ? (
+                        <>
+                          <div className="pointer-events-none absolute top-7 z-30 h-[330px] w-0.5 -translate-x-1/2 bg-emerald-300 shadow-[0_0_0_1px_rgba(16,185,129,.35)]" style={{ left: `${snapGuideLeft}%` }} />
+                          <span className="pointer-events-none absolute top-7 z-30 -translate-x-1/2 -translate-y-7 rounded-full bg-emerald-300 px-2 py-0.5 text-[9px] font-black text-slate-950 shadow" style={{ left: `${snapGuideLeft}%` }}>
+                            snap {roundTimelineTime(snapGuideTime)}s
+                          </span>
+                        </>
+                      ) : null}
                     </div>
                   </div>
                   <div className="grid grid-cols-[74px_1fr] gap-3">
