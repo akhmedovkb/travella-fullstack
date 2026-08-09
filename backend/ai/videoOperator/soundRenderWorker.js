@@ -76,13 +76,17 @@ function normalizeImageOverlay(item = {}, index = 0) {
 }
 
 function normalizeVideoClip(item = {}, index = 0) {
+  const sourceStart = Math.max(0, safeNumber(item.sourceStart, 0));
+  const sourceDuration = Math.max(0, safeNumber(item.sourceDuration, 0));
+  const sourceRemaining = sourceDuration > 0 ? Math.max(0.1, sourceDuration - sourceStart) : 180;
   return {
     id: String(item.id || `video_${index}`).trim(),
     label: String(item.label || `Video ${index + 1}`).trim(),
     url: String(item.url || "").trim(),
     time: Math.max(0, safeNumber(item.time, 0)),
-    sourceStart: Math.max(0, safeNumber(item.sourceStart, 0)),
-    duration: clampNumber(item.duration, 0.1, 180, 5),
+    sourceStart,
+    sourceDuration,
+    duration: clampNumber(item.duration, 0.1, Math.min(180, sourceRemaining), 5),
     x: clampNumber(item.x, 0, 100, 50),
     y: clampNumber(item.y, 0, 100, 50),
     width: clampNumber(item.width, 4, 95, 72),
