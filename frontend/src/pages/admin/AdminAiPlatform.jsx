@@ -561,9 +561,14 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const selectedClipMaxEnd = roundTimelineTime(selectedClipStart + selectedClipMaxDuration);
   const getClipKey = (type, index) => `${type}:${index}`;
   const isClipMultiSelected = (type, index) => selectedClipKeys.includes(getClipKey(type, index));
-  const shiftClipTime = (item, amount = 0.7) => {
+  const getClipDurationForType = (type, item) => Number(item?.duration || (type === "video" ? 5 : type === "image" ? 4 : type === "text" ? 3 : getSoundPreset(item?.assetId).tone?.duration || 0.3));
+  const clampClipStartForType = (type, item, value) => {
+    const clipDuration = Math.max(0.1, getClipDurationForType(type, item));
+    return Math.max(0, Math.min(Math.max(0, duration - clipDuration), roundTimelineTime(value)));
+  };
+  const shiftClipTime = (type, item, amount = 0.7) => {
     const current = Number(item?.time || 0);
-    return Math.max(0, Math.min(duration, Math.round((current + amount) * 10) / 10));
+    return clampClipStartForType(type, item, current + amount);
   };
   const selectSingleClip = (type, index) => {
     setSelectedClip({ type, index });
@@ -673,7 +678,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       const clone = {
         ...source,
         id: `${type}_${Date.now()}_${index}`,
-        time: Math.min(duration, Math.round((Number(source.time || 0) + 0.7) * 10) / 10),
+        time: shiftClipTime(type, source),
       };
       items.splice(index + 1, 0, clone);
       selectSingleClip(type, index + 1);
@@ -729,7 +734,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       const clone = {
         ...source,
         id: `copy_sfx_${Date.now()}_${index}`,
-        time: Math.min(duration, Math.round((Number(source.time || 0) + 0.7) * 10) / 10),
+        time: shiftClipTime("sfx", source),
       };
       nextEffects.splice(index + 1, 0, clone);
       selectSingleClip("sfx", index + 1);
@@ -852,7 +857,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
           nextItems.push({
             ...item,
             id: `${type}_copy_${Date.now()}_${index}_${cloneIndex}`,
-            time: shiftClipTime(item),
+            time: shiftClipTime(type, item),
           });
         });
         return nextItems;
@@ -927,7 +932,6 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     }
     return splitEffect(selectedClip.index);
   };
-  const getClipDurationForType = (type, item) => Number(item?.duration || (type === "video" ? 5 : type === "image" ? 4 : type === "text" ? 3 : getSoundPreset(item?.assetId).tone?.duration || 0.3));
   const nudgeSelectedClip = (amount) => {
     if (selectedClipKeys.length > 1) {
       const selected = new Set(selectedClipKeys);
@@ -1132,7 +1136,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         nextItems.push({
           ...(clip.item || {}),
           id: `${type}_paste_${Date.now()}_${index}_${cloneIndex}`,
-          time: Math.max(0, Math.min(duration, Math.round((currentTime + Number(clip.offset || 0)) * 10) / 10)),
+          time: clampClipStartForType(type, clip.item, currentTime + Number(clip.offset || 0)),
         });
       });
       return nextItems;
