@@ -727,6 +727,9 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     pausePreviewPlayback();
     seekTimeline(0);
   };
+  const seekTimelineBy = (delta) => {
+    seekTimeline(Math.round((currentTime + Number(delta || 0)) * 10) / 10);
+  };
   const togglePreviewPlayback = () => {
     const player = previewVideoRef.current;
     if (!player) return;
@@ -1398,6 +1401,12 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if (event.key === "Escape" && selectedClipKeys.length > 1) {
         event.preventDefault();
         selectSingleClip(selectedClip.type, selectedClip.index);
+        return;
+      }
+      if (!selectedItem && (event.key === "ArrowLeft" || event.key === "ArrowRight")) {
+        event.preventDefault();
+        const direction = event.key === "ArrowLeft" ? -1 : 1;
+        seekTimelineBy(direction * (event.shiftKey ? 5 : 1));
         return;
       }
       if (!selectedItem) return;
@@ -2596,6 +2605,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   </button>
                   <button type="button" onClick={() => playPreviewFrom(0)} disabled={!previewUrl} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100 disabled:opacity-40" title="Enter — play from start">С начала</button>
                   <button type="button" onClick={stopPreviewPlayback} disabled={!previewUrl} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15 disabled:opacity-40">Стоп</button>
+                  <button type="button" onClick={() => seekTimelineBy(-1)} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15" title="ArrowLeft, Shift+ArrowLeft — 5 секунд">Назад 1s</button>
+                  <button type="button" onClick={() => seekTimelineBy(1)} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15" title="ArrowRight, Shift+ArrowRight — 5 секунд">Вперёд 1s</button>
                   <button type="button" onClick={playPlan} className="rounded-2xl bg-indigo-600 px-3 py-2 text-xs font-black text-white hover:bg-indigo-500">Прослушать</button>
                   <button type="button" onClick={selectAllTimelineClips} className="rounded-2xl bg-white px-3 py-2 text-xs font-black text-slate-950 hover:bg-slate-100">Все клипы</button>
                   <button type="button" onClick={copySelectedClips} className="rounded-2xl bg-white/10 px-3 py-2 text-xs font-black text-white ring-1 ring-white/10 hover:bg-white/15">Копировать</button>
