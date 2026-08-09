@@ -78,6 +78,10 @@ function normalizeVideoClip(item = {}, index = 0) {
     time: Math.max(0, safeNumber(item.time, 0)),
     sourceStart: Math.max(0, safeNumber(item.sourceStart, 0)),
     duration: clampNumber(item.duration, 0.1, 180, 5),
+    x: clampNumber(item.x, 0, 100, 50),
+    y: clampNumber(item.y, 0, 100, 50),
+    width: clampNumber(item.width, 4, 95, 72),
+    scale: clampNumber(item.scale, 0.2, 4, 1),
     enabled: item.enabled === false ? false : true,
   };
 }
@@ -186,10 +190,13 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
     const scaled = `[vclipscaled${index}]`;
     const ref = `[vclipref${index}]`;
     const out = `[vclip${index}]`;
+    const widthRatio = Math.max(0.04, Math.min(2, (normalized.width * normalized.scale) / 100));
+    const overlayX = `min(max(0\\,main_w*${normalized.x / 100}-overlay_w/2)\\,main_w-overlay_w)`;
+    const overlayY = `min(max(0\\,main_h*${normalized.y / 100}-overlay_h/2)\\,main_h-overlay_h)`;
     const enable = `between(t\\,${normalized.time}\\,${normalized.time + normalized.duration})`;
     filterParts.push(`[${item.inputIndex}:v]trim=start=${normalized.sourceStart}:duration=${normalized.duration},setpts=PTS-STARTPTS+${normalized.time}/TB${trimmed}`);
-    filterParts.push(`${trimmed}${videoLabel}scale2ref=w=main_w:h=main_h${scaled}${ref}`);
-    filterParts.push(`${ref}${scaled}overlay=0:0:enable='${enable}'${out}`);
+    filterParts.push(`${trimmed}${videoLabel}scale2ref=w=main_w*${widthRatio}:h=-2${scaled}${ref}`);
+    filterParts.push(`${ref}${scaled}overlay=x='${overlayX}':y='${overlayY}':enable='${enable}'${out}`);
     videoLabel = out;
     hasVideoFilters = true;
   });
