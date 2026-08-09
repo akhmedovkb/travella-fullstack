@@ -1080,17 +1080,21 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     const end = start + Math.max(0.1, length);
     const nextStart = clampTimelineTime(currentTime, 0, Math.max(0, end - 0.1));
     const delta = nextStart - start;
+    const nextSourceStart = selectedClip.type === "video" ? Math.max(0, Math.round((Number(selectedItem.sourceStart || 0) + delta) * 10) / 10) : 0;
+    const nextDuration = selectedClip.type === "video"
+      ? clampClipDuration(end - nextStart, nextStart, { ...selectedItem, sourceStart: nextSourceStart })
+      : Math.round((end - nextStart) * 10) / 10;
     updateSelectedClip({
       time: nextStart,
-      duration: Math.round((end - nextStart) * 10) / 10,
-      ...(selectedClip.type === "video" ? { sourceStart: Math.max(0, Math.round((Number(selectedItem.sourceStart || 0) + delta) * 10) / 10) } : {}),
+      duration: nextDuration,
+      ...(selectedClip.type === "video" ? { sourceStart: nextSourceStart } : {}),
     });
   };
   const trimSelectedClipEndToPlayhead = () => {
     if (selectedClipKeys.length > 1 || !selectedItem) return;
     const start = Number(selectedItem.time || 0);
-    const nextEnd = clampTimelineTime(currentTime, start + 0.1, duration);
-    updateSelectedClip({ duration: Math.round((nextEnd - start) * 10) / 10 });
+    const nextEnd = clampTimelineTime(currentTime, start + 0.1, selectedClipMaxEnd);
+    updateSelectedClip({ duration: clampClipDuration(nextEnd - start) });
   };
   const getSelectedClipItems = () => selectedClipKeys
     .map((key) => {
