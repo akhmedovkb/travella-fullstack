@@ -1307,7 +1307,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         ...base,
         textOverlays: [
           ...items,
-          { id: `text_${Date.now()}`, label: "CTA text", text: "Свяжитесь с поставщиком", time: Math.min(3, duration), duration: 3, enabled: true, x: 50, y: 78, fontSize: 22, scale: 1, zIndex: 30 + items.length },
+          { id: `text_${Date.now()}`, label: "CTA text", text: "Свяжитесь с поставщиком", time: Math.min(3, duration), duration: 3, enabled: true, x: 50, y: 78, fontSize: 22, scale: 1, opacity: 1, zIndex: 30 + items.length },
         ],
       };
     });
@@ -1321,7 +1321,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
         ...base,
         imageOverlays: [
           ...items,
-          { id: `image_${Date.now()}`, label: "Product card", time: Math.min(5, duration), duration: 4, enabled: true, x: 50, y: 72, scale: 1, width: 34, zIndex: 20 + items.length },
+          { id: `image_${Date.now()}`, label: "Product card", time: Math.min(5, duration), duration: 4, enabled: true, x: 50, y: 72, scale: 1, opacity: 1, width: 34, zIndex: 20 + items.length },
         ],
       };
     });
@@ -1347,6 +1347,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             x: 50,
             y: 72,
             scale: 1,
+            opacity: 1,
             width: 34,
             zIndex: 20 + items.length,
           },
@@ -1378,6 +1379,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
             y: 50,
             width: 72,
             scale: 1,
+            opacity: 1,
             zIndex: 15 + items.length,
             note: "Импортированный видео-клип. Вставляется поверх основного HeyGen video без собственного звука.",
           },
@@ -1973,6 +1975,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                           top: `${Number(item.y ?? 78)}%`,
                           fontSize: `${Number(item.fontSize || 22) * Number(item.scale || 1)}px`,
                           maxWidth: "80%",
+                          opacity: Number(item.opacity ?? 1),
                           zIndex: getOverlayLayer("text", item, index),
                         };
                         if (editingTextIndex === index) {
@@ -2033,6 +2036,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             left: `${Number(item.x ?? 50)}%`,
                             top: `${Number(item.y ?? 72)}%`,
                             width: `${Number(item.width || 34) * Number(item.scale || 1)}%`,
+                            opacity: Number(item.opacity ?? 1),
                             zIndex: getOverlayLayer("image", item, index),
                           }}
                         >
@@ -2060,6 +2064,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                             left: `${Number(item.x ?? 50)}%`,
                             top: `${Number(item.y ?? 50)}%`,
                             width: `${Number(item.width || 72) * Number(item.scale || 1)}%`,
+                            opacity: Number(item.opacity ?? 1),
                             zIndex: getOverlayLayer("video", item, index),
                           }}
                           title="Перетащи видео-вставку. Потяни маркер — изменить размер."
@@ -3037,6 +3042,10 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                       <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
                         <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Размер · {Math.round(Number(selectedItem.scale || 1) * 100)}%</span>
                         <input type="range" min="0.4" max="2.5" step="0.05" value={Number(selectedItem.scale || 1)} onChange={(e) => updateSelectedClip({ scale: Number(e.target.value) })} className="mt-2 w-full accent-amber-500" />
+                      </label>
+                      <label className="block rounded-xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
+                        <span className="text-[10px] font-black uppercase tracking-wide text-slate-400">Прозрачность · {Math.round(Number(selectedItem.opacity ?? 1) * 100)}%</span>
+                        <input type="range" min="0.1" max="1" step="0.05" value={Number(selectedItem.opacity ?? 1)} onChange={(e) => updateSelectedClip({ opacity: Number(e.target.value) })} className="mt-2 w-full accent-slate-600" />
                       </label>
                       <div className="rounded-xl bg-slate-50 p-2 ring-1 ring-slate-100">
                         <div className="mb-2 flex items-center justify-between gap-2 px-1">
