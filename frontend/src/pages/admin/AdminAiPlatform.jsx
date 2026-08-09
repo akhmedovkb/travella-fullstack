@@ -420,6 +420,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const [mediaToolbarNotice, setMediaToolbarNotice] = React.useState("");
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
+  const previewVideoRef = React.useRef(null);
   const mediaInputRef = React.useRef(null);
   const historyRef = React.useRef({ past: [], future: [], last: "", skip: false });
   const clonePlan = (value) => JSON.parse(JSON.stringify(value || null));
@@ -648,7 +649,18 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       playSfxPreview(effect, Math.min(8, Math.max(0, Number(effect.time || 0))));
     });
   };
-  const seekTimeline = (value) => {
+  const seekTimeline = (value, options = {}) => {
+    const nextTime = Math.max(0, Math.min(duration, Number(value) || 0));
+    setSnapGuideTime(null);
+    setCurrentTime(nextTime);
+    if (options.syncPreview !== false && previewVideoRef.current && Number.isFinite(previewVideoRef.current.duration)) {
+      const videoTime = Math.max(0, Math.min(previewVideoRef.current.duration, nextTime));
+      if (Math.abs(previewVideoRef.current.currentTime - videoTime) > 0.15) {
+        previewVideoRef.current.currentTime = videoTime;
+      }
+    }
+  };
+  const syncTimelineFromPreview = (value) => {
     setSnapGuideTime(null);
     setCurrentTime(Math.max(0, Math.min(duration, Number(value) || 0)));
   };
@@ -2077,7 +2089,15 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                   <div className="text-xs font-black uppercase tracking-wide text-slate-400">Превью</div>
                   {previewUrl ? (
                     <div ref={previewFrameRef} className="relative mt-2 flex justify-center overflow-hidden rounded-xl bg-black">
-                      <video src={previewUrl} controls onTimeUpdate={(event) => seekTimeline(event.currentTarget.currentTime)} className="aspect-[9/16] max-h-[520px] w-full bg-black object-contain" />
+                      <video
+                        ref={previewVideoRef}
+                        src={previewUrl}
+                        controls
+                        onLoadedMetadata={(event) => syncTimelineFromPreview(Math.min(currentTime, event.currentTarget.duration || currentTime))}
+                        onTimeUpdate={(event) => syncTimelineFromPreview(event.currentTarget.currentTime)}
+                        onSeeked={(event) => syncTimelineFromPreview(event.currentTarget.currentTime)}
+                        className="aspect-[9/16] max-h-[520px] w-full bg-black object-contain"
+                      />
                       {textOverlays.map((item, index) => {
                         if (item.enabled === false || !isOverlayVisibleAtTime(item)) return null;
                         const textStyle = {
