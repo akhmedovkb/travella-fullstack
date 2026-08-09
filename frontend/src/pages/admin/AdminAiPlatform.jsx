@@ -422,6 +422,8 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
   const timelineRef = React.useRef(null);
   const previewFrameRef = React.useRef(null);
   const previewVideoRef = React.useRef(null);
+  const playbackTimersRef = React.useRef([]);
+  const playbackAudiosRef = React.useRef([]);
   const mediaInputRef = React.useRef(null);
   const historyRef = React.useRef({ past: [], future: [], last: "", skip: false });
   const clonePlan = (value) => JSON.parse(JSON.stringify(value || null));
@@ -659,13 +661,52 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
       if (Math.abs(previewVideoRef.current.currentTime - videoTime) > 0.15) {
         previewVideoRef.current.currentTime = videoTime;
       }
+      if (!previewVideoRef.current.paused) scheduleTimelineSfxFrom(nextTime);
     }
   };
   const syncTimelineFromPreview = (value) => {
     setSnapGuideTime(null);
     setCurrentTime(Math.max(0, Math.min(duration, Number(value) || 0)));
   };
+  const clearTimelinePlaybackAudio = () => {
+    playbackTimersRef.current.forEach((timerId) => window.clearTimeout(timerId));
+    playbackTimersRef.current = [];
+    playbackAudiosRef.current.forEach((audio) => {
+      try {
+        audio.pause();
+        audio.currentTime = 0;
+      } catch (_) {
+        // Ignore browser audio cleanup edge cases.
+      }
+    });
+    playbackAudiosRef.current = [];
+    setSoloIndex(null);
+  };
+  const playSfxClipNow = (effect, index) => {
+    setSoloIndex(index);
+    if (effect?.url) {
+      const audio = new Audio(effect.url);
+      audio.volume = Math.max(0.01, Math.min(0.8, Number(effect.volume ?? 0.2)));
+      playbackAudiosRef.current = [...playbackAudiosRef.current, audio];
+      audio.play().catch(() => playSfxPreview(effect));
+    } else {
+      playSfxPreview(effect);
+    }
+    window.setTimeout(() => setSoloIndex((value) => (value === index ? null : value)), 900);
+  };
+  const scheduleTimelineSfxFrom = (startTime = currentTime) => {
+    clearTimelinePlaybackAudio();
+    effects.forEach((effect, index) => {
+      if (!effect || effect.enabled === false) return;
+      const clipTime = Number(effect.time || 0);
+      if (clipTime < startTime - 0.05 || clipTime > duration) return;
+      const delayMs = Math.max(0, Math.round((clipTime - startTime) * 1000));
+      const timerId = window.setTimeout(() => playSfxClipNow(effect, index), delayMs);
+      playbackTimersRef.current = [...playbackTimersRef.current, timerId];
+    });
+  };
   const pausePreviewPlayback = () => {
+    clearTimelinePlaybackAudio();
     previewVideoRef.current?.pause?.();
     setIsPreviewPlaying(false);
   };
@@ -678,7 +719,11 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
     }
     const targetTime = Math.max(0, Math.min(Number.isFinite(player.duration) ? player.duration : duration, currentTime));
     if (Math.abs(player.currentTime - targetTime) > 0.15) player.currentTime = targetTime;
-    player.play().then(() => setIsPreviewPlaying(true)).catch(() => setIsPreviewPlaying(false));
+    scheduleTimelineSfxFrom(targetTime);
+    player.play().then(() => setIsPreviewPlaying(true)).catch(() => {
+      clearTimelinePlaybackAudio();
+      setIsPreviewPlaying(false);
+    });
   };
   const startScrubTimeline = (event) => {
     event.preventDefault();
@@ -2093,7 +2138,7 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <button type="button" onClick={redoTimeline} disabled={!canRedo || busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">Повторить</button>
                 <button type="button" onClick={() => onSave?.(job, draft)} disabled={busy || rendering} className="rounded-2xl bg-white px-4 py-2 text-xs font-black text-slate-950 ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-40">{busy ? "Сохраняю..." : "Сохранить"}</button>
                 <button type="button" onClick={() => onRender?.(job)} disabled={busy || rendering} className="rounded-2xl bg-slate-950 px-4 py-2 text-xs font-black text-white hover:bg-slate-800 disabled:opacity-40">{rendering ? "Свожу..." : renderedUrl ? "Пересвести звук" : "Свести звук"}</button>
-                <button type="button" onClick={() => setEditorOpen(false)} className="rounded-2xl bg-rose-50 px-4 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Закрыть</button>
+                <button type="button" onClick={() => { pausePreviewPlayback(); setEditorOpen(false); }} className="rounded-2xl bg-rose-50 px-4 py-2 text-xs font-black text-rose-700 ring-1 ring-rose-100 hover:bg-rose-100">Закрыть</button>
               </div>
             </div>
             <div className="flex-1 overflow-y-auto p-3 md:p-4">
@@ -2116,10 +2161,22 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                         controls
                         onLoadedMetadata={(event) => syncTimelineFromPreview(Math.min(currentTime, event.currentTarget.duration || currentTime))}
                         onTimeUpdate={(event) => syncTimelineFromPreview(event.currentTarget.currentTime)}
-                        onSeeked={(event) => syncTimelineFromPreview(event.currentTarget.currentTime)}
-                        onPlay={() => setIsPreviewPlaying(true)}
-                        onPause={() => setIsPreviewPlaying(false)}
-                        onEnded={() => setIsPreviewPlaying(false)}
+                        onSeeked={(event) => {
+                          syncTimelineFromPreview(event.currentTarget.currentTime);
+                          if (!event.currentTarget.paused) scheduleTimelineSfxFrom(event.currentTarget.currentTime);
+                        }}
+                        onPlay={(event) => {
+                          if (!playbackTimersRef.current.length) scheduleTimelineSfxFrom(event.currentTarget.currentTime);
+                          setIsPreviewPlaying(true);
+                        }}
+                        onPause={() => {
+                          clearTimelinePlaybackAudio();
+                          setIsPreviewPlaying(false);
+                        }}
+                        onEnded={() => {
+                          clearTimelinePlaybackAudio();
+                          setIsPreviewPlaying(false);
+                        }}
                         className="aspect-[9/16] max-h-[520px] w-full bg-black object-contain"
                       />
                       {textOverlays.map((item, index) => {
