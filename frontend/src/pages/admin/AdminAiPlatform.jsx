@@ -2881,26 +2881,40 @@ function SoundPlanEditor({ job, soundPlan, onSave, onRender, onImportMedia, load
                 <div style={{ minWidth: `${timelineMinWidth}px` }}>
                   <div className="mb-3 grid grid-cols-[74px_1fr] gap-3">
                     <div className="py-1 text-[10px] font-black uppercase tracking-wide text-slate-400">Playhead</div>
-                    <div className="relative">
-                      <button
-                        type="button"
-                        onPointerDown={startScrubTimeline}
-                        className="relative h-5 w-full cursor-pointer rounded-full bg-white/90"
-                        title="Перетащи, чтобы перейти на секунду ролика."
-                      >
-                        <span className="absolute inset-y-0 left-0 rounded-full bg-indigo-500" style={{ width: `${playheadLeft}%` }} />
-                        <span className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500 ring-2 ring-white shadow" style={{ left: `${playheadLeft}%` }} />
-                      </button>
-                      <div className="pointer-events-none absolute right-1 top-1/2 min-w-12 -translate-y-1/2 rounded-lg bg-slate-800 px-2 py-1 text-center text-[10px] font-black text-white ring-1 ring-white/10">{Math.round(currentTime * 10) / 10}s</div>
-                      <div className="pointer-events-none absolute top-7 z-20 h-[330px] w-0.5 -translate-x-1/2 bg-rose-400 shadow-[0_0_0_1px_rgba(255,255,255,.7)]" style={{ left: `${playheadLeft}%` }} />
-                      {snapGuideLeft !== null ? (
-                        <>
-                          <div className="pointer-events-none absolute top-7 z-30 h-[330px] w-0.5 -translate-x-1/2 bg-emerald-300 shadow-[0_0_0_1px_rgba(16,185,129,.35)]" style={{ left: `${snapGuideLeft}%` }} />
-                          <span className="pointer-events-none absolute top-7 z-30 -translate-x-1/2 -translate-y-7 rounded-full bg-emerald-300 px-2 py-0.5 text-[9px] font-black text-slate-950 shadow" style={{ left: `${snapGuideLeft}%` }}>
-                            snap {roundTimelineTime(snapGuideTime)}s
-                          </span>
-                        </>
-                      ) : null}
+                    <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_112px]">
+                      <div className="relative">
+                        <button
+                          type="button"
+                          onPointerDown={startScrubTimeline}
+                          className="relative h-5 w-full cursor-pointer rounded-full bg-white/90"
+                          title="Перетащи, чтобы перейти на секунду ролика."
+                        >
+                          <span className="absolute inset-y-0 left-0 rounded-full bg-indigo-500" style={{ width: `${playheadLeft}%` }} />
+                          <span className="absolute top-1/2 h-4 w-4 -translate-x-1/2 -translate-y-1/2 rounded-full bg-indigo-500 ring-2 ring-white shadow" style={{ left: `${playheadLeft}%` }} />
+                        </button>
+                        <div className="pointer-events-none absolute right-1 top-1/2 min-w-12 -translate-y-1/2 rounded-lg bg-slate-800 px-2 py-1 text-center text-[10px] font-black text-white ring-1 ring-white/10">{Math.round(currentTime * 10) / 10}s</div>
+                        <div className="pointer-events-none absolute top-7 z-20 h-[330px] w-0.5 -translate-x-1/2 bg-rose-400 shadow-[0_0_0_1px_rgba(255,255,255,.7)]" style={{ left: `${playheadLeft}%` }} />
+                        {snapGuideLeft !== null ? (
+                          <>
+                            <div className="pointer-events-none absolute top-7 z-30 h-[330px] w-0.5 -translate-x-1/2 bg-emerald-300 shadow-[0_0_0_1px_rgba(16,185,129,.35)]" style={{ left: `${snapGuideLeft}%` }} />
+                            <span className="pointer-events-none absolute top-7 z-30 -translate-x-1/2 -translate-y-7 rounded-full bg-emerald-300 px-2 py-0.5 text-[9px] font-black text-slate-950 shadow" style={{ left: `${snapGuideLeft}%` }}>
+                              snap {roundTimelineTime(snapGuideTime)}s
+                            </span>
+                          </>
+                        ) : null}
+                      </div>
+                      <label className="rounded-xl bg-slate-800 px-2 py-1 ring-1 ring-white/10">
+                        <span className="block text-[9px] font-black uppercase tracking-wide text-slate-500">Секунда</span>
+                        <input
+                          type="number"
+                          min="0"
+                          max={duration}
+                          step="0.1"
+                          value={roundTimelineTime(currentTime)}
+                          onChange={(event) => seekTimeline(Number(event.target.value))}
+                          className="w-full bg-transparent text-xs font-black text-white outline-none"
+                        />
+                      </label>
                     </div>
                   </div>
                   <div className="grid grid-cols-[74px_1fr] gap-3">
