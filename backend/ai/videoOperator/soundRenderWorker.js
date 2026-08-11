@@ -92,6 +92,7 @@ function normalizeVideoClip(item = {}, index = 0) {
     width: clampNumber(item.width, 4, 95, 72),
     scale: clampNumber(item.scale, 0.2, 4, 1),
     opacity: clampNumber(item.opacity, 0.05, 1, 1),
+    volume: clampNumber(item.volume, 0, 1, 0.75),
     rotation: clampNumber(item.rotation, -180, 180, 0),
     zIndex: safeNumber(item.zIndex, 10 + index),
     enabled: item.enabled === false ? false : true,
@@ -191,6 +192,15 @@ function buildFfmpegArgs({ inputPath, outputPath, soundPlan = {}, imageInputs = 
     item.inputIndex = nextInputIndex;
     nextInputIndex += 1;
     args.push("-i", item.path);
+  });
+
+  videoInputs.forEach((input, index) => {
+    const item = normalizeVideoClip(input.clip, index);
+    if (!input.hasAudio || item.volume <= 0) return;
+    const delay = Math.round(item.time * 1000);
+    const label = `vclipaudio${index}`;
+    filterParts.push(`[${input.inputIndex}:a]atrim=start=${item.sourceStart}:duration=${item.duration},asetpts=PTS-STARTPTS,volume=${item.volume},adelay=${delay}|${delay}[${label}]`);
+    audioLabels.push(`[${label}]`);
   });
 
   let videoLabel = "[0:v]";
@@ -391,9 +401,11 @@ async function prepareVideoInputs(soundPlan = {}, tempDir) {
   for (let index = 0; index < clips.length; index += 1) {
     const clip = clips[index];
     try {
+      const filePath = await downloadMediaToTemp(clip.url, tempDir, `video-clip-${index}`, 350 * 1024 * 1024);
       inputs.push({
-        path: await downloadMediaToTemp(clip.url, tempDir, `video-clip-${index}`, 350 * 1024 * 1024),
+        path: filePath,
         clip,
+        hasAudio: await mediaFileHasAudio(filePath),
       });
     } catch {
       // Keep renderable: failed video inserts are skipped instead of failing the whole render.
@@ -401,6 +413,31 @@ async function prepareVideoInputs(soundPlan = {}, tempDir) {
   }
 
   return inputs;
+}
+
+function mediaFileHasAudio(filePath) {
+  const ffmpegPath = getFfmpegPath();
+  if (!ffmpegPath || !filePath) return Promise.resolve(false);
+
+  return new Promise((resolve) => {
+    const child = spawn(ffmpegPath, ["-hide_banner", "-i", filePath], { windowsHide: true });
+    let stderr = "";
+    const timer = setTimeout(() => {
+      child.kill("SIGKILL");
+      resolve(false);
+    }, 12000);
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", () => {
+      clearTimeout(timer);
+      resolve(false);
+    });
+    child.on("close", () => {
+      clearTimeout(timer);
+      resolve(/Stream #\d+:\d+.*Audio:/i.test(stderr) || /\bAudio:\s/i.test(stderr));
+    });
+  });
 }
 
 function mediaExtFromContentType(contentType = "", fallback = "bin") {
