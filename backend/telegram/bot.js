@@ -12294,6 +12294,18 @@ bot.action(/^balance:topup:(\d+)$/, async (ctx) => {
 
 
 const PROVIDER_SUPPORT_PROMPT_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+const PROVIDER_SUPPORT_CARD_NUMBER = (
+  process.env.PROVIDER_SUPPORT_CARD_NUMBER || "9860 0966 0175 9945"
+).trim();
+const PROVIDER_SUPPORT_CARD_OWNER = (
+  process.env.PROVIDER_SUPPORT_CARD_OWNER || "KOMIL AKHMEDOV"
+).trim();
+const PROVIDER_SUPPORT_CARD_BANK = (
+  process.env.PROVIDER_SUPPORT_CARD_BANK || "ASIA ALLIANCE BANK"
+).trim();
+const PROVIDER_SUPPORT_CARD_NOTE = (
+  process.env.PROVIDER_SUPPORT_CARD_NOTE || "После перевода можно отправить чек в этот чат."
+).trim();
 
 function getProviderSupportContext(ctx) {
   const data = String(ctx?.callbackQuery?.data || "");
@@ -12338,68 +12350,54 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
     const providerId = await resolveProviderIdByTelegramChatId(telegramChatId).catch(() => null);
     if (providerId && await recentlySupportedProject(providerId)) return;
 
-    const amounts = Array.isArray(settings.suggested_amounts)
-      ? settings.suggested_amounts
-      : [10000, 25000, 50000, 100000];
-
-    const rows = amounts
-      .map((x) => Math.trunc(Number(x)))
-      .filter((x) => Number.isFinite(x) && x > 0)
-      .slice(0, 8)
-      .map((x) => {
-        const amountLabel = x.toLocaleString("ru-RU");
-        return [
-          {
-            text: `💳 Payme · ${amountLabel} сум`,
-            callback_data: `support_project:pay_payme:${x}:${Number(serviceId || 0)}`,
-          },
-          {
-            text: `🟣 Click · ${amountLabel} сум`,
-            callback_data: `support_project:pay_click:${x}:${Number(serviceId || 0)}`,
-          },
-        ];
-      });
-
-    if (!rows.length) return;
-
-    rows.push([{ text: "⏭ Продолжить без поддержки", callback_data: "support_project:skip" }]);
-    rows.push([
-      { text: "📋 Мои услуги", callback_data: "prov_services:list" },
-      { text: "🗄 Архив", callback_data: "archive:open" },
-    ]);
-    rows.push([{ text: "📈 Спрос и клиенты", url: `${SITE_URL}/dashboard/finance` }]);
-
-    const text =
-      `💛 <b>Спасибо, что помогаете развивать Travella</b>
-
-` +
-      `Поддержка проекта добровольная. Она помогает держать базу отказных предложений актуальной и удобной для всех.
-
-` +
-      `<b>Ваш вклад помогает:</b>
-` +
-      `• улучшать поиск и карточки
-` +
-      `• развивать Telegram-бота и веб-кабинет
-` +
-      `• быстрее внедрять новые инструменты для поставщиков
-
-` +
-      `💳 <b>Выберите сумму и удобный способ оплаты:</b>
-` +
-      `Payme — быстрая оплата картой
-` +
-      `Click — счёт придёт в приложение Click Up.`;
-
     ctx.session.__providerSupportPromptAt = now;
 
-    await safeReply(ctx, text, {
-      parse_mode: "HTML",
-      reply_markup: { inline_keyboard: rows },
-    });
+    await replyProviderSupportCardDetails(ctx);
   } catch (e) {
     console.error("[tg-bot] provider support prompt error:", e?.message || e);
   }
+}
+
+function buildProviderSupportCardKeyboard() {
+  return {
+    inline_keyboard: [
+      [{ text: "⏭ Продолжить без поддержки", callback_data: "support_project:skip" }],
+      [
+        { text: "📋 Мои услуги", callback_data: "prov_services:list" },
+        { text: "🗄 Архив", callback_data: "archive:open" },
+      ],
+      [{ text: "📈 Спрос и клиенты", url: `${SITE_URL}/dashboard/finance` }],
+    ],
+  };
+}
+
+function buildProviderSupportCardText() {
+  const cardNumber = escapeHtml(PROVIDER_SUPPORT_CARD_NUMBER);
+  const cardOwner = escapeHtml(PROVIDER_SUPPORT_CARD_OWNER);
+  const cardBank = escapeHtml(PROVIDER_SUPPORT_CARD_BANK);
+  const cardNote = escapeHtml(PROVIDER_SUPPORT_CARD_NOTE);
+
+  return `💛 <b>Спасибо, что помогаете развивать Travella</b>
+
+Поддержка проекта добровольная. Она помогает держать базу отказных предложений актуальной и удобной для всех.
+
+<b>Ваш вклад помогает:</b>
+• улучшать поиск и карточки
+• развивать Telegram-бота и веб-кабинет
+• быстрее внедрять новые инструменты для поставщиков
+
+💳 <b>Для поддержки отправьте удобную сумму на карту:</b>
+
+<code>${cardNumber}</code>
+${cardOwner ? `👤 Получатель: <b>${cardOwner}</b>\n` : ""}${cardBank ? `🏦 Банк: <b>${cardBank}</b>\n` : ""}
+${cardNote}`;
+}
+
+async function replyProviderSupportCardDetails(ctx) {
+  await safeReply(ctx, buildProviderSupportCardText(), {
+    parse_mode: "HTML",
+    reply_markup: buildProviderSupportCardKeyboard(),
+  });
 }
 
 bot.action("support_project:skip", async (ctx) => {
@@ -12977,32 +12975,20 @@ async function resolveProviderForSupportAction(ctx) {
 bot.action(/^support_project:pay_payme:(\d+):(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
-
-    const amountSum = Number(ctx.match?.[1] || 0);
-    const serviceId = Number(ctx.match?.[2] || 0) || null;
-    const providerId = await resolveProviderForSupportAction(ctx);
-    if (!providerId) return;
-
-    await sendProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
+    await replyProviderSupportCardDetails(ctx);
   } catch (e) {
     console.error("[tg-bot] support_project:pay_payme error:", e?.message || e);
-    await safeReply(ctx, "⚠️ Не удалось создать Payme оплату поддержки проекта. Попробуйте позже.");
+    await safeReply(ctx, "⚠️ Не удалось показать реквизиты карты. Попробуйте позже.");
   }
 });
 
 bot.action(/^support_project:pay_click:(\d+):(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
-
-    const amountSum = Number(ctx.match?.[1] || 0);
-    const serviceId = Number(ctx.match?.[2] || 0) || null;
-    const providerId = await resolveProviderForSupportAction(ctx);
-    if (!providerId) return;
-
-    await sendClickProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
+    await replyProviderSupportCardDetails(ctx);
   } catch (e) {
     console.error("[tg-bot] support_project:pay_click error:", e?.click?.error_note || e?.message || e);
-    await safeReply(ctx, "⚠️ Не удалось создать Click-счёт поддержки проекта. Попробуйте позже.");
+    await safeReply(ctx, "⚠️ Не удалось показать реквизиты карты. Попробуйте позже.");
   }
 });
 
@@ -13010,16 +12996,10 @@ bot.action(/^support_project:pay_click:(\d+):(\d+)$/, async (ctx) => {
 bot.action(/^support_project:pay:(\d+):(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
-
-    const amountSum = Number(ctx.match?.[1] || 0);
-    const serviceId = Number(ctx.match?.[2] || 0) || null;
-    const providerId = await resolveProviderForSupportAction(ctx);
-    if (!providerId) return;
-
-    await sendProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
+    await replyProviderSupportCardDetails(ctx);
   } catch (e) {
     console.error("[tg-bot] support_project:pay legacy error:", e?.message || e);
-    await safeReply(ctx, "⚠️ Не удалось создать Payme оплату поддержки проекта. Попробуйте позже.");
+    await safeReply(ctx, "⚠️ Не удалось показать реквизиты карты. Попробуйте позже.");
   }
 });
 
