@@ -125,6 +125,7 @@ export default function AdminProviderSupport() {
       message:
         settings?.message ||
         "Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.",
+      payment_mode: settings?.payment_mode === "payme_click" ? "payme_click" : "card",
       suggested_amounts: amounts,
       min_amount_sum: Number(settings?.min_amount_sum || 1000),
     };
@@ -187,6 +188,7 @@ export default function AdminProviderSupport() {
           enabled: !!form.enabled,
           title: form.title,
           message: form.message,
+          payment_mode: form.payment_mode === "payme_click" ? "payme_click" : "card",
           suggested_amounts: amounts,
           min_amount_sum: Number(form.min_amount_sum || 1000),
         },
@@ -231,7 +233,7 @@ export default function AdminProviderSupport() {
               Поддержка проекта
             </h2>
             <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">
-              Донаты поставщиков через Payme из Telegram-бота и веба. Здесь видны оплаты, ожидания, источник и текущие настройки блока поддержки.
+                Поддержка поставщиков из Telegram-бота и веба. Здесь видны оплаты, ожидания, источник и текущие настройки блока поддержки.
             </p>
           </div>
 
@@ -309,6 +311,35 @@ export default function AdminProviderSupport() {
           </div>
 
           <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="lg:col-span-2">
+              <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">Способ поддержки в Telegram-боте</span>
+              <div className="mt-2 grid gap-2 rounded-2xl bg-slate-50 p-1 ring-1 ring-slate-200 sm:inline-grid sm:grid-cols-2">
+                {[
+                  ["card", "Перевод на карту", "Показывает номер карты без Payme/Click."],
+                  ["payme_click", "Payme + Click", "Возвращает кнопки сумм и онлайн-оплату."],
+                ].map(([value, title, hint]) => {
+                  const active = form.payment_mode === value;
+                  return (
+                    <button
+                      key={value}
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, payment_mode: value }))}
+                      className={`rounded-xl px-4 py-3 text-left transition ${
+                        active
+                          ? "bg-slate-950 text-white shadow-sm"
+                          : "bg-white text-slate-700 hover:bg-slate-100"
+                      }`}
+                    >
+                      <span className="block text-sm font-black">{title}</span>
+                      <span className={`mt-1 block text-xs font-semibold ${active ? "text-white/70" : "text-slate-500"}`}>
+                        {hint}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">Заголовок</span>
               <input

@@ -73,6 +73,106 @@ const accommodationLabel = (value) => {
   return map[upper] ? `${upper} (${map[upper]})` : raw;
 };
 
+const parseMoneyNumber = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const normalized = raw
+    .replace(/\s+/g, "")
+    .replace(/,/g, ".")
+    .replace(/[^\d.-]/g, "");
+  const n = Number(normalized);
+  return Number.isFinite(n) && n > 0 ? n : null;
+};
+
+const formatMoneyCompact = (value) => {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
+  }).format(n);
+};
+
+const pluralRu = (n, one, few, many) => {
+  const abs = Math.abs(Number(n) || 0);
+  const mod10 = abs % 10;
+  const mod100 = abs % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+};
+
+const toPositiveInt = (value) => {
+  const match = String(value ?? "").match(/\d+/);
+  if (!match) return 0;
+  const n = Number(match[0]);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+};
+
+const inferPlacementCount = (details = {}) => {
+  const raw = String(
+    firstNonEmpty(details.accommodation, details.placement, details.room, details.roomType, details.roomCategory) || ""
+  ).toUpperCase();
+  if (!raw) return 0;
+  if (/\bSGL\b|SINGLE|ОДНОМЕСТ/i.test(raw)) return 1;
+  if (/\bDBL\b|DOUBLE|TWIN|ДВУХМЕСТ/i.test(raw)) return 2;
+  if (/\bTRPL\b|\bTPL\b|TRIPLE|ТР[ЕЁ]ХМЕСТ/i.test(raw)) return 3;
+  if (/\bQDPL\b|QUAD|QUADRUPLE|ЧЕТЫР[ЕЁ]ХМЕСТ/i.test(raw)) return 4;
+  return 0;
+};
+
+const buildPriceDisplay = ({ rawPrice, details = {}, categoryRaw = "" }) => {
+  const value = parseMoneyNumber(rawPrice);
+  if (!value) return null;
+  const cat = String(categoryRaw || "").toLowerCase();
+  const adt = toPositiveInt(details.adt || details.adults || details.accommodationADT);
+  const chd = toPositiveInt(details.chd || details.children || details.accommodationCHD);
+  const inf = toPositiveInt(details.inf || details.infants || details.accommodationINF);
+  const guestsFromAges = adt + chd + inf;
+
+  let count = 0;
+  let unit = "чел.";
+  let totalLabel = "за пакет";
+  let perLabel = "за 1 человека";
+
+  if (cat.includes("flight")) {
+    count = toPositiveInt(firstNonEmpty(details.passengersCount, details.passengers, details.quantity, details.seats, details.places)) || 1;
+    unit = "билет";
+    totalLabel = `за ${count} ${pluralRu(count, "билет", "билета", "билетов")}`;
+    perLabel = "за 1 билет";
+  } else if (cat.includes("ticket") || cat.includes("event")) {
+    count = toPositiveInt(firstNonEmpty(details.ticketsCount, details.ticketCount, details.quantity, details.seats, details.count)) || 1;
+    unit = "билет";
+    totalLabel = `за ${count} ${pluralRu(count, "билет", "билета", "билетов")}`;
+    perLabel = "за 1 билет";
+  } else {
+    count =
+      guestsFromAges ||
+      toPositiveInt(firstNonEmpty(
+        details.peopleCount,
+        details.persons,
+        details.people,
+        details.guests,
+        details.pax,
+        details.travellers,
+        details.travelers,
+        details.passengersCount
+      )) ||
+      inferPlacementCount(details);
+    if (count > 0) totalLabel = `за ${count} ${pluralRu(count, "человека", "человек", "человек")}`;
+  }
+
+  return {
+    value,
+    total: formatMoneyCompact(value),
+    totalLabel,
+    count,
+    unit,
+    perLabel,
+    perUnit: count > 1 ? formatMoneyCompact(value / count) : "",
+  };
+};
+
 const maybeParse = (x) => {
   if (!x) return null;
   if (typeof x === "object") return x;
@@ -433,9 +533,6 @@ function extractServiceFields(item, viewerRole, t) {
           svc.price
         );
 
-  const prettyPrice =
-    rawPrice == null ? null : new Intl.NumberFormat().format(Number(rawPrice));
-
   const hotel = firstNonEmpty(
     details?.hotel,
     details?.hotelName,
@@ -465,6 +562,8 @@ function extractServiceFields(item, viewerRole, t) {
   );
 
   const categoryRaw = String(firstNonEmpty(svc.category, item.category, details?.category, details?.type) || "").toLowerCase();
+  const priceDisplay = buildPriceDisplay({ rawPrice, details, categoryRaw });
+  const prettyPrice = priceDisplay?.total || null;
   const isAuthorTour = categoryRaw === "author_tour";
 
   const authorProgram = firstNonEmpty(
@@ -704,6 +803,7 @@ const dates =
     dates,
     direction,
     prettyPrice,
+    priceDisplay,
     inlineProvider,
     providerId,
     flatName,
@@ -753,6 +853,7 @@ export default function ServiceCard({
     dates,
     direction,
     prettyPrice,
+    priceDisplay,
     inlineProvider,
     providerId,
     flatName,
@@ -1822,7 +1923,7 @@ return (
               <div className="flex items-end justify-between gap-3">
                 <div className="min-w-0">
                   <div className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/55">
-                    {t("marketplace.price", { defaultValue: "Цена" })}
+                    {t("marketplace.price_package", { defaultValue: "Цена пакета" })}
                   </div>
                   <div className="mt-1 flex items-end gap-2">
                     <div className="truncate text-[29px] sm:text-[32px] font-black leading-none tracking-[-0.035em] drop-shadow-sm">
@@ -1832,6 +1933,16 @@ return (
                       {t("marketplace.price_currency", { defaultValue: "у.е." })}
                     </div>
                   </div>
+                  {priceDisplay?.totalLabel && (
+                    <div className="mt-1 text-[11px] font-black text-white/70">
+                      {priceDisplay.totalLabel}
+                    </div>
+                  )}
+                  {priceDisplay?.perUnit && (
+                    <div className="mt-1 inline-flex rounded-full bg-white/10 px-2 py-1 text-[11px] font-black text-emerald-100 ring-1 ring-white/15">
+                      {priceDisplay.perLabel}: {priceDisplay.perUnit} {t("marketplace.price_currency", { defaultValue: "у.е." })}
+                    </div>
+                  )}
                 </div>
 
                 {!isExpired && expireAt && (
@@ -2266,14 +2377,20 @@ return (
               {prettyPrice && (
                 <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-amber-400 px-4 py-3 text-white shadow-[0_16px_34px_rgba(249,115,22,0.24)]">
                   <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/70">
-                    {t("marketplace.price", { defaultValue: "Цена" })}
+                    {t("marketplace.price_package", { defaultValue: "Цена пакета" })}
                   </div>
                   <div className="mt-1 text-2xl font-black leading-none tracking-[-0.05em]">
                     {prettyPrice}
                   </div>
                   <div className="mt-0.5 text-xs font-black text-white/85">
                     {t("marketplace.price_currency", { defaultValue: "у.е." })}
+                    {priceDisplay?.totalLabel ? ` · ${priceDisplay.totalLabel}` : ""}
                   </div>
+                  {priceDisplay?.perUnit && (
+                    <div className="mt-1 rounded-full bg-white/18 px-2 py-1 text-[11px] font-black text-white">
+                      {priceDisplay.perLabel}: {priceDisplay.perUnit} {t("marketplace.price_currency", { defaultValue: "у.е." })}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -2600,7 +2717,7 @@ return (
                   {prettyPrice && (
                     <div className="mt-3 rounded-2xl bg-white/80 px-3 py-2.5 ring-1 ring-orange-100">
                       <div className="text-[10px] font-black uppercase tracking-[0.14em] text-orange-600/70">
-                        {t("marketplace.tour_price_label", { defaultValue: "Стоимость тура" })}
+                        {t("marketplace.price_package", { defaultValue: "Цена пакета" })}
                       </div>
                       <div className="mt-0.5 flex items-end gap-1.5">
                         <div className="text-2xl font-black leading-none tracking-[-0.04em] text-gray-950">
@@ -2610,6 +2727,16 @@ return (
                           {t("marketplace.price_currency", { defaultValue: "у.е." })}
                         </div>
                       </div>
+                      {priceDisplay?.totalLabel && (
+                        <div className="mt-1 text-xs font-black text-gray-500">
+                          {priceDisplay.totalLabel}
+                        </div>
+                      )}
+                      {priceDisplay?.perUnit && (
+                        <div className="mt-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100">
+                          {priceDisplay.perLabel}: {priceDisplay.perUnit} {t("marketplace.price_currency", { defaultValue: "у.е." })}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

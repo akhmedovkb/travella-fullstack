@@ -63,6 +63,64 @@ const HEYGEN_DELIVERY_PRESETS = [
 
 function cn(...items) { return items.filter(Boolean).join(" "); }
 function fmtDate(value) { try { return new Date(value).toLocaleString("ru-RU"); } catch { return "—"; } }
+function parseMoneyNumber(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const n = Number(raw.replace(/\s+/g, "").replace(/,/g, ".").replace(/[^\d.-]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+function formatMoneyCompact(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return new Intl.NumberFormat("ru-RU", { maximumFractionDigits: Number.isInteger(n) ? 0 : 2 }).format(n);
+}
+function toPositiveInt(value) {
+  const match = String(value ?? "").match(/\d+/);
+  if (!match) return 0;
+  const n = Number(match[0]);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+}
+function pluralRu(n, one, few, many) {
+  const abs = Math.abs(Number(n) || 0);
+  const mod10 = abs % 10;
+  const mod100 = abs % 100;
+  if (mod10 === 1 && mod100 !== 11) return one;
+  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+  return many;
+}
+function inferVideoPriceDisplay(ctx = {}) {
+  const price = parseMoneyNumber(ctx.price);
+  if (!price) return null;
+  const category = String(ctx.category || ctx.categoryKey || "").toLowerCase();
+  const peopleRaw = String(ctx.people || ctx.accommodation || ctx.placement || "").toUpperCase();
+  let count = toPositiveInt(ctx.peopleCount || ctx.persons || ctx.guests || ctx.pax || ctx.passengersCount || ctx.ticketsCount);
+  let totalLabel = "за пакет";
+  let perLabel = "за 1 человека";
+
+  if (category.includes("flight") || category.includes("авиа")) {
+    count = count || 1;
+    totalLabel = `за ${count} ${pluralRu(count, "билет", "билета", "билетов")}`;
+    perLabel = "за 1 билет";
+  } else if (category.includes("ticket") || category.includes("event") || category.includes("меропр")) {
+    count = count || 1;
+    totalLabel = `за ${count} ${pluralRu(count, "билет", "билета", "билетов")}`;
+    perLabel = "за 1 билет";
+  } else {
+    if (!count && /\bSGL\b|SINGLE|ОДНОМЕСТ/i.test(peopleRaw)) count = 1;
+    if (!count && /\bDBL\b|DOUBLE|TWIN|ДВУХМЕСТ/i.test(peopleRaw)) count = 2;
+    if (!count && /\bTRPL\b|\bTPL\b|TRIPLE|ТР[ЕЁ]ХМЕСТ/i.test(peopleRaw)) count = 3;
+    if (!count && /\bQDPL\b|QUAD|QUADRUPLE|ЧЕТЫР[ЕЁ]ХМЕСТ/i.test(peopleRaw)) count = 4;
+    if (count > 0) totalLabel = `за ${count} ${pluralRu(count, "человека", "человек", "человек")}`;
+  }
+
+  return {
+    total: `${formatMoneyCompact(price)} ${ctx.currency || "USD"}`,
+    totalLabel,
+    perUnit: count > 1 ? `${formatMoneyCompact(price / count)} ${ctx.currency || "USD"}` : "",
+    perLabel,
+  };
+}
 function isToday(value) {
   if (!value) return false;
   const d = new Date(value);
@@ -153,6 +211,7 @@ function ToolEvent({ ev }) {
 function ServicePreview({ service }) {
   if (!service) return null;
   const c = service.videoContext || {};
+  const priceDisplay = inferVideoPriceDisplay(c);
   return (
     <div className="mt-4 rounded-3xl border border-blue-100 bg-blue-50/70 p-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
@@ -161,7 +220,17 @@ function ServicePreview({ service }) {
           <div className="mt-1 text-lg font-black text-slate-950">{c.code} · {c.title}</div>
           <div className="mt-1 text-sm font-semibold text-slate-600">{c.category || service.category} · {service.status || "—"}</div>
         </div>
-        {c.price ? <Pill tone="blue">{c.price} {c.currency || "USD"}</Pill> : null}
+        {priceDisplay ? (
+          <div className="flex flex-col items-start gap-1 md:items-end">
+            <Pill tone="blue">{priceDisplay.total}</Pill>
+            <div className="text-xs font-black text-blue-700">{priceDisplay.totalLabel}</div>
+            {priceDisplay.perUnit ? (
+              <div className="rounded-full bg-white px-2.5 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100">
+                {priceDisplay.perLabel}: {priceDisplay.perUnit}
+              </div>
+            ) : null}
+          </div>
+        ) : c.price ? <Pill tone="blue">{c.price} {c.currency || "USD"}</Pill> : null}
       </div>
       <div className="mt-4 grid gap-3 text-sm font-semibold text-slate-700 md:grid-cols-2">
         <div><b>Направление:</b> {c.destination || "—"}</div>

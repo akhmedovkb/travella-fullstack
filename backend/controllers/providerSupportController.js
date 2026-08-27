@@ -153,6 +153,7 @@ async function ensureProviderSupportSchema(db = pool) {
       enabled BOOLEAN NOT NULL DEFAULT TRUE,
       title TEXT NOT NULL DEFAULT '❤️ Поддержка проекта',
       message TEXT NOT NULL DEFAULT 'Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.',
+      payment_mode TEXT NOT NULL DEFAULT 'card',
       suggested_amounts JSONB NOT NULL DEFAULT '[10000,25000,50000,100000]'::jsonb,
       min_amount_sum INTEGER NOT NULL DEFAULT ${DEFAULT_MIN_AMOUNT_SUM},
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -165,6 +166,11 @@ async function ensureProviderSupportSchema(db = pool) {
     INSERT INTO provider_support_settings (id)
     VALUES (1)
     ON CONFLICT (id) DO NOTHING
+  `);
+
+  await db.query(`
+    ALTER TABLE provider_support_settings
+      ADD COLUMN IF NOT EXISTS payment_mode TEXT NOT NULL DEFAULT 'card'
   `);
 
   await db.query(`
@@ -408,6 +414,7 @@ async function getProviderSupportSettings(db = pool) {
         enabled,
         title,
         message,
+        payment_mode,
         suggested_amounts,
         min_amount_sum,
         updated_at
@@ -954,6 +961,9 @@ async function adminUpdateSupportSettings(req, res) {
       cleanText(req.body?.message, 2000) ||
       "Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.";
     const suggestedAmounts = normalizeSuggestedAmounts(req.body?.suggested_amounts);
+    const paymentMode = String(req.body?.payment_mode || "card").trim() === "payme_click"
+      ? "payme_click"
+      : "card";
     const minAmount = clampInt(
       req.body?.min_amount_sum,
       DEFAULT_MIN_AMOUNT_SUM,
@@ -967,20 +977,22 @@ async function adminUpdateSupportSettings(req, res) {
            SET enabled = $1,
                title = $2,
                message = $3,
-               suggested_amounts = $4::jsonb,
-               min_amount_sum = $5,
+               payment_mode = $4,
+               suggested_amounts = $5::jsonb,
+               min_amount_sum = $6,
                updated_at = NOW()
          WHERE id = 1
          RETURNING
            id,
            enabled,
-           title,
-           message,
-           suggested_amounts,
-           min_amount_sum,
-           updated_at
+            title,
+            message,
+            payment_mode,
+            suggested_amounts,
+            min_amount_sum,
+            updated_at
       `,
-      [enabled, title, message, JSON.stringify(suggestedAmounts), minAmount]
+      [enabled, title, message, paymentMode, JSON.stringify(suggestedAmounts), minAmount]
     );
 
     return res.json({ ok: true, settings: rows[0] });

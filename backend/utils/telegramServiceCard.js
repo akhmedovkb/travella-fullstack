@@ -301,6 +301,37 @@ function formatPriceWithCurrency(value) {
   return `${v} ${PRICE_CURRENCY}`;
 }
 
+function parseMoneyNumber(value) {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  const raw = String(value ?? "").trim();
+  if (!raw) return null;
+  const normalized = raw
+    .replace(/\s+/g, "")
+    .replace(/,/g, ".")
+    .replace(/[^\d.-]/g, "");
+  const n = Number(normalized);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function formatMoneyCompact(value) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "";
+  return new Intl.NumberFormat("ru-RU", {
+    maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
+  }).format(n);
+}
+
+function extractCurrencyLabel(value) {
+  const raw = String(value || "").trim();
+  const match = raw.match(/\b(USD|EUR|RUB|UZS)\b|\$|€|₽|сум/i);
+  if (!match) return PRICE_CURRENCY;
+  const token = match[0].toUpperCase();
+  if (token === "$") return "USD";
+  if (token === "€") return "EUR";
+  if (token === "₽") return "RUB";
+  return /сум/i.test(match[0]) ? "сум" : token;
+}
+
 function buildServiceUrl(serviceId) {
   const tpl = SERVICE_URL_TEMPLATE || "{SITE_URL}?service={id}";
   return tpl
@@ -935,6 +966,92 @@ const priceKind =
     return "";
   };
 
+  const toPositiveInt = (value) => {
+    const match = String(value ?? "").match(/\d+/);
+    if (!match) return 0;
+    const n = Number(match[0]);
+    return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+  };
+
+  const pluralRu = (n, one, few, many) => {
+    const abs = Math.abs(Number(n) || 0);
+    const mod10 = abs % 10;
+    const mod100 = abs % 100;
+    if (mod10 === 1 && mod100 !== 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+    return many;
+  };
+
+  const placementCount = () => {
+    const raw = String(firstValue(d.accommodation, d.placement, d.room, d.roomType, d.roomCategory) || "").toUpperCase();
+    if (!raw) return 0;
+    if (/\bSGL\b|SINGLE|ОДНОМЕСТ/i.test(raw)) return 1;
+    if (/\bDBL\b|DOUBLE|TWIN|ДВУХМЕСТ/i.test(raw)) return 2;
+    if (/\bTRPL\b|\bTPL\b|TRIPLE|ТР[ЕЁ]ХМЕСТ/i.test(raw)) return 3;
+    if (/\bQDPL\b|QUAD|QUADRUPLE|ЧЕТЫР[ЕЁ]ХМЕСТ/i.test(raw)) return 4;
+    return 0;
+  };
+
+  const inferPriceAudience = () => {
+    const cat = String(category || "").toLowerCase();
+    const adt = toPositiveInt(d.adt || d.adults || d.accommodationADT);
+    const chd = toPositiveInt(d.chd || d.children || d.accommodationCHD);
+    const inf = toPositiveInt(d.inf || d.infants || d.accommodationINF);
+    const guestsFromAges = adt + chd + inf;
+    if (guestsFromAges > 0) {
+      const label = `${guestsFromAges} ${pluralRu(guestsFromAges, "человека", "человек", "человек")}`;
+      return { count: guestsFromAges, unit: "чел.", totalLabel: `за ${label}`, perLabel: "за 1 человека" };
+    }
+
+    if (cat.includes("flight")) {
+      const count = toPositiveInt(firstValue(d.passengersCount, d.passengers, d.quantity, d.seats, d.places));
+      if (count > 0) {
+        return {
+          count,
+          unit: "билет",
+          totalLabel: `за ${count} ${pluralRu(count, "билет", "билета", "билетов")}`,
+          perLabel: "за 1 билет",
+        };
+      }
+      return { count: 1, unit: "билет", totalLabel: "за 1 билет", perLabel: "за 1 билет" };
+    }
+
+    if (cat.includes("ticket") || cat.includes("event")) {
+      const count = toPositiveInt(firstValue(d.ticketsCount, d.ticketCount, d.quantity, d.seats, d.count));
+      if (count > 0) {
+        return {
+          count,
+          unit: "билет",
+          totalLabel: `за ${count} ${pluralRu(count, "билет", "билета", "билетов")}`,
+          perLabel: "за 1 билет",
+        };
+      }
+      return { count: 1, unit: "билет", totalLabel: "за 1 билет", perLabel: "за 1 билет" };
+    }
+
+    const explicitGuests = toPositiveInt(firstValue(
+      d.peopleCount,
+      d.persons,
+      d.people,
+      d.guests,
+      d.pax,
+      d.travellers,
+      d.travelers,
+      d.passengersCount
+    ));
+    const count = explicitGuests || placementCount();
+    if (count > 0) {
+      return {
+        count,
+        unit: "чел.",
+        totalLabel: `за ${count} ${pluralRu(count, "человека", "человек", "человек")}`,
+        perLabel: "за 1 человека",
+      };
+    }
+
+    return { count: 0, unit: "", totalLabel: "за пакет", perLabel: "" };
+  };
+
   const hasPositiveFlag = (...values) => {
     for (const value of values) {
       if (value === true) return true;
@@ -1043,7 +1160,7 @@ const priceKind =
 
   const priceHeroLine = () => {
     if (priceWithCur == null || !String(priceWithCur).trim()) return "";
-    const audience = firstValue(
+    const explicitAudience = firstValue(
       d.priceFor,
       d.pricePer,
       d.priceDescription,
@@ -1052,9 +1169,21 @@ const priceKind =
       d.passengersCount ? `за ${d.passengersCount} пассаж.` : "",
       d.ticketsCount ? `за ${d.ticketsCount} билет.` : ""
     );
-    return audience
-      ? `💵 <b>${escapeHtml(String(priceWithCur))}</b> <i>${escapeHtml(audience)}</i>`
-      : `💵 <b>${escapeHtml(String(priceWithCur))}</b>`;
+    const audience = explicitAudience || inferPriceAudience();
+    const totalLabel = typeof audience === "string" ? audience : audience.totalLabel;
+    const count = typeof audience === "string" ? 0 : Number(audience.count || 0);
+    const perLabel = typeof audience === "string" ? "" : audience.perLabel;
+    const priceNumber = parseMoneyNumber(priceRaw);
+    const currency = extractCurrencyLabel(priceWithCur);
+    const lines = [
+      totalLabel
+        ? `💵 <b>${escapeHtml(String(priceWithCur))}</b> <i>${escapeHtml(totalLabel)}</i>`
+        : `💵 <b>${escapeHtml(String(priceWithCur))}</b>`,
+    ];
+    if (priceNumber && count > 1 && perLabel) {
+      lines.push(`👤 <b>${escapeHtml(perLabel)}:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
+    }
+    return lines.join("\n");
   };
 
   const smartBadges = (kind = "refused") => {

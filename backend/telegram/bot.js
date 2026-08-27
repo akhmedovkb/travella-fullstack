@@ -12306,6 +12306,8 @@ const PROVIDER_SUPPORT_CARD_BANK = (
 const PROVIDER_SUPPORT_CARD_NOTE = (
   process.env.PROVIDER_SUPPORT_CARD_NOTE || "После перевода можно отправить чек в этот чат."
 ).trim();
+const PROVIDER_SUPPORT_PAYMENT_MODE_CARD = "card";
+const PROVIDER_SUPPORT_PAYMENT_MODE_PAYME_CLICK = "payme_click";
 
 function getProviderSupportContext(ctx) {
   const data = String(ctx?.callbackQuery?.data || "");
@@ -12352,10 +12354,85 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
 
     ctx.session.__providerSupportPromptAt = now;
 
+    if (getProviderSupportPaymentMode(settings) === PROVIDER_SUPPORT_PAYMENT_MODE_PAYME_CLICK) {
+      await replyProviderSupportPaymeClickPrompt(ctx, settings, serviceId);
+      return;
+    }
+
     await replyProviderSupportCardDetails(ctx);
   } catch (e) {
     console.error("[tg-bot] provider support prompt error:", e?.message || e);
   }
+}
+
+function getProviderSupportPaymentMode(settings = null) {
+  return String(settings?.payment_mode || PROVIDER_SUPPORT_PAYMENT_MODE_CARD).trim() === PROVIDER_SUPPORT_PAYMENT_MODE_PAYME_CLICK
+    ? PROVIDER_SUPPORT_PAYMENT_MODE_PAYME_CLICK
+    : PROVIDER_SUPPORT_PAYMENT_MODE_CARD;
+}
+
+async function getProviderSupportPaymentModeFromDb() {
+  try {
+    if (!pool) return PROVIDER_SUPPORT_PAYMENT_MODE_CARD;
+    const settings = await getProviderSupportSettings(pool);
+    return getProviderSupportPaymentMode(settings);
+  } catch {
+    return PROVIDER_SUPPORT_PAYMENT_MODE_CARD;
+  }
+}
+
+async function replyProviderSupportPaymeClickPrompt(ctx, settings, serviceId = null) {
+  const amounts = Array.isArray(settings?.suggested_amounts)
+    ? settings.suggested_amounts
+    : [10000, 25000, 50000, 100000];
+
+  const rows = amounts
+    .map((x) => Math.trunc(Number(x)))
+    .filter((x) => Number.isFinite(x) && x > 0)
+    .slice(0, 8)
+    .map((x) => {
+      const amountLabel = x.toLocaleString("ru-RU");
+      return [
+        {
+          text: `💳 Payme · ${amountLabel} сум`,
+          callback_data: `support_project:pay_payme:${x}:${Number(serviceId || 0)}`,
+        },
+        {
+          text: `🟣 Click · ${amountLabel} сум`,
+          callback_data: `support_project:pay_click:${x}:${Number(serviceId || 0)}`,
+        },
+      ];
+    });
+
+  if (!rows.length) {
+    await replyProviderSupportCardDetails(ctx);
+    return;
+  }
+
+  rows.push([{ text: "⏭ Продолжить без поддержки", callback_data: "support_project:skip" }]);
+  rows.push([
+    { text: "📋 Мои услуги", callback_data: "prov_services:list" },
+    { text: "🗄 Архив", callback_data: "archive:open" },
+  ]);
+  rows.push([{ text: "📈 Спрос и клиенты", url: `${SITE_URL}/dashboard/finance` }]);
+
+  const text = `💛 <b>Спасибо, что помогаете развивать Travella</b>
+
+Поддержка проекта добровольная. Она помогает держать базу отказных предложений актуальной и удобной для всех.
+
+<b>Ваш вклад помогает:</b>
+• улучшать поиск и карточки
+• развивать Telegram-бота и веб-кабинет
+• быстрее внедрять новые инструменты для поставщиков
+
+💳 <b>Выберите сумму и удобный способ оплаты:</b>
+Payme — быстрая оплата картой
+Click — счёт придёт в приложение Click Up.`;
+
+  await safeReply(ctx, text, {
+    parse_mode: "HTML",
+    reply_markup: { inline_keyboard: rows },
+  });
 }
 
 function buildProviderSupportCardKeyboard() {
@@ -12975,20 +13052,40 @@ async function resolveProviderForSupportAction(ctx) {
 bot.action(/^support_project:pay_payme:(\d+):(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
-    await replyProviderSupportCardDetails(ctx);
+    if (await getProviderSupportPaymentModeFromDb() !== PROVIDER_SUPPORT_PAYMENT_MODE_PAYME_CLICK) {
+      await replyProviderSupportCardDetails(ctx);
+      return;
+    }
+
+    const amountSum = Number(ctx.match?.[1] || 0);
+    const serviceId = Number(ctx.match?.[2] || 0) || null;
+    const providerId = await resolveProviderForSupportAction(ctx);
+    if (!providerId) return;
+
+    await sendProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
   } catch (e) {
     console.error("[tg-bot] support_project:pay_payme error:", e?.message || e);
-    await safeReply(ctx, "⚠️ Не удалось показать реквизиты карты. Попробуйте позже.");
+    await safeReply(ctx, "⚠️ Не удалось обработать поддержку проекта. Попробуйте позже.");
   }
 });
 
 bot.action(/^support_project:pay_click:(\d+):(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
-    await replyProviderSupportCardDetails(ctx);
+    if (await getProviderSupportPaymentModeFromDb() !== PROVIDER_SUPPORT_PAYMENT_MODE_PAYME_CLICK) {
+      await replyProviderSupportCardDetails(ctx);
+      return;
+    }
+
+    const amountSum = Number(ctx.match?.[1] || 0);
+    const serviceId = Number(ctx.match?.[2] || 0) || null;
+    const providerId = await resolveProviderForSupportAction(ctx);
+    if (!providerId) return;
+
+    await sendClickProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
   } catch (e) {
     console.error("[tg-bot] support_project:pay_click error:", e?.click?.error_note || e?.message || e);
-    await safeReply(ctx, "⚠️ Не удалось показать реквизиты карты. Попробуйте позже.");
+    await safeReply(ctx, "⚠️ Не удалось обработать поддержку проекта. Попробуйте позже.");
   }
 });
 
@@ -12996,10 +13093,20 @@ bot.action(/^support_project:pay_click:(\d+):(\d+)$/, async (ctx) => {
 bot.action(/^support_project:pay:(\d+):(\d+)$/, async (ctx) => {
   try {
     await safeCb(ctx);
-    await replyProviderSupportCardDetails(ctx);
+    if (await getProviderSupportPaymentModeFromDb() !== PROVIDER_SUPPORT_PAYMENT_MODE_PAYME_CLICK) {
+      await replyProviderSupportCardDetails(ctx);
+      return;
+    }
+
+    const amountSum = Number(ctx.match?.[1] || 0);
+    const serviceId = Number(ctx.match?.[2] || 0) || null;
+    const providerId = await resolveProviderForSupportAction(ctx);
+    if (!providerId) return;
+
+    await sendProviderSupportInvoice(ctx, { providerId, serviceId, amountSum });
   } catch (e) {
     console.error("[tg-bot] support_project:pay legacy error:", e?.message || e);
-    await safeReply(ctx, "⚠️ Не удалось показать реквизиты карты. Попробуйте позже.");
+    await safeReply(ctx, "⚠️ Не удалось обработать поддержку проекта. Попробуйте позже.");
   }
 });
 
