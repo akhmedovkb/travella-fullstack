@@ -8080,6 +8080,8 @@ async function finishCreateServiceFromWizard(ctx) {
         ],
       },
     });
+
+    await replyProviderSupportPrompt(ctx, createdServiceId);
   } catch (e) {
     const apiError = e?.response?.data?.error || null;
     console.error(
