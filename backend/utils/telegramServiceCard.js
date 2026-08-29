@@ -712,7 +712,13 @@ const priceKind =
     const raw = getServiceDisplayTitle({ ...svc, category }, { allowFallback: false, maxLength: 60 });
 
     if (raw) {
-      return `📝 <b>${escapeHtml(normalizeTitleSoft(raw))}</b>`;
+      const productPrefix = String(productTitle || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const categoryPrefix = String(CATEGORY_LABELS?.[category] || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const cleanedTitle = normalizeTitleSoft(raw)
+        .replace(new RegExp(`^\\s*(?:${productPrefix}|${categoryPrefix})\\s*[:—–-]?\\s*`, "i"), "")
+        .trim();
+      const displayTitle = cleanedTitle || normalizeTitleSoft(raw);
+      return `📝 <b>${escapeHtml(displayTitle)}</b>`;
     }
 
     if (mode === "hotel") {
