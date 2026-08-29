@@ -760,6 +760,12 @@ const priceKind =
     return "";
   };
 
+  const lineContainsValue = (line, value) => {
+    const haystack = String(line || "").replace(/<[^>]*>/g, " ").toLowerCase();
+    const needle = String(value || "").trim().toLowerCase();
+    return Boolean(needle && haystack.includes(needle));
+  };
+
   const hasReturnFlight = () => {
     const rr =
       d.returnFlightDate ||
@@ -1669,6 +1675,8 @@ const priceKind =
     if (showBotAttribution) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
     parts.push(productHeader("ОТКАЗНОЙ ТУР"));
+    const offerNameLine = titleLine("generic");
+    if (offerNameLine) parts.push(offerNameLine);
 
     const departureCity = firstValue(
       d.directionFrom,
@@ -1706,7 +1714,9 @@ const priceKind =
     );
 
     if (heroTitle) {
-      parts.push(`🌍 <b>${escapeHtml(heroTitle)}</b>`);
+      if (!lineContainsValue(offerNameLine, heroTitle)) {
+        parts.push(`🌍 <b>${escapeHtml(heroTitle)}</b>`);
+      }
     }
 
     if (departureCity) {
@@ -1784,11 +1794,13 @@ const priceKind =
     if (showBotAttribution) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
     parts.push(productHeader("ОТКАЗНОЙ ОТЕЛЬ"));
+    const offerNameLine = titleLine("hotel");
+    if (offerNameLine) parts.push(offerNameLine);
 
     const hotelName = firstValue(d.hotel, d.hotelName, titlePretty);
     const city = firstValue(d.directionTo, d.city, d.locationCity, d.toCity);
     const country2 = firstValue(d.directionCountry, d.country, d.locationCountry);
-    if (hotelName) parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
+    if (hotelName && !lineContainsValue(offerNameLine, hotelName)) parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
     const place = joinUniqueClean([city, country2], ", ");
     if (place) parts.push(`📍 ${escapeHtml(place)}`);
 
@@ -1842,12 +1854,14 @@ const priceKind =
     if (showBotAttribution) parts.push(`<i>через @${escapeHtml(BOT_USERNAME)}</i>`);
 
     parts.push(productHeader("ОТКАЗНОЙ АВИАБИЛЕТ"));
+    const offerNameLine = titleLine("flight");
+    if (offerNameLine) parts.push(offerNameLine);
 
     const fromCity = firstValue(d.directionFrom, d.fromCity, d.cityFrom, d.departureCity);
     const toCity = firstValue(d.directionTo, d.toCity, d.cityTo, d.arrivalCity);
     const country2 = firstValue(d.directionCountry, d.country);
     const routeLine = fromCity && toCity ? `${fromCity} → ${toCity}` : firstValue(route, toCity, fromCity);
-    if (routeLine) parts.push(`📍 <b>${escapeHtml(routeLine)}</b>`);
+    if (routeLine && !lineContainsValue(offerNameLine, routeLine)) parts.push(`📍 <b>${escapeHtml(routeLine)}</b>`);
     if (country2 && !routeLine.includes(country2)) parts.push(`🌍 ${escapeHtml(country2)}`);
 
     const fd = flightDateLabel();
@@ -1915,9 +1929,11 @@ const priceKind =
 
     const evEmoji = ticketEmoji(d.eventCategory || d.ticketType || d.type || svc.title);
     parts.push(`${evEmoji} <b>${escapeHtml(productTitle || "БИЛЕТ / МЕРОПРИЯТИЕ")}</b> <code>#R${serviceId}</code>`);
+    const offerNameLine = titleLine("ticket");
+    if (offerNameLine) parts.push(offerNameLine);
 
     const eventName = firstValue(d.eventName, d.title, svc.title);
-    if (eventName) parts.push(`${evEmoji} <b>${escapeHtml(normalizeTitleSoft(eventName))}</b>`);
+    if (eventName && !lineContainsValue(offerNameLine, eventName)) parts.push(`${evEmoji} <b>${escapeHtml(normalizeTitleSoft(eventName))}</b>`);
 
     const eventCat = firstValue(d.eventCategory, d.ticketType, d.type);
     const city = firstValue(d.city, d.locationCity, d.directionTo, d.toCity);
