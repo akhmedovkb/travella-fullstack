@@ -3167,8 +3167,8 @@ const sortLabel = useMemo(() => {
               </div>
             </div>
 
-          <div className="mt-4 overflow-visible rounded-xl border border-gray-200">
-          <table className="w-full table-fixed text-sm">
+          <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200">
+          <table className="min-w-[1380px] w-full table-fixed text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-gray-700">
               <tr>
                 <th className="w-12 px-3 py-2 text-left font-medium">
@@ -3195,6 +3195,7 @@ const sortLabel = useMemo(() => {
                 </th>
                 <th className="px-3 py-2 text-left font-medium">Категория</th>
                 <th className="px-3 py-2 text-left font-medium">Название</th>
+                <th className="px-3 py-2 text-left font-medium">Цена</th>
                 <th
                   className={thClass("created_at")}
                   onClick={() => toggleSort("created_at")}
@@ -3231,7 +3232,7 @@ const sortLabel = useMemo(() => {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={10}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={11}>
                     Загрузка…
                   </td>
                 </tr>
@@ -3276,15 +3277,16 @@ const sortLabel = useMemo(() => {
                           type="checkbox"
                           checked={selectedIds.includes(Number(it.id))}
                           onChange={() => toggleSelectOne(it.id)}
-                          disabled={deleted || !tgOk || bulkSending}
+                          disabled={deleted || bulkSending}
                           className="h-4 w-4 rounded border-slate-300 disabled:cursor-not-allowed disabled:opacity-40"
-                          title={deleted ? "Удалённые не выбираются" : !tgOk ? "Нет Telegram chatId" : "Выбрать услугу"}
+                          title={deleted ? "Удалённые не выбираются" : "Выбрать услугу"}
                         />
                       </td>
                       <td className="whitespace-nowrap px-3 py-2 text-gray-900">{it.id}</td>
 
                       <td className="whitespace-nowrap px-3 py-2">
-                        <Badge tone="blue">{it.category}</Badge>
+                        <Badge tone="blue">{categoryHumanLabel(it.category)}</Badge>
+                        <div className="mt-1 font-mono text-[11px] text-slate-500">{it.category || "—"}</div>
                         <div className="mt-1 flex flex-wrap gap-1">
                           <Badge tone={actual ? "green" : "red"}>{actual ? "actual" : "inactive"}</Badge>
                           {deleted ? <Badge tone="amber">deleted</Badge> : null}
@@ -3298,8 +3300,14 @@ const sortLabel = useMemo(() => {
                         <div className="mt-0.5 text-xs text-gray-600">
                           status: <span className="font-mono">{it.status}</span>
                         </div>
+                        <div className="mt-1 text-xs font-medium text-slate-600">
+                          {serviceRouteText(it)} · {serviceDateText(it)}
+                        </div>
+                      </td>
+
+                      <td className="px-3 py-2 align-top">
                         <div className={classNames(
-                          "mt-1 rounded-xl border px-2 py-1 text-xs",
+                          "rounded-xl border px-2 py-1 text-xs",
                           price.tone === "amber"
                             ? "border-amber-100 bg-amber-50 text-amber-950"
                             : "border-emerald-100 bg-emerald-50 text-emerald-950"
@@ -3566,7 +3574,7 @@ const sortLabel = useMemo(() => {
                 })
               ) : (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={10}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={11}>
                     Нет данных.
                   </td>
                 </tr>
