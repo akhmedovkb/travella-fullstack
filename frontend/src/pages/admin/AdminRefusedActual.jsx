@@ -53,6 +53,18 @@ function normalizeApiBase(raw) {
   return (raw || "").toString().trim().replace(/\/+$/, "");
 }
 
+function getProductionApiFallback() {
+  try {
+    const host = (window?.location?.hostname || "").toLowerCase();
+    if (host === "travella.uz" || host === "www.travella.uz") {
+      return "https://travella-fullstack-production.up.railway.app";
+    }
+  } catch {
+    // ignore
+  }
+  return "";
+}
+
 function computeApiPrefix(base) {
   if (!base) return "/api";
   const b = base.replace(/\/+$/, "");
@@ -443,6 +455,62 @@ function serviceDateText(it) {
   const b = fmt(end);
   if (a && b) return `${a} → ${b}`;
   return a || b || "—";
+}
+
+function servicePeopleCount(it) {
+  const d = it?.details || {};
+  const candidates = [
+    d.peopleCount,
+    d.personCount,
+    d.persons,
+    d.people,
+    d.adults,
+    d.guests,
+    d.pax,
+  ];
+  for (const value of candidates) {
+    const n = parseFiniteNumber(value);
+    if (n && n > 0) return Math.max(1, Math.round(n));
+  }
+  return 1;
+}
+
+function formatMoney(value, currency = "USD") {
+  const n = parseFiniteNumber(value);
+  if (n === null) return "";
+  const rounded = Math.round(n * 100) / 100;
+  return `${rounded.toLocaleString("ru-RU")} ${currency || "USD"}`;
+}
+
+function servicePriceSummary(it) {
+  const d = it?.details || {};
+  const currency = d.currency || it?.currency || "USD";
+  const gross = d.grossPrice ?? it?.price;
+  const packageText = formatMoney(gross, currency);
+  const people = servicePeopleCount(it);
+  const perPerson = people > 1 && parseFiniteNumber(gross) !== null
+    ? formatMoney(parseFiniteNumber(gross) / people, currency)
+    : "";
+
+  if (!packageText) {
+    return { primary: "Цена не указана", secondary: "нужно заполнить", tone: "amber" };
+  }
+
+  const category = String(it?.category || "");
+  const unit =
+    category === "refused_hotel"
+      ? "за номер/период"
+      : category === "refused_flight"
+      ? "за билет"
+      : category === "refused_ticket" || category === "refused_event_ticket"
+      ? "за билет"
+      : `за пакет${people > 1 ? ` / ${people} чел.` : ""}`;
+
+  return {
+    primary: `${packageText} ${unit}`,
+    secondary: perPerson ? `за 1 человека: ${perPerson}` : "за 1 человека: не рассчитывается",
+    tone: "green",
+  };
 }
 
 function daysUntilText(dateValue) {
@@ -1337,7 +1405,15 @@ export default function AdminRefusedActual() {
   const base = useMemo(() => {
     const env = normalizeApiBase(getEnvApiBase());
     const rt = normalizeApiBase(getRuntimeApiBase());
-    return env || rt || "";
+    const fallback = normalizeApiBase(getProductionApiFallback());
+    return env || rt || fallback || "";
+  }, []);
+
+  const baseSource = useMemo(() => {
+    if (normalizeApiBase(getEnvApiBase())) return "env";
+    if (normalizeApiBase(getRuntimeApiBase())) return "runtime";
+    if (normalizeApiBase(getProductionApiFallback())) return "fallback";
+    return "missing";
   }, []);
 
   const apiPrefix = useMemo(() => computeApiPrefix(base), [base]);
@@ -2537,17 +2613,10 @@ const sortLabel = useMemo(() => {
     <div className="p-4 md:p-6">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Все отказные услуги</h1>
+          <h1 className="text-xl font-semibold text-gray-900">Контроль отказных предложений</h1>
           <p className="mt-1 text-sm text-gray-600">
-            Список всех refused_* услуг. Можно фильтровать актуальные, неактуальные и удалённые,
-            вручную спросить актуальность у поставщика, продлить, удалить, восстановить и теперь
-            редактировать все поля услуги.
+            Рабочая очередь для проверки актуальности, продления, публикации и редактирования отказных услуг.
           </p>
-          <div className="mt-2 text-xs text-gray-500">
-            API base: <span className="font-mono">{base ? base : "— (не задан)"}</span>
-            {" • "}
-            prefix: <span className="font-mono">{apiPrefix || "—"}</span>
-          </div>
         </div>
 
         {toast ? (
@@ -2581,6 +2650,86 @@ const sortLabel = useMemo(() => {
           </div>
         </div>
       ) : null}
+
+      <div className="mt-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div>
+            <div className="text-sm font-black uppercase tracking-[0.14em] text-slate-500">Что сделать сейчас</div>
+            <div className="mt-1 text-sm text-slate-600">
+              Сначала срочные и без ответа, потом услуги без Telegram и неактуальные записи.
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <button
+              type="button"
+              onClick={() => setQuickFilter("urgent")}
+              className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-left hover:bg-red-100"
+            >
+              <div className="text-2xl font-black text-red-950">{pageStats.urgentCount}</div>
+              <div className="text-xs font-bold text-red-700">срочные</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickFilter("no_answer")}
+              className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100"
+            >
+              <div className="text-2xl font-black text-amber-950">{pageStats.noAnswerCount}</div>
+              <div className="text-xs font-bold text-amber-700">без ответа</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickFilter("no_tg")}
+              className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left hover:bg-slate-100"
+            >
+              <div className="text-2xl font-black text-slate-950">{pageStats.tgMissingCount}</div>
+              <div className="text-xs font-bold text-slate-600">без Telegram</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setQuickFilter("all");
+                setActuality("inactive");
+              }}
+              className="rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-left hover:bg-blue-100"
+            >
+              <div className="text-2xl font-black text-blue-950">{pageStats.inactiveCount}</div>
+              <div className="text-xs font-bold text-blue-700">неактуальные</div>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <details className="mt-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <summary className="cursor-pointer select-none text-sm font-semibold text-gray-900">
+          Диагностика подключения
+          <span className={classNames(
+            "ml-2 rounded-full px-2 py-0.5 text-xs font-bold",
+            baseSource === "missing"
+              ? "bg-red-50 text-red-700"
+              : baseSource === "fallback"
+              ? "bg-amber-50 text-amber-700"
+              : "bg-green-50 text-green-700"
+          )}>
+            {baseSource === "missing" ? "API не задан" : baseSource === "fallback" ? "запасной API" : "API задан"}
+          </span>
+        </summary>
+        <div className="mt-3 grid grid-cols-1 gap-3 text-sm md:grid-cols-3">
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-[11px] font-bold uppercase text-slate-400">API base</div>
+            <div className="mt-1 break-all font-mono text-xs text-slate-800">{base || "—"}</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-[11px] font-bold uppercase text-slate-400">Prefix</div>
+            <div className="mt-1 font-mono text-xs text-slate-800">{apiPrefix || "—"}</div>
+          </div>
+          <div className="rounded-xl bg-slate-50 p-3">
+            <div className="text-[11px] font-bold uppercase text-slate-400">Источник</div>
+            <div className="mt-1 text-xs font-bold text-slate-800">
+              {baseSource === "env" ? "VITE_API_BASE_URL" : baseSource === "runtime" ? "window.frontend.API_BASE" : baseSource === "fallback" ? "production fallback" : "не найден"}
+            </div>
+          </div>
+        </div>
+      </details>
 
       <details className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
         <summary className="cursor-pointer select-none text-sm font-semibold text-gray-900">
@@ -2831,6 +2980,7 @@ const sortLabel = useMemo(() => {
                 const deleted = !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
                 const urgency = daysUntilText(it?.expirationAt || it?.expiration_at || it?.startDateForSort);
                 const meta = it.meta || {};
+                const price = servicePriceSummary(it);
                 return (
                   <div key={it.id} className={classNames("overflow-hidden rounded-3xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", actual ? "border-slate-200" : "border-red-100")}>
                     <div className={classNames("border-b bg-gradient-to-br p-4", categoryAccent(it.category))}>
@@ -2853,6 +3003,15 @@ const sortLabel = useMemo(() => {
                           <div className="text-[11px] font-bold uppercase text-slate-400">Даты</div>
                           <div className="mt-1 font-bold text-slate-900">{serviceDateText(it)}</div>
                         </div>
+                      </div>
+
+                      <div className={classNames(
+                        "rounded-2xl border p-3",
+                        price.tone === "amber" ? "border-amber-100 bg-amber-50" : "border-emerald-100 bg-emerald-50"
+                      )}>
+                        <div className="text-[11px] font-bold uppercase text-slate-500">Цена для продажи</div>
+                        <div className="mt-1 font-black text-slate-950">{price.primary}</div>
+                        <div className="mt-0.5 text-xs font-bold text-slate-600">{price.secondary}</div>
                       </div>
 
                       <div className="flex flex-wrap gap-2">
@@ -3024,6 +3183,7 @@ const sortLabel = useMemo(() => {
                   const lastSentAt = meta.lastSentAt;
                   const lastAnswer = meta.lastAnswer;
                   const lastSentBy = String(meta.lastSentBy || "").toLowerCase();
+                  const price = servicePriceSummary(it);
 
                   const sentBadge =
                     lastSentBy === "job"
@@ -3066,6 +3226,15 @@ const sortLabel = useMemo(() => {
                         </div>
                         <div className="mt-0.5 text-xs text-gray-600">
                           status: <span className="font-mono">{it.status}</span>
+                        </div>
+                        <div className={classNames(
+                          "mt-1 rounded-xl border px-2 py-1 text-xs",
+                          price.tone === "amber"
+                            ? "border-amber-100 bg-amber-50 text-amber-950"
+                            : "border-emerald-100 bg-emerald-50 text-emerald-950"
+                        )}>
+                          <span className="font-bold">{price.primary}</span>
+                          <span className={classNames("ml-1", price.tone === "amber" ? "text-amber-700" : "text-emerald-700")}>{price.secondary}</span>
                         </div>
                       </td>
 
