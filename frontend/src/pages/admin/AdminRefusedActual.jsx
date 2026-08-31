@@ -1618,17 +1618,37 @@ export default function AdminRefusedActual() {
       visibleItems
         .filter((it) => {
           const deleted = !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
+          return !deleted;
+        })
+        .map((it) => Number(it.id))
+        .filter((id) => Number.isFinite(id)),
+    [visibleItems]
+  );
+
+  const askableSelectedIds = useMemo(
+    () =>
+      selectedIds
+        .map((id) => Number(id))
+        .filter((id) => {
+          if (!Number.isFinite(id) || !selectableVisibleIds.includes(id)) return false;
+          const it = visibleItems.find((row) => Number(row.id) === id);
           const effectiveTg =
             it?.provider?.telegram_refused_chat_id ||
             it?.provider?.telegram_web_chat_id ||
             it?.provider?.telegram_chat_id ||
             it?.provider?.chatId ||
             "";
-          return !deleted && !!effectiveTg;
-        })
-        .map((it) => Number(it.id))
-        .filter((id) => Number.isFinite(id)),
-    [visibleItems]
+          return !!effectiveTg;
+        }),
+    [selectedIds, selectableVisibleIds, visibleItems]
+  );
+
+  const extendableSelectedIds = useMemo(
+    () =>
+      selectedIds
+        .map((id) => Number(id))
+        .filter((id) => Number.isFinite(id) && selectableVisibleIds.includes(id)),
+    [selectedIds, selectableVisibleIds]
   );
 
   const selectedVisibleCount = useMemo(
@@ -2450,9 +2470,7 @@ async function saveInlineEdit(item) {
   }
 
   async function askActualSelected(force = false) {
-    const ids = selectedIds
-      .map((id) => Number(id))
-      .filter((id) => Number.isFinite(id) && selectableVisibleIds.includes(id));
+    const ids = askableSelectedIds;
 
     if (!ids.length) {
       showToast("warn", "Выберите услуги с TG chatId на текущей странице");
@@ -2479,6 +2497,44 @@ async function saveInlineEdit(item) {
 
       setSelectedIds([]);
       await loadList(page);
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setBulkSending(false);
+    }
+  }
+
+  async function extendSelected() {
+    const ids = extendableSelectedIds;
+    if (!ids.length) {
+      showToast("warn", "Выберите активные услуги на текущей странице");
+      return;
+    }
+
+    setBulkSending(true);
+    setError("");
+    try {
+      let ok = 0;
+      let failed = 0;
+      for (const id of ids) {
+        const resp = await http.post(apiPath(`/admin/refused/${id}/extend`));
+        const data = ensureJsonOrThrow(resp, `extendSelected:${id}`);
+        if (data?.success) ok += 1;
+        else failed += 1;
+      }
+
+      showToast(
+        failed ? "warn" : "ok",
+        `Продлено: ${ok}. Ошибки: ${failed}.`
+      );
+
+      setSelectedIds([]);
+      await loadList(page);
+      if (detailsItem?.id && ids.includes(Number(detailsItem.id))) {
+        await openDetails(detailsItem.id);
+      }
     } catch (e) {
       const info = extractAxiosError(e);
       setError(info.msg);
@@ -3075,15 +3131,30 @@ const sortLabel = useMemo(() => {
                 <button
                   type="button"
                   onClick={() => askActualSelected(false)}
-                  disabled={!selectedIds.length || bulkSending}
+                  disabled={!askableSelectedIds.length || bulkSending}
                   className={classNames(
                     "rounded-xl border px-3 py-2 text-xs font-bold",
-                    !selectedIds.length || bulkSending
+                    !askableSelectedIds.length || bulkSending
                       ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
                       : "border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                   )}
+                  title={!askableSelectedIds.length ? "Среди выбранных нет услуг с Telegram chatId" : "Спросить актуальность выбранных услуг"}
                 >
-                  {bulkSending ? "Отправка…" : "Спросить выбранные"}
+                  {bulkSending ? "Отправка…" : `Спросить с TG (${askableSelectedIds.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={extendSelected}
+                  disabled={!extendableSelectedIds.length || bulkSending}
+                  className={classNames(
+                    "rounded-xl border px-3 py-2 text-xs font-bold",
+                    !extendableSelectedIds.length || bulkSending
+                      ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                      : "border-green-200 bg-green-50 text-green-700 hover:bg-green-100"
+                  )}
+                  title="Продлить выбранные активные услуги на 7 дней"
+                >
+                  {bulkSending ? "Продление…" : `Продлить +7 (${extendableSelectedIds.length})`}
                 </button>
                 <button
                   type="button"
