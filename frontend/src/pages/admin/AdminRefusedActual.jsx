@@ -544,6 +544,14 @@ function hasServiceImages(it) {
   return singles.some((x) => !isBlank(x));
 }
 
+function getServiceQualityFlags(it, tgOk) {
+  const flags = [];
+  if (!hasServicePrice(it)) flags.push({ key: "price", label: "нет цены", tone: "amber" });
+  if (!hasServiceImages(it)) flags.push({ key: "photo", label: "нет фото", tone: "amber" });
+  if (!tgOk) flags.push({ key: "tg", label: "нет TG", tone: "red" });
+  return flags;
+}
+
 function daysUntilText(dateValue) {
   if (!dateValue) return { text: "без даты", tone: "gray", days: null };
   const dt = new Date(dateValue);
@@ -3099,6 +3107,7 @@ const sortLabel = useMemo(() => {
                 const urgency = daysUntilText(it?.expirationAt || it?.expiration_at || it?.startDateForSort);
                 const meta = it.meta || {};
                 const price = servicePriceSummary(it);
+                const qualityFlags = getServiceQualityFlags(it, tgOk);
                 return (
                   <div key={it.id} className={classNames("overflow-hidden rounded-3xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", actual ? "border-slate-200" : "border-red-100")}>
                     <div className={classNames("border-b bg-gradient-to-br p-4", categoryAccent(it.category))}>
@@ -3134,7 +3143,10 @@ const sortLabel = useMemo(() => {
 
                       <div className="flex flex-wrap gap-2">
                         <Badge tone={urgency.tone}>{urgency.text}</Badge>
-                        <Badge tone={tgOk ? "green" : "red"}>{tgOk ? "TG OK" : "нет TG"}</Badge>
+                        {tgOk ? <Badge tone="green">TG OK</Badge> : null}
+                        {qualityFlags.map((flag) => (
+                          <Badge key={flag.key} tone={flag.tone}>{flag.label}</Badge>
+                        ))}
                         {meta.lastSentAt ? <Badge tone="blue">спросили</Badge> : null}
                         {meta.lastAnswer ? <Badge tone="green">ответ: {String(meta.lastAnswer)}</Badge> : null}
                         {deleted ? <Badge tone="amber">deleted</Badge> : null}
@@ -3230,7 +3242,7 @@ const sortLabel = useMemo(() => {
             </div>
 
           <div className="mt-4 overflow-x-auto rounded-xl border border-gray-200">
-          <table className="min-w-[1380px] w-full table-fixed text-sm">
+          <table className="min-w-[1480px] w-full table-fixed text-sm">
             <thead className="sticky top-0 z-10 bg-gray-50 text-gray-700">
               <tr>
                 <th className="w-12 px-3 py-2 text-left font-medium">
@@ -3286,6 +3298,7 @@ const sortLabel = useMemo(() => {
                   <SortBadge active={sortBy === "provider"} dir={sortOrder} />
                 </th>
                 <th className="px-3 py-2 text-left font-medium">TG</th>
+                <th className="px-3 py-2 text-left font-medium">Проверка</th>
                 <th className="px-3 py-2 text-left font-medium">Meta</th>
                 <th className="px-3 py-2 text-left font-medium">Действия</th>
               </tr>
@@ -3294,7 +3307,7 @@ const sortLabel = useMemo(() => {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={11}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={12}>
                     Загрузка…
                   </td>
                 </tr>
@@ -3318,6 +3331,7 @@ const sortLabel = useMemo(() => {
                   const lastAnswer = meta.lastAnswer;
                   const lastSentBy = String(meta.lastSentBy || "").toLowerCase();
                   const price = servicePriceSummary(it);
+                  const qualityFlags = getServiceQualityFlags(it, tgOk);
 
                   const sentBadge =
                     lastSentBy === "job"
@@ -3353,6 +3367,18 @@ const sortLabel = useMemo(() => {
                           <Badge tone={actual ? "green" : "red"}>{actual ? "actual" : "inactive"}</Badge>
                           {deleted ? <Badge tone="amber">deleted</Badge> : null}
                         </div>
+                      </td>
+
+                      <td className="px-3 py-2 align-top">
+                        {qualityFlags.length ? (
+                          <div className="flex flex-wrap gap-1">
+                            {qualityFlags.map((flag) => (
+                              <Badge key={flag.key} tone={flag.tone}>{flag.label}</Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <Badge tone="green">готово</Badge>
+                        )}
                       </td>
 
                       <td className="px-3 py-2">
@@ -3636,7 +3662,7 @@ const sortLabel = useMemo(() => {
                 })
               ) : (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={11}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={12}>
                     Нет данных.
                   </td>
                 </tr>
