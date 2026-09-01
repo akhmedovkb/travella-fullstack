@@ -513,6 +513,11 @@ function servicePriceSummary(it) {
   };
 }
 
+function hasServicePrice(it) {
+  const d = it?.details || {};
+  return parseFiniteNumber(d.grossPrice ?? it?.price) !== null;
+}
+
 function daysUntilText(dateValue) {
   if (!dateValue) return { text: "без даты", tone: "gray", days: null };
   const dt = new Date(dateValue);
@@ -1537,6 +1542,7 @@ export default function AdminRefusedActual() {
     let inactiveCount = 0;
     let tgMissingCount = 0;
     let noAnswerCount = 0;
+    let noPriceCount = 0;
     let urgentCount = 0;
     let tourCount = 0;
     let authorTourCount = 0;
@@ -1562,6 +1568,7 @@ export default function AdminRefusedActual() {
 
       const meta = it?.meta || {};
       if (meta.lastSentAt && !meta.lastAnswer) noAnswerCount += 1;
+      if (!hasServicePrice(it)) noPriceCount += 1;
 
       const d = new Date(it?.expirationAt || it?.expiration_at || it?.startDateForSort || "");
       if (!Number.isNaN(d.getTime()) && d.getTime() >= now && d.getTime() - now <= 2 * 86400000) {
@@ -1575,6 +1582,7 @@ export default function AdminRefusedActual() {
       inactiveCount,
       tgMissingCount,
       noAnswerCount,
+      noPriceCount,
       urgentCount,
       tourCount,
       authorTourCount,
@@ -1604,6 +1612,9 @@ export default function AdminRefusedActual() {
     }
     if (quickFilter === "no_answer") {
       return list.filter((it) => it?.meta?.lastSentAt && !it?.meta?.lastAnswer);
+    }
+    if (quickFilter === "no_price") {
+      return list.filter((it) => !hasServicePrice(it));
     }
     return list;
   }, [items, quickFilter]);
@@ -2715,7 +2726,7 @@ const sortLabel = useMemo(() => {
               Сначала срочные и без ответа, потом услуги без Telegram и неактуальные записи.
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
             <button
               type="button"
               onClick={() => setQuickFilter("urgent")}
@@ -2739,6 +2750,14 @@ const sortLabel = useMemo(() => {
             >
               <div className="text-2xl font-black text-slate-950">{pageStats.tgMissingCount}</div>
               <div className="text-xs font-bold text-slate-600">без Telegram</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickFilter("no_price")}
+              className="rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3 text-left hover:bg-orange-100"
+            >
+              <div className="text-2xl font-black text-orange-950">{pageStats.noPriceCount}</div>
+              <div className="text-xs font-bold text-orange-700">без цены</div>
             </button>
             <button
               type="button"
@@ -2866,6 +2885,7 @@ const sortLabel = useMemo(() => {
             <QuickChip active={quickFilter === "urgent"} onClick={() => setQuickFilter("urgent")}>Срочные</QuickChip>
             <QuickChip active={quickFilter === "no_answer"} onClick={() => setQuickFilter("no_answer")}>Без ответа</QuickChip>
             <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
+            <QuickChip active={quickFilter === "no_price"} onClick={() => setQuickFilter("no_price")}>Без цены</QuickChip>
           </div>
 
           <div className="inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 xl:w-auto">
