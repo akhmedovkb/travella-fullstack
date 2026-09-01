@@ -2520,6 +2520,17 @@ async function saveInlineEdit(item) {
     });
   }
 
+  function resetFilters() {
+    setCategory("");
+    setStatus("");
+    setQ("");
+    setActuality("actual");
+    setVisibility("active");
+    setQuickFilter("all");
+    setSelectedIds([]);
+    setPage(1);
+  }
+
   async function askActualSelected(force = false) {
     const ids = askableSelectedIds;
 
@@ -2929,36 +2940,51 @@ const sortLabel = useMemo(() => {
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
         <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap gap-2">
-            <QuickChip active={quickFilter === "all"} onClick={() => setQuickFilter("all")}>Все на странице</QuickChip>
-            <QuickChip active={quickFilter === "urgent"} onClick={() => setQuickFilter("urgent")}>Срочные</QuickChip>
-            <QuickChip active={quickFilter === "no_answer"} onClick={() => setQuickFilter("no_answer")}>Без ответа</QuickChip>
-            <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
-            <QuickChip active={quickFilter === "no_price"} onClick={() => setQuickFilter("no_price")}>Без цены</QuickChip>
-            <QuickChip active={quickFilter === "no_photo"} onClick={() => setQuickFilter("no_photo")}>Без фото</QuickChip>
+          <div>
+            <div className="flex flex-wrap gap-2">
+              <QuickChip active={quickFilter === "all"} onClick={() => setQuickFilter("all")}>Все на странице</QuickChip>
+              <QuickChip active={quickFilter === "urgent"} onClick={() => setQuickFilter("urgent")}>Срочные</QuickChip>
+              <QuickChip active={quickFilter === "no_answer"} onClick={() => setQuickFilter("no_answer")}>Без ответа</QuickChip>
+              <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
+              <QuickChip active={quickFilter === "no_price"} onClick={() => setQuickFilter("no_price")}>Без цены</QuickChip>
+              <QuickChip active={quickFilter === "no_photo"} onClick={() => setQuickFilter("no_photo")}>Без фото</QuickChip>
+            </div>
+            <div className="mt-2 text-xs font-medium text-slate-500">
+              Показано после быстрых фильтров: <span className="font-bold text-slate-900">{visibleItems.length}</span> из {pageStats.shown}
+              {quickFilter !== "all" ? <span className="ml-2 text-orange-700">активен быстрый фильтр</span> : null}
+            </div>
           </div>
 
-          <div className="inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 xl:w-auto">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <button
               type="button"
-              onClick={() => setViewMode("table")}
-              className={classNames(
-                "flex-1 rounded-xl px-4 py-2 text-sm font-bold transition xl:flex-none",
-                viewMode === "table" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
-              )}
+              onClick={resetFilters}
+              className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
             >
-              Таблица
+              Сбросить фильтры
             </button>
-            <button
-              type="button"
-              onClick={() => setViewMode("cards")}
-              className={classNames(
-                "flex-1 rounded-xl px-4 py-2 text-sm font-bold transition xl:flex-none",
-                viewMode === "cards" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
-              )}
-            >
-              Карточки
-            </button>
+            <div className="inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:w-auto">
+              <button
+                type="button"
+                onClick={() => setViewMode("table")}
+                className={classNames(
+                  "flex-1 rounded-xl px-4 py-2 text-sm font-bold transition sm:flex-none",
+                  viewMode === "table" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                )}
+              >
+                Таблица
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("cards")}
+                className={classNames(
+                  "flex-1 rounded-xl px-4 py-2 text-sm font-bold transition sm:flex-none",
+                  viewMode === "cards" ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-900"
+                )}
+              >
+                Карточки
+              </button>
+            </div>
           </div>
         </div>
       </div>
