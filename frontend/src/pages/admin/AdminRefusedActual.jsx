@@ -518,6 +518,32 @@ function hasServicePrice(it) {
   return parseFiniteNumber(d.grossPrice ?? it?.price) !== null;
 }
 
+function hasServiceImages(it) {
+  const d = it?.details || {};
+  const arrays = [
+    it?.images,
+    d.images,
+    d.photos,
+    d.photoUrls,
+    d.proofImages,
+  ];
+  if (arrays.some((arr) => Array.isArray(arr) && arr.some((x) => !isBlank(x)))) return true;
+
+  const singles = [
+    it?.image,
+    it?.imageUrl,
+    it?.photo,
+    it?.photoUrl,
+    d.image,
+    d.imageUrl,
+    d.photo,
+    d.photoUrl,
+    d.mainImage,
+    d.coverImage,
+  ];
+  return singles.some((x) => !isBlank(x));
+}
+
 function daysUntilText(dateValue) {
   if (!dateValue) return { text: "без даты", tone: "gray", days: null };
   const dt = new Date(dateValue);
@@ -1543,6 +1569,7 @@ export default function AdminRefusedActual() {
     let tgMissingCount = 0;
     let noAnswerCount = 0;
     let noPriceCount = 0;
+    let noPhotoCount = 0;
     let urgentCount = 0;
     let tourCount = 0;
     let authorTourCount = 0;
@@ -1569,6 +1596,7 @@ export default function AdminRefusedActual() {
       const meta = it?.meta || {};
       if (meta.lastSentAt && !meta.lastAnswer) noAnswerCount += 1;
       if (!hasServicePrice(it)) noPriceCount += 1;
+      if (!hasServiceImages(it)) noPhotoCount += 1;
 
       const d = new Date(it?.expirationAt || it?.expiration_at || it?.startDateForSort || "");
       if (!Number.isNaN(d.getTime()) && d.getTime() >= now && d.getTime() - now <= 2 * 86400000) {
@@ -1583,6 +1611,7 @@ export default function AdminRefusedActual() {
       tgMissingCount,
       noAnswerCount,
       noPriceCount,
+      noPhotoCount,
       urgentCount,
       tourCount,
       authorTourCount,
@@ -1615,6 +1644,9 @@ export default function AdminRefusedActual() {
     }
     if (quickFilter === "no_price") {
       return list.filter((it) => !hasServicePrice(it));
+    }
+    if (quickFilter === "no_photo") {
+      return list.filter((it) => !hasServiceImages(it));
     }
     return list;
   }, [items, quickFilter]);
@@ -2726,7 +2758,7 @@ const sortLabel = useMemo(() => {
               Сначала срочные и без ответа, потом услуги без Telegram и неактуальные записи.
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
             <button
               type="button"
               onClick={() => setQuickFilter("urgent")}
@@ -2758,6 +2790,14 @@ const sortLabel = useMemo(() => {
             >
               <div className="text-2xl font-black text-orange-950">{pageStats.noPriceCount}</div>
               <div className="text-xs font-bold text-orange-700">без цены</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickFilter("no_photo")}
+              className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-left hover:bg-violet-100"
+            >
+              <div className="text-2xl font-black text-violet-950">{pageStats.noPhotoCount}</div>
+              <div className="text-xs font-bold text-violet-700">без фото</div>
             </button>
             <button
               type="button"
@@ -2869,13 +2909,14 @@ const sortLabel = useMemo(() => {
         </div>
       </details>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-6">
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-7">
         <StatCard label="Всего по фильтру" value={total} hint={`на странице: ${pageStats.shown}`} tone="blue" />
         <StatCard label="Актуальные" value={pageStats.actualCount} hint="в текущей выдаче" tone="green" />
         <StatCard label="Неактуальные" value={pageStats.inactiveCount} hint="нужно проверить" tone={pageStats.inactiveCount ? "amber" : "slate"} />
         <StatCard label="Срочные" value={pageStats.urgentCount} hint="сегодня / до 5 дней" tone={pageStats.urgentCount ? "red" : "slate"} />
         <StatCard label="Без TG" value={pageStats.tgMissingCount} hint="нельзя спросить" tone={pageStats.tgMissingCount ? "red" : "slate"} />
         <StatCard label="Без ответа" value={pageStats.noAnswerCount} hint="после запроса" tone={pageStats.noAnswerCount ? "amber" : "slate"} />
+        <StatCard label="Без фото" value={pageStats.noPhotoCount} hint="нужно оформить" tone={pageStats.noPhotoCount ? "amber" : "slate"} />
       </div>
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -2886,6 +2927,7 @@ const sortLabel = useMemo(() => {
             <QuickChip active={quickFilter === "no_answer"} onClick={() => setQuickFilter("no_answer")}>Без ответа</QuickChip>
             <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
             <QuickChip active={quickFilter === "no_price"} onClick={() => setQuickFilter("no_price")}>Без цены</QuickChip>
+            <QuickChip active={quickFilter === "no_photo"} onClick={() => setQuickFilter("no_photo")}>Без фото</QuickChip>
           </div>
 
           <div className="inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 xl:w-auto">
