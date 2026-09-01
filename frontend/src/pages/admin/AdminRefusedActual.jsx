@@ -546,10 +546,31 @@ function hasServiceImages(it) {
 
 function getServiceQualityFlags(it, tgOk) {
   const flags = [];
-  if (!hasServicePrice(it)) flags.push({ key: "price", label: "нет цены", tone: "amber" });
-  if (!hasServiceImages(it)) flags.push({ key: "photo", label: "нет фото", tone: "amber" });
-  if (!tgOk) flags.push({ key: "tg", label: "нет TG", tone: "red" });
+  if (!hasServicePrice(it)) flags.push({ key: "price", label: "нет цены", tone: "amber", action: "details" });
+  if (!hasServiceImages(it)) flags.push({ key: "photo", label: "нет фото", tone: "amber", action: "images" });
+  if (!tgOk) flags.push({ key: "tg", label: "нет TG", tone: "red", action: "tg" });
   return flags;
+}
+
+function QualityFlagButton({ flag, onClick }) {
+  const tones = {
+    amber: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
+    red: "border-red-200 bg-red-50 text-red-700 hover:bg-red-100",
+    green: "border-green-200 bg-green-50 text-green-700 hover:bg-green-100",
+  };
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={classNames(
+        "inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium transition",
+        tones[flag?.tone] || tones.amber
+      )}
+      title="Открыть место исправления"
+    >
+      {flag?.label || "проверить"}
+    </button>
+  );
 }
 
 function daysUntilText(dateValue) {
@@ -1971,14 +1992,14 @@ export default function AdminRefusedActual() {
     }
   }
 
-    async function openEdit(id) {
+    async function openEdit(id, initialTab = "main") {
       setEditOpen(true);
       setEditLoading(true);
       setEditError("");
       setEditForm(null);
       setOriginalEditForm(null);
       setSaveAndCloseRequested(false);
-      setEditTab("main");
+      setEditTab(initialTab || "main");
       setHotelQuery("");
       setHotelOptions([]);
       setImageUrlDraft("");
@@ -2000,6 +2021,15 @@ export default function AdminRefusedActual() {
       } finally {
         setEditLoading(false);
       }
+    }
+
+    function handleQualityFlagClick(item, flag) {
+      if (!item || !flag) return;
+      if (flag.action === "tg") {
+        openInlineEdit(item);
+        return;
+      }
+      openEdit(item.id, flag.action || "main");
     }
 
     function closeEditEditor() {
@@ -3171,7 +3201,11 @@ const sortLabel = useMemo(() => {
                         <Badge tone={urgency.tone}>{urgency.text}</Badge>
                         {tgOk ? <Badge tone="green">TG OK</Badge> : null}
                         {qualityFlags.map((flag) => (
-                          <Badge key={flag.key} tone={flag.tone}>{flag.label}</Badge>
+                          <QualityFlagButton
+                            key={flag.key}
+                            flag={flag}
+                            onClick={() => handleQualityFlagClick(it, flag)}
+                          />
                         ))}
                         {meta.lastSentAt ? <Badge tone="blue">спросили</Badge> : null}
                         {meta.lastAnswer ? <Badge tone="green">ответ: {String(meta.lastAnswer)}</Badge> : null}
@@ -3399,7 +3433,11 @@ const sortLabel = useMemo(() => {
                         {qualityFlags.length ? (
                           <div className="flex flex-wrap gap-1">
                             {qualityFlags.map((flag) => (
-                              <Badge key={flag.key} tone={flag.tone}>{flag.label}</Badge>
+                              <QualityFlagButton
+                                key={flag.key}
+                                flag={flag}
+                                onClick={() => handleQualityFlagClick(it, flag)}
+                              />
                             ))}
                           </div>
                         ) : (
