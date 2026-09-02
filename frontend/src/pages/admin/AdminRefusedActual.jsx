@@ -620,6 +620,43 @@ function QuickChip({ active, children, onClick }) {
   );
 }
 
+function quickFilterLabel(value) {
+  const map = {
+    all: "все на странице",
+    urgent: "срочные",
+    no_answer: "без ответа",
+    no_tg: "без Telegram",
+    no_price: "без цены",
+    no_photo: "без фото",
+  };
+  return map[value] || "текущий фильтр";
+}
+
+function RefusedEmptyState({ quickFilter, onReset }) {
+  const hasQuickFilter = quickFilter && quickFilter !== "all";
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 text-sm text-slate-600">
+      <div className="font-bold text-slate-900">
+        {hasQuickFilter ? `По фильтру "${quickFilterLabel(quickFilter)}" ничего нет` : "Нет данных"}
+      </div>
+      <div className="mt-1">
+        {hasQuickFilter
+          ? "Значит, в этой очереди сейчас нет проблемных услуг на текущей странице."
+          : "Попробуйте обновить список или поменять основные фильтры."}
+      </div>
+      {hasQuickFilter ? (
+        <button
+          type="button"
+          onClick={onReset}
+          className="mt-3 rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+        >
+          Показать все
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function Modal({
   open,
   title,
@@ -3238,7 +3275,7 @@ const sortLabel = useMemo(() => {
                 );
               })
             ) : (
-              <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Нет данных.</div>
+              <RefusedEmptyState quickFilter={quickFilter} onReset={resetFilters} />
             )}
           </div>
         ) : (
@@ -3727,7 +3764,7 @@ const sortLabel = useMemo(() => {
               ) : (
                 <tr>
                   <td className="px-3 py-3 text-gray-600" colSpan={12}>
-                    Нет данных.
+                    <RefusedEmptyState quickFilter={quickFilter} onReset={resetFilters} />
                   </td>
                 </tr>
               )}
