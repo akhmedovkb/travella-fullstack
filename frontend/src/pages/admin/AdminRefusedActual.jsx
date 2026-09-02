@@ -527,6 +527,55 @@ function buildServiceSummaryText(it) {
   ].join("\n");
 }
 
+function csvCell(value) {
+  const text = String(value ?? "").replace(/\r?\n/g, " ").replace(/"/g, '""');
+  return `"${text}"`;
+}
+
+function buildRefusedCsv(items) {
+  const header = [
+    "ID",
+    "Категория",
+    "Название",
+    "Маршрут",
+    "Даты",
+    "Цена",
+    "За 1 человека",
+    "Поставщик",
+    "Телефон",
+    "Telegram",
+    "Статус",
+    "Проверка",
+  ];
+  const rows = (Array.isArray(items) ? items : []).map((it) => {
+    const effectiveTg =
+      it?.provider?.telegram_refused_chat_id ||
+      it?.provider?.telegram_web_chat_id ||
+      it?.provider?.telegram_chat_id ||
+      it?.provider?.chatId ||
+      "";
+    const price = servicePriceSummary(it);
+    const quality = getServiceQualityFlags(it, !!effectiveTg)
+      .map((flag) => flag.label)
+      .join(", ") || "готово";
+    return [
+      it?.id || "",
+      categoryHumanLabel(it?.category),
+      serviceMainTitle(it),
+      serviceRouteText(it),
+      serviceDateText(it),
+      price.primary,
+      price.secondary,
+      it?.provider?.companyName || it?.provider?.name || "",
+      it?.provider?.phone || "",
+      effectiveTg || "",
+      it?.status || "",
+      quality,
+    ];
+  });
+  return [header, ...rows].map((row) => row.map(csvCell).join(",")).join("\n");
+}
+
 function hasServicePrice(it) {
   const d = it?.details || {};
   return parseFiniteNumber(d.grossPrice ?? it?.price) !== null;
@@ -2670,6 +2719,30 @@ async function saveInlineEdit(item) {
     }
   }
 
+  function exportVisibleCsv() {
+    try {
+      if (!visibleItems.length) {
+        showToast("warn", "Нет строк для экспорта");
+        return;
+      }
+
+      const csv = `\uFEFF${buildRefusedCsv(visibleItems)}`;
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 10);
+      link.href = url;
+      link.download = `travella-refused-${quickFilter || "all"}-${stamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast("ok", `CSV экспортирован: ${visibleItems.length}`);
+    } catch (e) {
+      showToast("err", e?.message || "Не удалось экспортировать CSV");
+    }
+  }
+
   async function askActualSelected(force = false) {
     const ids = askableSelectedIds;
 
@@ -3105,6 +3178,19 @@ const sortLabel = useMemo(() => {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={exportVisibleCsv}
+              disabled={!visibleItems.length}
+              className={classNames(
+                "rounded-2xl border px-4 py-2 text-sm font-bold",
+                !visibleItems.length
+                  ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                  : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+              )}
+            >
+              Скачать CSV
+            </button>
             <button
               type="button"
               onClick={resetFilters}
