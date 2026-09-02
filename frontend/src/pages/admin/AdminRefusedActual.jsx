@@ -1792,6 +1792,14 @@ export default function AdminRefusedActual() {
     [selectedIds, selectableVisibleIds]
   );
 
+  const selectedVisibleItems = useMemo(
+    () =>
+      visibleItems.filter((it) =>
+        selectedIds.includes(Number(it?.id))
+      ),
+    [selectedIds, visibleItems]
+  );
+
   const selectedVisibleCount = useMemo(
     () => selectableVisibleIds.filter((id) => selectedIds.includes(id)).length,
     [selectableVisibleIds, selectedIds]
@@ -2643,6 +2651,25 @@ async function saveInlineEdit(item) {
     }
   }
 
+  async function copySelectedSummaries() {
+    try {
+      if (!selectedVisibleItems.length) {
+        showToast("warn", "Выберите услуги на текущей странице");
+        return;
+      }
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard API недоступен");
+      }
+      const text = selectedVisibleItems
+        .map((item) => buildServiceSummaryText(item))
+        .join("\n\n---\n\n");
+      await navigator.clipboard.writeText(text);
+      showToast("ok", `Скопировано услуг: ${selectedVisibleItems.length}`);
+    } catch (e) {
+      showToast("err", e?.message || "Не удалось скопировать выбранные");
+    }
+  }
+
   async function askActualSelected(force = false) {
     const ids = askableSelectedIds;
 
@@ -3382,6 +3409,20 @@ const sortLabel = useMemo(() => {
                   title="Продлить выбранные активные услуги на 7 дней"
                 >
                   {bulkSending ? "Продление…" : `Продлить +7 (${extendableSelectedIds.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={copySelectedSummaries}
+                  disabled={!selectedVisibleItems.length || bulkSending}
+                  className={classNames(
+                    "rounded-xl border px-3 py-2 text-xs font-bold",
+                    !selectedVisibleItems.length || bulkSending
+                      ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  )}
+                  title="Скопировать краткие выжимки выбранных услуг"
+                >
+                  Копировать выбранные ({selectedVisibleItems.length})
                 </button>
                 <button
                   type="button"
