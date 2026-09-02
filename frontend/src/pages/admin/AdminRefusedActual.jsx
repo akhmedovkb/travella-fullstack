@@ -546,10 +546,21 @@ function hasServiceImages(it) {
 
 function getServiceQualityFlags(it, tgOk) {
   const flags = [];
+  if (!it?.isActual) flags.push({ key: "actual", label: "неактуально", tone: "red", action: "details" });
   if (!hasServicePrice(it)) flags.push({ key: "price", label: "нет цены", tone: "amber", action: "details" });
   if (!hasServiceImages(it)) flags.push({ key: "photo", label: "нет фото", tone: "amber", action: "images" });
   if (!tgOk) flags.push({ key: "tg", label: "нет TG", tone: "red", action: "tg" });
   return flags;
+}
+
+function isServiceReadyForPublishing(it) {
+  const effectiveTg =
+    it?.provider?.telegram_refused_chat_id ||
+    it?.provider?.telegram_web_chat_id ||
+    it?.provider?.telegram_chat_id ||
+    it?.provider?.chatId ||
+    "";
+  return !!it?.isActual && getServiceQualityFlags(it, !!effectiveTg).length === 0;
 }
 
 function QualityFlagButton({ flag, onClick }) {
@@ -623,6 +634,7 @@ function QuickChip({ active, children, onClick }) {
 function quickFilterLabel(value) {
   const map = {
     all: "все на странице",
+    ready: "готовые",
     urgent: "срочные",
     no_answer: "без ответа",
     no_tg: "без Telegram",
@@ -1636,6 +1648,7 @@ export default function AdminRefusedActual() {
     let noAnswerCount = 0;
     let noPriceCount = 0;
     let noPhotoCount = 0;
+    let readyCount = 0;
     let urgentCount = 0;
     let tourCount = 0;
     let authorTourCount = 0;
@@ -1663,6 +1676,7 @@ export default function AdminRefusedActual() {
       if (meta.lastSentAt && !meta.lastAnswer) noAnswerCount += 1;
       if (!hasServicePrice(it)) noPriceCount += 1;
       if (!hasServiceImages(it)) noPhotoCount += 1;
+      if (isServiceReadyForPublishing(it)) readyCount += 1;
 
       const d = new Date(it?.expirationAt || it?.expiration_at || it?.startDateForSort || "");
       if (!Number.isNaN(d.getTime()) && d.getTime() >= now && d.getTime() - now <= 2 * 86400000) {
@@ -1678,6 +1692,7 @@ export default function AdminRefusedActual() {
       noAnswerCount,
       noPriceCount,
       noPhotoCount,
+      readyCount,
       urgentCount,
       tourCount,
       authorTourCount,
@@ -1713,6 +1728,9 @@ export default function AdminRefusedActual() {
     }
     if (quickFilter === "no_photo") {
       return list.filter((it) => !hasServiceImages(it));
+    }
+    if (quickFilter === "ready") {
+      return list.filter((it) => isServiceReadyForPublishing(it));
     }
     return list;
   }, [items, quickFilter]);
@@ -2841,10 +2859,18 @@ const sortLabel = useMemo(() => {
           <div>
             <div className="text-sm font-black uppercase tracking-[0.14em] text-slate-500">Что сделать сейчас</div>
             <div className="mt-1 text-sm text-slate-600">
-              Сначала срочные и без ответа, потом услуги без Telegram и неактуальные записи.
+              Сначала срочные и без ответа, потом услуги без Telegram, цены или фото. Готовые можно двигать в публикацию.
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+            <button
+              type="button"
+              onClick={() => setQuickFilter("ready")}
+              className="rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-3 text-left hover:bg-emerald-100"
+            >
+              <div className="text-2xl font-black text-emerald-950">{pageStats.readyCount}</div>
+              <div className="text-xs font-bold text-emerald-700">готовые</div>
+            </button>
             <button
               type="button"
               onClick={() => setQuickFilter("urgent")}
@@ -2995,8 +3021,9 @@ const sortLabel = useMemo(() => {
         </div>
       </details>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-7">
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
         <StatCard label="Всего по фильтру" value={total} hint={`на странице: ${pageStats.shown}`} tone="blue" />
+        <StatCard label="Готовые" value={pageStats.readyCount} hint="можно публиковать" tone={pageStats.readyCount ? "green" : "slate"} />
         <StatCard label="Актуальные" value={pageStats.actualCount} hint="в текущей выдаче" tone="green" />
         <StatCard label="Неактуальные" value={pageStats.inactiveCount} hint="нужно проверить" tone={pageStats.inactiveCount ? "amber" : "slate"} />
         <StatCard label="Срочные" value={pageStats.urgentCount} hint="сегодня / до 5 дней" tone={pageStats.urgentCount ? "red" : "slate"} />
@@ -3010,6 +3037,7 @@ const sortLabel = useMemo(() => {
           <div>
             <div className="flex flex-wrap gap-2">
               <QuickChip active={quickFilter === "all"} onClick={() => setQuickFilter("all")}>Все на странице</QuickChip>
+              <QuickChip active={quickFilter === "ready"} onClick={() => setQuickFilter("ready")}>Готовые</QuickChip>
               <QuickChip active={quickFilter === "urgent"} onClick={() => setQuickFilter("urgent")}>Срочные</QuickChip>
               <QuickChip active={quickFilter === "no_answer"} onClick={() => setQuickFilter("no_answer")}>Без ответа</QuickChip>
               <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
