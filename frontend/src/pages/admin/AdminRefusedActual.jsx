@@ -513,6 +513,20 @@ function servicePriceSummary(it) {
   };
 }
 
+function buildServiceSummaryText(it) {
+  const price = servicePriceSummary(it);
+  const provider = it?.provider?.companyName || it?.provider?.name || "—";
+  return [
+    `${categoryHumanLabel(it?.category)} #${it?.id || "—"}`,
+    `Название: ${serviceMainTitle(it)}`,
+    `Маршрут: ${serviceRouteText(it)}`,
+    `Даты: ${serviceDateText(it)}`,
+    `Цена: ${price.primary}${price.secondary ? ` (${price.secondary})` : ""}`,
+    `Поставщик: ${provider}`,
+    `Статус: ${it?.status || "—"}`,
+  ].join("\n");
+}
+
 function hasServicePrice(it) {
   const d = it?.details || {};
   return parseFiniteNumber(d.grossPrice ?? it?.price) !== null;
@@ -2616,6 +2630,19 @@ async function saveInlineEdit(item) {
     setPage(1);
   }
 
+  async function copyServiceSummary(item) {
+    try {
+      const text = buildServiceSummaryText(item);
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard API недоступен");
+      }
+      await navigator.clipboard.writeText(text);
+      showToast("ok", `Скопировано: #${item?.id || "—"}`);
+    } catch (e) {
+      showToast("err", e?.message || "Не удалось скопировать");
+    }
+  }
+
   async function askActualSelected(force = false) {
     const ids = askableSelectedIds;
 
@@ -3288,6 +3315,7 @@ const sortLabel = useMemo(() => {
 
                       <div className="flex flex-wrap gap-2 pt-1">
                         <button onClick={() => openDetails(it.id)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold hover:bg-slate-50">Детали</button>
+                        <button onClick={() => copyServiceSummary(it)} className="rounded-xl border border-slate-200 px-3 py-2 text-xs font-bold hover:bg-slate-50">Копировать</button>
                         <button onClick={() => openEdit(it.id)} className="rounded-xl border border-violet-200 bg-violet-50 px-3 py-2 text-xs font-bold text-violet-700 hover:bg-violet-100">Редактировать</button>
                         {!deleted ? (
                           <>
@@ -3693,6 +3721,13 @@ const sortLabel = useMemo(() => {
                             className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
                           >
                             Детали
+                          </button>
+
+                          <button
+                            onClick={() => copyServiceSummary(it)}
+                            className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs hover:bg-gray-50"
+                          >
+                            Копировать
                           </button>
 
                           <button
