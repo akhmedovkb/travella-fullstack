@@ -548,12 +548,7 @@ function buildRefusedCsv(items) {
     "Проверка",
   ];
   const rows = (Array.isArray(items) ? items : []).map((it) => {
-    const effectiveTg =
-      it?.provider?.telegram_refused_chat_id ||
-      it?.provider?.telegram_web_chat_id ||
-      it?.provider?.telegram_chat_id ||
-      it?.provider?.chatId ||
-      "";
+    const effectiveTg = serviceTelegramId(it);
     const price = servicePriceSummary(it);
     const quality = getServiceQualityFlags(it, !!effectiveTg)
       .map((flag) => flag.label)
@@ -607,22 +602,35 @@ function hasServiceImages(it) {
   return singles.some((x) => !isBlank(x));
 }
 
+function serviceTelegramId(it) {
+  return (
+    it?.provider?.telegram_refused_chat_id ||
+    it?.provider?.telegram_web_chat_id ||
+    it?.provider?.telegram_chat_id ||
+    it?.provider?.chatId ||
+    ""
+  );
+}
+
+function hasProviderContact(it) {
+  const p = it?.provider || {};
+  return [p.phone, p.phoneNumber, p.contactPhone, p.email, p.telegram, p.telegramUsername, serviceTelegramId(it)].some(
+    (x) => !isBlank(x)
+  );
+}
+
 function getServiceQualityFlags(it, tgOk) {
   const flags = [];
   if (!it?.isActual) flags.push({ key: "actual", label: "неактуально", tone: "red", action: "details" });
   if (!hasServicePrice(it)) flags.push({ key: "price", label: "нет цены", tone: "amber", action: "details" });
   if (!hasServiceImages(it)) flags.push({ key: "photo", label: "нет фото", tone: "amber", action: "images" });
+  if (!hasProviderContact(it)) flags.push({ key: "contact", label: "нет контакта", tone: "red", action: "provider" });
   if (!tgOk) flags.push({ key: "tg", label: "нет TG", tone: "red", action: "tg" });
   return flags;
 }
 
 function isServiceReadyForPublishing(it) {
-  const effectiveTg =
-    it?.provider?.telegram_refused_chat_id ||
-    it?.provider?.telegram_web_chat_id ||
-    it?.provider?.telegram_chat_id ||
-    it?.provider?.chatId ||
-    "";
+  const effectiveTg = serviceTelegramId(it);
   return !!it?.isActual && getServiceQualityFlags(it, !!effectiveTg).length === 0;
 }
 
@@ -701,6 +709,7 @@ function quickFilterLabel(value) {
     urgent: "срочные",
     no_answer: "без ответа",
     no_tg: "без Telegram",
+    no_contact: "без контактов",
     no_price: "без цены",
     no_photo: "без фото",
   };
@@ -1708,6 +1717,7 @@ export default function AdminRefusedActual() {
     let actualCount = 0;
     let inactiveCount = 0;
     let tgMissingCount = 0;
+    let contactMissingCount = 0;
     let noAnswerCount = 0;
     let noPriceCount = 0;
     let noPhotoCount = 0;
@@ -1727,13 +1737,9 @@ export default function AdminRefusedActual() {
       if (it?.category === "refused_hotel") hotelCount += 1;
       if (it?.category === "refused_flight") flightCount += 1;
 
-      const effectiveTg =
-        it?.provider?.telegram_refused_chat_id ||
-        it?.provider?.telegram_web_chat_id ||
-        it?.provider?.telegram_chat_id ||
-        it?.provider?.chatId ||
-        "";
+      const effectiveTg = serviceTelegramId(it);
       if (!effectiveTg) tgMissingCount += 1;
+      if (!hasProviderContact(it)) contactMissingCount += 1;
 
       const meta = it?.meta || {};
       if (meta.lastSentAt && !meta.lastAnswer) noAnswerCount += 1;
@@ -1752,6 +1758,7 @@ export default function AdminRefusedActual() {
       actualCount,
       inactiveCount,
       tgMissingCount,
+      contactMissingCount,
       noAnswerCount,
       noPriceCount,
       noPhotoCount,
@@ -1773,15 +1780,10 @@ export default function AdminRefusedActual() {
       });
     }
     if (quickFilter === "no_tg") {
-      return list.filter((it) => {
-        const effectiveTg =
-          it?.provider?.telegram_refused_chat_id ||
-          it?.provider?.telegram_web_chat_id ||
-          it?.provider?.telegram_chat_id ||
-          it?.provider?.chatId ||
-          "";
-        return !effectiveTg;
-      });
+      return list.filter((it) => !serviceTelegramId(it));
+    }
+    if (quickFilter === "no_contact") {
+      return list.filter((it) => !hasProviderContact(it));
     }
     if (quickFilter === "no_answer") {
       return list.filter((it) => it?.meta?.lastSentAt && !it?.meta?.lastAnswer);
@@ -1822,12 +1824,7 @@ export default function AdminRefusedActual() {
         .filter((id) => {
           if (!Number.isFinite(id) || !selectableVisibleIds.includes(id)) return false;
           const it = visibleItems.find((row) => Number(row.id) === id);
-          const effectiveTg =
-            it?.provider?.telegram_refused_chat_id ||
-            it?.provider?.telegram_web_chat_id ||
-            it?.provider?.telegram_chat_id ||
-            it?.provider?.chatId ||
-            "";
+          const effectiveTg = serviceTelegramId(it);
           return !!effectiveTg;
         }),
     [selectedIds, selectableVisibleIds, visibleItems]
@@ -3163,6 +3160,7 @@ const sortLabel = useMemo(() => {
         <StatCard label="Актуальные" value={pageStats.actualCount} hint="в текущей выдаче" tone="green" />
         <StatCard label="Неактуальные" value={pageStats.inactiveCount} hint="нужно проверить" tone={pageStats.inactiveCount ? "amber" : "slate"} />
         <StatCard label="Срочные" value={pageStats.urgentCount} hint="сегодня / до 5 дней" tone={pageStats.urgentCount ? "red" : "slate"} />
+        <StatCard label="Без контакта" value={pageStats.contactMissingCount} hint="нет телефона/email/TG" tone={pageStats.contactMissingCount ? "red" : "slate"} />
         <StatCard label="Без TG" value={pageStats.tgMissingCount} hint="нельзя спросить" tone={pageStats.tgMissingCount ? "red" : "slate"} />
         <StatCard label="Без ответа" value={pageStats.noAnswerCount} hint="после запроса" tone={pageStats.noAnswerCount ? "amber" : "slate"} />
         <StatCard label="Без фото" value={pageStats.noPhotoCount} hint="нужно оформить" tone={pageStats.noPhotoCount ? "amber" : "slate"} />
@@ -3176,6 +3174,7 @@ const sortLabel = useMemo(() => {
               <QuickChip active={quickFilter === "ready"} onClick={() => setQuickFilter("ready")}>Готовые</QuickChip>
               <QuickChip active={quickFilter === "urgent"} onClick={() => setQuickFilter("urgent")}>Срочные</QuickChip>
               <QuickChip active={quickFilter === "no_answer"} onClick={() => setQuickFilter("no_answer")}>Без ответа</QuickChip>
+              <QuickChip active={quickFilter === "no_contact"} onClick={() => setQuickFilter("no_contact")}>Без контактов</QuickChip>
               <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
               <QuickChip active={quickFilter === "no_price"} onClick={() => setQuickFilter("no_price")}>Без цены</QuickChip>
               <QuickChip active={quickFilter === "no_photo"} onClick={() => setQuickFilter("no_photo")}>Без фото</QuickChip>
@@ -3365,12 +3364,7 @@ const sortLabel = useMemo(() => {
               <div className="rounded-2xl border border-slate-200 bg-white p-4 text-sm text-slate-600">Загрузка…</div>
             ) : visibleItems.length ? (
               visibleItems.map((it) => {
-                const effectiveTg =
-                  it?.provider?.telegram_refused_chat_id ||
-                  it?.provider?.telegram_web_chat_id ||
-                  it?.provider?.telegram_chat_id ||
-                  it?.provider?.chatId ||
-                  "";
+                const effectiveTg = serviceTelegramId(it);
                 const tgOk = !!effectiveTg;
                 const actual = !!it.isActual;
                 const deleted = !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
@@ -3616,12 +3610,7 @@ const sortLabel = useMemo(() => {
                 </tr>
               ) : visibleItems.length ? (
                 visibleItems.map((it) => {
-                  const effectiveTg =
-                    it?.provider?.telegram_refused_chat_id ||
-                    it?.provider?.telegram_web_chat_id ||
-                    it?.provider?.telegram_chat_id ||
-                    it?.provider?.chatId ||
-                    "";
+                  const effectiveTg = serviceTelegramId(it);
 
                   const tgOk = !!effectiveTg;
                   const actual = !!it.isActual;
