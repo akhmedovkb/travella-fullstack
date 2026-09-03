@@ -2742,6 +2742,25 @@ async function saveInlineEdit(item) {
     }
   }
 
+  async function copySelectedContacts() {
+    try {
+      if (!selectedVisibleItems.length) {
+        showToast("warn", "Выберите услуги на текущей странице");
+        return;
+      }
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard API недоступен");
+      }
+      const text = selectedVisibleItems
+        .map((item) => buildProviderContactText(item))
+        .join("\n\n---\n\n");
+      await navigator.clipboard.writeText(text);
+      showToast("ok", `Контакты скопированы: ${selectedVisibleItems.length}`);
+    } catch (e) {
+      showToast("err", e?.message || "Не удалось скопировать контакты");
+    }
+  }
+
   function exportRefusedCsv(items, scopeLabel = "all") {
     try {
       const exportItems = Array.isArray(items) ? items : [];
@@ -3548,6 +3567,20 @@ const sortLabel = useMemo(() => {
                   title="Скопировать краткие выжимки выбранных услуг"
                 >
                   Копировать выбранные ({selectedVisibleItems.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={copySelectedContacts}
+                  disabled={!selectedVisibleItems.length || bulkSending}
+                  className={classNames(
+                    "rounded-xl border px-3 py-2 text-xs font-bold",
+                    !selectedVisibleItems.length || bulkSending
+                      ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  )}
+                  title="Скопировать контакты поставщиков выбранных услуг"
+                >
+                  Контакты выбранных ({selectedVisibleItems.length})
                 </button>
                 <button
                   type="button"
