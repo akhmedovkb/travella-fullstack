@@ -527,6 +527,19 @@ function buildServiceSummaryText(it) {
   ].join("\n");
 }
 
+function buildProviderContactText(it) {
+  const p = it?.provider || {};
+  const rows = [
+    `${categoryHumanLabel(it?.category)} #${it?.id || "—"}`,
+    `Название: ${serviceMainTitle(it)}`,
+    `Поставщик: ${p.companyName || p.name || "—"}`,
+    `Телефон: ${p.phone || p.phoneNumber || p.contactPhone || "—"}`,
+    `Telegram: ${p.telegramUsername ? `@${p.telegramUsername}` : p.telegram || serviceTelegramId(it) || "—"}`,
+    `Email: ${p.email || "—"}`,
+  ];
+  return rows.join("\n");
+}
+
 function csvCell(value) {
   const text = String(value ?? "").replace(/\r?\n/g, " ").replace(/"/g, '""');
   return `"${text}"`;
@@ -2697,6 +2710,19 @@ async function saveInlineEdit(item) {
     }
   }
 
+  async function copyProviderContact(item) {
+    try {
+      const text = buildProviderContactText(item);
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard API недоступен");
+      }
+      await navigator.clipboard.writeText(text);
+      showToast("ok", `Контакты скопированы: #${item?.id || "—"}`);
+    } catch (e) {
+      showToast("err", e?.message || "Не удалось скопировать контакты");
+    }
+  }
+
   async function copySelectedSummaries() {
     try {
       if (!selectedVisibleItems.length) {
@@ -3422,10 +3448,20 @@ const sortLabel = useMemo(() => {
 
                       <div className="rounded-2xl border border-slate-100 bg-white p-3">
                         <div className="text-[11px] font-bold uppercase text-slate-400">Провайдер</div>
-                        <div className="mt-1 font-bold text-slate-900">{it?.provider?.companyName || it?.provider?.name || "—"}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
+                          <div className="font-bold text-slate-900">{it?.provider?.companyName || it?.provider?.name || "—"}</div>
+                          <button
+                            type="button"
+                            onClick={() => copyProviderContact(it)}
+                            className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50"
+                          >
+                            Контакты
+                          </button>
+                        </div>
                         <div className="mt-0.5 text-xs text-slate-500">
                           {it?.provider?.phone ? `📞 ${it.provider.phone}` : ""}
                           {it?.provider?.telegramUsername ? ` • @${it.provider.telegramUsername}` : ""}
+                          {!hasProviderContact(it) ? "контакты не указаны" : ""}
                         </div>
                       </div>
 
@@ -3718,12 +3754,22 @@ const sortLabel = useMemo(() => {
                       </td>
 
                       <td className={tdClass("provider")}>
-                        <div className="font-medium text-gray-900">
-                          {it?.provider?.companyName || it?.provider?.name || "—"}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="font-medium text-gray-900">
+                            {it?.provider?.companyName || it?.provider?.name || "—"}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => copyProviderContact(it)}
+                            className="rounded-full border border-slate-200 px-2 py-0.5 text-[11px] font-bold text-slate-600 hover:bg-slate-50"
+                          >
+                            Контакты
+                          </button>
                         </div>
                         <div className="mt-0.5 text-xs text-gray-600">
                           {it?.provider?.phone ? `📞 ${it.provider.phone}` : ""}
                           {it?.provider?.telegramUsername ? ` • @${it.provider.telegramUsername}` : ""}
+                          {!hasProviderContact(it) ? "контакты не указаны" : ""}
                         </div>
                       </td>
 
