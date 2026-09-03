@@ -2719,28 +2719,37 @@ async function saveInlineEdit(item) {
     }
   }
 
-  function exportVisibleCsv() {
+  function exportRefusedCsv(items, scopeLabel = "all") {
     try {
-      if (!visibleItems.length) {
+      const exportItems = Array.isArray(items) ? items : [];
+      if (!exportItems.length) {
         showToast("warn", "Нет строк для экспорта");
         return;
       }
 
-      const csv = `\uFEFF${buildRefusedCsv(visibleItems)}`;
+      const csv = `\uFEFF${buildRefusedCsv(exportItems)}`;
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
       const url = URL.createObjectURL(blob);
       const link = document.createElement("a");
       const stamp = new Date().toISOString().slice(0, 10);
       link.href = url;
-      link.download = `travella-refused-${quickFilter || "all"}-${stamp}.csv`;
+      link.download = `travella-refused-${scopeLabel}-${stamp}.csv`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(url);
-      showToast("ok", `CSV экспортирован: ${visibleItems.length}`);
+      showToast("ok", `CSV экспортирован: ${exportItems.length}`);
     } catch (e) {
       showToast("err", e?.message || "Не удалось экспортировать CSV");
     }
+  }
+
+  function exportVisibleCsv() {
+    exportRefusedCsv(visibleItems, quickFilter || "all");
+  }
+
+  function exportSelectedCsv() {
+    exportRefusedCsv(selectedVisibleItems, "selected");
   }
 
   async function askActualSelected(force = false) {
@@ -3509,6 +3518,20 @@ const sortLabel = useMemo(() => {
                   title="Скопировать краткие выжимки выбранных услуг"
                 >
                   Копировать выбранные ({selectedVisibleItems.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={exportSelectedCsv}
+                  disabled={!selectedVisibleItems.length || bulkSending}
+                  className={classNames(
+                    "rounded-xl border px-3 py-2 text-xs font-bold",
+                    !selectedVisibleItems.length || bulkSending
+                      ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  )}
+                  title="Скачать выбранные услуги в CSV"
+                >
+                  CSV выбранные ({selectedVisibleItems.length})
                 </button>
                 <button
                   type="button"
