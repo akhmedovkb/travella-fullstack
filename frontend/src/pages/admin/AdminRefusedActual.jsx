@@ -540,6 +540,23 @@ function buildProviderContactText(it) {
   return rows.join("\n");
 }
 
+function buildServiceBlockersText(items) {
+  const rows = (Array.isArray(items) ? items : [])
+    .map((it) => {
+      const flags = getServiceQualityFlags(it, !!serviceTelegramId(it));
+      if (!flags.length) return null;
+      const provider = it?.provider?.companyName || it?.provider?.name || "—";
+      return [
+        `${categoryHumanLabel(it?.category)} #${it?.id || "—"}`,
+        `Название: ${serviceMainTitle(it)}`,
+        `Проблемы: ${flags.map((flag) => flag.label).join(", ")}`,
+        `Поставщик: ${provider}`,
+      ].join("\n");
+    })
+    .filter(Boolean);
+  return rows.join("\n\n---\n\n");
+}
+
 function csvCell(value) {
   const text = String(value ?? "").replace(/\r?\n/g, " ").replace(/"/g, '""');
   return `"${text}"`;
@@ -2785,6 +2802,23 @@ async function saveInlineEdit(item) {
     }
   }
 
+  async function copyVisibleBlockers() {
+    try {
+      const text = buildServiceBlockersText(visibleItems);
+      if (!text) {
+        showToast("ok", "В текущей выдаче нет проблем для публикации");
+        return;
+      }
+      if (!navigator?.clipboard?.writeText) {
+        throw new Error("Clipboard API недоступен");
+      }
+      await navigator.clipboard.writeText(text);
+      showToast("ok", "Список проблем скопирован");
+    } catch (e) {
+      showToast("err", e?.message || "Не удалось скопировать проблемы");
+    }
+  }
+
   function exportRefusedCsv(items, scopeLabel = "all") {
     try {
       const exportItems = Array.isArray(items) ? items : [];
@@ -3290,6 +3324,19 @@ const sortLabel = useMemo(() => {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <button
+              type="button"
+              onClick={copyVisibleBlockers}
+              disabled={!visibleQualityStats.length}
+              className={classNames(
+                "rounded-2xl border px-4 py-2 text-sm font-bold",
+                !visibleQualityStats.length
+                  ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                  : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+              )}
+            >
+              Копировать проблемы
+            </button>
             <button
               type="button"
               onClick={exportVisibleCsv}
