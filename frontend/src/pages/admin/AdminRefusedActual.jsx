@@ -1871,6 +1871,18 @@ export default function AdminRefusedActual() {
     [visibleItems]
   );
 
+  const problemVisibleIds = useMemo(
+    () =>
+      visibleItems
+        .filter((it) => {
+          const deleted = !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
+          return !deleted && getServiceQualityFlags(it, !!serviceTelegramId(it)).length > 0;
+        })
+        .map((it) => Number(it.id))
+        .filter((id) => Number.isFinite(id)),
+    [visibleItems]
+  );
+
   const askableSelectedIds = useMemo(
     () =>
       selectedIds
@@ -2725,6 +2737,15 @@ async function saveInlineEdit(item) {
       }
       return Array.from(new Set([...prev, ...selectableVisibleIds]));
     });
+  }
+
+  function selectProblemVisible() {
+    if (!problemVisibleIds.length) {
+      showToast("ok", "В текущей выдаче нет проблемных услуг");
+      return;
+    }
+    setSelectedIds((prev) => Array.from(new Set([...prev, ...problemVisibleIds])));
+    showToast("ok", `Выбрано проблемных: ${problemVisibleIds.length}`);
   }
 
   function resetFilters() {
@@ -3627,6 +3648,19 @@ const sortLabel = useMemo(() => {
                 />
                 Выбрать все на странице
               </label>
+              <button
+                type="button"
+                onClick={selectProblemVisible}
+                disabled={!problemVisibleIds.length || bulkSending}
+                className={classNames(
+                  "w-fit rounded-xl border px-3 py-2 text-xs font-bold",
+                  !problemVisibleIds.length || bulkSending
+                    ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                    : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                )}
+              >
+                Выбрать проблемные ({problemVisibleIds.length})
+              </button>
 
               <div className="flex flex-wrap items-center gap-2">
                 <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
