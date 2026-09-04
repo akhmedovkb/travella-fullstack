@@ -3044,10 +3044,10 @@ const sortLabel = useMemo(() => {
           <div>
             <div className="text-sm font-black uppercase tracking-[0.14em] text-slate-500">Что сделать сейчас</div>
             <div className="mt-1 text-sm text-slate-600">
-              Сначала срочные и без ответа, потом услуги без Telegram, цены или фото. Готовые можно двигать в публикацию.
+              Сначала неготовые, срочные и без ответа, потом услуги без контактов, Telegram, цены или фото.
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-7">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-9">
             <button
               type="button"
               onClick={() => setQuickFilter("ready")}
@@ -3055,6 +3055,14 @@ const sortLabel = useMemo(() => {
             >
               <div className="text-2xl font-black text-emerald-950">{pageStats.readyCount}</div>
               <div className="text-xs font-bold text-emerald-700">готовые</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickFilter("not_ready")}
+              className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100"
+            >
+              <div className="text-2xl font-black text-amber-950">{pageStats.notReadyCount}</div>
+              <div className="text-xs font-bold text-amber-700">не готовые</div>
             </button>
             <button
               type="button"
@@ -3071,6 +3079,14 @@ const sortLabel = useMemo(() => {
             >
               <div className="text-2xl font-black text-amber-950">{pageStats.noAnswerCount}</div>
               <div className="text-xs font-bold text-amber-700">без ответа</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickFilter("no_contact")}
+              className="rounded-2xl border border-rose-100 bg-rose-50 px-4 py-3 text-left hover:bg-rose-100"
+            >
+              <div className="text-2xl font-black text-rose-950">{pageStats.contactMissingCount}</div>
+              <div className="text-xs font-bold text-rose-700">без контакта</div>
             </button>
             <button
               type="button"
@@ -3206,7 +3222,7 @@ const sortLabel = useMemo(() => {
         </div>
       </details>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-4 xl:grid-cols-8">
+      <div className="mt-5 grid grid-cols-2 gap-3 lg:grid-cols-5 xl:grid-cols-10">
         <StatCard label="Всего по фильтру" value={total} hint={`на странице: ${pageStats.shown}`} tone="blue" />
         <StatCard label="Готовые" value={pageStats.readyCount} hint="можно публиковать" tone={pageStats.readyCount ? "green" : "slate"} />
         <StatCard label="Не готовые" value={pageStats.notReadyCount} hint="надо исправить" tone={pageStats.notReadyCount ? "amber" : "slate"} />
