@@ -1825,6 +1825,23 @@ export default function AdminRefusedActual() {
     [visibleItems]
   );
 
+  const visibleQualityStats = useMemo(() => {
+    const stats = { actual: 0, price: 0, photo: 0, contact: 0, tg: 0 };
+    for (const it of visibleItems) {
+      const flags = getServiceQualityFlags(it, !!serviceTelegramId(it));
+      for (const flag of flags) {
+        if (Object.prototype.hasOwnProperty.call(stats, flag.key)) stats[flag.key] += 1;
+      }
+    }
+    return [
+      { key: "actual", label: "неактуально", value: stats.actual, filter: "not_ready" },
+      { key: "price", label: "нет цены", value: stats.price, filter: "no_price" },
+      { key: "photo", label: "нет фото", value: stats.photo, filter: "no_photo" },
+      { key: "contact", label: "нет контакта", value: stats.contact, filter: "no_contact" },
+      { key: "tg", label: "нет TG", value: stats.tg, filter: "no_tg" },
+    ].filter((x) => x.value > 0);
+  }, [visibleItems]);
+
   const selectableVisibleIds = useMemo(
     () =>
       visibleItems
@@ -3253,6 +3270,23 @@ const sortLabel = useMemo(() => {
               Показано после быстрых фильтров: <span className="font-bold text-slate-900">{visibleItems.length}</span> из {pageStats.shown}
               {quickFilter !== "all" ? <span className="ml-2 text-orange-700">активен быстрый фильтр</span> : null}
             </div>
+            {visibleQualityStats.length ? (
+              <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                <span className="font-bold text-slate-500">Мешает публикации:</span>
+                {visibleQualityStats.map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => setQuickFilter(item.filter)}
+                    className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 font-bold text-amber-800 hover:bg-amber-100"
+                  >
+                    {item.label}: {item.value}
+                  </button>
+                ))}
+              </div>
+            ) : visibleItems.length ? (
+              <div className="mt-2 text-xs font-bold text-emerald-700">Видимая выдача готова к публикации.</div>
+            ) : null}
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
