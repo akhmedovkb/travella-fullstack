@@ -573,12 +573,15 @@ function buildRefusedCsv(items) {
     "За 1 человека",
     "Поставщик",
     "Телефон",
-    "Telegram",
+    "Telegram username",
+    "Email",
+    "TG chatId",
     "Статус",
     "Проверка",
   ];
   const rows = (Array.isArray(items) ? items : []).map((it) => {
     const effectiveTg = serviceTelegramId(it);
+    const provider = it?.provider || {};
     const price = servicePriceSummary(it);
     const quality = getServiceQualityFlags(it, !!effectiveTg)
       .map((flag) => flag.label)
@@ -591,8 +594,10 @@ function buildRefusedCsv(items) {
       serviceDateText(it),
       price.primary,
       price.secondary,
-      it?.provider?.companyName || it?.provider?.name || "",
-      it?.provider?.phone || "",
+      provider.companyName || provider.name || "",
+      provider.phone || provider.phoneNumber || provider.contactPhone || "",
+      provider.telegramUsername ? `@${provider.telegramUsername}` : provider.telegram || "",
+      provider.email || "",
       effectiveTg || "",
       it?.status || "",
       quality,
