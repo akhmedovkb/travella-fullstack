@@ -1764,6 +1764,7 @@ export default function AdminRefusedActual() {
     let authorTourCount = 0;
     let hotelCount = 0;
     let flightCount = 0;
+    let ticketCount = 0;
 
     for (const it of list) {
       if (it?.isActual) actualCount += 1;
@@ -1773,6 +1774,7 @@ export default function AdminRefusedActual() {
       if (it?.category === "author_tour") authorTourCount += 1;
       if (it?.category === "refused_hotel") hotelCount += 1;
       if (it?.category === "refused_flight") flightCount += 1;
+      if (it?.category === "refused_ticket" || it?.category === "refused_event_ticket") ticketCount += 1;
 
       const effectiveTg = serviceTelegramId(it);
       if (!effectiveTg) tgMissingCount += 1;
@@ -1807,6 +1809,7 @@ export default function AdminRefusedActual() {
       authorTourCount,
       hotelCount,
       flightCount,
+      ticketCount,
     };
   }, [items]);
 
@@ -3040,6 +3043,15 @@ async function saveInlineEdit(item) {
     { value: "refused_ticket", label: "Отказной билет" },
   ];
 
+  const categoryQuickActions = [
+    { value: "", label: "Все", count: pageStats.shown },
+    { value: "refused_tour", label: "Туры", count: pageStats.tourCount },
+    { value: "author_tour", label: "Авторские", count: pageStats.authorTourCount },
+    { value: "refused_hotel", label: "Отели", count: pageStats.hotelCount },
+    { value: "refused_flight", label: "Авиа", count: pageStats.flightCount },
+    { value: "refused_ticket", label: "Билеты", count: pageStats.ticketCount },
+  ];
+
   const statuses = [
     { value: "", label: "На витрине (published/approved)" },
     { value: "published", label: "published" },
@@ -3410,13 +3422,36 @@ const sortLabel = useMemo(() => {
       </div>
 
       <div className="mt-5 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+        <div className="mb-4 flex flex-wrap items-center gap-2">
+          {categoryQuickActions.map((item) => (
+            <button
+              key={item.value || "all"}
+              type="button"
+              onClick={() => {
+                setCategory(item.value);
+                setPage(1);
+              }}
+              className={classNames(
+                "rounded-full border px-3 py-1.5 text-xs font-bold transition",
+                category === item.value
+                  ? "border-slate-900 bg-slate-950 text-white"
+                  : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+              )}
+            >
+              {item.label} · {item.count}
+            </button>
+          ))}
+        </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-12 md:items-end">
           <div className="md:col-span-3">
             <label className="text-xs font-medium text-gray-600">Категория</label>
             <select
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => {
+                setCategory(e.target.value);
+                setPage(1);
+              }}
             >
               {categories.map((c) => (
                 <option key={c.value || "all"} value={c.value}>
