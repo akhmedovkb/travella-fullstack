@@ -392,6 +392,14 @@ function writeStoredRefusedUi(settings) {
   }
 }
 
+function clearStoredRefusedUi() {
+  try {
+    window.localStorage.removeItem(REFUSED_ACTUAL_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+}
+
 function SortBadge({ active, dir }) {
   if (!active) return null;
   return (
@@ -2846,6 +2854,13 @@ async function saveInlineEdit(item) {
     setPage(1);
   }
 
+  function resetSavedView() {
+    clearStoredRefusedUi();
+    resetFilters();
+    setViewMode(REFUSED_FILTER_DEFAULTS.viewMode);
+    showToast("ok", "Вид страницы сброшен");
+  }
+
   async function copyServiceSummary(item) {
     try {
       const text = buildServiceSummaryText(item);
@@ -3420,6 +3435,7 @@ const sortLabel = useMemo(() => {
             <div className="mt-2 text-xs font-medium text-slate-500">
               Показано после быстрых фильтров: <span className="font-bold text-slate-900">{visibleItems.length}</span> из {pageStats.shown}
               {quickFilter !== "all" ? <span className="ml-2 text-orange-700">активен быстрый фильтр</span> : null}
+              <span className="ml-2 text-slate-400">вид сохраняется на этом устройстве</span>
             </div>
             {visibleQualityStats.length ? (
               <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
@@ -3469,10 +3485,10 @@ const sortLabel = useMemo(() => {
             </button>
             <button
               type="button"
-              onClick={resetFilters}
+              onClick={resetSavedView}
               className="rounded-2xl border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50"
             >
-              Сбросить фильтры
+              Сбросить вид
             </button>
             <div className="inline-flex w-full rounded-2xl border border-slate-200 bg-slate-50 p-1 sm:w-auto">
               <button
