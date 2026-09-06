@@ -4258,6 +4258,13 @@ const sortLabel = useMemo(() => {
           <div className="flex items-center gap-2">
             <button
               className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => setPage(1)}
+              disabled={page <= 1 || loading}
+            >
+              В начало
+            </button>
+            <button
+              className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
               onClick={() => setPage((p) => Math.max(1, p - 1))}
               disabled={page <= 1 || loading}
             >
@@ -4273,6 +4280,13 @@ const sortLabel = useMemo(() => {
               disabled={page >= pageCount || loading}
             >
               Вперёд →
+            </button>
+            <button
+              className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => setPage(pageCount)}
+              disabled={page >= pageCount || loading}
+            >
+              В конец
             </button>
           </div>
         </div>
