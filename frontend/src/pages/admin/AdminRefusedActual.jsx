@@ -4255,7 +4255,7 @@ const sortLabel = useMemo(() => {
             Всего: <span className="font-medium text-gray-900">{total}</span>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2 md:justify-end">
             <button
               className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
               onClick={() => setPage(1)}
@@ -4270,9 +4270,25 @@ const sortLabel = useMemo(() => {
             >
               ← Назад
             </button>
-            <div className="text-sm text-gray-700">
-              Стр. <span className="font-medium text-gray-900">{page}</span> из{" "}
-              <span className="font-medium text-gray-900">{pageCount}</span>
+            <div className="flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700">
+              <span>Стр.</span>
+              <input
+                type="number"
+                min={1}
+                max={pageCount}
+                value={page}
+                disabled={loading}
+                onChange={(event) => {
+                  const nextPage = Number(event.target.value);
+                  if (!Number.isFinite(nextPage)) return;
+                  setPage(Math.min(pageCount, Math.max(1, Math.floor(nextPage))));
+                }}
+                className="h-8 w-16 rounded-lg border border-gray-200 px-2 text-center font-medium text-gray-900 outline-none focus:border-orange-300 focus:ring-2 focus:ring-orange-100 disabled:bg-gray-50"
+                aria-label="Номер страницы"
+              />
+              <span>
+                из <span className="font-medium text-gray-900">{pageCount}</span>
+              </span>
             </div>
             <button
               className="rounded-xl border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
