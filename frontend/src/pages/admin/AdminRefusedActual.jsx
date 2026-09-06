@@ -3466,7 +3466,10 @@ const sortLabel = useMemo(() => {
             <select
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={status}
-              onChange={(e) => setStatus(e.target.value)}
+              onChange={(e) => {
+                setStatus(e.target.value);
+                setPage(1);
+              }}
               disabled={visibility === "deleted"}
             >
               {statuses.map((s) => (
@@ -3482,7 +3485,10 @@ const sortLabel = useMemo(() => {
             <select
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={visibility}
-              onChange={(e) => setVisibility(e.target.value)}
+              onChange={(e) => {
+                setVisibility(e.target.value);
+                setPage(1);
+              }}
             >
               {visibilityOptions.map((v) => (
                 <option key={v.value} value={v.value}>
@@ -3497,7 +3503,10 @@ const sortLabel = useMemo(() => {
             <select
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={actuality}
-              onChange={(e) => setActuality(e.target.value)}
+              onChange={(e) => {
+                setActuality(e.target.value);
+                setPage(1);
+              }}
             >
               {actualityOptions.map((a) => (
                 <option key={a.value} value={a.value}>
@@ -3513,7 +3522,10 @@ const sortLabel = useMemo(() => {
               <input
                 className="w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setPage(1);
+                }}
                 placeholder="hotel, direction, provider, phone, username..."
               />
               <button
@@ -3534,7 +3546,10 @@ const sortLabel = useMemo(() => {
             <select
               className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-gray-200"
               value={String(limit)}
-              onChange={(e) => setLimit(Number(e.target.value))}
+              onChange={(e) => {
+                setLimit(Number(e.target.value));
+                setPage(1);
+              }}
             >
               {[20, 30, 50, 100].map((n) => (
                 <option key={n} value={n}>
