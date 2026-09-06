@@ -88,6 +88,32 @@ function classNames(...a) {
   return a.filter(Boolean).join(" ");
 }
 
+const REFUSED_ACTUAL_STORAGE_KEY = "travella.admin.refusedActual.ui";
+
+const REFUSED_FILTER_DEFAULTS = {
+  category: "",
+  status: "",
+  actuality: "actual",
+  visibility: "active",
+  limit: 30,
+  sortBy: "sort_date",
+  sortOrder: "asc",
+  viewMode: "table",
+  quickFilter: "all",
+};
+
+const REFUSED_FILTER_ALLOWED = {
+  category: new Set(["", "refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_ticket"]),
+  status: new Set(["", "published", "approved", "draft", "rejected", "archived"]),
+  actuality: new Set(["all", "actual", "inactive"]),
+  visibility: new Set(["active", "deleted", "all"]),
+  limit: new Set([20, 30, 50, 100]),
+  sortBy: new Set(["created_at", "provider", "sort_date", "id"]),
+  sortOrder: new Set(["asc", "desc"]),
+  viewMode: new Set(["table", "cards"]),
+  quickFilter: new Set(["all", "ready", "not_ready", "urgent", "no_answer", "no_contact", "no_tg", "no_price", "no_photo"]),
+};
+
 function isProbablyHtmlPayload(data, contentType) {
   if (contentType && String(contentType).toLowerCase().includes("text/html")) {
     return true;
@@ -332,6 +358,35 @@ function writeUrlSort(sortBy, sortOrder) {
     url.searchParams.set("sortBy", sortBy);
     url.searchParams.set("sortOrder", sortOrder);
     window.history.replaceState({}, "", url.toString());
+  } catch {
+    // ignore
+  }
+}
+
+function readStoredRefusedUi() {
+  const urlSort = readUrlSort();
+  const fallback = { ...REFUSED_FILTER_DEFAULTS, ...urlSort };
+  try {
+    const raw = window.localStorage.getItem(REFUSED_ACTUAL_STORAGE_KEY);
+    const parsed = raw ? safeJsonParse(raw, {}) : {};
+    const next = { ...fallback };
+
+    for (const key of ["category", "status", "actuality", "visibility", "sortBy", "sortOrder", "viewMode", "quickFilter"]) {
+      const value = typeof parsed?.[key] === "string" ? parsed[key] : fallback[key];
+      next[key] = REFUSED_FILTER_ALLOWED[key].has(value) ? value : fallback[key];
+    }
+
+    const limit = Number(parsed?.limit);
+    next.limit = REFUSED_FILTER_ALLOWED.limit.has(limit) ? limit : fallback.limit;
+    return next;
+  } catch {
+    return fallback;
+  }
+}
+
+function writeStoredRefusedUi(settings) {
+  try {
+    window.localStorage.setItem(REFUSED_ACTUAL_STORAGE_KEY, JSON.stringify(settings));
   } catch {
     // ignore
   }
@@ -1660,18 +1715,18 @@ export default function AdminRefusedActual() {
   const [items, setItems] = useState([]);
   const [total, setTotal] = useState(0);
 
-  const [category, setCategory] = useState("");
-  const [status, setStatus] = useState("");
+  const initialUi = useMemo(() => readStoredRefusedUi(), []);
+  const [category, setCategory] = useState(initialUi.category);
+  const [status, setStatus] = useState(initialUi.status);
   const [q, setQ] = useState("");
-  const [actuality, setActuality] = useState("actual");
-  const [visibility, setVisibility] = useState("active");
+  const [actuality, setActuality] = useState(initialUi.actuality);
+  const [visibility, setVisibility] = useState(initialUi.visibility);
 
   const [page, setPage] = useState(1);
-  const [limit, setLimit] = useState(30);
+  const [limit, setLimit] = useState(initialUi.limit);
 
-  const initialSort = useMemo(() => readUrlSort(), []);
-  const [sortBy, setSortBy] = useState(initialSort.sortBy);
-  const [sortOrder, setSortOrder] = useState(initialSort.sortOrder);
+  const [sortBy, setSortBy] = useState(initialUi.sortBy);
+  const [sortOrder, setSortOrder] = useState(initialUi.sortOrder);
 
   const [error, setError] = useState("");
   const [toast, setToast] = useState(null);
@@ -1737,8 +1792,8 @@ export default function AdminRefusedActual() {
     telegram_chat_id: "",
   });
 
-  const [viewMode, setViewMode] = useState("table");
-  const [quickFilter, setQuickFilter] = useState("all");
+  const [viewMode, setViewMode] = useState(initialUi.viewMode);
+  const [quickFilter, setQuickFilter] = useState(initialUi.quickFilter);
   const [actionMenuOpen, setActionMenuOpen] = useState(null);
 
   const pageCount = useMemo(() => {
@@ -2153,6 +2208,20 @@ export default function AdminRefusedActual() {
   useEffect(() => {
     setPage(1);
   }, [category, status, actuality, visibility, limit, sortBy, sortOrder]);
+
+  useEffect(() => {
+    writeStoredRefusedUi({
+      category,
+      status,
+      actuality,
+      visibility,
+      limit,
+      sortBy,
+      sortOrder,
+      viewMode,
+      quickFilter,
+    });
+  }, [category, status, actuality, visibility, limit, sortBy, sortOrder, viewMode, quickFilter]);
 
   useEffect(() => {
     if (!canUse) return;
@@ -2764,12 +2833,15 @@ async function saveInlineEdit(item) {
   }
 
   function resetFilters() {
-    setCategory("");
-    setStatus("");
+    setCategory(REFUSED_FILTER_DEFAULTS.category);
+    setStatus(REFUSED_FILTER_DEFAULTS.status);
     setQ("");
-    setActuality("actual");
-    setVisibility("active");
-    setQuickFilter("all");
+    setActuality(REFUSED_FILTER_DEFAULTS.actuality);
+    setVisibility(REFUSED_FILTER_DEFAULTS.visibility);
+    setLimit(REFUSED_FILTER_DEFAULTS.limit);
+    setSortBy(REFUSED_FILTER_DEFAULTS.sortBy);
+    setSortOrder(REFUSED_FILTER_DEFAULTS.sortOrder);
+    setQuickFilter(REFUSED_FILTER_DEFAULTS.quickFilter);
     setSelectedIds([]);
     setPage(1);
   }
