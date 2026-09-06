@@ -12306,8 +12306,12 @@ const PROVIDER_SUPPORT_CARD_BANK = (
   process.env.PROVIDER_SUPPORT_CARD_BANK || "ASIA ALLIANCE BANK"
 ).trim();
 const PROVIDER_SUPPORT_CARD_NOTE = (
-  process.env.PROVIDER_SUPPORT_CARD_NOTE || "После перевода можно отправить чек в этот чат."
+  process.env.PROVIDER_SUPPORT_CARD_NOTE || "После перевода отправьте чек в этот чат."
 ).trim();
+const PROVIDER_SUPPORT_FIXED_AMOUNT_SUM = Math.max(
+  1,
+  Math.trunc(Number(process.env.PROVIDER_SUPPORT_FIXED_AMOUNT_SUM || 25000) || 25000)
+);
 const PROVIDER_SUPPORT_PAYMENT_MODE_CARD = "card";
 const PROVIDER_SUPPORT_PAYMENT_MODE_PAYME_CLICK = "payme_click";
 
@@ -12361,7 +12365,7 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
       return;
     }
 
-    await replyProviderSupportCardDetails(ctx);
+    await replyProviderSupportCardDetails(ctx, settings);
   } catch (e) {
     console.error("[tg-bot] provider support prompt error:", e?.message || e);
   }
@@ -12384,14 +12388,12 @@ async function getProviderSupportPaymentModeFromDb() {
 }
 
 async function replyProviderSupportPaymeClickPrompt(ctx, settings, serviceId = null) {
-  const amounts = Array.isArray(settings?.suggested_amounts)
-    ? settings.suggested_amounts
-    : [10000, 25000, 50000, 100000];
+  const amounts = [PROVIDER_SUPPORT_FIXED_AMOUNT_SUM];
 
   const rows = amounts
     .map((x) => Math.trunc(Number(x)))
     .filter((x) => Number.isFinite(x) && x > 0)
-    .slice(0, 8)
+    .slice(0, 4)
     .map((x) => {
       const amountLabel = x.toLocaleString("ru-RU");
       return [
@@ -12411,25 +12413,20 @@ async function replyProviderSupportPaymeClickPrompt(ctx, settings, serviceId = n
     return;
   }
 
-  rows.push([{ text: "⏭ Продолжить без поддержки", callback_data: "support_project:skip" }]);
   rows.push([
     { text: "📋 Мои услуги", callback_data: "prov_services:list" },
     { text: "🗄 Архив", callback_data: "archive:open" },
   ]);
   rows.push([{ text: "📈 Спрос и клиенты", url: `${SITE_URL}/dashboard/finance` }]);
 
-  const text = `💛 <b>Спасибо, что помогаете развивать Travella</b>
+  const amountLabel = Math.trunc(Number(amounts?.[0] || PROVIDER_SUPPORT_FIXED_AMOUNT_SUM)).toLocaleString("ru-RU");
+  const text = `💳 <b>Сервисный взнос Travella</b>
 
-Поддержка проекта добровольная. Она помогает держать базу отказных предложений актуальной и удобной для всех.
+Чтобы мы обработали объявление и держали базу актуальной, оплатите фиксированный сервисный взнос:
 
-<b>Ваш вклад помогает:</b>
-• улучшать поиск и карточки
-• развивать Telegram-бота и веб-кабинет
-• быстрее внедрять новые инструменты для поставщиков
+<b>${amountLabel} сум за объявление</b>
 
-💳 <b>Выберите сумму и удобный способ оплаты:</b>
-Payme — быстрая оплата картой
-Click — счёт придёт в приложение Click Up.`;
+Выберите удобный способ оплаты ниже. После оплаты можно вернуться в бот и продолжить работу с услугами.`;
 
   await safeReply(ctx, text, {
     parse_mode: "HTML",
@@ -12440,7 +12437,7 @@ Click — счёт придёт в приложение Click Up.`;
 function buildProviderSupportCardKeyboard() {
   return {
     inline_keyboard: [
-      [{ text: "⏭ Продолжить без поддержки", callback_data: "support_project:skip" }],
+      [{ text: "✅ Оплатил / отправлю чек", callback_data: "support_project:receipt_hint" }],
       [
         { text: "📋 Мои услуги", callback_data: "prov_services:list" },
         { text: "🗄 Архив", callback_data: "archive:open" },
@@ -12455,29 +12452,48 @@ function buildProviderSupportCardText() {
   const cardOwner = escapeHtml(PROVIDER_SUPPORT_CARD_OWNER);
   const cardBank = escapeHtml(PROVIDER_SUPPORT_CARD_BANK);
   const cardNote = escapeHtml(PROVIDER_SUPPORT_CARD_NOTE);
+  const amount = PROVIDER_SUPPORT_FIXED_AMOUNT_SUM;
+  const amountLabel = escapeHtml(amount.toLocaleString("ru-RU"));
 
-  return `💛 <b>Спасибо, что помогаете развивать Travella</b>
+  return `💳 <b>Сервисный взнос Travella</b>
 
-Поддержка проекта добровольная. Она помогает держать базу отказных предложений актуальной и удобной для всех.
+Чтобы мы обработали объявление и держали базу отказных предложений актуальной, оплатите фиксированный сервисный взнос:
 
-<b>Ваш вклад помогает:</b>
-• улучшать поиск и карточки
-• развивать Telegram-бота и веб-кабинет
-• быстрее внедрять новые инструменты для поставщиков
+<b>${amountLabel} сум за 1 объявление</b>
 
-💳 <b>Для поддержки отправьте удобную сумму на карту:</b>
+Переведите сумму на карту:
 
 <code>${cardNumber}</code>
 ${cardOwner ? `👤 Получатель: <b>${cardOwner}</b>\n` : ""}${cardBank ? `🏦 Банк: <b>${cardBank}</b>\n` : ""}
 ${cardNote}`;
 }
 
-async function replyProviderSupportCardDetails(ctx) {
+async function replyProviderSupportCardDetails(ctx, settings = null) {
   await safeReply(ctx, buildProviderSupportCardText(), {
     parse_mode: "HTML",
     reply_markup: buildProviderSupportCardKeyboard(),
   });
 }
+
+bot.action("support_project:receipt_hint", async (ctx) => {
+  try {
+    await safeCb(ctx, "Отправьте чек сообщением в этот чат");
+    await safeReply(
+      ctx,
+      "📎 Прикрепите сюда скриншот или фото чека. После проверки мы продолжим обработку объявления.",
+      {
+        reply_markup: {
+          inline_keyboard: [
+            [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
+            [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
+          ],
+        },
+      }
+    );
+  } catch (e) {
+    console.error("[tg-bot] support_project:receipt_hint error:", e?.message || e);
+  }
+});
 
 bot.action("support_project:skip", async (ctx) => {
   try {

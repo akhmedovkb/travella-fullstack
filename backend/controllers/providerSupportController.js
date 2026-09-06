@@ -2,8 +2,10 @@
 const pool = require("../db");
 const { resolveProviderByTelegramActorId } = require("../utils/providerTelegramResolver");
 
-const DEFAULT_SUGGESTED_AMOUNTS = [10000, 25000, 50000, 100000];
+const DEFAULT_SUGGESTED_AMOUNTS = [25000];
 const DEFAULT_MIN_AMOUNT_SUM = 1000;
+const DEFAULT_SUPPORT_MESSAGE =
+  "Для публикации, снятия или продвижения объявления нужен сервисный взнос 25 000 сум. После перевода отправьте чек в этот чат.";
 
 function intOrNull(v) {
   const n = Number(v);
@@ -152,9 +154,9 @@ async function ensureProviderSupportSchema(db = pool) {
       id INTEGER PRIMARY KEY DEFAULT 1,
       enabled BOOLEAN NOT NULL DEFAULT TRUE,
       title TEXT NOT NULL DEFAULT '❤️ Поддержка проекта',
-      message TEXT NOT NULL DEFAULT 'Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.',
+      message TEXT NOT NULL DEFAULT '${DEFAULT_SUPPORT_MESSAGE.replace(/'/g, "''")}',
       payment_mode TEXT NOT NULL DEFAULT 'card',
-      suggested_amounts JSONB NOT NULL DEFAULT '[10000,25000,50000,100000]'::jsonb,
+      suggested_amounts JSONB NOT NULL DEFAULT '[25000]'::jsonb,
       min_amount_sum INTEGER NOT NULL DEFAULT ${DEFAULT_MIN_AMOUNT_SUM},
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -959,7 +961,7 @@ async function adminUpdateSupportSettings(req, res) {
     const title = cleanText(req.body?.title, 300) || "❤️ Поддержка проекта";
     const message =
       cleanText(req.body?.message, 2000) ||
-      "Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.";
+      DEFAULT_SUPPORT_MESSAGE;
     const suggestedAmounts = normalizeSuggestedAmounts(req.body?.suggested_amounts);
     const paymentMode = String(req.body?.payment_mode || "card").trim() === "payme_click"
       ? "payme_click"

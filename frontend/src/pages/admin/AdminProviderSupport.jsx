@@ -117,14 +117,14 @@ export default function AdminProviderSupport() {
   const settingsForm = useMemo(() => {
     const amounts = Array.isArray(settings?.suggested_amounts)
       ? settings.suggested_amounts.join(", ")
-      : "10000, 25000, 50000, 100000";
+      : "25000";
 
     return {
       enabled: settings?.enabled !== false,
       title: settings?.title || "❤️ Поддержка проекта",
       message:
         settings?.message ||
-        "Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.",
+        "Для публикации, снятия или продвижения объявления нужен сервисный взнос 25 000 сум. После перевода отправьте чек в этот чат.",
       payment_mode: settings?.payment_mode === "payme_click" ? "payme_click" : "card",
       suggested_amounts: amounts,
       min_amount_sum: Number(settings?.min_amount_sum || 1000),
@@ -354,7 +354,7 @@ export default function AdminProviderSupport() {
               <input
                 value={form.suggested_amounts}
                 onChange={(e) => setForm((p) => ({ ...p, suggested_amounts: e.target.value }))}
-                placeholder="10000, 25000, 50000, 100000"
+                placeholder="25000"
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-100"
               />
             </label>
