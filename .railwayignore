@@ -3,6 +3,7 @@
 .github
 .vercel
 .cache
+.npm-cache-codex
 .vite
 .idea
 .vscode

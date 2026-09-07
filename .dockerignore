@@ -29,4 +29,5 @@ backend/logs
 coverage
 .nyc_output
 .cache
+.npm-cache-codex
 .vercel
