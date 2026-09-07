@@ -4,6 +4,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "react-toastify";
 import { apiGet, apiPut } from "../../api";
 
+const FIXED_SUPPORT_AMOUNT_SUM = 25000;
+const SUPPORT_CARD_NUMBER = "9860 0966 0175 9945";
+const SUPPORT_CARD_OWNER = "KOMIL AKHMEDOV";
+const SUPPORT_CARD_BANK = "ASIA ALLIANCE BANK";
+const DEFAULT_SUPPORT_MESSAGE =
+  "Для публикации, снятия или продвижения объявления нужен сервисный взнос 25 000 сум. После перевода отправьте чек в этот чат.";
+
 const STATUS_OPTIONS = [
   ["", "Все статусы"],
   ["paid", "Оплачено"],
@@ -117,14 +124,12 @@ export default function AdminProviderSupport() {
   const settingsForm = useMemo(() => {
     const amounts = Array.isArray(settings?.suggested_amounts)
       ? settings.suggested_amounts.join(", ")
-      : "25000";
+      : String(FIXED_SUPPORT_AMOUNT_SUM);
 
     return {
       enabled: settings?.enabled !== false,
       title: settings?.title || "❤️ Поддержка проекта",
-      message:
-        settings?.message ||
-        "Для публикации, снятия или продвижения объявления нужен сервисный взнос 25 000 сум. После перевода отправьте чек в этот чат.",
+      message: settings?.message || DEFAULT_SUPPORT_MESSAGE,
       payment_mode: settings?.payment_mode === "payme_click" ? "payme_click" : "card",
       suggested_amounts: amounts,
       min_amount_sum: Number(settings?.min_amount_sum || 1000),
@@ -340,6 +345,28 @@ export default function AdminProviderSupport() {
               </div>
             </div>
 
+            <div className="lg:col-span-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-950">
+              <div className="text-xs font-black uppercase tracking-[0.12em] text-emerald-700">Фактически в Telegram</div>
+              <div className="mt-2 grid gap-3 lg:grid-cols-3">
+                <div>
+                  <div className="text-xs font-bold text-emerald-700">Сумма</div>
+                  <div className="mt-1 text-lg font-black">{formatMoney(FIXED_SUPPORT_AMOUNT_SUM)} сум за 1 объявление</div>
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-emerald-700">Карта</div>
+                  <div className="mt-1 font-mono text-base font-black">{SUPPORT_CARD_NUMBER}</div>
+                </div>
+                <div>
+                  <div className="text-xs font-bold text-emerald-700">Получатель</div>
+                  <div className="mt-1 font-black">{SUPPORT_CARD_OWNER}</div>
+                  <div className="text-xs font-bold text-emerald-700">{SUPPORT_CARD_BANK}</div>
+                </div>
+              </div>
+              <div className="mt-3 rounded-xl bg-white/70 px-3 py-2 text-xs font-bold text-emerald-900">
+                В карточном режиме бот не показывает кнопку “Продолжить без поддержки”: поставщик видит просьбу оплатить и отправить чек.
+              </div>
+            </div>
+
             <label className="block">
               <span className="text-xs font-black uppercase tracking-[0.12em] text-slate-500">Заголовок</span>
               <input
@@ -354,7 +381,7 @@ export default function AdminProviderSupport() {
               <input
                 value={form.suggested_amounts}
                 onChange={(e) => setForm((p) => ({ ...p, suggested_amounts: e.target.value }))}
-                placeholder="25000"
+                placeholder={String(FIXED_SUPPORT_AMOUNT_SUM)}
                 className="mt-1 w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-100"
               />
             </label>
