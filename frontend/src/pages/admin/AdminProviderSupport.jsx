@@ -132,7 +132,7 @@ export default function AdminProviderSupport() {
       message: settings?.message || DEFAULT_SUPPORT_MESSAGE,
       payment_mode: settings?.payment_mode === "payme_click" ? "payme_click" : "card",
       suggested_amounts: amounts,
-      min_amount_sum: Number(settings?.min_amount_sum || 1000),
+      min_amount_sum: Number(settings?.min_amount_sum || FIXED_SUPPORT_AMOUNT_SUM),
     };
   }, [settings]);
 
@@ -195,7 +195,7 @@ export default function AdminProviderSupport() {
           message: form.message,
           payment_mode: form.payment_mode === "payme_click" ? "payme_click" : "card",
           suggested_amounts: amounts,
-          min_amount_sum: Number(form.min_amount_sum || 1000),
+          min_amount_sum: Number(form.min_amount_sum || FIXED_SUPPORT_AMOUNT_SUM),
         },
         "admin"
       );

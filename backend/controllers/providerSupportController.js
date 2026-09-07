@@ -2,8 +2,11 @@
 const pool = require("../db");
 const { resolveProviderByTelegramActorId } = require("../utils/providerTelegramResolver");
 
+const OLD_DEFAULT_SUGGESTED_AMOUNTS = [10000, 25000, 50000, 100000];
 const DEFAULT_SUGGESTED_AMOUNTS = [25000];
-const DEFAULT_MIN_AMOUNT_SUM = 1000;
+const DEFAULT_MIN_AMOUNT_SUM = 25000;
+const OLD_DEFAULT_SUPPORT_MESSAGE =
+  "Если вы хотите поддержать развитие проекта Bot Otkaznyx Turov и Travella — можете отправить любую комфортную для вас сумму.";
 const DEFAULT_SUPPORT_MESSAGE =
   "Для публикации, снятия или продвижения объявления нужен сервисный взнос 25 000 сум. После перевода отправьте чек в этот чат.";
 
@@ -355,6 +358,37 @@ async function ensureProviderSupportSchema(db = pool) {
   }
 }
 
+async function migrateProviderSupportDefaults(db = pool) {
+  await db.query(
+    `
+      UPDATE provider_support_settings
+         SET message = CASE
+               WHEN message = $1 THEN $2
+               ELSE message
+             END,
+             suggested_amounts = CASE
+               WHEN suggested_amounts = $3::jsonb THEN $4::jsonb
+               ELSE suggested_amounts
+             END,
+             min_amount_sum = GREATEST(COALESCE(min_amount_sum, 0), $5),
+             updated_at = NOW()
+       WHERE id = 1
+         AND (
+           message = $1
+           OR suggested_amounts = $3::jsonb
+           OR COALESCE(min_amount_sum, 0) < $5
+         )
+    `,
+    [
+      OLD_DEFAULT_SUPPORT_MESSAGE,
+      DEFAULT_SUPPORT_MESSAGE,
+      JSON.stringify(OLD_DEFAULT_SUGGESTED_AMOUNTS),
+      JSON.stringify(DEFAULT_SUGGESTED_AMOUNTS),
+      DEFAULT_MIN_AMOUNT_SUM,
+    ]
+  );
+}
+
 function buildPaymeCheckoutUrl({
   merchantId,
   checkoutBase,
@@ -408,6 +442,7 @@ async function getProviderByTelegramChatId(db, telegramChatId) {
 
 async function getProviderSupportSettings(db = pool) {
   await ensureProviderSupportSchema(db);
+  await migrateProviderSupportDefaults(db);
 
   const { rows } = await db.query(
     `
