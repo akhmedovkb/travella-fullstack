@@ -753,6 +753,64 @@ function QualityFlagButton({ flag, onClick }) {
   );
 }
 
+function ReadinessCell({ qualityFlags = [], deleted = false, onFix }) {
+  const firstFlag = qualityFlags[0] || null;
+  const hasCritical = qualityFlags.some((flag) => flag?.tone === "red");
+
+  if (deleted) {
+    return (
+      <div className="min-w-[190px] rounded-2xl border border-amber-200 bg-amber-50 px-3 py-2">
+        <div className="text-xs font-black uppercase tracking-[0.12em] text-amber-700">В архиве</div>
+        <div className="mt-1 text-sm font-bold text-amber-950">Удалено из активных</div>
+      </div>
+    );
+  }
+
+  if (!qualityFlags.length) {
+    return (
+      <div className="min-w-[190px] rounded-2xl border border-emerald-200 bg-emerald-50 px-3 py-2">
+        <div className="text-xs font-black uppercase tracking-[0.12em] text-emerald-700">Готово</div>
+        <div className="mt-1 text-sm font-bold text-emerald-950">Можно публиковать</div>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={classNames(
+        "min-w-[220px] rounded-2xl border px-3 py-2",
+        hasCritical ? "border-red-200 bg-red-50" : "border-amber-200 bg-amber-50"
+      )}
+    >
+      <div className={classNames("text-xs font-black uppercase tracking-[0.12em]", hasCritical ? "text-red-700" : "text-amber-700")}>
+        Нужно исправить
+      </div>
+      <div className={classNames("mt-1 text-sm font-bold", hasCritical ? "text-red-950" : "text-amber-950")}>
+        {qualityFlags.length === 1 ? firstFlag.label : `${qualityFlags.length} проблемы`}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-1">
+        {qualityFlags.map((flag) => (
+          <QualityFlagButton key={flag.key} flag={flag} onClick={() => onFix?.(flag)} />
+        ))}
+      </div>
+      {firstFlag ? (
+        <button
+          type="button"
+          onClick={() => onFix?.(firstFlag)}
+          className={classNames(
+            "mt-2 rounded-xl border px-3 py-1.5 text-xs font-bold",
+            hasCritical
+              ? "border-red-200 bg-white text-red-700 hover:bg-red-100"
+              : "border-amber-200 bg-white text-amber-800 hover:bg-amber-100"
+          )}
+        >
+          Исправить
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 function daysUntilText(dateValue) {
   if (!dateValue) return { text: "без даты", tone: "gray", days: null };
   const dt = new Date(dateValue);
@@ -3742,6 +3800,12 @@ const sortLabel = useMemo(() => {
                         {deleted ? <Badge tone="amber">deleted</Badge> : null}
                       </div>
 
+                      <ReadinessCell
+                        qualityFlags={qualityFlags}
+                        deleted={deleted}
+                        onFix={(flag) => handleQualityFlagClick(it, flag)}
+                      />
+
                       <div className="rounded-2xl border border-slate-100 bg-white p-3">
                         <div className="text-[11px] font-bold uppercase text-slate-400">Провайдер</div>
                         <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -3939,6 +4003,7 @@ const sortLabel = useMemo(() => {
                   <SortBadge active={sortBy === "id"} dir={sortOrder} />
                 </th>
                 <th className="px-3 py-2 text-left font-medium">Категория</th>
+                <th className="px-3 py-2 text-left font-medium">Готовность</th>
                 <th className="px-3 py-2 text-left font-medium">Название</th>
                 <th className="px-3 py-2 text-left font-medium">Цена</th>
                 <th
@@ -3978,7 +4043,7 @@ const sortLabel = useMemo(() => {
             <tbody className="divide-y divide-gray-200">
               {loading ? (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={12}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={13}>
                     Загрузка…
                   </td>
                 </tr>
@@ -4036,19 +4101,11 @@ const sortLabel = useMemo(() => {
                       </td>
 
                       <td className="px-3 py-2 align-top">
-                        {qualityFlags.length ? (
-                          <div className="flex flex-wrap gap-1">
-                            {qualityFlags.map((flag) => (
-                              <QualityFlagButton
-                                key={flag.key}
-                                flag={flag}
-                                onClick={() => handleQualityFlagClick(it, flag)}
-                              />
-                            ))}
-                          </div>
-                        ) : (
-                          <Badge tone="green">готово</Badge>
-                        )}
+                        <ReadinessCell
+                          qualityFlags={qualityFlags}
+                          deleted={deleted}
+                          onFix={(flag) => handleQualityFlagClick(it, flag)}
+                        />
                       </td>
 
                       <td className="px-3 py-2">
@@ -4349,7 +4406,7 @@ const sortLabel = useMemo(() => {
                 })
               ) : (
                 <tr>
-                  <td className="px-3 py-3 text-gray-600" colSpan={12}>
+                  <td className="px-3 py-3 text-gray-600" colSpan={13}>
                     <RefusedEmptyState quickFilter={quickFilter} onReset={resetFilters} />
                   </td>
                 </tr>
