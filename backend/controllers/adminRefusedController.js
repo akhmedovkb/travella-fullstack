@@ -464,10 +464,12 @@ exports.listActualRefused = async (req, res) => {
           publicChannelChatId: publicationMeta.publicChannelChatId || null,
           publicChannelPublishedBy: publicationMeta.publicChannelPublishedBy || null,
           fixRequestedAt: fixRequestMeta.requestedAt || null,
+          fixFirstRequestedAt: fixRequestMeta.firstRequestedAt || fixRequestMeta.requestedAt || null,
           fixRequestedBy: fixRequestMeta.requestedBy || null,
           fixRequestFlags: Array.isArray(fixRequestMeta.flags) ? fixRequestMeta.flags : [],
           fixRequestFollowUpCount: Number(fixRequestMeta.followUpCount || 0),
           fixRequestLastAutoFollowUpAt: fixRequestMeta.lastAutoFollowUpAt || null,
+          fixNoResponseAt: fixRequestMeta.noResponseAt || null,
         },
       };
     });
@@ -610,10 +612,12 @@ exports.getRefusedById = async (req, res) => {
           publicChannelChatId: publicationMeta.publicChannelChatId || null,
           publicChannelPublishedBy: publicationMeta.publicChannelPublishedBy || null,
           fixRequestedAt: fixRequestMeta.requestedAt || null,
+          fixFirstRequestedAt: fixRequestMeta.firstRequestedAt || fixRequestMeta.requestedAt || null,
           fixRequestedBy: fixRequestMeta.requestedBy || null,
           fixRequestFlags: Array.isArray(fixRequestMeta.flags) ? fixRequestMeta.flags : [],
           fixRequestFollowUpCount: Number(fixRequestMeta.followUpCount || 0),
           fixRequestLastAutoFollowUpAt: fixRequestMeta.lastAutoFollowUpAt || null,
+          fixNoResponseAt: fixRequestMeta.noResponseAt || null,
         },
         isActual: isServiceActual(detailsObj, svcForActual),
         startDateForSort: (() => {
@@ -936,6 +940,7 @@ async function requestRefusedFixForService(id, actor = {}, options = {}) {
     admin_fix_request_meta: {
       ...(detailsObj.admin_fix_request_meta || {}),
       requestedAt: new Date().toISOString(),
+      firstRequestedAt: detailsObj.admin_fix_request_meta?.firstRequestedAt || detailsObj.admin_fix_request_meta?.requestedAt || new Date().toISOString(),
       requestedBy: actor?.id || null,
       flags: flags.map((flag) => flag.key),
       labels: flags.map((flag) => flag.label),
@@ -945,6 +950,9 @@ async function requestRefusedFixForService(id, actor = {}, options = {}) {
       lastAutoFollowUpAt: options.followUp
         ? new Date().toISOString()
         : detailsObj.admin_fix_request_meta?.lastAutoFollowUpAt || null,
+      noResponseAt: options.markNoResponse
+        ? new Date().toISOString()
+        : detailsObj.admin_fix_request_meta?.noResponseAt || null,
     },
   };
 

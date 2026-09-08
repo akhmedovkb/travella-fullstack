@@ -140,6 +140,7 @@ async function runRefusedFixFollowupJobSafe() {
     console.log(`[scheduler] refusedFixFollowupJob finished`, {
       scanned: result?.scanned,
       due: result?.due,
+      noResponseMarked: result?.noResponseMarked,
       sent: result?.sent,
       noChat: result?.noChat,
       noFixNeeded: result?.noFixNeeded,

@@ -139,6 +139,7 @@ const REFUSED_FILTER_ALLOWED = {
     "no_answer",
     "fix_requested",
     "fix_overdue",
+    "fix_no_response",
     "no_contact",
     "no_tg",
     "no_price",
@@ -781,15 +782,21 @@ function getFixRequestMeta(it) {
   const meta = it?.meta || {};
   return {
     requestedAt: meta.fixRequestedAt || null,
+    firstRequestedAt: meta.fixFirstRequestedAt || meta.fixRequestedAt || null,
     requestedBy: meta.fixRequestedBy || null,
     flags: Array.isArray(meta.fixRequestFlags) ? meta.fixRequestFlags : [],
     followUpCount: Number(meta.fixRequestFollowUpCount || 0),
     lastAutoFollowUpAt: meta.fixRequestLastAutoFollowUpAt || null,
+    noResponseAt: meta.fixNoResponseAt || null,
   };
 }
 
 function hasFixRequest(it) {
   return Boolean(getFixRequestMeta(it).requestedAt);
+}
+
+function hasFixNoResponse(it) {
+  return Boolean(getFixRequestMeta(it).noResponseAt);
 }
 
 function QualityFlagButton({ flag, onClick }) {
@@ -926,6 +933,7 @@ function quickFilterLabel(value) {
     no_answer: "без ответа",
     fix_requested: "просили исправить",
     fix_overdue: "ждём 24ч+",
+    fix_no_response: "не отвечает",
     no_tg: "без Telegram",
     no_contact: "без контактов",
     not_ready: "не готовые",
@@ -1940,6 +1948,7 @@ export default function AdminRefusedActual() {
     let noAnswerCount = 0;
     let fixRequestedCount = 0;
     let fixOverdueCount = 0;
+    let fixNoResponseCount = 0;
     let noPriceCount = 0;
     let noPhotoCount = 0;
     let readyCount = 0;
@@ -1972,6 +1981,7 @@ export default function AdminRefusedActual() {
         const hours = elapsedHours(meta.fixRequestedAt);
         if (hours != null && hours >= 24) fixOverdueCount += 1;
       }
+      if (meta.fixNoResponseAt) fixNoResponseCount += 1;
       if (!hasServicePrice(it)) noPriceCount += 1;
       if (!hasServiceImages(it)) noPhotoCount += 1;
       if (isServiceReadyForPublishing(it)) readyCount += 1;
@@ -1992,6 +2002,7 @@ export default function AdminRefusedActual() {
       noAnswerCount,
       fixRequestedCount,
       fixOverdueCount,
+      fixNoResponseCount,
       noPriceCount,
       noPhotoCount,
       readyCount,
@@ -2030,6 +2041,9 @@ export default function AdminRefusedActual() {
         const hours = elapsedHours(getFixRequestMeta(it).requestedAt);
         return hours != null && hours >= 24;
       });
+    }
+    if (quickFilter === "fix_no_response") {
+      return list.filter((it) => hasFixNoResponse(it));
     }
     if (quickFilter === "no_price") {
       return list.filter((it) => !hasServicePrice(it));
@@ -3572,7 +3586,7 @@ const sortLabel = useMemo(() => {
               Сначала неготовые, срочные и без ответа, потом проверьте очередь правок и услуги без контактов, Telegram, цены или фото.
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-11">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-12">
             <button
               type="button"
               onClick={() => setQuickFilter("ready")}
@@ -3620,6 +3634,14 @@ const sortLabel = useMemo(() => {
             >
               <div className="text-2xl font-black text-red-950">{pageStats.fixOverdueCount}</div>
               <div className="text-xs font-bold text-red-700">ждём 24ч+</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickFilter("fix_no_response")}
+              className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-left hover:bg-red-100"
+            >
+              <div className="text-2xl font-black text-red-950">{pageStats.fixNoResponseCount}</div>
+              <div className="text-xs font-bold text-red-700">не отвечает</div>
             </button>
             <button
               type="button"
@@ -3770,6 +3792,7 @@ const sortLabel = useMemo(() => {
         <StatCard label="Актуальные" value={pageStats.actualCount} hint="в текущей выдаче" tone="green" />
         <StatCard label="Неактуальные" value={pageStats.inactiveCount} hint="нужно проверить" tone={pageStats.inactiveCount ? "amber" : "slate"} />
         <StatCard label="Срочные" value={pageStats.urgentCount} hint="сегодня / до 5 дней" tone={pageStats.urgentCount ? "red" : "slate"} />
+        <StatCard label="Не отвечает" value={pageStats.fixNoResponseCount} hint="после авто-дожима" tone={pageStats.fixNoResponseCount ? "red" : "slate"} />
         <StatCard label="Без контакта" value={pageStats.contactMissingCount} hint="нет телефона/email/TG" tone={pageStats.contactMissingCount ? "red" : "slate"} />
         <StatCard label="Без TG" value={pageStats.tgMissingCount} hint="нельзя спросить" tone={pageStats.tgMissingCount ? "red" : "slate"} />
         <StatCard label="Без ответа" value={pageStats.noAnswerCount} hint="после запроса" tone={pageStats.noAnswerCount ? "amber" : "slate"} />
@@ -3787,6 +3810,7 @@ const sortLabel = useMemo(() => {
               <QuickChip active={quickFilter === "no_answer"} onClick={() => setQuickFilter("no_answer")}>Без ответа</QuickChip>
               <QuickChip active={quickFilter === "fix_requested"} onClick={() => setQuickFilter("fix_requested")}>Ждём правки</QuickChip>
               <QuickChip active={quickFilter === "fix_overdue"} onClick={() => setQuickFilter("fix_overdue")}>Ждём 24ч+</QuickChip>
+              <QuickChip active={quickFilter === "fix_no_response"} onClick={() => setQuickFilter("fix_no_response")}>Не отвечает</QuickChip>
               <QuickChip active={quickFilter === "no_contact"} onClick={() => setQuickFilter("no_contact")}>Без контактов</QuickChip>
               <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
               <QuickChip active={quickFilter === "no_price"} onClick={() => setQuickFilter("no_price")}>Без цены</QuickChip>
@@ -4057,6 +4081,7 @@ const sortLabel = useMemo(() => {
                 const fixMeta = getFixRequestMeta(it);
                 const fixRequested = hasFixRequest(it);
                 const fixOverdue = elapsedHours(fixMeta.requestedAt) >= 24;
+                const fixNoResponse = hasFixNoResponse(it);
                 const price = servicePriceSummary(it);
                 const qualityFlags = getServiceQualityFlags(it, tgOk);
                 const readyForPublish = !deleted && isServiceReadyForPublishing(it);
@@ -4109,6 +4134,7 @@ const sortLabel = useMemo(() => {
                         {alreadyPublished ? <Badge tone="green">в канале</Badge> : null}
                         {fixRequested ? <Badge tone="amber">просили исправить</Badge> : null}
                         {fixOverdue ? <Badge tone="red">ждём 24ч+</Badge> : null}
+                        {fixNoResponse ? <Badge tone="red">не отвечает</Badge> : null}
                         {deleted ? <Badge tone="amber">deleted</Badge> : null}
                       </div>
                       {alreadyPublished ? (
@@ -4125,6 +4151,7 @@ const sortLabel = useMemo(() => {
                           Просили исправить: {formatDate(fixMeta.requestedAt)}
                           <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>ждём {elapsedShort(fixMeta.requestedAt)}</span>
                           {fixMeta.followUpCount ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>авто: {fixMeta.followUpCount}</span> : null}
+                          {fixNoResponse ? <span className="ml-1 text-red-700">не отвечает с {formatDate(fixMeta.noResponseAt)}</span> : null}
                           {fixMeta.flags.length ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>({fixMeta.flags.join(", ")})</span> : null}
                         </div>
                       ) : null}
@@ -4449,6 +4476,7 @@ const sortLabel = useMemo(() => {
                   const fixMeta = getFixRequestMeta(it);
                   const fixRequested = hasFixRequest(it);
                   const fixOverdue = elapsedHours(fixMeta.requestedAt) >= 24;
+                  const fixNoResponse = hasFixNoResponse(it);
                   const lockUntil = meta.lockUntil;
                   const lastSentAt = meta.lastSentAt;
                   const lastAnswer = meta.lastAnswer;
@@ -4702,6 +4730,7 @@ const sortLabel = useMemo(() => {
                             исправления: <span className="font-mono">{formatDate(fixMeta.requestedAt)}</span>
                             <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>ждём {elapsedShort(fixMeta.requestedAt)}</span>
                             {fixMeta.followUpCount ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>авто: {fixMeta.followUpCount}</span> : null}
+                            {fixNoResponse ? <span className="ml-1 text-red-700">не отвечает с {formatDate(fixMeta.noResponseAt)}</span> : null}
                             {fixMeta.flags.length ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>{fixMeta.flags.join(", ")}</span> : null}
                           </div>
                         ) : null}

@@ -6,6 +6,8 @@ const {
 } = require("../controllers/adminRefusedController");
 
 const DEFAULT_THRESHOLD_HOURS = 24;
+const DEFAULT_NO_RESPONSE_HOURS = 48;
+const DEFAULT_NO_RESPONSE_MIN_FOLLOWUPS = 2;
 const DEFAULT_LIMIT = 25;
 const DEFAULT_SCAN_LIMIT = 200;
 
@@ -35,14 +37,25 @@ async function runRefusedFixFollowupJob(options = {}) {
   );
   const limit = Math.max(1, Math.min(Number(options.limit || intEnv("REFUSED_FIX_FOLLOWUP_LIMIT", DEFAULT_LIMIT)), 100));
   const scanLimit = Math.max(limit, Math.min(Number(options.scanLimit || intEnv("REFUSED_FIX_FOLLOWUP_SCAN_LIMIT", DEFAULT_SCAN_LIMIT)), 1000));
+  const noResponseHours = Math.max(
+    thresholdHours,
+    Number(options.noResponseHours || intEnv("REFUSED_FIX_NO_RESPONSE_HOURS", DEFAULT_NO_RESPONSE_HOURS))
+  );
+  const noResponseMinFollowups = Math.max(
+    1,
+    Number(options.noResponseMinFollowups || intEnv("REFUSED_FIX_NO_RESPONSE_MIN_FOLLOWUPS", DEFAULT_NO_RESPONSE_MIN_FOLLOWUPS))
+  );
 
   const stats = {
     ok: true,
     thresholdHours,
+    noResponseHours,
+    noResponseMinFollowups,
     scanLimit,
     limit,
     scanned: 0,
     due: 0,
+    noResponseMarked: 0,
     sent: 0,
     noChat: 0,
     noFixNeeded: 0,
@@ -62,7 +75,13 @@ async function runRefusedFixFollowupJob(options = {}) {
     `
       SELECT
         s.id,
-        s.details #>> '{admin_fix_request_meta,requestedAt}' AS requested_at
+        s.details #>> '{admin_fix_request_meta,requestedAt}' AS requested_at,
+        COALESCE(
+          NULLIF(s.details #>> '{admin_fix_request_meta,firstRequestedAt}', ''),
+          NULLIF(s.details #>> '{admin_fix_request_meta,requestedAt}', '')
+        ) AS first_requested_at,
+        COALESCE(NULLIF(s.details #>> '{admin_fix_request_meta,followUpCount}', ''), '0')::int AS follow_up_count,
+        s.details #>> '{admin_fix_request_meta,noResponseAt}' AS no_response_at
       FROM services s
       WHERE s.deleted_at IS NULL
         AND ((s.category LIKE 'refused_%') OR s.category = 'author_tour')
@@ -87,13 +106,24 @@ async function runRefusedFixFollowupJob(options = {}) {
 
   for (const row of due) {
     try {
+      const firstRequestedAge = hoursSince(row.first_requested_at || row.requested_at, now);
+      const nextFollowUpCount = Number(row.follow_up_count || 0) + 1;
+      const shouldMarkNoResponse =
+        !row.no_response_at &&
+        firstRequestedAge != null &&
+        firstRequestedAge >= noResponseHours &&
+        nextFollowUpCount >= noResponseMinFollowups;
+
       const result = await requestRefusedFixForServiceInternal(
         row.id,
         { id: "refused_fix_followup_job", role: "system" },
-        { followUp: true }
+        { followUp: true, markNoResponse: shouldMarkNoResponse }
       );
       stats.results.push(result);
-      if (result.success) stats.sent += 1;
+      if (result.success) {
+        stats.sent += 1;
+        if (shouldMarkNoResponse) stats.noResponseMarked += 1;
+      }
       else if (result.code === "NO_PROVIDER_CHAT_ID") stats.noChat += 1;
       else if (result.code === "NO_FIX_NEEDED") stats.noFixNeeded += 1;
       else stats.failed += 1;
