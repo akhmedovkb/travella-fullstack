@@ -5,6 +5,7 @@ const { askActualReminder } = require("./askActualReminder");
 const { cleanupExpiredServicesJob } = require("./cleanupExpiredServicesJob");
 const { runUnlockNudge } = require("./unlockNudgeJob");
 const { runAbandonedPaymeReminderJob } = require("./abandonedPaymeReminderJob");
+const { runRefusedFixFollowupJob } = require("./refusedFixFollowupJob");
 
 const TZ = "Asia/Tashkent";
 const ASK_HOURS = new Set([10, 14, 18]);
@@ -131,6 +132,26 @@ async function runCleanupExpiredServicesJob() {
   }
 }
 
+async function runRefusedFixFollowupJobSafe() {
+  console.log(`[scheduler] refusedFixFollowupJob started (${TZ})`);
+
+  try {
+    const result = await runRefusedFixFollowupJob();
+    console.log(`[scheduler] refusedFixFollowupJob finished`, {
+      scanned: result?.scanned,
+      due: result?.due,
+      sent: result?.sent,
+      noChat: result?.noChat,
+      noFixNeeded: result?.noFixNeeded,
+      failed: result?.failed,
+      skipped: result?.skipped,
+      reason: result?.reason,
+    });
+  } catch (err) {
+    console.error(`[scheduler] refusedFixFollowupJob failed`, err);
+  }
+}
+
 function startJobsScheduler() {
   if (
     String(process.env.DISABLE_REMINDER_SCHEDULER || "").trim() === "1" ||
@@ -185,6 +206,15 @@ function startJobsScheduler() {
     "*/15 * * * *",
     async () => {
       await runAbandonedPaymeReminderJob();
+    },
+    { timezone: TZ }
+  );
+
+  // Refused cards: repeat fix request after 24h if provider has not corrected the card
+  cron.schedule(
+    "17 * * * *",
+    async () => {
+      await runRefusedFixFollowupJobSafe();
     },
     { timezone: TZ }
   );

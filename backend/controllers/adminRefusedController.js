@@ -466,6 +466,8 @@ exports.listActualRefused = async (req, res) => {
           fixRequestedAt: fixRequestMeta.requestedAt || null,
           fixRequestedBy: fixRequestMeta.requestedBy || null,
           fixRequestFlags: Array.isArray(fixRequestMeta.flags) ? fixRequestMeta.flags : [],
+          fixRequestFollowUpCount: Number(fixRequestMeta.followUpCount || 0),
+          fixRequestLastAutoFollowUpAt: fixRequestMeta.lastAutoFollowUpAt || null,
         },
       };
     });
@@ -610,6 +612,8 @@ exports.getRefusedById = async (req, res) => {
           fixRequestedAt: fixRequestMeta.requestedAt || null,
           fixRequestedBy: fixRequestMeta.requestedBy || null,
           fixRequestFlags: Array.isArray(fixRequestMeta.flags) ? fixRequestMeta.flags : [],
+          fixRequestFollowUpCount: Number(fixRequestMeta.followUpCount || 0),
+          fixRequestLastAutoFollowUpAt: fixRequestMeta.lastAutoFollowUpAt || null,
         },
         isActual: isServiceActual(detailsObj, svcForActual),
         startDateForSort: (() => {
@@ -848,7 +852,7 @@ exports.publishRefusedBulk = async (req, res) => {
   }
 };
 
-async function requestRefusedFixForService(id, actor = {}) {
+async function requestRefusedFixForService(id, actor = {}, options = {}) {
   const sid = Number(id || 0);
   if (!Number.isFinite(sid) || sid <= 0) {
     return { success: false, code: "BAD_ID", message: "Bad id" };
@@ -904,7 +908,9 @@ async function requestRefusedFixForService(id, actor = {}) {
   const serviceUrl = `${siteUrl}/dashboard?from=admin&service=${encodeURIComponent(sid)}`;
   const flagLines = flags.map((flag) => `• ${escapeHtml(flag.label)}`).join("\n");
   const text = [
-    `🛠 <b>Нужно исправить карточку Travella</b>`,
+    options.followUp
+      ? `⏰ <b>Повторное напоминание: нужно исправить карточку Travella</b>`
+      : `🛠 <b>Нужно исправить карточку Travella</b>`,
     ``,
     `Здравствуйте, ${escapeHtml(providerName)}.`,
     `По услуге <b>#${sid}</b> нужно обновить данные, чтобы мы могли опубликовать её в подборке отказных предложений.`,
@@ -933,6 +939,12 @@ async function requestRefusedFixForService(id, actor = {}) {
       requestedBy: actor?.id || null,
       flags: flags.map((flag) => flag.key),
       labels: flags.map((flag) => flag.label),
+      followUpCount: options.followUp
+        ? Number(detailsObj.admin_fix_request_meta?.followUpCount || 0) + 1
+        : Number(detailsObj.admin_fix_request_meta?.followUpCount || 0),
+      lastAutoFollowUpAt: options.followUp
+        ? new Date().toISOString()
+        : detailsObj.admin_fix_request_meta?.lastAutoFollowUpAt || null,
     },
   };
 
@@ -948,6 +960,8 @@ async function requestRefusedFixForService(id, actor = {}) {
 
   return { success: true, id: sid, chatId, flags: flags.map((flag) => flag.key) };
 }
+
+exports.requestRefusedFixForServiceInternal = requestRefusedFixForService;
 
 exports.requestFixRefusedService = async (req, res) => {
   try {

@@ -783,6 +783,8 @@ function getFixRequestMeta(it) {
     requestedAt: meta.fixRequestedAt || null,
     requestedBy: meta.fixRequestedBy || null,
     flags: Array.isArray(meta.fixRequestFlags) ? meta.fixRequestFlags : [],
+    followUpCount: Number(meta.fixRequestFollowUpCount || 0),
+    lastAutoFollowUpAt: meta.fixRequestLastAutoFollowUpAt || null,
   };
 }
 
@@ -4122,6 +4124,7 @@ const sortLabel = useMemo(() => {
                         )}>
                           Просили исправить: {formatDate(fixMeta.requestedAt)}
                           <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>ждём {elapsedShort(fixMeta.requestedAt)}</span>
+                          {fixMeta.followUpCount ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>авто: {fixMeta.followUpCount}</span> : null}
                           {fixMeta.flags.length ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>({fixMeta.flags.join(", ")})</span> : null}
                         </div>
                       ) : null}
@@ -4698,6 +4701,7 @@ const sortLabel = useMemo(() => {
                           )}>
                             исправления: <span className="font-mono">{formatDate(fixMeta.requestedAt)}</span>
                             <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>ждём {elapsedShort(fixMeta.requestedAt)}</span>
+                            {fixMeta.followUpCount ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>авто: {fixMeta.followUpCount}</span> : null}
                             {fixMeta.flags.length ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>{fixMeta.flags.join(", ")}</span> : null}
                           </div>
                         ) : null}
