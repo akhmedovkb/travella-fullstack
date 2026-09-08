@@ -10,6 +10,8 @@ const {
   getRefusedById,
   askActualNow,
   askActualBulk,
+  publishRefusedService,
+  publishRefusedBulk,
   extendRefusedService,
   deleteRefusedService,
   restoreRefusedService,
@@ -29,6 +31,12 @@ router.post("/refused/:id/ask-actual", askActualNow);
 
 // массово отправить вопрос актуальности по выбранным услугам
 router.post("/refused/ask-actual/bulk", askActualBulk);
+
+// опубликовать public-safe карточку в Telegram канал
+router.post("/refused/:id/publish-public", publishRefusedService);
+
+// массово опубликовать public-safe карточки в Telegram канал
+router.post("/refused/publish-public/bulk", publishRefusedBulk);
 
 // продлить на +7 дней
 router.post("/refused/:id/extend", extendRefusedService);

@@ -2041,6 +2041,18 @@ export default function AdminRefusedActual() {
     [selectedIds, visibleItems]
   );
 
+  const publishableSelectedIds = useMemo(
+    () =>
+      selectedVisibleItems
+        .filter((it) => {
+          const deleted = !!it?.deletedAt || String(it?.status || "").toLowerCase() === "deleted";
+          return !deleted && isServiceReadyForPublishing(it);
+        })
+        .map((it) => Number(it.id))
+        .filter(Boolean),
+    [selectedVisibleItems]
+  );
+
   const selectedVisibleCount = useMemo(
     () => selectableVisibleIds.filter((id) => selectedIds.includes(id)).length,
     [selectableVisibleIds, selectedIds]
@@ -3108,6 +3120,75 @@ async function saveInlineEdit(item) {
     }
   }
 
+  async function publishPublicSelected() {
+    const ids = publishableSelectedIds;
+    if (!ids.length) {
+      showToast("warn", "Среди выбранных нет готовых карточек для публикации");
+      return;
+    }
+
+    if (!window.confirm(`Опубликовать готовые карточки в Telegram канал: ${ids.length}?`)) return;
+
+    setBulkSending(true);
+    setError("");
+    try {
+      const resp = await http.post(apiPath(`/admin/refused/publish-public/bulk`), { ids });
+      const data = ensureJsonOrThrow(resp, "publishPublicSelected");
+      if (!data?.success) {
+        throw new Error(data?.message || "Не удалось опубликовать выбранные");
+      }
+
+      showToast(
+        data.failed ? "warn" : "ok",
+        `Опубликовано: ${data.published || 0}. Ошибки: ${data.failed || 0}.`
+      );
+
+      setSelectedIds([]);
+      await loadList(page);
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setBulkSending(false);
+    }
+  }
+
+  async function publishPublicService(item) {
+    if (!item?.id) return;
+
+    const qualityFlags = getServiceQualityFlags(item, !!serviceTelegramId(item));
+    if (qualityFlags.length || !item.isActual) {
+      showToast("warn", "Сначала исправьте карточку перед публикацией");
+      return;
+    }
+
+    if (!window.confirm(`Опубликовать отказ #${item.id} в Telegram канал?`)) return;
+
+    setSendingId(item.id);
+    setError("");
+    try {
+      const resp = await http.post(apiPath(`/admin/refused/${item.id}/publish-public`));
+      const data = ensureJsonOrThrow(resp, "publishPublicService");
+      if (!data?.success) {
+        throw new Error(data?.message || "Не удалось опубликовать");
+      }
+
+      showToast("ok", `✅ Опубликовано в канал${data.messageId ? `, message ${data.messageId}` : ""}`);
+      await loadList(page);
+
+      if (detailsItem?.id === item.id) {
+        await openDetails(item.id);
+      }
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setSendingId(null);
+    }
+  }
+
   async function extendService(id) {
     setSendingId(id);
     setError("");
@@ -3752,6 +3833,7 @@ const sortLabel = useMemo(() => {
                 const meta = it.meta || {};
                 const price = servicePriceSummary(it);
                 const qualityFlags = getServiceQualityFlags(it, tgOk);
+                const readyForPublish = !deleted && isServiceReadyForPublishing(it);
                 return (
                   <div key={it.id} className={classNames("overflow-hidden rounded-3xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", actual ? "border-slate-200" : "border-red-100")}>
                     <div className={classNames("border-b bg-gradient-to-br p-4", categoryAccent(it.category))}>
@@ -3833,6 +3915,14 @@ const sortLabel = useMemo(() => {
                           <>
                             <button onClick={() => askActual(it.id, false)} disabled={!tgOk || sendingId === it.id} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">Спросить</button>
                             <button onClick={() => extendService(it.id)} disabled={sendingId === it.id} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50">+7 дней</button>
+                            <button
+                              onClick={() => publishPublicService(it)}
+                              disabled={!readyForPublish || sendingId === it.id}
+                              className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              title={readyForPublish ? "Опубликовать public-safe карточку в Telegram канал" : "Сначала исправьте готовность карточки"}
+                            >
+                              В канал
+                            </button>
                           </>
                         ) : (
                           <button onClick={() => restoreService(it.id)} disabled={sendingId === it.id} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:opacity-50">Восстановить</button>
@@ -3914,6 +4004,20 @@ const sortLabel = useMemo(() => {
                   title="Продлить выбранные активные услуги на 7 дней"
                 >
                   {bulkSending ? "Продление…" : `Продлить +7 (${extendableSelectedIds.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={publishPublicSelected}
+                  disabled={!publishableSelectedIds.length || bulkSending}
+                  className={classNames(
+                    "rounded-xl border px-3 py-2 text-xs font-bold",
+                    !publishableSelectedIds.length || bulkSending
+                      ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                      : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                  )}
+                  title={!publishableSelectedIds.length ? "Среди выбранных нет готовых карточек" : "Опубликовать готовые выбранные карточки в Telegram канал"}
+                >
+                  {bulkSending ? "Публикация…" : `В канал (${publishableSelectedIds.length})`}
                 </button>
                 <button
                   type="button"
@@ -4063,6 +4167,7 @@ const sortLabel = useMemo(() => {
                   const lastSentBy = String(meta.lastSentBy || "").toLowerCase();
                   const price = servicePriceSummary(it);
                   const qualityFlags = getServiceQualityFlags(it, tgOk);
+                  const readyForPublish = !deleted && isServiceReadyForPublishing(it);
 
                   const sentBadge =
                     lastSentBy === "job"
@@ -4359,6 +4464,20 @@ const sortLabel = useMemo(() => {
                                 title="Продлить на 7 дней"
                               >
                                 Продлить
+                              </button>
+
+                              <button
+                                onClick={() => publishPublicService(it)}
+                                disabled={!readyForPublish || sendingId === it.id}
+                                className={classNames(
+                                  "rounded-lg border px-3 py-1.5 text-xs",
+                                  !readyForPublish || sendingId === it.id
+                                    ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                                    : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
+                                )}
+                                title={readyForPublish ? "Опубликовать public-safe карточку в Telegram канал" : "Сначала исправьте готовность карточки"}
+                              >
+                                В канал
                               </button>
 
                               <button

@@ -2,8 +2,39 @@
 const db = require("../db");
 
 // Telegram send + keyboards/helpers
-const { tgSend } = require("../utils/telegram");
+const { tgSend, tgSendPhoto } = require("../utils/telegram");
 const CLIENT_BOT_TOKEN = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
+const { buildServiceMessage } = require("../utils/telegramServiceCard");
+const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
+
+const PUBLIC_CHANNEL_CHAT_ID_RAW = (
+  process.env.TELEGRAM_PUBLIC_CHANNEL_ID ||
+  process.env.TG_PUBLIC_CHANNEL_ID ||
+  process.env.TELEGRAM_ANNOUNCE_CHANNEL_ID ||
+  process.env.TELEGRAM_CHANNEL_ID ||
+  ""
+).trim();
+
+function normalizeTelegramPublishChatId(value) {
+  let raw = String(value || "").trim();
+  if (!raw) return "";
+
+  raw = raw
+    .replace(/^https?:\/\/t\.me\//i, "@")
+    .replace(/^t\.me\//i, "@")
+    .replace(/\?.*$/, "")
+    .replace(/\/.*$/, "")
+    .trim();
+
+  if (!raw) return "";
+  if (raw.startsWith("@")) return raw;
+  if (/^-100\d+$/.test(raw)) return raw;
+  if (/^-\d+$/.test(raw)) return raw;
+  if (/^\d+$/.test(raw)) return `-100${raw}`;
+  return raw;
+}
+
+const PUBLIC_CHANNEL_CHAT_ID = normalizeTelegramPublishChatId(PUBLIC_CHANNEL_CHAT_ID_RAW);
 
 // helpers для проверки актуальности услуги
 const {
@@ -73,6 +104,12 @@ function pickProviderChatId(p) {
     p?.chatId ||
     null
   );
+}
+
+function tiyinToSum(value) {
+  const n = Number(value || 0);
+  if (!Number.isFinite(n)) return 0;
+  return Math.trunc(n / 100);
 }
 
 // дата для сортировки/отображения
@@ -473,6 +510,216 @@ exports.getRefusedById = async (req, res) => {
   } catch (e) {
     console.error("[adminRefused] getRefusedById error:", e);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+async function publishRefusedServiceToPublicChannel(id, actor = {}) {
+  const sid = Number(id || 0);
+  if (!Number.isFinite(sid) || sid <= 0) {
+    return { success: false, code: "BAD_ID", message: "Bad id" };
+  }
+
+  if (!PUBLIC_CHANNEL_CHAT_ID) {
+    return {
+      success: false,
+      code: "NO_PUBLIC_CHANNEL",
+      message: "TELEGRAM_PUBLIC_CHANNEL_ID is not configured",
+    };
+  }
+
+  const sql = `
+    SELECT
+      s.*,
+      p.id AS p_id,
+      p.name AS p_name,
+      to_jsonb(p)->>'company_name' AS p_company_name,
+      p.phone AS p_phone,
+      p.social AS p_social,
+      p.email AS p_email,
+      p.telegram_refused_chat_id,
+      p.telegram_web_chat_id,
+      p.telegram_chat_id,
+      p.tg_chat_id
+    FROM services s
+    JOIN providers p ON p.id = s.provider_id
+    WHERE s.id = $1
+      AND s.deleted_at IS NULL
+      AND ((s.category LIKE 'refused_%') OR s.category = 'author_tour')
+    LIMIT 1
+  `;
+  const r = await db.query(sql, [sid]);
+  const row = r.rows?.[0];
+  if (!row) {
+    return { success: false, code: "NOT_FOUND", message: "Service not found" };
+  }
+
+  const detailsObj = parseDetailsAny(row.details);
+  const actual = isServiceActual(detailsObj, {
+    ...row,
+    expiration: row.expiration_at || row.expiration || null,
+  });
+  if (!actual) {
+    return { success: false, code: "NOT_ACTUAL", message: "Service is not actual" };
+  }
+
+  const unlockSettings = await getContactUnlockSettings(db).catch(() => null);
+  const unlockPrice = tiyinToSum(unlockSettings?.effective_price || 0) || Number(process.env.CONTACT_UNLOCK_PRICE || 10000);
+  const botUsername = (
+    process.env.TELEGRAM_CLIENT_BOT_USERNAME ||
+    process.env.TELEGRAM_BOT_USERNAME ||
+    ""
+  )
+    .replace(/^@/, "")
+    .trim();
+  const siteUrl = (process.env.SITE_PUBLIC_URL || process.env.SITE_URL || "https://travella.uz").replace(/\/+$/, "");
+  const deepLink = botUsername
+    ? `https://t.me/${botUsername}?start=${encodeURIComponent(`unlock_${sid}`)}`
+    : `${siteUrl}/?service=${sid}`;
+
+  const serviceForCard = {
+    ...row,
+    id: row.id,
+    category: row.category,
+    type: row.category,
+    details: detailsObj,
+    provider: {
+      id: row.p_id,
+      name: row.p_name,
+      companyName: row.p_company_name,
+      phone: row.p_phone,
+      email: row.p_email,
+      telegramUsername: row.p_social,
+      telegram_refused_chat_id: row.telegram_refused_chat_id || null,
+      telegram_web_chat_id: row.telegram_web_chat_id || null,
+      telegram_chat_id: row.telegram_chat_id || null,
+      tg_chat_id: row.tg_chat_id || null,
+    },
+  };
+
+  const built = buildServiceMessage(serviceForCard, row.category || "refused_tour", "client", {
+    audience: "public",
+    publicSafe: true,
+    unlocked: false,
+    unlockPrice,
+    forceHideProviderContacts: true,
+    forceShowProviderContacts: false,
+    publicOpenBotUrl: deepLink,
+    forceRefused: String(row.category || "").startsWith("refused_") || row.category === "author_tour",
+  });
+
+  const text = String(built?.text || "").trim();
+  const rows = Array.isArray(built?.kbExtra?.inline_keyboard)
+    ? [...built.kbExtra.inline_keyboard]
+    : [];
+  const hasContactButton = rows.some((buttonRow) =>
+    (buttonRow || []).some((btn) => String(btn?.text || "").includes("Связаться"))
+  );
+  if (!hasContactButton) rows.unshift([{ text: "💬 Связаться с поставщиком", url: deepLink }]);
+  const replyMarkup = { inline_keyboard: rows };
+
+  let sendResult = null;
+  if (built?.photoUrl) {
+    sendResult = await tgSendPhoto(
+      PUBLIC_CHANNEL_CHAT_ID,
+      built.photoUrl,
+      text,
+      { parse_mode: "HTML", reply_markup: replyMarkup },
+      CLIENT_BOT_TOKEN,
+      true
+    );
+  } else {
+    await tgSend(
+      PUBLIC_CHANNEL_CHAT_ID,
+      text,
+      { reply_markup: replyMarkup },
+      CLIENT_BOT_TOKEN,
+      true
+    );
+    sendResult = { ok: true };
+  }
+
+  const messageId = sendResult?.result?.message_id || sendResult?.message_id || null;
+  const nextDetails = {
+    ...detailsObj,
+    admin_publication_meta: {
+      ...(detailsObj.admin_publication_meta || {}),
+      publicChannelPublishedAt: new Date().toISOString(),
+      publicChannelMessageId: messageId,
+      publicChannelChatId: PUBLIC_CHANNEL_CHAT_ID,
+      publicChannelPublishedBy: actor?.id || null,
+    },
+  };
+
+  await db.query(
+    `
+      UPDATE services
+      SET details = $2::jsonb,
+          status = CASE WHEN LOWER(COALESCE(status,'')) IN ('draft','pending','rejected') THEN 'published' ELSE status END,
+          published_at = COALESCE(published_at, NOW()),
+          updated_at = NOW()
+      WHERE id = $1
+    `,
+    [sid, JSON.stringify(nextDetails)]
+  );
+
+  return {
+    success: true,
+    id: sid,
+    messageId,
+    channel: PUBLIC_CHANNEL_CHAT_ID,
+  };
+}
+
+exports.publishRefusedService = async (req, res) => {
+  try {
+    const result = await publishRefusedServiceToPublicChannel(req.params.id, req.user || {});
+    const status = result.success ? 200 : result.code === "NOT_FOUND" ? 404 : 400;
+    return res.status(status).json(result);
+  } catch (e) {
+    console.error("[adminRefused] publishRefusedService error:", e?.response?.data || e?.message || e);
+    return res.status(500).json({
+      success: false,
+      code: "PUBLISH_FAILED",
+      message: e?.response?.data?.description || e?.message || "Publish failed",
+    });
+  }
+};
+
+exports.publishRefusedBulk = async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0)
+      : [];
+
+    if (!ids.length) {
+      return res.status(400).json({ success: false, message: "No ids" });
+    }
+
+    const uniqueIds = [...new Set(ids)].slice(0, 25);
+    const results = [];
+    for (const id of uniqueIds) {
+      try {
+        results.push(await publishRefusedServiceToPublicChannel(id, req.user || {}));
+      } catch (e) {
+        results.push({
+          success: false,
+          id,
+          code: "PUBLISH_FAILED",
+          message: e?.response?.data?.description || e?.message || "Publish failed",
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      requested: uniqueIds.length,
+      published: results.filter((x) => x.success).length,
+      failed: results.filter((x) => !x.success).length,
+      results,
+    });
+  } catch (e) {
+    console.error("[adminRefused] publishRefusedBulk error:", e?.message || e);
+    return res.status(500).json({ success: false, message: "Server error" });
   }
 };
 
