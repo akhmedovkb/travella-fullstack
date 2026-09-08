@@ -340,6 +340,7 @@ exports.listActualRefused = async (req, res) => {
       const dt = getStartDateForAdminSort(r);
       const chatId = pickProviderChatId(r);
       const meta = (detailsObj && detailsObj.tg_actual_reminders_meta) || {};
+      const publicationMeta = (detailsObj && detailsObj.admin_publication_meta) || {};
 
       return {
         id: r.id,
@@ -372,6 +373,10 @@ exports.listActualRefused = async (req, res) => {
           lastConfirmedAt: meta.lastConfirmedAt || null,
           lockUntil: meta.lockUntil || null,
           lastSentBy: meta.lastSentBy || null,
+          publicChannelPublishedAt: publicationMeta.publicChannelPublishedAt || null,
+          publicChannelMessageId: publicationMeta.publicChannelMessageId || null,
+          publicChannelChatId: publicationMeta.publicChannelChatId || null,
+          publicChannelPublishedBy: publicationMeta.publicChannelPublishedBy || null,
         },
       };
     });
@@ -461,6 +466,8 @@ exports.getRefusedById = async (req, res) => {
 
     const detailsObj = parseDetailsAny(row.details);
     const chatId = pickProviderChatId(row);
+    const reminderMeta = detailsObj.tg_actual_reminders_meta || {};
+    const publicationMeta = detailsObj.admin_publication_meta || {};
 
     const svcForActual = {
       ...row,
@@ -500,6 +507,17 @@ exports.getRefusedById = async (req, res) => {
           tg_chat_id: row.tg_chat_id || null,
           chatId,
         },
+        meta: {
+          lastSentAt: reminderMeta.lastSentAt || null,
+          lastAnswer: reminderMeta.lastAnswer || null,
+          lastConfirmedAt: reminderMeta.lastConfirmedAt || null,
+          lockUntil: reminderMeta.lockUntil || null,
+          lastSentBy: reminderMeta.lastSentBy || null,
+          publicChannelPublishedAt: publicationMeta.publicChannelPublishedAt || null,
+          publicChannelMessageId: publicationMeta.publicChannelMessageId || null,
+          publicChannelChatId: publicationMeta.publicChannelChatId || null,
+          publicChannelPublishedBy: publicationMeta.publicChannelPublishedBy || null,
+        },
         isActual: isServiceActual(detailsObj, svcForActual),
         startDateForSort: (() => {
           const dt = getStartDateForAdminSort(row);
@@ -513,7 +531,7 @@ exports.getRefusedById = async (req, res) => {
   }
 };
 
-async function publishRefusedServiceToPublicChannel(id, actor = {}) {
+async function publishRefusedServiceToPublicChannel(id, actor = {}, options = {}) {
   const sid = Number(id || 0);
   if (!Number.isFinite(sid) || sid <= 0) {
     return { success: false, code: "BAD_ID", message: "Bad id" };
@@ -554,6 +572,18 @@ async function publishRefusedServiceToPublicChannel(id, actor = {}) {
   }
 
   const detailsObj = parseDetailsAny(row.details);
+  const existingPublication = detailsObj.admin_publication_meta || {};
+  if (existingPublication.publicChannelPublishedAt && !options.force) {
+    return {
+      success: false,
+      code: "ALREADY_PUBLISHED",
+      message: "Service was already published to public channel",
+      id: sid,
+      publishedAt: existingPublication.publicChannelPublishedAt,
+      messageId: existingPublication.publicChannelMessageId || null,
+    };
+  }
+
   const actual = isServiceActual(detailsObj, {
     ...row,
     expiration: row.expiration_at || row.expiration || null,
@@ -672,7 +702,8 @@ async function publishRefusedServiceToPublicChannel(id, actor = {}) {
 
 exports.publishRefusedService = async (req, res) => {
   try {
-    const result = await publishRefusedServiceToPublicChannel(req.params.id, req.user || {});
+    const force = req.query?.force === "1" || req.body?.force === true || req.body?.force === "1";
+    const result = await publishRefusedServiceToPublicChannel(req.params.id, req.user || {}, { force });
     const status = result.success ? 200 : result.code === "NOT_FOUND" ? 404 : 400;
     return res.status(status).json(result);
   } catch (e) {
@@ -690,6 +721,7 @@ exports.publishRefusedBulk = async (req, res) => {
     const ids = Array.isArray(req.body?.ids)
       ? req.body.ids.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0)
       : [];
+    const force = req.body?.force === true || req.body?.force === "1";
 
     if (!ids.length) {
       return res.status(400).json({ success: false, message: "No ids" });
@@ -699,7 +731,7 @@ exports.publishRefusedBulk = async (req, res) => {
     const results = [];
     for (const id of uniqueIds) {
       try {
-        results.push(await publishRefusedServiceToPublicChannel(id, req.user || {}));
+        results.push(await publishRefusedServiceToPublicChannel(id, req.user || {}, { force }));
       } catch (e) {
         results.push({
           success: false,

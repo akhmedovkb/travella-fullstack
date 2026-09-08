@@ -732,6 +732,19 @@ function isServiceReadyForPublishing(it) {
   return !!it?.isActual && getServiceQualityFlags(it, !!effectiveTg).length === 0;
 }
 
+function getPublicChannelPublication(it) {
+  const meta = it?.meta || {};
+  return {
+    publishedAt: meta.publicChannelPublishedAt || null,
+    messageId: meta.publicChannelMessageId || null,
+    chatId: meta.publicChannelChatId || null,
+  };
+}
+
+function hasPublicChannelPublication(it) {
+  return Boolean(getPublicChannelPublication(it).publishedAt);
+}
+
 function QualityFlagButton({ flag, onClick }) {
   const tones = {
     amber: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
@@ -2046,7 +2059,7 @@ export default function AdminRefusedActual() {
       selectedVisibleItems
         .filter((it) => {
           const deleted = !!it?.deletedAt || String(it?.status || "").toLowerCase() === "deleted";
-          return !deleted && isServiceReadyForPublishing(it);
+          return !deleted && isServiceReadyForPublishing(it) && !hasPublicChannelPublication(it);
         })
         .map((it) => Number(it.id))
         .filter(Boolean),
@@ -3163,12 +3176,21 @@ async function saveInlineEdit(item) {
       return;
     }
 
-    if (!window.confirm(`Опубликовать отказ #${item.id} в Telegram канал?`)) return;
+    const alreadyPublished = hasPublicChannelPublication(item);
+    const publication = getPublicChannelPublication(item);
+    const confirmText = alreadyPublished
+      ? `Эта карточка уже публиковалась ${formatDate(publication.publishedAt)}.\n\nОтправить повторно в Telegram канал?`
+      : `Опубликовать отказ #${item.id} в Telegram канал?`;
+    if (!window.confirm(confirmText)) return;
 
     setSendingId(item.id);
     setError("");
     try {
-      const resp = await http.post(apiPath(`/admin/refused/${item.id}/publish-public`));
+      const resp = await http.post(
+        apiPath(`/admin/refused/${item.id}/publish-public`),
+        { force: alreadyPublished ? "1" : "0" },
+        { params: { force: alreadyPublished ? "1" : "0" } }
+      );
       const data = ensureJsonOrThrow(resp, "publishPublicService");
       if (!data?.success) {
         throw new Error(data?.message || "Не удалось опубликовать");
@@ -3831,6 +3853,8 @@ const sortLabel = useMemo(() => {
                 const deleted = !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
                 const urgency = daysUntilText(it?.expirationAt || it?.expiration_at || it?.startDateForSort);
                 const meta = it.meta || {};
+                const publication = getPublicChannelPublication(it);
+                const alreadyPublished = hasPublicChannelPublication(it);
                 const price = servicePriceSummary(it);
                 const qualityFlags = getServiceQualityFlags(it, tgOk);
                 const readyForPublish = !deleted && isServiceReadyForPublishing(it);
@@ -3879,8 +3903,15 @@ const sortLabel = useMemo(() => {
                         ))}
                         {meta.lastSentAt ? <Badge tone="blue">спросили</Badge> : null}
                         {meta.lastAnswer ? <Badge tone="green">ответ: {String(meta.lastAnswer)}</Badge> : null}
+                        {alreadyPublished ? <Badge tone="green">в канале</Badge> : null}
                         {deleted ? <Badge tone="amber">deleted</Badge> : null}
                       </div>
+                      {alreadyPublished ? (
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
+                          Опубликовано: {formatDate(publication.publishedAt)}
+                          {publication.messageId ? <span className="ml-1 font-mono">#{publication.messageId}</span> : null}
+                        </div>
+                      ) : null}
 
                       <ReadinessCell
                         qualityFlags={qualityFlags}
@@ -3919,9 +3950,9 @@ const sortLabel = useMemo(() => {
                               onClick={() => publishPublicService(it)}
                               disabled={!readyForPublish || sendingId === it.id}
                               className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
-                              title={readyForPublish ? "Опубликовать public-safe карточку в Telegram канал" : "Сначала исправьте готовность карточки"}
+                              title={readyForPublish ? (alreadyPublished ? "Повторно опубликовать карточку в Telegram канал" : "Опубликовать public-safe карточку в Telegram канал") : "Сначала исправьте готовность карточки"}
                             >
-                              В канал
+                              {alreadyPublished ? "Повторить в канал" : "В канал"}
                             </button>
                           </>
                         ) : (
@@ -4161,6 +4192,8 @@ const sortLabel = useMemo(() => {
                     !!it.deletedAt || String(it.status || "").toLowerCase() === "deleted";
 
                   const meta = it.meta || {};
+                  const publication = getPublicChannelPublication(it);
+                  const alreadyPublished = hasPublicChannelPublication(it);
                   const lockUntil = meta.lockUntil;
                   const lastSentAt = meta.lastSentAt;
                   const lastAnswer = meta.lastAnswer;
@@ -4397,6 +4430,14 @@ const sortLabel = useMemo(() => {
                         <div className="text-xs text-gray-700">
                           lock: <span className="font-mono">{lockUntil ? formatDate(lockUntil) : "—"}</span>
                         </div>
+                        {alreadyPublished ? (
+                          <div className="mt-1 rounded-lg border border-emerald-100 bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-800">
+                            в канале: <span className="font-mono">{formatDate(publication.publishedAt)}</span>
+                            {publication.messageId ? <span className="ml-1 font-mono">#{publication.messageId}</span> : null}
+                          </div>
+                        ) : (
+                          <div className="mt-1 text-[11px] text-slate-500">в канал ещё не отправляли</div>
+                        )}
                       </td>
 
                       <td className="whitespace-nowrap px-3 py-2">
@@ -4475,9 +4516,9 @@ const sortLabel = useMemo(() => {
                                     ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
                                     : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
                                 )}
-                                title={readyForPublish ? "Опубликовать public-safe карточку в Telegram канал" : "Сначала исправьте готовность карточки"}
+                                title={readyForPublish ? (alreadyPublished ? "Повторно опубликовать карточку в Telegram канал" : "Опубликовать public-safe карточку в Telegram канал") : "Сначала исправьте готовность карточки"}
                               >
-                                В канал
+                                {alreadyPublished ? "Повторить в канал" : "В канал"}
                               </button>
 
                               <button
