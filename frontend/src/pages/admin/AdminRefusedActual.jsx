@@ -2144,6 +2144,20 @@ export default function AdminRefusedActual() {
     [selectedVisibleItems]
   );
 
+  const overdueFixSelectedIds = useMemo(
+    () =>
+      selectedVisibleItems
+        .filter((it) => {
+          const deleted = !!it?.deletedAt || String(it?.status || "").toLowerCase() === "deleted";
+          const tgOk = !!serviceTelegramId(it);
+          const hours = elapsedHours(getFixRequestMeta(it).requestedAt);
+          return !deleted && tgOk && hours != null && hours >= 24 && getServiceQualityFlags(it, tgOk).length > 0;
+        })
+        .map((it) => Number(it.id))
+        .filter(Boolean),
+    [selectedVisibleItems]
+  );
+
   const selectedVisibleCount = useMemo(
     () => selectableVisibleIds.filter((id) => selectedIds.includes(id)).length,
     [selectableVisibleIds, selectedIds]
@@ -3289,14 +3303,22 @@ async function saveInlineEdit(item) {
     }
   }
 
-  async function requestFixSelected() {
-    const ids = fixRequestableSelectedIds;
+  async function requestFixSelected({ overdueOnly = false } = {}) {
+    const ids = overdueOnly ? overdueFixSelectedIds : fixRequestableSelectedIds;
     if (!ids.length) {
-      showToast("warn", "Среди выбранных нет проблемных карточек с TG chatId");
+      showToast(
+        "warn",
+        overdueOnly
+          ? "Среди выбранных нет карточек, которые ждут правки 24+ часа"
+          : "Среди выбранных нет проблемных карточек с TG chatId"
+      );
       return;
     }
 
-    if (!window.confirm(`Отправить поставщикам просьбу исправить карточки: ${ids.length}?`)) return;
+    const confirmText = overdueOnly
+      ? `Повторно отправить просьбу исправить карточки, которые ждут 24+ часа: ${ids.length}?`
+      : `Отправить поставщикам просьбу исправить карточки: ${ids.length}?`;
+    if (!window.confirm(confirmText)) return;
 
     setBulkSending(true);
     setError("");
@@ -3309,7 +3331,7 @@ async function saveInlineEdit(item) {
 
       showToast(
         data.failed ? "warn" : "ok",
-        `Отправлено на исправление: ${data.sent || 0}. Без TG: ${data.noChat || 0}. Уже готово: ${data.noFixNeeded || 0}. Ошибки: ${data.failed || 0}.`
+        `${overdueOnly ? "Повторно отправлено" : "Отправлено на исправление"}: ${data.sent || 0}. Без TG: ${data.noChat || 0}. Уже готово: ${data.noFixNeeded || 0}. Ошибки: ${data.failed || 0}.`
       );
 
       setSelectedIds([]);
@@ -4032,6 +4054,7 @@ const sortLabel = useMemo(() => {
                 const alreadyPublished = hasPublicChannelPublication(it);
                 const fixMeta = getFixRequestMeta(it);
                 const fixRequested = hasFixRequest(it);
+                const fixOverdue = elapsedHours(fixMeta.requestedAt) >= 24;
                 const price = servicePriceSummary(it);
                 const qualityFlags = getServiceQualityFlags(it, tgOk);
                 const readyForPublish = !deleted && isServiceReadyForPublishing(it);
@@ -4083,6 +4106,7 @@ const sortLabel = useMemo(() => {
                         {meta.lastAnswer ? <Badge tone="green">ответ: {String(meta.lastAnswer)}</Badge> : null}
                         {alreadyPublished ? <Badge tone="green">в канале</Badge> : null}
                         {fixRequested ? <Badge tone="amber">просили исправить</Badge> : null}
+                        {fixOverdue ? <Badge tone="red">ждём 24ч+</Badge> : null}
                         {deleted ? <Badge tone="amber">deleted</Badge> : null}
                       </div>
                       {alreadyPublished ? (
@@ -4092,10 +4116,13 @@ const sortLabel = useMemo(() => {
                         </div>
                       ) : null}
                       {fixRequested ? (
-                        <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+                        <div className={classNames(
+                          "rounded-2xl border px-3 py-2 text-xs font-bold",
+                          fixOverdue ? "border-red-100 bg-red-50 text-red-900" : "border-amber-100 bg-amber-50 text-amber-900"
+                        )}>
                           Просили исправить: {formatDate(fixMeta.requestedAt)}
-                          <span className="ml-1 text-amber-700">ждём {elapsedShort(fixMeta.requestedAt)}</span>
-                          {fixMeta.flags.length ? <span className="ml-1 text-amber-700">({fixMeta.flags.join(", ")})</span> : null}
+                          <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>ждём {elapsedShort(fixMeta.requestedAt)}</span>
+                          {fixMeta.flags.length ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>({fixMeta.flags.join(", ")})</span> : null}
                         </div>
                       ) : null}
 
@@ -4218,7 +4245,7 @@ const sortLabel = useMemo(() => {
                 </button>
                 <button
                   type="button"
-                  onClick={requestFixSelected}
+                  onClick={() => requestFixSelected()}
                   disabled={!fixRequestableSelectedIds.length || bulkSending}
                   className={classNames(
                     "rounded-xl border px-3 py-2 text-xs font-bold",
@@ -4229,6 +4256,20 @@ const sortLabel = useMemo(() => {
                   title={!fixRequestableSelectedIds.length ? "Среди выбранных нет проблемных карточек с Telegram chatId" : "Отправить поставщикам список полей, которые надо исправить"}
                 >
                   {bulkSending ? "Отправка…" : `Попросить исправить (${fixRequestableSelectedIds.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => requestFixSelected({ overdueOnly: true })}
+                  disabled={!overdueFixSelectedIds.length || bulkSending}
+                  className={classNames(
+                    "rounded-xl border px-3 py-2 text-xs font-bold",
+                    !overdueFixSelectedIds.length || bulkSending
+                      ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                      : "border-red-200 bg-red-50 text-red-700 hover:bg-red-100"
+                  )}
+                  title={!overdueFixSelectedIds.length ? "Среди выбранных нет карточек, которые ждут правки больше 24 часов" : "Повторно отправить просьбу поставщикам, которые не исправили карточку за 24 часа"}
+                >
+                  {bulkSending ? "Отправка…" : `Повторить 24ч+ (${overdueFixSelectedIds.length})`}
                 </button>
                 <button
                   type="button"
@@ -4404,6 +4445,7 @@ const sortLabel = useMemo(() => {
                   const alreadyPublished = hasPublicChannelPublication(it);
                   const fixMeta = getFixRequestMeta(it);
                   const fixRequested = hasFixRequest(it);
+                  const fixOverdue = elapsedHours(fixMeta.requestedAt) >= 24;
                   const lockUntil = meta.lockUntil;
                   const lastSentAt = meta.lastSentAt;
                   const lastAnswer = meta.lastAnswer;
@@ -4650,10 +4692,13 @@ const sortLabel = useMemo(() => {
                           <div className="mt-1 text-[11px] text-slate-500">в канал ещё не отправляли</div>
                         )}
                         {fixRequested ? (
-                          <div className="mt-1 rounded-lg border border-amber-100 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-900">
+                          <div className={classNames(
+                            "mt-1 rounded-lg border px-2 py-1 text-[11px] font-bold",
+                            fixOverdue ? "border-red-100 bg-red-50 text-red-900" : "border-amber-100 bg-amber-50 text-amber-900"
+                          )}>
                             исправления: <span className="font-mono">{formatDate(fixMeta.requestedAt)}</span>
-                            <span className="ml-1 text-amber-700">ждём {elapsedShort(fixMeta.requestedAt)}</span>
-                            {fixMeta.flags.length ? <span className="ml-1 text-amber-700">{fixMeta.flags.join(", ")}</span> : null}
+                            <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>ждём {elapsedShort(fixMeta.requestedAt)}</span>
+                            {fixMeta.flags.length ? <span className={classNames("ml-1", fixOverdue ? "text-red-700" : "text-amber-700")}>{fixMeta.flags.join(", ")}</span> : null}
                           </div>
                         ) : null}
                       </td>
