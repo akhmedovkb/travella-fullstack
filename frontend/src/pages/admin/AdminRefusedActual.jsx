@@ -745,6 +745,19 @@ function hasPublicChannelPublication(it) {
   return Boolean(getPublicChannelPublication(it).publishedAt);
 }
 
+function getFixRequestMeta(it) {
+  const meta = it?.meta || {};
+  return {
+    requestedAt: meta.fixRequestedAt || null,
+    requestedBy: meta.fixRequestedBy || null,
+    flags: Array.isArray(meta.fixRequestFlags) ? meta.fixRequestFlags : [],
+  };
+}
+
+function hasFixRequest(it) {
+  return Boolean(getFixRequestMeta(it).requestedAt);
+}
+
 function QualityFlagButton({ flag, onClick }) {
   const tones = {
     amber: "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100",
@@ -2066,6 +2079,19 @@ export default function AdminRefusedActual() {
     [selectedVisibleItems]
   );
 
+  const fixRequestableSelectedIds = useMemo(
+    () =>
+      selectedVisibleItems
+        .filter((it) => {
+          const deleted = !!it?.deletedAt || String(it?.status || "").toLowerCase() === "deleted";
+          const tgOk = !!serviceTelegramId(it);
+          return !deleted && tgOk && getServiceQualityFlags(it, tgOk).length > 0;
+        })
+        .map((it) => Number(it.id))
+        .filter(Boolean),
+    [selectedVisibleItems]
+  );
+
   const selectedVisibleCount = useMemo(
     () => selectableVisibleIds.filter((id) => selectedIds.includes(id)).length,
     [selectableVisibleIds, selectedIds]
@@ -3211,6 +3237,85 @@ async function saveInlineEdit(item) {
     }
   }
 
+  async function requestFixSelected() {
+    const ids = fixRequestableSelectedIds;
+    if (!ids.length) {
+      showToast("warn", "Среди выбранных нет проблемных карточек с TG chatId");
+      return;
+    }
+
+    if (!window.confirm(`Отправить поставщикам просьбу исправить карточки: ${ids.length}?`)) return;
+
+    setBulkSending(true);
+    setError("");
+    try {
+      const resp = await http.post(apiPath(`/admin/refused/request-fix/bulk`), { ids });
+      const data = ensureJsonOrThrow(resp, "requestFixSelected");
+      if (!data?.success) {
+        throw new Error(data?.message || "Не удалось отправить просьбы об исправлении");
+      }
+
+      showToast(
+        data.failed ? "warn" : "ok",
+        `Отправлено на исправление: ${data.sent || 0}. Без TG: ${data.noChat || 0}. Уже готово: ${data.noFixNeeded || 0}. Ошибки: ${data.failed || 0}.`
+      );
+
+      setSelectedIds([]);
+      await loadList(page);
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setBulkSending(false);
+    }
+  }
+
+  async function requestFixService(item) {
+    if (!item?.id) return;
+
+    const tgOk = !!serviceTelegramId(item);
+    const qualityFlags = getServiceQualityFlags(item, tgOk);
+    if (!tgOk) {
+      showToast("warn", "У поставщика нет Telegram chatId");
+      return;
+    }
+    if (!qualityFlags.length) {
+      showToast("warn", "Карточка уже выглядит готовой");
+      return;
+    }
+
+    const fixMeta = getFixRequestMeta(item);
+    const confirmText = fixMeta.requestedAt
+      ? `Поставщику уже отправляли просьбу ${formatDate(fixMeta.requestedAt)}.\n\nОтправить повторно?`
+      : `Попросить поставщика исправить карточку #${item.id}?`;
+    if (!window.confirm(confirmText)) return;
+
+    setSendingId(item.id);
+    setError("");
+    try {
+      const resp = await http.post(apiPath(`/admin/refused/${item.id}/request-fix`));
+      const data = ensureJsonOrThrow(resp, "requestFixService");
+      if (!data?.success) {
+        throw new Error(data?.message || "Не удалось отправить просьбу об исправлении");
+      }
+
+      const sentFlags = Array.isArray(data.flags) ? data.flags.length : qualityFlags.length;
+      showToast("ok", `✅ Отправлено поставщику: ${sentFlags} проблем`);
+      await loadList(page);
+
+      if (detailsItem?.id === item.id) {
+        await openDetails(item.id);
+      }
+    } catch (e) {
+      const info = extractAxiosError(e);
+      setError(info.msg);
+      showToast("err", `❌ ${info.msg}`);
+    } finally {
+      setSendingId(null);
+    }
+  }
+
   async function extendService(id) {
     setSendingId(id);
     setError("");
@@ -3855,9 +3960,12 @@ const sortLabel = useMemo(() => {
                 const meta = it.meta || {};
                 const publication = getPublicChannelPublication(it);
                 const alreadyPublished = hasPublicChannelPublication(it);
+                const fixMeta = getFixRequestMeta(it);
+                const fixRequested = hasFixRequest(it);
                 const price = servicePriceSummary(it);
                 const qualityFlags = getServiceQualityFlags(it, tgOk);
                 const readyForPublish = !deleted && isServiceReadyForPublishing(it);
+                const canRequestFix = !deleted && tgOk && qualityFlags.length > 0;
                 return (
                   <div key={it.id} className={classNames("overflow-hidden rounded-3xl border bg-white shadow-sm transition hover:-translate-y-0.5 hover:shadow-md", actual ? "border-slate-200" : "border-red-100")}>
                     <div className={classNames("border-b bg-gradient-to-br p-4", categoryAccent(it.category))}>
@@ -3904,12 +4012,19 @@ const sortLabel = useMemo(() => {
                         {meta.lastSentAt ? <Badge tone="blue">спросили</Badge> : null}
                         {meta.lastAnswer ? <Badge tone="green">ответ: {String(meta.lastAnswer)}</Badge> : null}
                         {alreadyPublished ? <Badge tone="green">в канале</Badge> : null}
+                        {fixRequested ? <Badge tone="amber">просили исправить</Badge> : null}
                         {deleted ? <Badge tone="amber">deleted</Badge> : null}
                       </div>
                       {alreadyPublished ? (
                         <div className="rounded-2xl border border-emerald-100 bg-emerald-50 px-3 py-2 text-xs font-bold text-emerald-800">
                           Опубликовано: {formatDate(publication.publishedAt)}
                           {publication.messageId ? <span className="ml-1 font-mono">#{publication.messageId}</span> : null}
+                        </div>
+                      ) : null}
+                      {fixRequested ? (
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
+                          Просили исправить: {formatDate(fixMeta.requestedAt)}
+                          {fixMeta.flags.length ? <span className="ml-1 text-amber-700">({fixMeta.flags.join(", ")})</span> : null}
                         </div>
                       ) : null}
 
@@ -3945,6 +4060,14 @@ const sortLabel = useMemo(() => {
                         {!deleted ? (
                           <>
                             <button onClick={() => askActual(it.id, false)} disabled={!tgOk || sendingId === it.id} className="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 hover:bg-blue-100 disabled:cursor-not-allowed disabled:opacity-50">Спросить</button>
+                            <button
+                              onClick={() => requestFixService(it)}
+                              disabled={!canRequestFix || sendingId === it.id}
+                              className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800 hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-50"
+                              title={canRequestFix ? "Отправить поставщику список того, что нужно исправить" : "Нужна проблемная карточка с Telegram chatId"}
+                            >
+                              Исправить
+                            </button>
                             <button onClick={() => extendService(it.id)} disabled={sendingId === it.id} className="rounded-xl border border-green-200 bg-green-50 px-3 py-2 text-xs font-bold text-green-700 hover:bg-green-100 disabled:cursor-not-allowed disabled:opacity-50">+7 дней</button>
                             <button
                               onClick={() => publishPublicService(it)}
@@ -4021,6 +4144,20 @@ const sortLabel = useMemo(() => {
                   title={!askableSelectedIds.length ? "Среди выбранных нет услуг с Telegram chatId" : "Спросить актуальность выбранных услуг"}
                 >
                   {bulkSending ? "Отправка…" : `Спросить с TG (${askableSelectedIds.length})`}
+                </button>
+                <button
+                  type="button"
+                  onClick={requestFixSelected}
+                  disabled={!fixRequestableSelectedIds.length || bulkSending}
+                  className={classNames(
+                    "rounded-xl border px-3 py-2 text-xs font-bold",
+                    !fixRequestableSelectedIds.length || bulkSending
+                      ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                      : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                  )}
+                  title={!fixRequestableSelectedIds.length ? "Среди выбранных нет проблемных карточек с Telegram chatId" : "Отправить поставщикам список полей, которые надо исправить"}
+                >
+                  {bulkSending ? "Отправка…" : `Попросить исправить (${fixRequestableSelectedIds.length})`}
                 </button>
                 <button
                   type="button"
@@ -4194,6 +4331,8 @@ const sortLabel = useMemo(() => {
                   const meta = it.meta || {};
                   const publication = getPublicChannelPublication(it);
                   const alreadyPublished = hasPublicChannelPublication(it);
+                  const fixMeta = getFixRequestMeta(it);
+                  const fixRequested = hasFixRequest(it);
                   const lockUntil = meta.lockUntil;
                   const lastSentAt = meta.lastSentAt;
                   const lastAnswer = meta.lastAnswer;
@@ -4201,6 +4340,7 @@ const sortLabel = useMemo(() => {
                   const price = servicePriceSummary(it);
                   const qualityFlags = getServiceQualityFlags(it, tgOk);
                   const readyForPublish = !deleted && isServiceReadyForPublishing(it);
+                  const canRequestFix = !deleted && tgOk && qualityFlags.length > 0;
 
                   const sentBadge =
                     lastSentBy === "job"
@@ -4438,6 +4578,12 @@ const sortLabel = useMemo(() => {
                         ) : (
                           <div className="mt-1 text-[11px] text-slate-500">в канал ещё не отправляли</div>
                         )}
+                        {fixRequested ? (
+                          <div className="mt-1 rounded-lg border border-amber-100 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-900">
+                            исправления: <span className="font-mono">{formatDate(fixMeta.requestedAt)}</span>
+                            {fixMeta.flags.length ? <span className="ml-1 text-amber-700">{fixMeta.flags.join(", ")}</span> : null}
+                          </div>
+                        ) : null}
                       </td>
 
                       <td className="whitespace-nowrap px-3 py-2">
@@ -4491,6 +4637,20 @@ const sortLabel = useMemo(() => {
                                 title="Принудительно, даже если lockUntil не прошёл"
                               >
                                 Force
+                              </button>
+
+                              <button
+                                onClick={() => requestFixService(it)}
+                                disabled={!canRequestFix || sendingId === it.id}
+                                className={classNames(
+                                  "rounded-lg border px-3 py-1.5 text-xs",
+                                  !canRequestFix || sendingId === it.id
+                                    ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
+                                    : "border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100"
+                                )}
+                                title={canRequestFix ? "Отправить поставщику список того, что нужно исправить" : "Нужна проблемная карточка с Telegram chatId"}
+                              >
+                                Исправить
                               </button>
 
                               <button

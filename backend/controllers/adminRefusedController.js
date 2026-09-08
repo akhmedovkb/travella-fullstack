@@ -112,6 +112,91 @@ function tiyinToSum(value) {
   return Math.trunc(n / 100);
 }
 
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function isBlank(value) {
+  return value == null || String(value).trim() === "";
+}
+
+function firstFilled(...values) {
+  for (const value of values) {
+    if (!isBlank(value)) return String(value).trim();
+  }
+  return "";
+}
+
+function hasRefusedPrice(row, detailsObj) {
+  return !isBlank(
+    firstFilled(
+      row?.price,
+      row?.net_price,
+      row?.gross_price,
+      detailsObj?.netPrice,
+      detailsObj?.grossPrice,
+      detailsObj?.publicPrice,
+      detailsObj?.price,
+      detailsObj?.amount,
+      detailsObj?.ticketPrice,
+      detailsObj?.totalPrice,
+      detailsObj?.pricePerPerson
+    )
+  );
+}
+
+function hasRefusedImages(row, detailsObj) {
+  const arrays = [
+    row?.images,
+    row?.photos,
+    detailsObj?.images,
+    detailsObj?.photos,
+    detailsObj?.photoUrls,
+    detailsObj?.proofImages,
+  ];
+  if (arrays.some((arr) => Array.isArray(arr) && arr.some((x) => !isBlank(x)))) return true;
+
+  return [
+    row?.image,
+    row?.image_url,
+    row?.photo,
+    row?.photo_url,
+    detailsObj?.image,
+    detailsObj?.imageUrl,
+    detailsObj?.photo,
+    detailsObj?.photoUrl,
+    detailsObj?.mainImage,
+    detailsObj?.coverImage,
+  ].some((x) => !isBlank(x));
+}
+
+function hasProviderContact(row) {
+  return [
+    row?.p_phone,
+    row?.p_email,
+    row?.p_social,
+    row?.telegram_refused_chat_id,
+    row?.telegram_web_chat_id,
+    row?.telegram_chat_id,
+    row?.tg_chat_id,
+  ].some((x) => !isBlank(x));
+}
+
+function buildRefusedQualityFlags(row, detailsObj, actual) {
+  const flags = [];
+  if (!actual) flags.push({ key: "actual", label: "подтвердить актуальность" });
+  if (!hasRefusedPrice(row, detailsObj)) flags.push({ key: "price", label: "указать цену" });
+  if (!hasRefusedImages(row, detailsObj)) flags.push({ key: "photo", label: "добавить фото" });
+  if (!hasProviderContact(row)) flags.push({ key: "contact", label: "добавить контакт поставщика" });
+  if (!pickProviderChatId(row)) flags.push({ key: "tg", label: "открыть Telegram-бота Travella и нажать /start" });
+  return flags;
+}
+
 // дата для сортировки/отображения
 function getStartDateForAdminSort(svc) {
   const d = parseDetailsAny(svc.details);
@@ -341,6 +426,7 @@ exports.listActualRefused = async (req, res) => {
       const chatId = pickProviderChatId(r);
       const meta = (detailsObj && detailsObj.tg_actual_reminders_meta) || {};
       const publicationMeta = (detailsObj && detailsObj.admin_publication_meta) || {};
+      const fixRequestMeta = (detailsObj && detailsObj.admin_fix_request_meta) || {};
 
       return {
         id: r.id,
@@ -377,6 +463,9 @@ exports.listActualRefused = async (req, res) => {
           publicChannelMessageId: publicationMeta.publicChannelMessageId || null,
           publicChannelChatId: publicationMeta.publicChannelChatId || null,
           publicChannelPublishedBy: publicationMeta.publicChannelPublishedBy || null,
+          fixRequestedAt: fixRequestMeta.requestedAt || null,
+          fixRequestedBy: fixRequestMeta.requestedBy || null,
+          fixRequestFlags: Array.isArray(fixRequestMeta.flags) ? fixRequestMeta.flags : [],
         },
       };
     });
@@ -468,6 +557,7 @@ exports.getRefusedById = async (req, res) => {
     const chatId = pickProviderChatId(row);
     const reminderMeta = detailsObj.tg_actual_reminders_meta || {};
     const publicationMeta = detailsObj.admin_publication_meta || {};
+    const fixRequestMeta = detailsObj.admin_fix_request_meta || {};
 
     const svcForActual = {
       ...row,
@@ -517,6 +607,9 @@ exports.getRefusedById = async (req, res) => {
           publicChannelMessageId: publicationMeta.publicChannelMessageId || null,
           publicChannelChatId: publicationMeta.publicChannelChatId || null,
           publicChannelPublishedBy: publicationMeta.publicChannelPublishedBy || null,
+          fixRequestedAt: fixRequestMeta.requestedAt || null,
+          fixRequestedBy: fixRequestMeta.requestedBy || null,
+          fixRequestFlags: Array.isArray(fixRequestMeta.flags) ? fixRequestMeta.flags : [],
         },
         isActual: isServiceActual(detailsObj, svcForActual),
         startDateForSort: (() => {
@@ -751,6 +844,160 @@ exports.publishRefusedBulk = async (req, res) => {
     });
   } catch (e) {
     console.error("[adminRefused] publishRefusedBulk error:", e?.message || e);
+    return res.status(500).json({ success: false, message: "Server error" });
+  }
+};
+
+async function requestRefusedFixForService(id, actor = {}) {
+  const sid = Number(id || 0);
+  if (!Number.isFinite(sid) || sid <= 0) {
+    return { success: false, code: "BAD_ID", message: "Bad id" };
+  }
+
+  const sql = `
+    SELECT
+      s.*,
+      p.id AS p_id,
+      p.name AS p_name,
+      to_jsonb(p)->>'company_name' AS p_company_name,
+      p.phone AS p_phone,
+      p.social AS p_social,
+      p.email AS p_email,
+      p.telegram_refused_chat_id,
+      p.telegram_web_chat_id,
+      p.telegram_chat_id,
+      p.tg_chat_id
+    FROM services s
+    JOIN providers p ON p.id = s.provider_id
+    WHERE s.id = $1
+      AND s.deleted_at IS NULL
+      AND ((s.category LIKE 'refused_%') OR s.category = 'author_tour')
+    LIMIT 1
+  `;
+  const r = await db.query(sql, [sid]);
+  const row = r.rows?.[0];
+  if (!row) return { success: false, code: "NOT_FOUND", message: "Service not found", id: sid };
+
+  const chatId = pickProviderChatId(row);
+  if (!chatId) {
+    return {
+      success: false,
+      code: "NO_PROVIDER_CHAT_ID",
+      message: "У провайдера нет Telegram chatId",
+      id: sid,
+    };
+  }
+
+  const detailsObj = parseDetailsAny(row.details);
+  const actual = isServiceActual(detailsObj, {
+    ...row,
+    expiration: row.expiration_at || row.expiration || null,
+  });
+  const flags = buildRefusedQualityFlags(row, detailsObj, actual);
+  if (!flags.length) {
+    return { success: false, code: "NO_FIX_NEEDED", message: "Card is already ready", id: sid };
+  }
+
+  const title = firstFilled(row.title, detailsObj.title, detailsObj.hotel, detailsObj.hotelName, `Услуга #${sid}`);
+  const providerName = firstFilled(row.p_company_name, row.p_name, "Поставщик");
+  const siteUrl = (process.env.SITE_PUBLIC_URL || process.env.SITE_URL || "https://travella.uz").replace(/\/+$/, "");
+  const serviceUrl = `${siteUrl}/dashboard?from=admin&service=${encodeURIComponent(sid)}`;
+  const flagLines = flags.map((flag) => `• ${escapeHtml(flag.label)}`).join("\n");
+  const text = [
+    `🛠 <b>Нужно исправить карточку Travella</b>`,
+    ``,
+    `Здравствуйте, ${escapeHtml(providerName)}.`,
+    `По услуге <b>#${sid}</b> нужно обновить данные, чтобы мы могли опубликовать её в подборке отказных предложений.`,
+    ``,
+    `📌 <b>${escapeHtml(title)}</b>`,
+    ``,
+    `<b>Что нужно добавить/проверить:</b>`,
+    flagLines,
+    ``,
+    `После исправления откройте <b>Мои услуги</b> в боте или в кабинете Travella и обновите карточку.`,
+  ].join("\n");
+
+  const replyMarkup = {
+    inline_keyboard: [
+      [{ text: "📋 Мои услуги", url: serviceUrl }],
+    ],
+  };
+
+  await tgSend(chatId, text, { reply_markup: replyMarkup }, CLIENT_BOT_TOKEN, true);
+
+  const nextDetails = {
+    ...detailsObj,
+    admin_fix_request_meta: {
+      ...(detailsObj.admin_fix_request_meta || {}),
+      requestedAt: new Date().toISOString(),
+      requestedBy: actor?.id || null,
+      flags: flags.map((flag) => flag.key),
+      labels: flags.map((flag) => flag.label),
+    },
+  };
+
+  await db.query(
+    `
+      UPDATE services
+      SET details = $2::jsonb,
+          updated_at = NOW()
+      WHERE id = $1
+    `,
+    [sid, JSON.stringify(nextDetails)]
+  );
+
+  return { success: true, id: sid, chatId, flags: flags.map((flag) => flag.key) };
+}
+
+exports.requestFixRefusedService = async (req, res) => {
+  try {
+    const result = await requestRefusedFixForService(req.params.id, req.user || {});
+    const status = result.success ? 200 : result.code === "NOT_FOUND" ? 404 : 400;
+    return res.status(status).json(result);
+  } catch (e) {
+    console.error("[adminRefused] requestFixRefusedService error:", e?.response?.data || e?.message || e);
+    return res.status(500).json({
+      success: false,
+      code: "FIX_REQUEST_FAILED",
+      message: e?.response?.data?.description || e?.message || "Fix request failed",
+    });
+  }
+};
+
+exports.requestFixRefusedBulk = async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids)
+      ? req.body.ids.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0)
+      : [];
+
+    if (!ids.length) return res.status(400).json({ success: false, message: "No ids" });
+
+    const uniqueIds = [...new Set(ids)].slice(0, 50);
+    const results = [];
+    for (const id of uniqueIds) {
+      try {
+        results.push(await requestRefusedFixForService(id, req.user || {}));
+      } catch (e) {
+        results.push({
+          success: false,
+          id,
+          code: "FIX_REQUEST_FAILED",
+          message: e?.response?.data?.description || e?.message || "Fix request failed",
+        });
+      }
+    }
+
+    return res.json({
+      success: true,
+      requested: uniqueIds.length,
+      sent: results.filter((x) => x.success).length,
+      noChat: results.filter((x) => x.code === "NO_PROVIDER_CHAT_ID").length,
+      noFixNeeded: results.filter((x) => x.code === "NO_FIX_NEEDED").length,
+      failed: results.filter((x) => !x.success && !["NO_PROVIDER_CHAT_ID", "NO_FIX_NEEDED"].includes(x.code)).length,
+      results,
+    });
+  } catch (e) {
+    console.error("[adminRefused] requestFixRefusedBulk error:", e?.message || e);
     return res.status(500).json({ success: false, message: "Server error" });
   }
 };

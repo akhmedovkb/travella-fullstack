@@ -12,6 +12,8 @@ const {
   askActualBulk,
   publishRefusedService,
   publishRefusedBulk,
+  requestFixRefusedService,
+  requestFixRefusedBulk,
   extendRefusedService,
   deleteRefusedService,
   restoreRefusedService,
@@ -31,6 +33,12 @@ router.post("/refused/:id/ask-actual", askActualNow);
 
 // массово отправить вопрос актуальности по выбранным услугам
 router.post("/refused/ask-actual/bulk", askActualBulk);
+
+// попросить поставщика исправить проблемную карточку
+router.post("/refused/:id/request-fix", requestFixRefusedService);
+
+// массово попросить поставщиков исправить проблемные карточки
+router.post("/refused/request-fix/bulk", requestFixRefusedBulk);
 
 // опубликовать public-safe карточку в Telegram канал
 router.post("/refused/:id/publish-public", publishRefusedService);
