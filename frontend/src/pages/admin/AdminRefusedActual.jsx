@@ -78,6 +78,26 @@ function formatDate(iso) {
   return d.toLocaleString();
 }
 
+function elapsedShort(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "—";
+  const diffMs = Date.now() - d.getTime();
+  if (diffMs < 0) return "только что";
+  const minutes = Math.floor(diffMs / 60000);
+  if (minutes < 60) return `${Math.max(1, minutes)} мин.`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} ч.`;
+  return `${Math.floor(hours / 24)} дн.`;
+}
+
+function elapsedHours(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - d.getTime()) / 3600000));
+}
+
 function short(s, n = 60) {
   const x = (s || "").toString();
   if (x.length <= n) return x;
@@ -111,7 +131,19 @@ const REFUSED_FILTER_ALLOWED = {
   sortBy: new Set(["created_at", "provider", "sort_date", "id"]),
   sortOrder: new Set(["asc", "desc"]),
   viewMode: new Set(["table", "cards"]),
-  quickFilter: new Set(["all", "ready", "not_ready", "urgent", "no_answer", "no_contact", "no_tg", "no_price", "no_photo"]),
+  quickFilter: new Set([
+    "all",
+    "ready",
+    "not_ready",
+    "urgent",
+    "no_answer",
+    "fix_requested",
+    "fix_overdue",
+    "no_contact",
+    "no_tg",
+    "no_price",
+    "no_photo",
+  ]),
 };
 
 function isProbablyHtmlPayload(data, contentType) {
@@ -890,6 +922,8 @@ function quickFilterLabel(value) {
     ready: "готовые",
     urgent: "срочные",
     no_answer: "без ответа",
+    fix_requested: "просили исправить",
+    fix_overdue: "ждём 24ч+",
     no_tg: "без Telegram",
     no_contact: "без контактов",
     not_ready: "не готовые",
@@ -1902,6 +1936,8 @@ export default function AdminRefusedActual() {
     let tgMissingCount = 0;
     let contactMissingCount = 0;
     let noAnswerCount = 0;
+    let fixRequestedCount = 0;
+    let fixOverdueCount = 0;
     let noPriceCount = 0;
     let noPhotoCount = 0;
     let readyCount = 0;
@@ -1929,6 +1965,11 @@ export default function AdminRefusedActual() {
 
       const meta = it?.meta || {};
       if (meta.lastSentAt && !meta.lastAnswer) noAnswerCount += 1;
+      if (meta.fixRequestedAt) {
+        fixRequestedCount += 1;
+        const hours = elapsedHours(meta.fixRequestedAt);
+        if (hours != null && hours >= 24) fixOverdueCount += 1;
+      }
       if (!hasServicePrice(it)) noPriceCount += 1;
       if (!hasServiceImages(it)) noPhotoCount += 1;
       if (isServiceReadyForPublishing(it)) readyCount += 1;
@@ -1947,6 +1988,8 @@ export default function AdminRefusedActual() {
       tgMissingCount,
       contactMissingCount,
       noAnswerCount,
+      fixRequestedCount,
+      fixOverdueCount,
       noPriceCount,
       noPhotoCount,
       readyCount,
@@ -1976,6 +2019,15 @@ export default function AdminRefusedActual() {
     }
     if (quickFilter === "no_answer") {
       return list.filter((it) => it?.meta?.lastSentAt && !it?.meta?.lastAnswer);
+    }
+    if (quickFilter === "fix_requested") {
+      return list.filter((it) => hasFixRequest(it));
+    }
+    if (quickFilter === "fix_overdue") {
+      return list.filter((it) => {
+        const hours = elapsedHours(getFixRequestMeta(it).requestedAt);
+        return hours != null && hours >= 24;
+      });
     }
     if (quickFilter === "no_price") {
       return list.filter((it) => !hasServicePrice(it));
@@ -3493,10 +3545,10 @@ const sortLabel = useMemo(() => {
           <div>
             <div className="text-sm font-black uppercase tracking-[0.14em] text-slate-500">Что сделать сейчас</div>
             <div className="mt-1 text-sm text-slate-600">
-              Сначала неготовые, срочные и без ответа, потом услуги без контактов, Telegram, цены или фото.
+              Сначала неготовые, срочные и без ответа, потом проверьте очередь правок и услуги без контактов, Telegram, цены или фото.
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-9">
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-11">
             <button
               type="button"
               onClick={() => setQuickFilter("ready")}
@@ -3528,6 +3580,22 @@ const sortLabel = useMemo(() => {
             >
               <div className="text-2xl font-black text-amber-950">{pageStats.noAnswerCount}</div>
               <div className="text-xs font-bold text-amber-700">без ответа</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickFilter("fix_requested")}
+              className="rounded-2xl border border-amber-100 bg-amber-50 px-4 py-3 text-left hover:bg-amber-100"
+            >
+              <div className="text-2xl font-black text-amber-950">{pageStats.fixRequestedCount}</div>
+              <div className="text-xs font-bold text-amber-700">ждём правки</div>
+            </button>
+            <button
+              type="button"
+              onClick={() => setQuickFilter("fix_overdue")}
+              className="rounded-2xl border border-red-100 bg-red-50 px-4 py-3 text-left hover:bg-red-100"
+            >
+              <div className="text-2xl font-black text-red-950">{pageStats.fixOverdueCount}</div>
+              <div className="text-xs font-bold text-red-700">ждём 24ч+</div>
             </button>
             <button
               type="button"
@@ -3693,6 +3761,8 @@ const sortLabel = useMemo(() => {
               <QuickChip active={quickFilter === "not_ready"} onClick={() => setQuickFilter("not_ready")}>Не готовые</QuickChip>
               <QuickChip active={quickFilter === "urgent"} onClick={() => setQuickFilter("urgent")}>Срочные</QuickChip>
               <QuickChip active={quickFilter === "no_answer"} onClick={() => setQuickFilter("no_answer")}>Без ответа</QuickChip>
+              <QuickChip active={quickFilter === "fix_requested"} onClick={() => setQuickFilter("fix_requested")}>Ждём правки</QuickChip>
+              <QuickChip active={quickFilter === "fix_overdue"} onClick={() => setQuickFilter("fix_overdue")}>Ждём 24ч+</QuickChip>
               <QuickChip active={quickFilter === "no_contact"} onClick={() => setQuickFilter("no_contact")}>Без контактов</QuickChip>
               <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
               <QuickChip active={quickFilter === "no_price"} onClick={() => setQuickFilter("no_price")}>Без цены</QuickChip>
@@ -4024,6 +4094,7 @@ const sortLabel = useMemo(() => {
                       {fixRequested ? (
                         <div className="rounded-2xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-900">
                           Просили исправить: {formatDate(fixMeta.requestedAt)}
+                          <span className="ml-1 text-amber-700">ждём {elapsedShort(fixMeta.requestedAt)}</span>
                           {fixMeta.flags.length ? <span className="ml-1 text-amber-700">({fixMeta.flags.join(", ")})</span> : null}
                         </div>
                       ) : null}
@@ -4581,6 +4652,7 @@ const sortLabel = useMemo(() => {
                         {fixRequested ? (
                           <div className="mt-1 rounded-lg border border-amber-100 bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-900">
                             исправления: <span className="font-mono">{formatDate(fixMeta.requestedAt)}</span>
+                            <span className="ml-1 text-amber-700">ждём {elapsedShort(fixMeta.requestedAt)}</span>
                             {fixMeta.flags.length ? <span className="ml-1 text-amber-700">{fixMeta.flags.join(", ")}</span> : null}
                           </div>
                         ) : null}
