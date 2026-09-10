@@ -704,7 +704,7 @@ async function publishRefusedServiceToPublicChannel(id, actor = {}, options = {}
     .trim();
   const siteUrl = (process.env.SITE_PUBLIC_URL || process.env.SITE_URL || "https://travella.uz").replace(/\/+$/, "");
   const deepLink = botUsername
-    ? `https://t.me/${botUsername}?start=${encodeURIComponent(`unlock_${sid}`)}`
+    ? `https://t.me/${botUsername}?start=${encodeURIComponent(`operator_${sid}`)}`
     : `${siteUrl}/?service=${sid}`;
 
   const serviceForCard = {

@@ -102,6 +102,35 @@ const PAYME_CARD_ONLY_HINT =
 // Кому отправлять "быстрые запросы" из бота
 const MANAGER_CHAT_ID = process.env.TELEGRAM_MANAGER_CHAT_ID || "";
 
+function getContactOperator(index) {
+  const i = Number(index) || 1;
+  const name = (
+    process.env[`CONTACT_OPERATOR_${i}_NAME`] ||
+    process.env[`TELEGRAM_CONTACT_OPERATOR_${i}_NAME`] ||
+    process.env[`TELEGRAM_OPERATOR_${i}_NAME`] ||
+    `Оператор ${i}`
+  ).trim();
+  const chatId = (
+    process.env[`CONTACT_OPERATOR_${i}_CHAT_ID`] ||
+    process.env[`TELEGRAM_CONTACT_OPERATOR_${i}_CHAT_ID`] ||
+    process.env[`TELEGRAM_OPERATOR_${i}_CHAT_ID`] ||
+    MANAGER_CHAT_ID ||
+    ""
+  ).trim();
+  const url = (
+    process.env[`CONTACT_OPERATOR_${i}_URL`] ||
+    process.env[`TELEGRAM_CONTACT_OPERATOR_${i}_URL`] ||
+    process.env[`TELEGRAM_OPERATOR_${i}_URL`] ||
+    ""
+  ).trim();
+
+  return { index: i, name, chatId, url };
+}
+
+function getContactOperators() {
+  return [1, 2, 3].map((i) => getContactOperator(i));
+}
+
 // Куда админ может публиковать public-safe карточки напрямую ботом.
 // Важно: бот должен быть администратором этого канала/группы.
 const PUBLIC_CHANNEL_CHAT_ID_RAW = (
@@ -4678,6 +4707,132 @@ async function fetchTelegramService(serviceId, role) {
   }
 }
 
+function buildOperatorContactDeepLink(serviceId) {
+  const sid = Number(serviceId);
+  if (!Number.isFinite(sid) || sid <= 0) return SITE_URL;
+  return BOT_USERNAME
+    ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`operator_${sid}`)}`
+    : `${SITE_URL}/?service=${sid}`;
+}
+
+function buildOperatorContactIntro(svc, serviceId) {
+  const d = parseDetailsAny(svc?.details);
+  const title = getServiceDisplayTitle(svc) || svc?.title || "Услуга";
+  const category = svc?.category || svc?.type || "service";
+  const direction = [
+    d.directionFrom || d.fromCity || d.departureCity || "",
+    d.directionTo || d.toCity || d.city || d.locationCity || d.country || "",
+  ].filter(Boolean).join(" → ");
+  const dates = [
+    d.startDate || d.dateFrom || d.checkIn || d.departureDate || "",
+    d.endDate || d.dateTo || d.checkOut || d.returnDate || "",
+  ].filter(Boolean).join(" → ");
+
+  const lines = [
+    "💬 <b>Связаться с поставщиком</b>",
+    "",
+    "Выберите оператора Travella — он примет заявку и поможет связаться с поставщиком.",
+    "",
+    `📌 <b>${escapeHtml(title)}</b> <code>#R${escapeHtml(serviceId)}</code>`,
+    `🏷 <b>${escapeHtml(category)}</b>`,
+  ];
+  if (direction) lines.push(`🌍 ${escapeHtml(direction)}`);
+  if (dates) lines.push(`📅 ${escapeHtml(dates)}`);
+  lines.push("", "👇 Нажмите на одного из операторов:");
+  return lines.join("\n");
+}
+
+async function sendOperatorContactMenu(ctx, serviceId) {
+  const sid = Number(serviceId);
+  if (!Number.isFinite(sid) || sid <= 0) {
+    await safeReply(ctx, "⚠️ Некорректная ссылка для связи с поставщиком.");
+    return;
+  }
+
+  const svc = await fetchTelegramService(sid, "client");
+  if (!svc) {
+    await safeReply(ctx, "❗️Услуга не найдена или уже снята с публикации.");
+    return;
+  }
+
+  const operatorRows = getContactOperators().map((op) => [
+    { text: `👤 ${op.name}`, callback_data: `op:${sid}:${op.index}` },
+  ]);
+
+  await safeReply(ctx, buildOperatorContactIntro(svc, sid), {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: {
+      inline_keyboard: [
+        ...operatorRows,
+        [{ text: "🌐 Подробнее на сайте", url: buildServiceUrl(sid) }],
+      ],
+    },
+  });
+}
+
+function formatTelegramUserForOperator(ctx) {
+  const from = ctx?.from || {};
+  const name = [from.first_name, from.last_name].filter(Boolean).join(" ").trim() || "Клиент";
+  const username = normalizeTelegramUsernameForLink(from.username || "");
+  const lines = [
+    `👤 <b>Клиент:</b> ${escapeHtml(name)}`,
+    `🆔 <b>Telegram ID:</b> <code>${escapeHtml(from.id || "")}</code>`,
+  ];
+  if (username) lines.push(`📲 <b>Username:</b> <a href="https://t.me/${encodeURIComponent(username)}">@${escapeHtml(username)}</a>`);
+  return lines.join("\n");
+}
+
+async function notifySelectedContactOperator(ctx, serviceId, operatorIndex) {
+  const sid = Number(serviceId);
+  const op = getContactOperator(operatorIndex);
+  if (!op.chatId) {
+    await ctx.answerCbQuery("Оператор не настроен", { show_alert: true });
+    await safeReply(ctx, "⚠️ Сейчас оператор не настроен. Попробуйте позже или откройте карточку на сайте.");
+    return;
+  }
+
+  const svc = await fetchTelegramService(sid, "client");
+  const title = getServiceDisplayTitle(svc) || svc?.title || `Услуга #R${sid}`;
+  const serviceUrl = buildServiceUrl(sid);
+  const userLine = formatTelegramUserForOperator(ctx);
+  const text = [
+    "🆕 <b>Клиент хочет связаться с поставщиком</b>",
+    "",
+    `👤 <b>Оператор:</b> ${escapeHtml(op.name)}`,
+    `📌 <b>${escapeHtml(title)}</b> <code>#R${escapeHtml(sid)}</code>`,
+    "",
+    userLine,
+    "",
+    "Свяжитесь с клиентом и помогите открыть контакт с поставщиком.",
+  ].join("\n");
+
+  const username = normalizeTelegramUsernameForLink(ctx?.from?.username || "");
+  const buttons = [
+    [{ text: "🌐 Открыть карточку", url: serviceUrl }],
+    [{ text: "👤 Открыть клиента", url: `tg://user?id=${ctx.from.id}` }],
+  ];
+  if (username) buttons.push([{ text: `📲 @${username}`, url: `https://t.me/${encodeURIComponent(username)}` }]);
+
+  await bot.telegram.sendMessage(op.chatId, text, {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: { inline_keyboard: buttons },
+  });
+
+  await ctx.answerCbQuery("Заявка отправлена");
+  await safeReply(
+    ctx,
+    `✅ Заявка отправлена: <b>${escapeHtml(op.name)}</b>\n\nОператор свяжется с вами в Telegram. Если у вас есть номер телефона или уточнение — отправьте его сюда следующим сообщением.`,
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [[{ text: "🌐 Подробнее на сайте", url: serviceUrl }]],
+      },
+    }
+  );
+}
+
 function parseImagesAny(images) {
   if (!images) return [];
   if (Array.isArray(images)) return images;
@@ -8286,6 +8441,14 @@ bot.start(async (ctx) => {
   try {
     let role = null;
 
+    // Public channel deep-link: operator_<serviceId> opens a lightweight contact flow
+    // before account binding, so new clients can ask an operator without friction.
+    const mOperator = startPayloadRaw.match(/^operator_(\d+)$/i);
+    if (mOperator) {
+      await sendOperatorContactMenu(ctx, Number(mOperator[1]));
+      return;
+    }
+
     // ✅ ПРИОРИТЕТ: СНАЧАЛА provider, ПОТОМ client
     try {
       const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
@@ -10695,6 +10858,21 @@ bot.action(/^request:(\d+)$/, async (ctx) => {
   }
 });
 
+bot.action(/^op:(\d+):([1-3])$/, async (ctx) => {
+  try {
+    const serviceId = Number(ctx.match[1]);
+    const operatorIndex = Number(ctx.match[2]);
+    if (!Number.isFinite(serviceId) || serviceId <= 0) {
+      await ctx.answerCbQuery("Некорректная услуга", { show_alert: true });
+      return;
+    }
+    await notifySelectedContactOperator(ctx, serviceId, operatorIndex);
+  } catch (e) {
+    console.error("[tg-bot] operator contact action error:", e?.response?.data || e?.message || e);
+    try { await ctx.answerCbQuery("Ошибка. Попробуйте ещё раз", { show_alert: true }); } catch {}
+  }
+});
+
 /* ===================== REQUEST STATUS (manager buttons) ===================== */
 bot.action(/^reqst:(\d+):(new|accepted|booked|rejected)$/, async (ctx) => {
   try {
@@ -11840,9 +12018,7 @@ async function sendPublicSafeServiceCardToChannel(ctx, serviceId) {
   const category = String(svc.category || svc.type || "refused_tour").toLowerCase();
   const unlockSettings = await getContactUnlockSettings(pool).catch(() => null);
   const unlockPrice = tiyinToSum(unlockSettings?.effective_price || 0) || CONTACT_UNLOCK_PRICE || 10000;
-  const deepLink = BOT_USERNAME
-    ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`unlock_${sid}`)}`
-    : `${SITE_URL}/?service=${sid}`;
+  const deepLink = buildOperatorContactDeepLink(sid);
 
   const built = buildServiceMessage(svc, category, "client", {
     audience: "public",
@@ -18105,7 +18281,8 @@ const data = await getOrFetchCached(
       const unlockPrice = tiyinToSum(unlockSettings.effective_price || 0);
       const isFreeMode = unlockPrice <= 0;
 
-      const publicDeepLink =
+      const contactDeepLink = buildOperatorContactDeepLink(svc.id);
+      const unlockDeepLink =
         BOT_USERNAME
           ? `https://t.me/${BOT_USERNAME}?start=${encodeURIComponent(`unlock_${svc.id}`)}`
           : `${SITE_URL}/?service=${svc.id}`;
@@ -18124,7 +18301,7 @@ const data = await getOrFetchCached(
           forceHideProviderContacts: mustHideContactsForInline,
           forceShowProviderContacts: roleForInline === "provider" || roleForInline === "admin",
           publicSafe: mustHideContactsForInline,
-          publicOpenBotUrl: publicDeepLink,
+          publicOpenBotUrl: contactDeepLink,
           hideBotAttribution: true,
         }
       );
@@ -18148,7 +18325,7 @@ const data = await getOrFetchCached(
 
       // 🔒 INLINE-безопасность: в чатах нельзя делать unlock callback'ом
       // вместо этого отправляем человека в ЛС боту по deep-link, где уже можно unlock'нуть безопасно
-      const deepLink = publicDeepLink;
+      const deepLink = canSeeContacts || isFreeMode ? unlockDeepLink : contactDeepLink;
       
       let keyboardForClient;
       if (roleForInline === "provider" || roleForInline === "admin") {
