@@ -1004,13 +1004,58 @@ const priceKind =
     return 0;
   };
 
+  const rawAccommodationText = () =>
+    String(firstValue(d.accommodation, d.placement, d.room, d.roomType, d.roomCategory) || "").toUpperCase();
+
+  const countAccommodationToken = (tokens) => {
+    const raw = rawAccommodationText();
+    if (!raw) return 0;
+    for (const token of tokens) {
+      const re = new RegExp(`(\\d+)\\s*${token}\\b`, "i");
+      const m = raw.match(re);
+      if (m) {
+        const n = Number(m[1]);
+        if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+      }
+    }
+    return 0;
+  };
+
+  const guestCompositionLabel = ({ adt, chd, inf }) => {
+    const parts = [];
+    if (adt > 0) parts.push(`${adt} ${pluralRu(adt, "взрослый", "взрослых", "взрослых")}`);
+    if (chd > 0) parts.push(`${chd} ${pluralRu(chd, "ребёнок", "ребёнка", "детей")}`);
+    if (inf > 0) parts.push(`${inf} ${pluralRu(inf, "младенец", "младенца", "младенцев")}`);
+    return parts.join(" + ");
+  };
+
   const inferPriceAudience = () => {
     const cat = String(category || "").toLowerCase();
-    const adt = toPositiveInt(d.adt || d.adults || d.accommodationADT);
-    const chd = toPositiveInt(d.chd || d.children || d.accommodationCHD);
-    const inf = toPositiveInt(d.inf || d.infants || d.accommodationINF);
+    const adt =
+      toPositiveInt(d.adt || d.adults || d.accommodationADT) ||
+      countAccommodationToken(["ADT", "ADL", "ADULT"]);
+    const chd =
+      toPositiveInt(d.chd || d.children || d.accommodationCHD) ||
+      countAccommodationToken(["CHD", "CHILD"]);
+    const inf =
+      toPositiveInt(d.inf || d.infants || d.accommodationINF) ||
+      countAccommodationToken(["INF", "INFANT"]);
     const guestsFromAges = adt + chd + inf;
+    const mixedPackage =
+      chd > 0 ||
+      inf > 0 ||
+      /\bEB\b|EXTRA\s*BED|CHD|CHILD|INF|INFANT/i.test(rawAccommodationText());
     if (guestsFromAges > 0) {
+      const composition = guestCompositionLabel({ adt, chd, inf });
+      if (mixedPackage) {
+        return {
+          count: guestsFromAges,
+          unit: "пакет",
+          totalLabel: "за пакет",
+          perLabel: "",
+          note: composition ? `Туристы: ${composition}` : "",
+        };
+      }
       const label = `${guestsFromAges} ${pluralRu(guestsFromAges, "человека", "человек", "человек")}`;
       return { count: guestsFromAges, unit: "чел.", totalLabel: `за ${label}`, perLabel: "за 1 человека" };
     }
@@ -1053,6 +1098,15 @@ const priceKind =
     ));
     const count = explicitGuests || placementCount();
     if (count > 0) {
+      if (mixedPackage) {
+        return {
+          count,
+          unit: "пакет",
+          totalLabel: "за пакет",
+          perLabel: "",
+          note: "",
+        };
+      }
       return {
         count,
         unit: "чел.",
@@ -1185,6 +1239,7 @@ const priceKind =
     const totalLabel = typeof audience === "string" ? audience : audience.totalLabel;
     const count = typeof audience === "string" ? 0 : Number(audience.count || 0);
     const perLabel = typeof audience === "string" ? "" : audience.perLabel;
+    const note = typeof audience === "string" ? "" : audience.note;
     const priceNumber = parseMoneyNumber(priceRaw);
     const currency = extractCurrencyLabel(priceWithCur);
     const lines = [
@@ -1194,6 +1249,9 @@ const priceKind =
     ];
     if (priceNumber && count > 1 && perLabel) {
       lines.push(`👤 <b>${escapeHtml(perLabel)}:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
+    }
+    if (note) {
+      lines.push(`👥 <b>${escapeHtml(note)}</b>`);
     }
     return lines.join("\n");
   };

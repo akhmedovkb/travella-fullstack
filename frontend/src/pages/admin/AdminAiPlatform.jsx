@@ -97,6 +97,7 @@ function inferVideoPriceDisplay(ctx = {}) {
   let count = toPositiveInt(ctx.peopleCount || ctx.persons || ctx.guests || ctx.pax || ctx.passengersCount || ctx.ticketsCount);
   let totalLabel = "за пакет";
   let perLabel = "за 1 человека";
+  const mixedPackage = /\bEB\b|EXTRA\s*BED|CHD|CHILD|INF|INFANT/i.test(peopleRaw);
 
   if (category.includes("flight") || category.includes("авиа")) {
     count = count || 1;
@@ -111,13 +112,18 @@ function inferVideoPriceDisplay(ctx = {}) {
     if (!count && /\bDBL\b|DOUBLE|TWIN|ДВУХМЕСТ/i.test(peopleRaw)) count = 2;
     if (!count && /\bTRPL\b|\bTPL\b|TRIPLE|ТР[ЕЁ]ХМЕСТ/i.test(peopleRaw)) count = 3;
     if (!count && /\bQDPL\b|QUAD|QUADRUPLE|ЧЕТЫР[ЕЁ]ХМЕСТ/i.test(peopleRaw)) count = 4;
-    if (count > 0) totalLabel = `за ${count} ${pluralRu(count, "человека", "человек", "человек")}`;
+    if (mixedPackage) {
+      totalLabel = "за пакет";
+      perLabel = "";
+    } else if (count > 0) {
+      totalLabel = `за ${count} ${pluralRu(count, "человека", "человек", "человек")}`;
+    }
   }
 
   return {
     total: `${formatMoneyCompact(price)} ${ctx.currency || "USD"}`,
     totalLabel,
-    perUnit: count > 1 ? `${formatMoneyCompact(price / count)} ${ctx.currency || "USD"}` : "",
+    perUnit: count > 1 && perLabel ? `${formatMoneyCompact(price / count)} ${ctx.currency || "USD"}` : "",
     perLabel,
   };
 }

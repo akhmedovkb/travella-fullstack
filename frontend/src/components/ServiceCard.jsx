@@ -121,19 +121,57 @@ const inferPlacementCount = (details = {}) => {
   return 0;
 };
 
+const accommodationText = (details = {}) =>
+  String(
+    firstNonEmpty(details.accommodation, details.placement, details.room, details.roomType, details.roomCategory) || ""
+  ).toUpperCase();
+
+const countAccommodationToken = (details = {}, tokens = []) => {
+  const raw = accommodationText(details);
+  if (!raw) return 0;
+  for (const token of tokens) {
+    const re = new RegExp(`(\\d+)\\s*${token}\\b`, "i");
+    const m = raw.match(re);
+    if (m) {
+      const n = Number(m[1]);
+      if (Number.isFinite(n) && n > 0) return Math.trunc(n);
+    }
+  }
+  return 0;
+};
+
+const buildGuestCompositionLabel = ({ adt, chd, inf }) => {
+  const parts = [];
+  if (adt > 0) parts.push(`${adt} ${pluralRu(adt, "взрослый", "взрослых", "взрослых")}`);
+  if (chd > 0) parts.push(`${chd} ${pluralRu(chd, "ребёнок", "ребёнка", "детей")}`);
+  if (inf > 0) parts.push(`${inf} ${pluralRu(inf, "младенец", "младенца", "младенцев")}`);
+  return parts.join(" + ");
+};
+
 const buildPriceDisplay = ({ rawPrice, details = {}, categoryRaw = "" }) => {
   const value = parseMoneyNumber(rawPrice);
   if (!value) return null;
   const cat = String(categoryRaw || "").toLowerCase();
-  const adt = toPositiveInt(details.adt || details.adults || details.accommodationADT);
-  const chd = toPositiveInt(details.chd || details.children || details.accommodationCHD);
-  const inf = toPositiveInt(details.inf || details.infants || details.accommodationINF);
+  const adt =
+    toPositiveInt(details.adt || details.adults || details.accommodationADT) ||
+    countAccommodationToken(details, ["ADT", "ADL", "ADULT"]);
+  const chd =
+    toPositiveInt(details.chd || details.children || details.accommodationCHD) ||
+    countAccommodationToken(details, ["CHD", "CHILD"]);
+  const inf =
+    toPositiveInt(details.inf || details.infants || details.accommodationINF) ||
+    countAccommodationToken(details, ["INF", "INFANT"]);
   const guestsFromAges = adt + chd + inf;
+  const mixedPackage =
+    chd > 0 ||
+    inf > 0 ||
+    /\bEB\b|EXTRA\s*BED|CHD|CHILD|INF|INFANT/i.test(accommodationText(details));
 
   let count = 0;
   let unit = "чел.";
   let totalLabel = "за пакет";
   let perLabel = "за 1 человека";
+  let note = "";
 
   if (cat.includes("flight")) {
     count = toPositiveInt(firstNonEmpty(details.passengersCount, details.passengers, details.quantity, details.seats, details.places)) || 1;
@@ -159,7 +197,14 @@ const buildPriceDisplay = ({ rawPrice, details = {}, categoryRaw = "" }) => {
         details.passengersCount
       )) ||
       inferPlacementCount(details);
-    if (count > 0) totalLabel = `за ${count} ${pluralRu(count, "человека", "человек", "человек")}`;
+    if (mixedPackage) {
+      totalLabel = "за пакет";
+      perLabel = "";
+      unit = "пакет";
+      note = buildGuestCompositionLabel({ adt, chd, inf });
+    } else if (count > 0) {
+      totalLabel = `за ${count} ${pluralRu(count, "человека", "человек", "человек")}`;
+    }
   }
 
   return {
@@ -168,8 +213,9 @@ const buildPriceDisplay = ({ rawPrice, details = {}, categoryRaw = "" }) => {
     totalLabel,
     count,
     unit,
+    note: note ? `Туристы: ${note}` : "",
     perLabel,
-    perUnit: count > 1 ? formatMoneyCompact(value / count) : "",
+    perUnit: count > 1 && perLabel ? formatMoneyCompact(value / count) : "",
   };
 };
 
@@ -1938,6 +1984,11 @@ return (
                       {priceDisplay.totalLabel}
                     </div>
                   )}
+                  {priceDisplay?.note && (
+                    <div className="mt-1 text-[11px] font-black text-white/70">
+                      {priceDisplay.note}
+                    </div>
+                  )}
                   {priceDisplay?.perUnit && (
                     <div className="mt-1 inline-flex rounded-full bg-white/10 px-2 py-1 text-[11px] font-black text-emerald-100 ring-1 ring-white/15">
                       {priceDisplay.perLabel}: {priceDisplay.perUnit} {t("marketplace.price_currency", { defaultValue: "у.е." })}
@@ -2386,6 +2437,11 @@ return (
                     {t("marketplace.price_currency", { defaultValue: "у.е." })}
                     {priceDisplay?.totalLabel ? ` · ${priceDisplay.totalLabel}` : ""}
                   </div>
+                  {priceDisplay?.note && (
+                    <div className="mt-0.5 text-[11px] font-black text-white/80">
+                      {priceDisplay.note}
+                    </div>
+                  )}
                   {priceDisplay?.perUnit && (
                     <div className="mt-1 rounded-full bg-white/18 px-2 py-1 text-[11px] font-black text-white">
                       {priceDisplay.perLabel}: {priceDisplay.perUnit} {t("marketplace.price_currency", { defaultValue: "у.е." })}
@@ -2730,6 +2786,11 @@ return (
                       {priceDisplay?.totalLabel && (
                         <div className="mt-1 text-xs font-black text-gray-500">
                           {priceDisplay.totalLabel}
+                        </div>
+                      )}
+                      {priceDisplay?.note && (
+                        <div className="mt-1 text-xs font-black text-gray-500">
+                          {priceDisplay.note}
                         </div>
                       )}
                       {priceDisplay?.perUnit && (
