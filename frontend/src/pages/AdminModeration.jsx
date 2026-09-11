@@ -84,6 +84,45 @@ function normalizeImages(images) {
   return [];
 }
 
+function formatDetailValue(value) {
+  if (value === null || typeof value === "undefined") return "";
+  if (typeof value === "object") return JSON.stringify(value, null, 2);
+  return String(value);
+}
+
+function detailsToRows(details) {
+  const source = normalizeDetails(details);
+  return Object.entries(source).map(([key, value]) => ({
+    key,
+    value: formatDetailValue(value),
+  }));
+}
+
+function parseDetailValue(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  if (raw === "true") return true;
+  if (raw === "false") return false;
+  if (raw === "null") return null;
+  if (/^[\[{]/.test(raw)) {
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return value;
+    }
+  }
+  return value;
+}
+
+function rowsToDetails(rows) {
+  return rows.reduce((acc, row) => {
+    const key = String(row?.key || "").trim();
+    if (!key) return acc;
+    acc[key] = parseDetailValue(row?.value);
+    return acc;
+  }, {});
+}
+
 function pickFirst(...vals) {
   for (const v of vals) {
     if (v === 0) return v;
@@ -132,6 +171,7 @@ function Card({
   onReject,
   onRejectClick,
   onUnpublish,
+  actionBusy,
   t,
   onOpenProof,
 }) {
@@ -742,6 +782,7 @@ function Card({
 
       <div className="mt-4 flex gap-2">
         <button
+          type="button"
           onClick={() => onEdit(s.id)}
           className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
         >
@@ -749,18 +790,24 @@ function Card({
         </button>
 
         <button
+          type="button"
           onClick={() => onApprove(s.id)}
-          className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700"
+          disabled={actionBusy === s.id}
+          className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-60"
         >
-          {tab === "rejected"
+          {actionBusy === s.id
+            ? t("common.saving", { defaultValue: "Сохранение..." })
+            : tab === "rejected"
             ? t("moderation.confirm", { defaultValue: "Подтвердить" })
             : t("moderation.approve", { defaultValue: "Approve" })}
         </button>
 
         {tab === "pending" && (
           <button
+            type="button"
             onClick={() => (onRejectClick ? onRejectClick(s) : onReject(s.id, "Нужно исправить данные услуги"))}
-            className="px-3 py-1.5 rounded bg-rose-600 text-white text-sm hover:bg-rose-700"
+            disabled={actionBusy === s.id}
+            className="px-3 py-1.5 rounded bg-rose-600 text-white text-sm hover:bg-rose-700 disabled:opacity-60"
           >
             {t("moderation.reject", { defaultValue: "Reject" })}
           </button>
@@ -768,8 +815,10 @@ function Card({
 
         {item.status === "published" && (
           <button
+            type="button"
             onClick={() => onUnpublish(s.id)}
-            className="px-3 py-1.5 rounded bg-gray-200 text-gray-800 text-sm hover:bg-gray-300"
+            disabled={actionBusy === s.id}
+            className="px-3 py-1.5 rounded bg-gray-200 text-gray-800 text-sm hover:bg-gray-300 disabled:opacity-60"
           >
             {t("moderation.unpublish", { defaultValue: "Unpublish" })}
           </button>
@@ -799,13 +848,17 @@ export default function AdminModeration() {
     category: "",
     price: "",
     vehicle_model: "",
-    detailsJson: "{}",
+    telegram_refused_chat_id: "",
+    telegram_web_chat_id: "",
+    telegram_chat_id: "",
     imagesJson: "[]",
     availabilityJson: "[]",
   });
+  const [editDetailsRows, setEditDetailsRows] = useState([]);
   const [editImages, setEditImages] = useState([]);
   const [newImageUrl, setNewImageUrl] = useState("");
   const [moderationEvents, setModerationEvents] = useState([]);
+  const [actionBusy, setActionBusy] = useState(null);
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -884,6 +937,7 @@ export default function AdminModeration() {
   }, [tab]);
 
   const approve = async (id) => {
+    setActionBusy(id);
     try {
       await axios.post(`${API_BASE}/api/admin/services/${id}/approve`, {}, cfg);
       tSuccess(t("moderation.approved", { defaultValue: "Опубликовано" }));
@@ -896,6 +950,8 @@ export default function AdminModeration() {
       tError(
         t("moderation.approve_error", { defaultValue: "Ошибка approve" })
       );
+    } finally {
+      setActionBusy(null);
     }
   };
 
@@ -919,6 +975,7 @@ export default function AdminModeration() {
       );
     }
 
+    setActionBusy(id);
     try {
       await axios.post(
         `${API_BASE}/api/admin/services/${id}/reject`,
@@ -935,10 +992,13 @@ export default function AdminModeration() {
       }));
     } catch {
       tError(t("moderation.reject_error", { defaultValue: "Ошибка reject" }));
+    } finally {
+      setActionBusy(null);
     }
   };
 
   const unpublish = async (id) => {
+    setActionBusy(id);
     try {
       await axios.post(
         `${API_BASE}/api/admin/services/${id}/unpublish`,
@@ -957,6 +1017,8 @@ export default function AdminModeration() {
           defaultValue: "Ошибка unpublish",
         })
       );
+    } finally {
+      setActionBusy(null);
     }
   };
 
@@ -974,6 +1036,7 @@ export default function AdminModeration() {
       const availability = Array.isArray(s.availability)
         ? s.availability
         : parseJsonSafe(s.availability, []) || [];
+      setEditDetailsRows(detailsToRows(details));
       setEditImages(images);
       setNewImageUrl("");
 
@@ -984,7 +1047,9 @@ export default function AdminModeration() {
         category: s.category || "",
         price: s.price ?? "",
         vehicle_model: s.vehicle_model || "",
-        detailsJson: JSON.stringify(details, null, 2),
+        telegram_refused_chat_id: s.telegram_refused_chat_id || "",
+        telegram_web_chat_id: s.telegram_web_chat_id || "",
+        telegram_chat_id: s.telegram_chat_id || "",
         imagesJson: JSON.stringify(images, null, 2),
         availabilityJson: JSON.stringify(availability, null, 2),
       });
@@ -1015,9 +1080,23 @@ export default function AdminModeration() {
     setEditImages((prev) => [...prev, ...list]);
     setNewImageUrl("");
   };
+
+  const updateDetailRow = (idx, patch) => {
+    setEditDetailsRows((prev) =>
+      prev.map((row, i) => (i === idx ? { ...row, ...patch } : row))
+    );
+  };
+
+  const removeDetailRow = (idx) => {
+    setEditDetailsRows((prev) => prev.filter((_, i) => i !== idx));
+  };
+
+  const addDetailRow = () => {
+    setEditDetailsRows((prev) => [...prev, { key: "", value: "" }]);
+  };
   
   const saveEdit = async () => {
-    const details = parseJsonSafe(editForm.detailsJson, null);
+    const details = rowsToDetails(editDetailsRows);
     const images = Array.isArray(editImages)
       ? editImages.filter((x) => String(x || "").trim())
       : [];
@@ -1026,7 +1105,7 @@ export default function AdminModeration() {
     if (!details || typeof details !== "object" || Array.isArray(details)) {
       return tError(
         t("moderation.details_json_invalid", {
-          defaultValue: "details должен быть объектом JSON",
+          defaultValue: "Поля details должны быть объектом",
         })
       );
     }
@@ -1049,6 +1128,9 @@ export default function AdminModeration() {
           category: editForm.category,
           price: editForm.price === "" ? null : editForm.price,
           vehicle_model: editForm.vehicle_model,
+          telegram_refused_chat_id: editForm.telegram_refused_chat_id,
+          telegram_web_chat_id: editForm.telegram_web_chat_id,
+          telegram_chat_id: editForm.telegram_chat_id,
           details,
           images,
           availability,
@@ -1160,6 +1242,7 @@ export default function AdminModeration() {
                 onReject={reject}
                 onRejectClick={openReject}
                 onUnpublish={unpublish}
+                actionBusy={actionBusy}
                 onOpenProof={setProofViewer}
                 t={t}
               />
@@ -1330,6 +1413,60 @@ export default function AdminModeration() {
                       className="w-full border rounded-lg px-3 py-2"
                     />
                   </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Refused bot chat ID
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.telegram_refused_chat_id}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          telegram_refused_chat_id: e.target.value,
+                        }))
+                      }
+                      className="w-full border rounded-lg px-3 py-2"
+                      placeholder="-100..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Web bot chat ID
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.telegram_web_chat_id}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          telegram_web_chat_id: e.target.value,
+                        }))
+                      }
+                      className="w-full border rounded-lg px-3 py-2"
+                      placeholder="70659475"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Main Telegram chat ID
+                    </label>
+                    <input
+                      type="text"
+                      value={editForm.telegram_chat_id}
+                      onChange={(e) =>
+                        setEditForm((prev) => ({
+                          ...prev,
+                          telegram_chat_id: e.target.value,
+                        }))
+                      }
+                      className="w-full border rounded-lg px-3 py-2"
+                      placeholder="70659475"
+                    />
+                  </div>
                 </div>
 
                 <div>
@@ -1350,20 +1487,71 @@ export default function AdminModeration() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium mb-1">
-                    details JSON
-                  </label>
-                  <textarea
-                    value={editForm.detailsJson}
-                    onChange={(e) =>
-                      setEditForm((prev) => ({
-                        ...prev,
-                        detailsJson: e.target.value,
-                      }))
-                    }
-                    rows={14}
-                    className="w-full border rounded-lg px-3 py-2 font-mono text-xs"
-                  />
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div>
+                      <div className="text-sm font-semibold">
+                        {t("moderation.all_detail_fields", {
+                          defaultValue: "Все поля карточки",
+                        })}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {t("moderation.all_detail_fields_hint", {
+                          defaultValue:
+                            "Меняйте ключ и значение. Для списков/объектов можно вставить JSON.",
+                        })}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addDetailRow}
+                      className="px-3 py-1.5 rounded-lg bg-gray-900 text-white text-sm hover:bg-black"
+                    >
+                      {t("common.add", { defaultValue: "Добавить" })}
+                    </button>
+                  </div>
+
+                  <div className="space-y-2">
+                    {editDetailsRows.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
+                        {t("moderation.no_detail_fields", {
+                          defaultValue: "Дополнительных полей пока нет.",
+                        })}
+                      </div>
+                    ) : (
+                      editDetailsRows.map((row, idx) => (
+                        <div
+                          key={`detail-${idx}`}
+                          className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-2 rounded-xl border border-gray-200 bg-gray-50 p-2"
+                        >
+                          <input
+                            type="text"
+                            value={row.key}
+                            onChange={(e) =>
+                              updateDetailRow(idx, { key: e.target.value })
+                            }
+                            className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
+                            placeholder="fieldName"
+                          />
+                          <textarea
+                            value={row.value}
+                            onChange={(e) =>
+                              updateDetailRow(idx, { value: e.target.value })
+                            }
+                            rows={String(row.value || "").length > 90 ? 3 : 1}
+                            className="w-full border rounded-lg px-3 py-2 text-sm bg-white font-mono"
+                            placeholder="Значение"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => removeDetailRow(idx)}
+                            className="px-3 py-2 rounded-lg bg-rose-50 text-rose-700 text-sm font-semibold hover:bg-rose-100"
+                          >
+                            {t("common.delete", { defaultValue: "Удалить" })}
+                          </button>
+                        </div>
+                      ))
+                    )}
+                  </div>
                 </div>
 
                 <div>
