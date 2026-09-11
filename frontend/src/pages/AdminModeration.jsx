@@ -828,6 +828,147 @@ function Card({
   );
 }
 
+function EditSection({ title, children }) {
+  return (
+    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 text-sm font-semibold text-gray-900">{title}</div>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function TextField({ label, value, onChange, placeholder = "", textarea = false, rows = 2 }) {
+  const commonProps = {
+    value,
+    onChange: (e) => onChange(e.target.value),
+    placeholder,
+    className: "w-full border rounded-lg px-3 py-2 text-sm bg-white",
+  };
+
+  return (
+    <label className="block">
+      <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
+        {label}
+      </span>
+      {textarea ? <textarea {...commonProps} rows={rows} /> : <input {...commonProps} type="text" />}
+    </label>
+  );
+}
+
+function ModerationPreview({ serviceId, form, details, images }) {
+  const title = pickFirst(
+    form.title,
+    details.title,
+    details.hotel,
+    details.eventName,
+    details.ticketTitle,
+    details.directionTo,
+    "Без названия"
+  );
+  const direction = pickFirst(
+    details.direction,
+    details.directionTo,
+    details.directionCountry,
+    details.location
+  );
+  const hotel = pickFirst(details.hotel, details.eventName, details.accommodation);
+  const dateFrom = pickFirst(
+    details.departureFlightDate,
+    details.departureDate,
+    details.startFlightDate,
+    details.startDate,
+    details.checkInDate,
+    details.eventDate
+  );
+  const dateTo = pickFirst(
+    details.returnFlightDate,
+    details.endFlightDate,
+    details.endDate,
+    details.checkOutDate
+  );
+  const grossPrice = pickFirst(details.grossPrice, details.gross_price, details.price, form.price);
+  const netPrice = pickFirst(details.netPrice, details.net_price, details.priceNet, details.price_net);
+  const proofImages = normalizeImages(details.proofImages);
+  const cover = pickFirst(
+    images?.[0],
+    proofImages[0],
+    details.image,
+    details.imageUrl,
+    details.cover,
+    details.coverImage,
+    details.photo,
+    details.photoUrl
+  );
+  const included = [
+    details.flightIncluded || details.airTickets || details.aviaTickets ? "авиабилеты" : null,
+    details.accommodation || details.hotel ? "проживание" : null,
+    details.food ? `питание ${details.food}` : null,
+    details.transfer ? "трансфер" : null,
+    details.insurance ? "страховка" : null,
+    details.visaIncluded ? "виза" : null,
+  ].filter(Boolean);
+
+  return (
+    <div className="sticky top-4 rounded-2xl border border-slate-200 bg-slate-950 p-4 text-white shadow-xl">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <div>
+          <div className="text-xs uppercase tracking-wide text-slate-400">Live preview</div>
+          <div className="text-sm font-semibold">Как карточка будет читаться</div>
+        </div>
+        <span className="rounded-full bg-white/10 px-2.5 py-1 text-xs">#{serviceId || "new"}</span>
+      </div>
+
+      <div className="overflow-hidden rounded-2xl bg-[#e9ffd9] text-black">
+        {cover && <img src={cover} alt="" className="h-44 w-full object-cover bg-white" />}
+        <div className="space-y-2 p-4 text-sm leading-snug">
+          <div className="text-xs text-emerald-700">через @OTKAZNYX_TUROV_UZB_BOT</div>
+          <div className="font-bold">📍 {form.category?.includes("refused") ? "ОТКАЗНОЙ ТУР" : "УСЛУГА"} #{serviceId}</div>
+          <div className="font-semibold">📝 {title}</div>
+          {direction && <div>🌎 {direction}</div>}
+          {details.directionFrom && <div>🛫 Вылет из: <b>{details.directionFrom}</b></div>}
+          {hotel && <div>🏨 {hotel}</div>}
+          {(dateFrom || dateTo) && (
+            <div>
+              📅 {dateFrom || "—"} {dateTo ? `→ ${dateTo}` : ""}
+            </div>
+          )}
+          {grossPrice && (
+            <div>
+              💵 <b>{fmt(grossPrice)} USD</b>
+              {netPrice ? <span className="text-xs"> · Netto {fmt(netPrice)}</span> : null}
+            </div>
+          )}
+          {details.pricePerPerson && <div>👤 за 1 человека: {details.pricePerPerson}</div>}
+          {included.length > 0 && (
+            <div className="pt-2">
+              <div className="font-semibold">✅ Включено:</div>
+              {included.map((x) => (
+                <div key={x}>• {x}</div>
+              ))}
+            </div>
+          )}
+          <div className="pt-2">🔥 отказное · ⚡ срочно</div>
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+        <div className={`rounded-xl px-3 py-2 ${title === "Без названия" ? "bg-rose-500/20 text-rose-100" : "bg-emerald-500/20 text-emerald-100"}`}>
+          Название
+        </div>
+        <div className={`rounded-xl px-3 py-2 ${grossPrice ? "bg-emerald-500/20 text-emerald-100" : "bg-rose-500/20 text-rose-100"}`}>
+          Цена
+        </div>
+        <div className={`rounded-xl px-3 py-2 ${dateFrom ? "bg-emerald-500/20 text-emerald-100" : "bg-amber-500/20 text-amber-100"}`}>
+          Даты
+        </div>
+        <div className={`rounded-xl px-3 py-2 ${cover ? "bg-emerald-500/20 text-emerald-100" : "bg-amber-500/20 text-amber-100"}`}>
+          Фото
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminModeration() {
   const { t } = useTranslation();
 
@@ -1087,6 +1228,14 @@ export default function AdminModeration() {
     );
   };
 
+  const setDetailValue = (key, value) => {
+    setEditDetailsRows((prev) => {
+      const idx = prev.findIndex((row) => row.key === key);
+      if (idx === -1) return [...prev, { key, value }];
+      return prev.map((row, i) => (i === idx ? { ...row, value } : row));
+    });
+  };
+
   const removeDetailRow = (idx) => {
     setEditDetailsRows((prev) => prev.filter((_, i) => i !== idx));
   };
@@ -1095,7 +1244,7 @@ export default function AdminModeration() {
     setEditDetailsRows((prev) => [...prev, { key: "", value: "" }]);
   };
   
-  const saveEdit = async () => {
+  const saveEdit = async ({ approveAfter = false } = {}) => {
     const details = rowsToDetails(editDetailsRows);
     const images = Array.isArray(editImages)
       ? editImages.filter((x) => String(x || "").trim())
@@ -1138,9 +1287,15 @@ export default function AdminModeration() {
         cfg
       );
 
+      if (approveAfter) {
+        await axios.post(`${API_BASE}/api/admin/services/${editItemId}/approve`, {}, cfg);
+      }
+
       tSuccess(
         t("moderation.saved", {
-          defaultValue: "Изменения сохранены",
+          defaultValue: approveAfter
+            ? "Изменения сохранены и услуга опубликована"
+            : "Изменения сохранены",
         })
       );
       setEditOpen(false);
@@ -1173,6 +1328,13 @@ export default function AdminModeration() {
       </div>
     );
   }
+
+  const editDetails = rowsToDetails(editDetailsRows);
+  const detailKey = (keys, fallback) =>
+    keys.find((key) => {
+      const value = editDetails[key];
+      return value !== null && typeof value !== "undefined" && String(value).trim() !== "";
+    }) || fallback;
 
   return (
     <>
@@ -1320,7 +1482,7 @@ export default function AdminModeration() {
       {editOpen &&
         createPortal(
           <div className="fixed inset-0 z-[5000] bg-black/60 flex items-center justify-center p-4">
-            <div className="w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+            <div className="w-full max-w-7xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
               <div className="flex items-center justify-between px-5 py-4 border-b">
                 <div className="text-lg font-semibold">
                   {t("moderation.edit_service", {
@@ -1336,8 +1498,9 @@ export default function AdminModeration() {
                 </button>
               </div>
 
-              <div className="p-5 space-y-4">
-                {moderationEvents.length > 0 && (
+              <div className="p-5 grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-5">
+                <div className="space-y-4">
+                  {moderationEvents.length > 0 && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="mb-2 text-sm font-semibold text-slate-700">
                       {t("moderation.history", { defaultValue: "История модерации" })}
@@ -1353,7 +1516,7 @@ export default function AdminModeration() {
                       ))}
                     </div>
                   </div>
-                )}
+                  )}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">
@@ -1485,6 +1648,102 @@ export default function AdminModeration() {
                     className="w-full border rounded-lg px-3 py-2"
                   />
                 </div>
+
+                <EditSection title="Быстрая правка карточки">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <TextField
+                      label="Страна / город"
+                      value={formatDetailValue(editDetails.directionCountry || editDetails.location)}
+                      onChange={(value) => setDetailValue(detailKey(["directionCountry", "location"], "directionCountry"), value)}
+                      placeholder="Стамбул, Турция"
+                    />
+                    <TextField
+                      label="Вылет из"
+                      value={formatDetailValue(editDetails.directionFrom)}
+                      onChange={(value) => setDetailValue("directionFrom", value)}
+                      placeholder="Ташкент"
+                    />
+                    <TextField
+                      label="Направление"
+                      value={formatDetailValue(editDetails.directionTo || editDetails.direction)}
+                      onChange={(value) => setDetailValue(detailKey(["directionTo", "direction"], "directionTo"), value)}
+                      placeholder="Анталия"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <TextField
+                      label="Дата начала"
+                      value={formatDetailValue(editDetails.startDate || editDetails.departureDate || editDetails.departureFlightDate)}
+                      onChange={(value) => setDetailValue(detailKey(["startDate", "departureDate", "departureFlightDate"], "startDate"), value)}
+                      placeholder="2026-09-23"
+                    />
+                    <TextField
+                      label="Дата окончания"
+                      value={formatDetailValue(editDetails.endDate || editDetails.returnFlightDate)}
+                      onChange={(value) => setDetailValue(detailKey(["endDate", "returnFlightDate"], "endDate"), value)}
+                      placeholder="2026-09-30"
+                    />
+                    <TextField
+                      label="Ночей"
+                      value={formatDetailValue(editDetails.nights)}
+                      onChange={(value) => setDetailValue("nights", value)}
+                      placeholder="7"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <TextField
+                      label="Отель / объект"
+                      value={formatDetailValue(editDetails.hotel || editDetails.eventName)}
+                      onChange={(value) => setDetailValue(detailKey(["hotel", "eventName"], "hotel"), value)}
+                      placeholder="Rixos Premium..."
+                    />
+                    <TextField
+                      label="Размещение"
+                      value={formatDetailValue(editDetails.roomCategory || editDetails.accommodation)}
+                      onChange={(value) => setDetailValue(detailKey(["roomCategory", "accommodation"], "roomCategory"), value)}
+                      placeholder="DBL / 2ADT+2CHD"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                    <TextField
+                      label="Netto"
+                      value={formatDetailValue(editDetails.netPrice || editDetails.net_price)}
+                      onChange={(value) => setDetailValue(detailKey(["netPrice", "net_price"], "netPrice"), value)}
+                      placeholder="2850"
+                    />
+                    <TextField
+                      label="Gross"
+                      value={formatDetailValue(editDetails.grossPrice || editDetails.gross_price || editDetails.price)}
+                      onChange={(value) => setDetailValue(detailKey(["grossPrice", "gross_price", "price"], "grossPrice"), value)}
+                      placeholder="3150"
+                    />
+                    <TextField
+                      label="За 1 человека"
+                      value={formatDetailValue(editDetails.pricePerPerson)}
+                      onChange={(value) => setDetailValue("pricePerPerson", value)}
+                      placeholder="1425 USD"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <TextField
+                      label="Питание"
+                      value={formatDetailValue(editDetails.food)}
+                      onChange={(value) => setDetailValue("food", value)}
+                      placeholder="AI / BB"
+                    />
+                    <TextField
+                      label="Детали рейса"
+                      value={formatDetailValue(editDetails.flightDetails || editDetails.flight_details || editDetails.flight_info)}
+                      onChange={(value) => setDetailValue(detailKey(["flightDetails", "flight_details", "flight_info"], "flightDetails"), value)}
+                      textarea
+                      rows={3}
+                    />
+                  </div>
+                </EditSection>
 
                 <div>
                   <div className="flex items-center justify-between gap-3 mb-2">
@@ -1623,6 +1882,13 @@ export default function AdminModeration() {
                     className="w-full border rounded-lg px-3 py-2 font-mono text-xs"
                   />
                 </div>
+                </div>
+                <ModerationPreview
+                  serviceId={editItemId}
+                  form={editForm}
+                  details={editDetails}
+                  images={editImages}
+                />
               </div>
 
               <div className="flex items-center justify-end gap-2 px-5 py-4 border-t">
@@ -1642,6 +1908,16 @@ export default function AdminModeration() {
                   {editSaving
                     ? t("common.saving", { defaultValue: "Сохранение..." })
                     : t("common.save", { defaultValue: "Сохранить" })}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => saveEdit({ approveAfter: true })}
+                  disabled={editSaving || editLoading}
+                  className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                >
+                  {editSaving
+                    ? t("common.saving", { defaultValue: "Сохранение..." })
+                    : "Сохранить и опубликовать"}
                 </button>
               </div>
             </div>
