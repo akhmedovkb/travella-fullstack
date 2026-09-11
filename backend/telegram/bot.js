@@ -4795,6 +4795,10 @@ async function notifySelectedContactOperator(ctx, serviceId, operatorIndex) {
   const svc = await fetchTelegramService(sid, "client");
   const title = getServiceDisplayTitle(svc) || svc?.title || `Услуга #R${sid}`;
   const serviceUrl = buildServiceUrl(sid);
+  const directOperatorUrl = String(op.url || "").trim();
+  const clientMessageText =
+    `Здравствуйте! Интересует услуга #R${sid}: ${title}. ` +
+    "Подскажите, пожалуйста, актуально и как связаться с поставщиком?";
   const userLine = formatTelegramUserForOperator(ctx);
   const text = [
     "🆕 <b>Клиент хочет связаться с поставщиком</b>",
@@ -4821,13 +4825,29 @@ async function notifySelectedContactOperator(ctx, serviceId, operatorIndex) {
   });
 
   await ctx.answerCbQuery("Заявка отправлена");
+  const clientRows = [];
+  if (directOperatorUrl) {
+    clientRows.push([{ text: `💬 Написать ${op.name}`, url: directOperatorUrl }]);
+  }
+  clientRows.push([{ text: "🌐 Подробнее на сайте", url: serviceUrl }]);
+
   await safeReply(
     ctx,
-    `✅ Заявка отправлена: <b>${escapeHtml(op.name)}</b>\n\nОператор свяжется с вами в Telegram. Если у вас есть номер телефона или уточнение — отправьте его сюда следующим сообщением.`,
+    [
+      `✅ Заявка отправлена: <b>${escapeHtml(op.name)}</b>`,
+      "",
+      "Оператор уже получил карточку и знает, о какой услуге речь.",
+      directOperatorUrl
+        ? "Нажмите кнопку ниже, чтобы сразу открыть диалог с оператором:"
+        : "Если нужно, отправьте сюда номер телефона или уточнение.",
+      "",
+      "Текст для сообщения оператору:",
+      `<code>${escapeHtml(clientMessageText)}</code>`,
+    ].join("\n"),
     {
       parse_mode: "HTML",
       reply_markup: {
-        inline_keyboard: [[{ text: "🌐 Подробнее на сайте", url: serviceUrl }]],
+        inline_keyboard: clientRows,
       },
     }
   );
