@@ -132,6 +132,19 @@ function pickFirst(...vals) {
   return null;
 }
 
+function hasText(value) {
+  if (value === 0) return true;
+  if (value === true || value === false) return true;
+  if (Array.isArray(value)) return value.length > 0;
+  return String(value ?? "").trim() !== "";
+}
+
+function yesNoValue(value) {
+  if (value === true) return true;
+  const s = String(value ?? "").trim().toLowerCase();
+  return ["true", "yes", "1", "да", "включено", "included"].includes(s);
+}
+
 function ProofLightbox({ image, onClose }) {
   if (!image) return null;
 
@@ -855,6 +868,124 @@ function TextField({ label, value, onChange, placeholder = "", textarea = false,
   );
 }
 
+function ToggleChip({ active, label, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`rounded-full border px-3 py-2 text-sm font-semibold transition ${
+        active
+          ? "border-emerald-300 bg-emerald-50 text-emerald-700"
+          : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+      }`}
+    >
+      {active ? "✓ " : "+ "}
+      {label}
+    </button>
+  );
+}
+
+function getModerationReadiness(form, details, images) {
+  const title = pickFirst(
+    form.title,
+    details.title,
+    details.hotel,
+    details.eventName,
+    details.ticketTitle,
+    details.directionTo
+  );
+  const direction = pickFirst(
+    details.direction,
+    details.directionTo,
+    details.directionCountry,
+    details.location
+  );
+  const dateFrom = pickFirst(
+    details.departureFlightDate,
+    details.departureDate,
+    details.startFlightDate,
+    details.startDate,
+    details.checkInDate,
+    details.eventDate
+  );
+  const price = pickFirst(details.grossPrice, details.gross_price, details.price, form.price);
+  const cover = pickFirst(
+    images?.[0],
+    normalizeImages(details.proofImages)[0],
+    details.image,
+    details.imageUrl,
+    details.cover,
+    details.coverImage,
+    details.photo,
+    details.photoUrl
+  );
+  const providerContact = pickFirst(
+    form.telegram_refused_chat_id,
+    form.telegram_web_chat_id,
+    form.telegram_chat_id
+  );
+  const accommodation = pickFirst(
+    details.hotel,
+    details.eventName,
+    details.accommodation,
+    details.roomCategory
+  );
+
+  return [
+    { key: "title", label: "Название", ok: hasText(title), required: true },
+    { key: "direction", label: "Направление", ok: hasText(direction), required: true },
+    { key: "date", label: "Дата начала", ok: hasText(dateFrom), required: true },
+    { key: "price", label: "Цена Gross", ok: hasText(price), required: true },
+    { key: "photo", label: "Фото", ok: hasText(cover), required: true },
+    { key: "contact", label: "Контакт поставщика", ok: hasText(providerContact), required: true },
+    { key: "accommodation", label: "Отель/размещение", ok: hasText(accommodation), required: false },
+    { key: "food", label: "Питание", ok: hasText(details.food), required: false },
+  ];
+}
+
+function ReadinessChecklist({ items }) {
+  const required = items.filter((item) => item.required);
+  const ready = required.every((item) => item.ok);
+
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-slate-900">Готовность к публикации</div>
+          <div className="text-xs text-slate-500">
+            {ready ? "Можно публиковать" : "Перед публикацией заполните красные пункты"}
+          </div>
+        </div>
+        <span
+          className={`rounded-full px-3 py-1 text-xs font-bold ${
+            ready ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"
+          }`}
+        >
+          {required.filter((item) => item.ok).length}/{required.length}
+        </span>
+      </div>
+
+      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-2">
+        {items.map((item) => (
+          <div
+            key={item.key}
+            className={`rounded-xl border px-3 py-2 text-sm ${
+              item.ok
+                ? "border-emerald-100 bg-emerald-50 text-emerald-800"
+                : item.required
+                ? "border-rose-100 bg-rose-50 text-rose-800"
+                : "border-amber-100 bg-amber-50 text-amber-800"
+            }`}
+          >
+            <span className="font-bold">{item.ok ? "✓" : item.required ? "!" : "?"}</span>{" "}
+            {item.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ModerationPreview({ serviceId, form, details, images }) {
   const title = pickFirst(
     form.title,
@@ -907,6 +1038,11 @@ function ModerationPreview({ serviceId, form, details, images }) {
     details.insurance ? "страховка" : null,
     details.visaIncluded ? "виза" : null,
   ].filter(Boolean);
+  const isRefused = form.category?.includes("refused") || yesNoValue(details.isRefused);
+  const priceAudience = pickFirst(details.priceFor, details.pricePer, details.priceType);
+  const urgencyBadge = pickFirst(details.expiration, details.expiration_at, details.expiration_ts)
+    ? "⚡ срочно"
+    : "⏳ срок не указан";
 
   return (
     <div className="sticky top-4 rounded-2xl border border-slate-200 bg-slate-950 p-4 text-white shadow-xl">
@@ -922,7 +1058,7 @@ function ModerationPreview({ serviceId, form, details, images }) {
         {cover && <img src={cover} alt="" className="h-44 w-full object-cover bg-white" />}
         <div className="space-y-2 p-4 text-sm leading-snug">
           <div className="text-xs text-emerald-700">через @OTKAZNYX_TUROV_UZB_BOT</div>
-          <div className="font-bold">📍 {form.category?.includes("refused") ? "ОТКАЗНОЙ ТУР" : "УСЛУГА"} #{serviceId}</div>
+          <div className="font-bold">📍 {isRefused ? "ОТКАЗНОЙ ТУР" : "УСЛУГА"} #{serviceId}</div>
           <div className="font-semibold">📝 {title}</div>
           {direction && <div>🌎 {direction}</div>}
           {details.directionFrom && <div>🛫 Вылет из: <b>{details.directionFrom}</b></div>}
@@ -935,6 +1071,7 @@ function ModerationPreview({ serviceId, form, details, images }) {
           {grossPrice && (
             <div>
               💵 <b>{fmt(grossPrice)} USD</b>
+              {priceAudience ? <span className="text-xs"> · {priceAudience}</span> : null}
               {netPrice ? <span className="text-xs"> · Netto {fmt(netPrice)}</span> : null}
             </div>
           )}
@@ -947,7 +1084,9 @@ function ModerationPreview({ serviceId, form, details, images }) {
               ))}
             </div>
           )}
-          <div className="pt-2">🔥 отказное · ⚡ срочно</div>
+          <div className="pt-2">
+            {isRefused ? "🔥 отказное" : "🧾 обычная услуга"} · {urgencyBadge}
+          </div>
         </div>
       </div>
 
@@ -1267,6 +1406,10 @@ export default function AdminModeration() {
       );
     }
 
+    if (approveAfter && !publishReady) {
+      return tInfo("Сначала заполните обязательные пункты чеклиста готовности.");
+    }
+
     setEditSaving(true);
     try {
       await axios.put(
@@ -1335,6 +1478,11 @@ export default function AdminModeration() {
       const value = editDetails[key];
       return value !== null && typeof value !== "undefined" && String(value).trim() !== "";
     }) || fallback;
+  const readinessItems = getModerationReadiness(editForm, editDetails, editImages);
+  const publishReady = readinessItems
+    .filter((item) => item.required)
+    .every((item) => item.ok);
+  const toggleDetailBool = (key) => setDetailValue(key, yesNoValue(editDetails[key]) ? "false" : "true");
 
   return (
     <>
@@ -1517,6 +1665,8 @@ export default function AdminModeration() {
                     </div>
                   </div>
                   )}
+                <ReadinessChecklist items={readinessItems} />
+
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">
@@ -1650,6 +1800,29 @@ export default function AdminModeration() {
                 </div>
 
                 <EditSection title="Быстрая правка карточки">
+                  <div className="flex flex-wrap gap-2">
+                    <ToggleChip
+                      active={yesNoValue(editDetails.flightIncluded || editDetails.airTickets || editDetails.aviaTickets)}
+                      label="Авиабилеты включены"
+                      onClick={() => toggleDetailBool(detailKey(["flightIncluded", "airTickets", "aviaTickets"], "flightIncluded"))}
+                    />
+                    <ToggleChip
+                      active={yesNoValue(editDetails.transferIncluded || editDetails.hasTransfer || editDetails.transfer)}
+                      label="Трансфер включён"
+                      onClick={() => toggleDetailBool(detailKey(["transferIncluded", "hasTransfer", "transfer"], "transferIncluded"))}
+                    />
+                    <ToggleChip
+                      active={yesNoValue(editDetails.insurance || editDetails.insuranceIncluded)}
+                      label="Страховка включена"
+                      onClick={() => toggleDetailBool(detailKey(["insurance", "insuranceIncluded"], "insurance"))}
+                    />
+                    <ToggleChip
+                      active={yesNoValue(editDetails.visa || editDetails.visaIncluded)}
+                      label="Виза включена"
+                      onClick={() => toggleDetailBool(detailKey(["visa", "visaIncluded"], "visaIncluded"))}
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <TextField
                       label="Страна / город"
@@ -1723,7 +1896,10 @@ export default function AdminModeration() {
                     <TextField
                       label="За 1 человека"
                       value={formatDetailValue(editDetails.pricePerPerson)}
-                      onChange={(value) => setDetailValue("pricePerPerson", value)}
+                      onChange={(value) => {
+                        setDetailValue("pricePerPerson", value);
+                        setDetailValue("priceFor", value ? "за 1 человека" : "");
+                      }}
                       placeholder="1425 USD"
                     />
                   </div>
@@ -1912,8 +2088,9 @@ export default function AdminModeration() {
                 <button
                   type="button"
                   onClick={() => saveEdit({ approveAfter: true })}
-                  disabled={editSaving || editLoading}
+                  disabled={editSaving || editLoading || !publishReady}
                   className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                  title={!publishReady ? "Заполните обязательные пункты чеклиста" : ""}
                 >
                   {editSaving
                     ? t("common.saving", { defaultValue: "Сохранение..." })
