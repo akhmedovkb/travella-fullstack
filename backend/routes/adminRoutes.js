@@ -14,7 +14,11 @@ const {
 } = require("../utils/telegram");
 
 const { broadcastApprovedService } = require("../utils/serviceApprovalBroadcast");
-const { logServiceModerationEvent, listServiceModerationEvents } = require("../utils/serviceModerationEvents");
+const {
+  ensureServiceModerationEvents,
+  logServiceModerationEvent,
+  listServiceModerationEvents,
+} = require("../utils/serviceModerationEvents");
 
 function phoneToDigits(phone) {
   return String(phone || "").replace(/\D/g, "");
@@ -24,10 +28,26 @@ function phoneToDigits(phone) {
 
 // /api/admin/services/pending
 router.get("/services/pending", authenticateToken, requireAdmin, async (req, res) => {
+  await ensureServiceModerationEvents(pool);
   const q = await pool.query(
-    `SELECT s.*, p.name AS provider_name, p.type AS provider_type
+    `SELECT
+        s.*,
+        p.name AS provider_name,
+        p.type AS provider_type,
+        ev.action AS last_moderation_action,
+        ev.reason_code AS last_moderation_reason_code,
+        ev.reason AS last_moderation_reason,
+        ev.created_at AS last_moderation_at,
+        ev.actor_id AS last_moderation_actor_id
        FROM services s
        JOIN providers p ON p.id = s.provider_id
+       LEFT JOIN LATERAL (
+         SELECT action, reason_code, reason, created_at, actor_id
+           FROM service_moderation_events
+          WHERE service_id = s.id
+          ORDER BY created_at DESC
+          LIMIT 1
+       ) ev ON TRUE
       WHERE COALESCE(s.moderation_status, s.status) = 'pending' AND s.deleted_at IS NULL
       ORDER BY s.submitted_at ASC NULLS LAST, s.updated_at DESC`
   );
@@ -36,10 +56,26 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
 
 // /api/admin/services/rejected
 router.get("/services/rejected", authenticateToken, requireAdmin, async (req, res) => {
+  await ensureServiceModerationEvents(pool);
   const q = await pool.query(
-    `SELECT s.*, p.name AS provider_name, p.type AS provider_type
+    `SELECT
+        s.*,
+        p.name AS provider_name,
+        p.type AS provider_type,
+        ev.action AS last_moderation_action,
+        ev.reason_code AS last_moderation_reason_code,
+        ev.reason AS last_moderation_reason,
+        ev.created_at AS last_moderation_at,
+        ev.actor_id AS last_moderation_actor_id
        FROM services s
        JOIN providers p ON p.id = s.provider_id
+       LEFT JOIN LATERAL (
+         SELECT action, reason_code, reason, created_at, actor_id
+           FROM service_moderation_events
+          WHERE service_id = s.id
+          ORDER BY created_at DESC
+          LIMIT 1
+       ) ev ON TRUE
       WHERE COALESCE(s.moderation_status, s.status) = 'rejected' AND s.deleted_at IS NULL
       ORDER BY COALESCE(s.rejected_at, s.updated_at) DESC`
   );

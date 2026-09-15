@@ -887,6 +887,37 @@ function Card({
         </div>
       )}
 
+      {s.last_moderation_action && (
+        <div
+          className={`mt-3 rounded-xl border p-2 text-xs ${
+            cardAnalysis.hasCorrectionHistory
+              ? "border-cyan-200 bg-cyan-50 text-cyan-800"
+              : String(s.last_moderation_action).toLowerCase() === "rejected"
+              ? "border-rose-200 bg-rose-50 text-rose-800"
+              : "border-slate-200 bg-slate-50 text-slate-700"
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <span className="font-bold">
+              {cardAnalysis.hasCorrectionHistory
+                ? "Вернулась после исправления"
+                : moderationActionLabel(s.last_moderation_action)}
+            </span>
+            {s.last_moderation_at && (
+              <span className="opacity-75">{formatDt(s.last_moderation_at)}</span>
+            )}
+          </div>
+          {s.last_moderation_reason_code && (
+            <div className="mt-1 font-semibold">{s.last_moderation_reason_code}</div>
+          )}
+          {s.last_moderation_reason && (
+            <div className="mt-1 max-h-10 overflow-hidden opacity-90">
+              {s.last_moderation_reason}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-2">
         <div className="mb-2 flex items-center justify-between gap-2">
           <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -1179,10 +1210,14 @@ function analyzeModerationService(svc = {}) {
   const blockingIssues = dangerIssues.filter((issue) => issue.blocking);
   const warningIssues = dangerIssues.filter((issue) => !issue.blocking);
   const ready = missingRequired.length === 0 && blockingIssues.length === 0;
+  const hasCorrectionHistory =
+    String(svc.last_moderation_action || "").toLowerCase() === "rejected" &&
+    String(svc.status || svc.moderation_status || "").toLowerCase() !== "rejected";
   const priority =
     (blockingIssues.length ? 100 : 0) +
     missingRequired.length * 12 +
     warningIssues.length * 3 +
+    (hasCorrectionHistory ? 8 : 0) +
     (svc.status === "rejected" ? 1 : 0);
 
   return {
@@ -1195,8 +1230,17 @@ function analyzeModerationService(svc = {}) {
     blockingIssues,
     warningIssues,
     ready,
+    hasCorrectionHistory,
     priority,
   };
+}
+
+function moderationActionLabel(action) {
+  const normalized = String(action || "").toLowerCase();
+  if (normalized === "approved") return "Одобрено";
+  if (normalized === "rejected") return "Запрошено исправление";
+  if (normalized === "unpublished") return "Снято";
+  return action || "";
 }
 
 function getQueueMetrics(items = []) {
@@ -1206,6 +1250,7 @@ function getQueueMetrics(items = []) {
       acc.total += 1;
       if (analysis.ready) acc.ready += 1;
       if (!analysis.ready) acc.needFix += 1;
+      if (analysis.hasCorrectionHistory) acc.afterCorrection += 1;
       if (analysis.dangerIssues.some((x) => x.key === "no-proof")) acc.noProof += 1;
       if (analysis.dangerIssues.some((x) => x.key === "no-photo")) acc.noPhoto += 1;
       if (analysis.dangerIssues.some((x) => x.key === "no-contact")) acc.noContact += 1;
@@ -1217,6 +1262,7 @@ function getQueueMetrics(items = []) {
       total: 0,
       ready: 0,
       needFix: 0,
+      afterCorrection: 0,
       noProof: 0,
       noPhoto: 0,
       noContact: 0,
@@ -1231,6 +1277,7 @@ function matchesQueueFilter(svc, filter) {
   const analysis = analyzeModerationService(svc);
   if (filter === "ready") return analysis.ready;
   if (filter === "needFix") return !analysis.ready;
+  if (filter === "afterCorrection") return analysis.hasCorrectionHistory;
   return analysis.dangerIssues.some((issue) => issue.key === filter);
 }
 
@@ -1240,6 +1287,7 @@ function QueuePanel({ items, filter, onFilterChange }) {
     { key: "all", label: "Все", count: metrics.total, tone: "slate" },
     { key: "ready", label: "Готовы", count: metrics.ready, tone: "emerald" },
     { key: "needFix", label: "Нужно исправить", count: metrics.needFix, tone: "rose" },
+    { key: "afterCorrection", label: "После исправления", count: metrics.afterCorrection, tone: "cyan" },
     { key: "no-proof", label: "Нет proof", count: metrics.noProof, tone: "amber" },
     { key: "no-photo", label: "Нет фото", count: metrics.noPhoto, tone: "violet" },
     { key: "no-contact", label: "Нет контакта", count: metrics.noContact, tone: "pink" },
@@ -1255,6 +1303,7 @@ function QueuePanel({ items, filter, onFilterChange }) {
     pink: "border-pink-200 bg-pink-50 text-pink-800",
     orange: "border-orange-200 bg-orange-50 text-orange-800",
     blue: "border-blue-200 bg-blue-50 text-blue-800",
+    cyan: "border-cyan-200 bg-cyan-50 text-cyan-800",
   };
 
   return (
