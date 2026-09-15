@@ -1130,6 +1130,51 @@ function DangerIssuesPanel({ issues }) {
   );
 }
 
+function buildCorrectionReason(readinessItems, dangerIssues) {
+  const missingRequired = readinessItems
+    .filter((item) => item.required && !item.ok)
+    .map((item) => item.label.toLowerCase());
+  const lines = ["Пожалуйста, исправьте карточку и отправьте её на модерацию повторно."];
+
+  if (missingRequired.length) {
+    lines.push(`Заполните обязательные поля: ${missingRequired.join(", ")}.`);
+  }
+
+  for (const issue of dangerIssues) {
+    if (issue.key === "gross-below-net") {
+      lines.push("Проверьте цену: Gross не должен быть ниже Netto.");
+    } else if (issue.key === "past-date") {
+      lines.push("Проверьте даты: дата начала уже прошла.");
+    } else if (issue.key === "no-contact") {
+      lines.push("Укажите Telegram контакт поставщика, чтобы клиент мог связаться.");
+    } else if (issue.key === "no-photo") {
+      lines.push("Добавьте фото для карточки.");
+    } else if (issue.key === "no-proof") {
+      lines.push("Добавьте proof/подтверждение подлинности предложения.");
+    }
+  }
+
+  if (lines.length === 1) {
+    lines.push("Уточните данные предложения: цену, даты, фото и подтверждение подлинности.");
+  }
+
+  return Array.from(new Set(lines)).join("\n");
+}
+
+function correctionReasonCode(readinessItems, dangerIssues) {
+  if (dangerIssues.some((issue) => issue.key === "no-proof")) return "NO_PROOF";
+  if (dangerIssues.some((issue) => issue.key === "gross-below-net")) return "BAD_PRICE";
+  if (
+    dangerIssues.some((issue) => issue.key === "past-date") ||
+    readinessItems.some((item) => item.key === "date" && item.required && !item.ok)
+  ) {
+    return "NO_DATES";
+  }
+  if (dangerIssues.some((issue) => issue.key === "no-photo")) return "MISSING_DETAILS";
+  if (dangerIssues.some((issue) => issue.key === "no-contact")) return "MISSING_DETAILS";
+  return "OTHER";
+}
+
 function ReadinessChecklist({ items }) {
   const required = items.filter((item) => item.required);
   const ready = required.every((item) => item.ok);
@@ -1576,10 +1621,12 @@ export default function AdminModeration() {
     }
   };
 
-  const openReject = (svc) => {
-    const first = REJECT_REASON_OPTIONS[0];
+  const openReject = (svc, reason = "", reasonCode = "") => {
+    const first =
+      REJECT_REASON_OPTIONS.find((x) => x.code === reasonCode) ||
+      REJECT_REASON_OPTIONS[0];
     setRejectTarget(svc);
-    setRejectForm({ reasonCode: first.code, reason: first.text });
+    setRejectForm({ reasonCode: first.code, reason: reason || first.text });
   };
 
   const changeRejectReasonCode = (code) => {
@@ -1605,6 +1652,10 @@ export default function AdminModeration() {
       );
       tSuccess(t("moderation.rejected", { defaultValue: "Отклонено" }));
       setRejectTarget(null);
+      setEditOpen(false);
+      setTelegramPreviewOpen(false);
+      setEditItemId(null);
+      setModerationEvents([]);
       setItems((prev) => prev.filter((x) => x.id !== id));
       setCounts((c) => ({
         ...c,
@@ -1834,6 +1885,20 @@ export default function AdminModeration() {
     setDetailValue("priceFor", "за 1 человека");
     setDetailValue("persons", String(perPersonSuggestion.people));
   };
+  const openCorrectionFromEdit = () => {
+    if (!editItemId) return;
+    const reason = buildCorrectionReason(readinessItems, dangerIssues);
+    const reasonCode = correctionReasonCode(readinessItems, dangerIssues);
+    openReject(
+      {
+        id: editItemId,
+        title: pickFirst(editForm.title, editDetails.title, editDetails.hotel, editDetails.eventName),
+        category: editForm.category,
+      },
+      reason,
+      reasonCode
+    );
+  };
 
   return (
     <>
@@ -1932,6 +1997,22 @@ export default function AdminModeration() {
                   <label className="block text-sm font-semibold text-gray-700 mb-1">
                     {t("moderation.reject_reason_type", { defaultValue: "Тип причины" })}
                   </label>
+                  <div className="mb-2 flex flex-wrap gap-2">
+                    {REJECT_REASON_OPTIONS.slice(0, 6).map((opt) => (
+                      <button
+                        key={`quick-${opt.code}`}
+                        type="button"
+                        onClick={() => changeRejectReasonCode(opt.code)}
+                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
+                          rejectForm.reasonCode === opt.code
+                            ? "border-rose-300 bg-rose-50 text-rose-700"
+                            : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                   <select
                     value={rejectForm.reasonCode}
                     onChange={(e) => changeRejectReasonCode(e.target.value)}
@@ -2461,6 +2542,14 @@ export default function AdminModeration() {
                   className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-black"
                 >
                   Предпросмотр Telegram
+                </button>
+                <button
+                  type="button"
+                  onClick={openCorrectionFromEdit}
+                  disabled={editSaving || editLoading || actionBusy === editItemId}
+                  className="px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60"
+                >
+                  Запросить исправление
                 </button>
                 <button
                   type="button"
