@@ -145,6 +145,87 @@ function yesNoValue(value) {
   return ["true", "yes", "1", "да", "включено", "included"].includes(s);
 }
 
+function parseMoneyValue(value) {
+  if (value === null || typeof value === "undefined") return null;
+  const raw = String(value)
+    .replace(/\s+/g, "")
+    .replace(/[^\d,.-]/g, "")
+    .replace(",", ".");
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parsePositiveInt(value) {
+  const n = Number.parseInt(String(value ?? "").replace(/[^\d-]/g, ""), 10);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+function inferPeopleCount(details) {
+  const adt = parsePositiveInt(details.adt || details.adults || details.accommodationADT);
+  const chd = parsePositiveInt(details.chd || details.children || details.accommodationCHD);
+  const inf = parsePositiveInt(details.inf || details.infants || details.accommodationINF);
+  const compositionCount = adt + chd + inf;
+  if (compositionCount > 0) return compositionCount;
+
+  const explicit = parsePositiveInt(
+    pickFirst(
+      details.peopleCount,
+      details.persons,
+      details.people,
+      details.guests,
+      details.pax,
+      details.travellers,
+      details.travelers,
+      details.passengersCount
+    )
+  );
+  if (explicit > 0) return explicit;
+
+  const accommodation = String(
+    pickFirst(details.accommodation, details.roomCategory, details.accommodationCategory, "") || ""
+  ).toUpperCase();
+  const adultMatches = accommodation.match(/\b(\d+)\s*(ADT|ADL|ADULT)\b/g) || [];
+  const childMatches = accommodation.match(/\b(\d+)\s*(CHD|CHILD)\b/g) || [];
+  const infantMatches = accommodation.match(/\b(\d+)\s*(INF|INFANT)\b/g) || [];
+  const tokenCount = [...adultMatches, ...childMatches, ...infantMatches].reduce((sum, token) => {
+    const n = parsePositiveInt(token);
+    return sum + n;
+  }, 0);
+  if (tokenCount > 0) return tokenCount;
+
+  if (/\bSGL\b/.test(accommodation)) return 1;
+  if (/\bDBL\b|\bTWIN\b/.test(accommodation)) return 2;
+  if (/\bTRPL\b/.test(accommodation)) return 3;
+  return 0;
+}
+
+function calculatePerPersonPrice(details, formPrice) {
+  const gross = parseMoneyValue(pickFirst(details.grossPrice, details.gross_price, details.price, formPrice));
+  const people = inferPeopleCount(details);
+  if (!gross || people <= 1) return null;
+  return {
+    amount: Math.round((gross / people) * 100) / 100,
+    people,
+  };
+}
+
+function parseDateValue(value) {
+  if (!value) return null;
+  const raw = String(value).trim();
+  const isoLike = raw.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/);
+  if (isoLike) {
+    const d = new Date(Number(isoLike[1]), Number(isoLike[2]) - 1, Number(isoLike[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const ruLike = raw.match(/(\d{1,2})[-/.](\d{1,2})[-/.](\d{4})/);
+  if (ruLike) {
+    const d = new Date(Number(ruLike[3]), Number(ruLike[2]) - 1, Number(ruLike[1]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function ProofLightbox({ image, onClose }) {
   if (!image) return null;
 
@@ -943,6 +1024,112 @@ function getModerationReadiness(form, details, images) {
   ];
 }
 
+function getDangerIssues(form, details, images) {
+  const issues = [];
+  const gross = parseMoneyValue(pickFirst(details.grossPrice, details.gross_price, details.price, form.price));
+  const net = parseMoneyValue(pickFirst(details.netPrice, details.net_price, details.priceNet, details.price_net));
+  const dateFromRaw = pickFirst(
+    details.departureFlightDate,
+    details.departureDate,
+    details.startFlightDate,
+    details.startDate,
+    details.checkInDate,
+    details.eventDate
+  );
+  const dateFrom = parseDateValue(dateFromRaw);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const proofImages = normalizeImages(details.proofImages);
+  const hasProof = proofImages.length > 0 || hasText(details.telegramProofFileId) || hasText(details.proofUrl);
+  const hasPhoto = normalizeImages(images).length > 0 || hasText(details.image) || hasText(details.imageUrl);
+  const hasProviderContact = hasText(
+    pickFirst(form.telegram_refused_chat_id, form.telegram_web_chat_id, form.telegram_chat_id)
+  );
+
+  if (gross != null && net != null && gross < net) {
+    issues.push({
+      key: "gross-below-net",
+      title: "Gross ниже Netto",
+      text: `Gross ${fmt(gross)} меньше Netto ${fmt(net)}. Проверьте цену перед публикацией.`,
+      blocking: true,
+    });
+  }
+
+  if (dateFrom && dateFrom < today) {
+    issues.push({
+      key: "past-date",
+      title: "Дата уже прошла",
+      text: `Дата начала ${dateFromRaw} уже в прошлом.`,
+      blocking: true,
+    });
+  }
+
+  if (!hasProviderContact) {
+    issues.push({
+      key: "no-contact",
+      title: "Нет Telegram контакта поставщика",
+      text: "Клиент не сможет быстро связаться с поставщиком.",
+      blocking: true,
+    });
+  }
+
+  if (!hasPhoto) {
+    issues.push({
+      key: "no-photo",
+      title: "Нет фото карточки",
+      text: "Карточка будет выглядеть слабее в канале и на сайте.",
+      blocking: true,
+    });
+  }
+
+  if (!hasProof) {
+    issues.push({
+      key: "no-proof",
+      title: "Нет proof",
+      text: "Нет подтверждения подлинности. Можно сохранить, но публиковать рискованно.",
+      blocking: false,
+    });
+  }
+
+  return issues;
+}
+
+function DangerIssuesPanel({ issues }) {
+  if (!issues.length) {
+    return (
+      <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
+        <b>Опасных ошибок нет.</b> Можно переходить к публикации после проверки текста.
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+      <div className="text-sm font-bold text-rose-900">Опасные ошибки</div>
+      <div className="mt-1 text-xs text-rose-700">
+        Красные пункты блокируют “Сохранить и опубликовать”.
+      </div>
+      <div className="mt-3 space-y-2">
+        {issues.map((issue) => (
+          <div
+            key={issue.key}
+            className={`rounded-xl border px-3 py-2 text-sm ${
+              issue.blocking
+                ? "border-rose-200 bg-white text-rose-900"
+                : "border-amber-200 bg-amber-50 text-amber-900"
+            }`}
+          >
+            <div className="font-bold">
+              {issue.blocking ? "!" : "?"} {issue.title}
+            </div>
+            <div className="mt-0.5 text-xs opacity-80">{issue.text}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function ReadinessChecklist({ items }) {
   const required = items.filter((item) => item.required);
   const ready = required.every((item) => item.ok);
@@ -1479,10 +1666,19 @@ export default function AdminModeration() {
       return value !== null && typeof value !== "undefined" && String(value).trim() !== "";
     }) || fallback;
   const readinessItems = getModerationReadiness(editForm, editDetails, editImages);
+  const dangerIssues = getDangerIssues(editForm, editDetails, editImages);
+  const blockingIssues = dangerIssues.filter((issue) => issue.blocking);
+  const perPersonSuggestion = calculatePerPersonPrice(editDetails, editForm.price);
   const publishReady = readinessItems
     .filter((item) => item.required)
-    .every((item) => item.ok);
+    .every((item) => item.ok) && blockingIssues.length === 0;
   const toggleDetailBool = (key) => setDetailValue(key, yesNoValue(editDetails[key]) ? "false" : "true");
+  const applyPerPersonSuggestion = () => {
+    if (!perPersonSuggestion) return;
+    setDetailValue("pricePerPerson", `${fmt(perPersonSuggestion.amount)} USD`);
+    setDetailValue("priceFor", "за 1 человека");
+    setDetailValue("persons", String(perPersonSuggestion.people));
+  };
 
   return (
     <>
@@ -1666,6 +1862,7 @@ export default function AdminModeration() {
                   </div>
                   )}
                 <ReadinessChecklist items={readinessItems} />
+                <DangerIssuesPanel issues={dangerIssues} />
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
@@ -1903,6 +2100,24 @@ export default function AdminModeration() {
                       placeholder="1425 USD"
                     />
                   </div>
+
+                  {perPersonSuggestion && (
+                    <div className="rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+                      <div className="font-semibold">
+                        Автосчёт: {fmt(perPersonSuggestion.amount)} USD за 1 человека
+                      </div>
+                      <div className="mt-1 text-xs text-blue-700">
+                        Gross разделён на {perPersonSuggestion.people} туристов.
+                      </div>
+                      <button
+                        type="button"
+                        onClick={applyPerPersonSuggestion}
+                        className="mt-2 rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-blue-700"
+                      >
+                        Поставить в поле
+                      </button>
+                    </div>
+                  )}
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <TextField
