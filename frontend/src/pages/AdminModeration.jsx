@@ -260,10 +260,12 @@ function ProofLightbox({ image, onClose }) {
 function Card({
   item,
   tab,
+  analysis,
   onEdit,
   onApprove,
   onReject,
   onRejectClick,
+  onCorrectionClick,
   onUnpublish,
   actionBusy,
   t,
@@ -274,6 +276,17 @@ function Card({
   const images = normalizeImages(s.images);
   const proofImages = normalizeImages(d.proofImages);
   const hasProof = proofImages.length > 0;
+  const cardAnalysis = analysis || analyzeModerationService(s);
+  const topIssues = [
+    ...cardAnalysis.blockingIssues,
+    ...cardAnalysis.missingRequired.map((item) => ({
+      key: `missing-${item.key}`,
+      title: `Нет: ${item.label}`,
+      text: "",
+      blocking: true,
+    })),
+    ...cardAnalysis.warningIssues,
+  ].slice(0, 4);
 
   const cover = pickFirst(
     images[0],
@@ -874,7 +887,44 @@ function Card({
         </div>
       )}
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-2">
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
+            Статус проверки
+          </span>
+          <span
+            className={`rounded-full px-2 py-1 text-[11px] font-bold ${
+              cardAnalysis.ready
+                ? "bg-emerald-100 text-emerald-700"
+                : "bg-rose-100 text-rose-700"
+            }`}
+          >
+            {cardAnalysis.ready ? "Готово" : "Нужна правка"}
+          </span>
+        </div>
+        {topIssues.length ? (
+          <div className="flex flex-wrap gap-1.5">
+            {topIssues.map((issue) => (
+              <span
+                key={issue.key}
+                className={`rounded-full px-2 py-1 text-[11px] font-semibold ${
+                  issue.blocking
+                    ? "bg-rose-100 text-rose-700"
+                    : "bg-amber-100 text-amber-700"
+                }`}
+              >
+                {issue.title}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="text-xs text-emerald-700">
+            Обязательные поля заполнены, опасных ошибок нет.
+          </div>
+        )}
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => onEdit(s.id)}
@@ -899,11 +949,17 @@ function Card({
         {tab === "pending" && (
           <button
             type="button"
-            onClick={() => (onRejectClick ? onRejectClick(s) : onReject(s.id, "Нужно исправить данные услуги"))}
+            onClick={() =>
+              onCorrectionClick
+                ? onCorrectionClick(s, cardAnalysis)
+                : onRejectClick
+                ? onRejectClick(s)
+                : onReject(s.id, "Нужно исправить данные услуги")
+            }
             disabled={actionBusy === s.id}
             className="px-3 py-1.5 rounded bg-rose-600 text-white text-sm hover:bg-rose-700 disabled:opacity-60"
           >
-            {t("moderation.reject", { defaultValue: "Reject" })}
+            Запросить исправление
           </button>
         )}
 
@@ -1092,6 +1148,150 @@ function getDangerIssues(form, details, images) {
   }
 
   return issues;
+}
+
+function editFormFromService(svc = {}) {
+  const provider = svc.provider || {};
+  return {
+    title: svc.title || "",
+    description: svc.description || "",
+    category: svc.category || "",
+    price: svc.price ?? "",
+    vehicle_model: svc.vehicle_model || "",
+    telegram_refused_chat_id:
+      svc.telegram_refused_chat_id ||
+      provider.telegram_refused_chat_id ||
+      provider.telegram_chat_id ||
+      "",
+    telegram_web_chat_id:
+      svc.telegram_web_chat_id || provider.telegram_web_chat_id || "",
+    telegram_chat_id: svc.telegram_chat_id || provider.telegram_chat_id || "",
+  };
+}
+
+function analyzeModerationService(svc = {}) {
+  const details = normalizeDetails(svc.details);
+  const images = normalizeImages(svc.images);
+  const form = editFormFromService(svc);
+  const readinessItems = getModerationReadiness(form, details, images);
+  const dangerIssues = getDangerIssues(form, details, images);
+  const missingRequired = readinessItems.filter((item) => item.required && !item.ok);
+  const blockingIssues = dangerIssues.filter((issue) => issue.blocking);
+  const warningIssues = dangerIssues.filter((issue) => !issue.blocking);
+  const ready = missingRequired.length === 0 && blockingIssues.length === 0;
+  const priority =
+    (blockingIssues.length ? 100 : 0) +
+    missingRequired.length * 12 +
+    warningIssues.length * 3 +
+    (svc.status === "rejected" ? 1 : 0);
+
+  return {
+    form,
+    details,
+    images,
+    readinessItems,
+    dangerIssues,
+    missingRequired,
+    blockingIssues,
+    warningIssues,
+    ready,
+    priority,
+  };
+}
+
+function getQueueMetrics(items = []) {
+  return items.reduce(
+    (acc, svc) => {
+      const analysis = analyzeModerationService(svc);
+      acc.total += 1;
+      if (analysis.ready) acc.ready += 1;
+      if (!analysis.ready) acc.needFix += 1;
+      if (analysis.dangerIssues.some((x) => x.key === "no-proof")) acc.noProof += 1;
+      if (analysis.dangerIssues.some((x) => x.key === "no-photo")) acc.noPhoto += 1;
+      if (analysis.dangerIssues.some((x) => x.key === "no-contact")) acc.noContact += 1;
+      if (analysis.dangerIssues.some((x) => x.key === "gross-below-net")) acc.badPrice += 1;
+      if (analysis.dangerIssues.some((x) => x.key === "past-date")) acc.pastDate += 1;
+      return acc;
+    },
+    {
+      total: 0,
+      ready: 0,
+      needFix: 0,
+      noProof: 0,
+      noPhoto: 0,
+      noContact: 0,
+      badPrice: 0,
+      pastDate: 0,
+    }
+  );
+}
+
+function matchesQueueFilter(svc, filter) {
+  if (filter === "all") return true;
+  const analysis = analyzeModerationService(svc);
+  if (filter === "ready") return analysis.ready;
+  if (filter === "needFix") return !analysis.ready;
+  return analysis.dangerIssues.some((issue) => issue.key === filter);
+}
+
+function QueuePanel({ items, filter, onFilterChange }) {
+  const metrics = getQueueMetrics(items);
+  const filters = [
+    { key: "all", label: "Все", count: metrics.total, tone: "slate" },
+    { key: "ready", label: "Готовы", count: metrics.ready, tone: "emerald" },
+    { key: "needFix", label: "Нужно исправить", count: metrics.needFix, tone: "rose" },
+    { key: "no-proof", label: "Нет proof", count: metrics.noProof, tone: "amber" },
+    { key: "no-photo", label: "Нет фото", count: metrics.noPhoto, tone: "violet" },
+    { key: "no-contact", label: "Нет контакта", count: metrics.noContact, tone: "pink" },
+    { key: "gross-below-net", label: "Цена", count: metrics.badPrice, tone: "orange" },
+    { key: "past-date", label: "Даты прошли", count: metrics.pastDate, tone: "blue" },
+  ];
+  const toneClass = {
+    slate: "border-slate-200 bg-slate-50 text-slate-800",
+    emerald: "border-emerald-200 bg-emerald-50 text-emerald-800",
+    rose: "border-rose-200 bg-rose-50 text-rose-800",
+    amber: "border-amber-200 bg-amber-50 text-amber-800",
+    violet: "border-violet-200 bg-violet-50 text-violet-800",
+    pink: "border-pink-200 bg-pink-50 text-pink-800",
+    orange: "border-orange-200 bg-orange-50 text-orange-800",
+    blue: "border-blue-200 bg-blue-50 text-blue-800",
+  };
+
+  return (
+    <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <div className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            Рабочая очередь
+          </div>
+          <div className="text-lg font-semibold text-slate-950">
+            Сначала карточки с ошибками, потом готовые к публикации
+          </div>
+        </div>
+        <div className="text-sm text-slate-500">
+          {metrics.ready} готовы · {metrics.needFix} требуют правки
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
+        {filters.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onFilterChange(item.key)}
+            className={`rounded-2xl border px-3 py-3 text-left transition ${
+              filter === item.key
+                ? "border-slate-950 bg-slate-950 text-white"
+                : toneClass[item.tone]
+            }`}
+          >
+            <div className="text-2xl font-bold leading-none">{item.count}</div>
+            <div className="mt-1 text-xs font-semibold leading-tight">{item.label}</div>
+          </button>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function DangerIssuesPanel({ issues }) {
@@ -1525,6 +1725,7 @@ export default function AdminModeration() {
   const [moderationEvents, setModerationEvents] = useState([]);
   const [actionBusy, setActionBusy] = useState(null);
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
+  const [queueFilter, setQueueFilter] = useState("all");
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -1599,6 +1800,7 @@ export default function AdminModeration() {
 
   useEffect(() => {
     load(tab);
+    setQueueFilter("all");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -1899,6 +2101,28 @@ export default function AdminModeration() {
       reasonCode
     );
   };
+  const openCorrectionFromCard = (svc, analysis) => {
+    const currentAnalysis = analysis || analyzeModerationService(svc);
+    const reason = buildCorrectionReason(
+      currentAnalysis.readinessItems,
+      currentAnalysis.dangerIssues
+    );
+    const reasonCode = correctionReasonCode(
+      currentAnalysis.readinessItems,
+      currentAnalysis.dangerIssues
+    );
+    openReject(svc, reason, reasonCode);
+  };
+  const displayedItems = items
+    .filter((it) => matchesQueueFilter(it, queueFilter))
+    .sort((a, b) => {
+      const aa = analyzeModerationService(a);
+      const bb = analyzeModerationService(b);
+      if (bb.priority !== aa.priority) return bb.priority - aa.priority;
+      const at = new Date(a.created_at || a.submitted_at || a.updated_at || 0).getTime();
+      const bt = new Date(b.created_at || b.submitted_at || b.updated_at || 0).getTime();
+      return bt - at;
+    });
 
   return (
     <>
@@ -1948,6 +2172,14 @@ export default function AdminModeration() {
           </button>
         </div>
 
+        {!loading && items.length > 0 && (
+          <QueuePanel
+            items={items}
+            filter={queueFilter}
+            onFilterChange={setQueueFilter}
+          />
+        )}
+
         {loading ? (
           <div className="text-gray-600">
             {t("common.loading", { defaultValue: "Загрузка…" })}
@@ -1956,23 +2188,32 @@ export default function AdminModeration() {
           <div className="text-gray-600">
             {t("moderation.empty", { defaultValue: "Нет элементов" })}
           </div>
+        ) : displayedItems.length === 0 ? (
+          <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
+            По выбранному фильтру карточек нет.
+          </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            {items.map((it) => (
+            {displayedItems.map((it) => {
+              const analysis = analyzeModerationService(it);
+              return (
               <Card
                 key={it.id}
                 item={it}
                 tab={tab}
+                analysis={analysis}
                 onEdit={openEdit}
                 onApprove={approve}
                 onReject={reject}
                 onRejectClick={openReject}
+                onCorrectionClick={openCorrectionFromCard}
                 onUnpublish={unpublish}
                 actionBusy={actionBusy}
                 onOpenProof={setProofViewer}
                 t={t}
               />
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
