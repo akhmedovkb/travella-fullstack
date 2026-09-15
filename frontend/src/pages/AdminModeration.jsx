@@ -1173,6 +1173,159 @@ function ReadinessChecklist({ items }) {
   );
 }
 
+function buildTelegramPreview(serviceId, form, details, images) {
+  const title = pickFirst(
+    form.title,
+    details.title,
+    details.hotel,
+    details.eventName,
+    details.ticketTitle,
+    details.directionTo,
+    "Без названия"
+  );
+  const direction = pickFirst(
+    details.direction,
+    details.directionTo,
+    details.directionCountry,
+    details.location
+  );
+  const from = pickFirst(details.directionFrom, details.fromCity, details.departureCity);
+  const hotel = pickFirst(details.hotel, details.eventName, details.accommodation);
+  const room = pickFirst(details.roomCategory, details.accommodationCategory, details.accommodation);
+  const dateFrom = pickFirst(
+    details.departureFlightDate,
+    details.departureDate,
+    details.startFlightDate,
+    details.startDate,
+    details.checkInDate,
+    details.eventDate
+  );
+  const dateTo = pickFirst(
+    details.returnFlightDate,
+    details.endFlightDate,
+    details.endDate,
+    details.checkOutDate
+  );
+  const nights = pickFirst(details.nights, details.nightsCount);
+  const grossPrice = pickFirst(details.grossPrice, details.gross_price, details.price, form.price);
+  const netPrice = pickFirst(details.netPrice, details.net_price, details.priceNet, details.price_net);
+  const priceFor = pickFirst(details.priceFor, details.pricePer, details.priceType);
+  const perPerson = pickFirst(details.pricePerPerson);
+  const isRefused = form.category?.includes("refused") || yesNoValue(details.isRefused);
+  const proofImages = normalizeImages(details.proofImages);
+  const photos = normalizeImages(images);
+  const hasPhoto = photos.length > 0 || hasText(details.image) || hasText(details.imageUrl);
+  const included = [
+    yesNoValue(details.flightIncluded || details.airTickets || details.aviaTickets) ? "авиабилеты" : null,
+    hotel ? "проживание" : null,
+    details.food ? `питание ${details.food}` : null,
+    yesNoValue(details.transferIncluded || details.hasTransfer || details.transfer) ? "трансфер" : null,
+    yesNoValue(details.insurance || details.insuranceIncluded) ? "страховка" : null,
+    yesNoValue(details.visa || details.visaIncluded) ? "виза" : null,
+  ].filter(Boolean);
+  const flightDetails = pickFirst(details.flightDetails, details.flight_details, details.flight_info);
+  const providerName = pickFirst(form.provider_name, details.providerName, details.supplierName);
+  const contactVisible = hasText(pickFirst(form.telegram_refused_chat_id, form.telegram_web_chat_id, form.telegram_chat_id));
+
+  const lines = [
+    "через @OTKAZNYX_TUROV_UZB_BOT",
+    `📍 ${isRefused ? "ОТКАЗНОЙ ТУР" : "УСЛУГА"} #${serviceId || ""}`.trim(),
+    `📝 ${title}`,
+    direction ? `🌎 ${direction}` : null,
+    from ? `🛫 Вылет из: ${from}` : null,
+    hotel ? `🏨 ${hotel}` : null,
+    (dateFrom || dateTo || nights || room)
+      ? `📅 ${dateFrom || "—"}${dateTo ? ` → ${dateTo}` : ""}${nights ? ` · ${nights} ноч.` : ""}${room ? ` · ${room}` : ""}`
+      : null,
+    grossPrice ? `💵 ${fmt(grossPrice)} USD${priceFor ? ` ${priceFor}` : ""}` : null,
+    perPerson ? `👤 за 1 человека: ${perPerson}` : null,
+    netPrice ? `Netto: ${fmt(netPrice)} USD` : null,
+    included.length ? ["", "✅ Включено:", ...included.map((item) => `• ${item}`)].join("\n") : null,
+    flightDetails ? ["", "ℹ️ Детали рейса:", String(flightDetails)].join("\n") : null,
+    "",
+    `${isRefused ? "🔥 отказное" : "🧾 обычная услуга"} · ${
+      pickFirst(details.expiration, details.expiration_at, details.expiration_ts) ? "⚡ срочно" : "⏳ срок не указан"
+    }`,
+    "",
+    contactVisible
+      ? providerName
+        ? `🤝 ${providerName}`
+        : "🤝 Контакт поставщика будет доступен"
+      : "🔒 Контакты откроются после оплаты.",
+    hasPhoto ? null : "⚠️ Фото не прикреплено.",
+    proofImages.length ? null : "⚠️ Proof не прикреплён.",
+  ].filter((line) => line !== null && typeof line !== "undefined");
+
+  return {
+    text: lines.join("\n"),
+    buttons: [
+      "💬 Связаться с поставщиком",
+      "🌐 Подробнее на сайте",
+      flightDetails ? "✈️ Детали рейса" : null,
+    ].filter(Boolean),
+  };
+}
+
+function TelegramPreviewModal({ serviceId, form, details, images, onClose, onPublish, publishDisabled, saving }) {
+  const preview = buildTelegramPreview(serviceId, form, details, images);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[5400] bg-black/65 flex items-center justify-center p-4">
+      <div className="w-full max-w-3xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between px-5 py-4 border-b">
+          <div>
+            <div className="text-lg font-semibold">Предпросмотр Telegram</div>
+            <div className="text-sm text-gray-500">Так будет выглядеть текст перед публикацией.</div>
+          </div>
+          <button type="button" onClick={onClose} className="text-2xl leading-none text-gray-500 hover:text-black">
+            ×
+          </button>
+        </div>
+
+        <div className="p-5 grid grid-cols-1 lg:grid-cols-[1fr_260px] gap-4 bg-slate-100">
+          <div className="rounded-3xl bg-[#e9ffd9] p-4 shadow-sm">
+            <pre className="whitespace-pre-wrap break-words font-sans text-[15px] leading-relaxed text-black">
+              {preview.text}
+            </pre>
+          </div>
+
+          <div className="space-y-3">
+            <div className="rounded-2xl bg-white p-4 shadow-sm">
+              <div className="text-xs font-bold uppercase tracking-wide text-gray-500">Кнопки под постом</div>
+              <div className="mt-3 space-y-2">
+                {preview.buttons.map((button) => (
+                  <div key={button} className="rounded-xl bg-slate-200 px-3 py-2 text-center text-sm font-semibold text-slate-800">
+                    {button}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="rounded-2xl bg-white p-4 text-xs text-gray-600 shadow-sm">
+              Это фронтенд-предпросмотр из текущих полей. Он нужен, чтобы поймать явные ошибки до публикации.
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 px-5 py-4 border-t">
+          <button type="button" onClick={onClose} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 hover:bg-gray-200">
+            Вернуться к правке
+          </button>
+          <button
+            type="button"
+            onClick={onPublish}
+            disabled={publishDisabled || saving}
+            className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+          >
+            {saving ? "Сохранение..." : "Сохранить и опубликовать"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 function ModerationPreview({ serviceId, form, details, images }) {
   const title = pickFirst(
     form.title,
@@ -1326,6 +1479,7 @@ export default function AdminModeration() {
   const [newImageUrl, setNewImageUrl] = useState("");
   const [moderationEvents, setModerationEvents] = useState([]);
   const [actionBusy, setActionBusy] = useState(null);
+  const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -1629,6 +1783,7 @@ export default function AdminModeration() {
         })
       );
       setEditOpen(false);
+      setTelegramPreviewOpen(false);
       setEditItemId(null);
       setModerationEvents([]);
       await load(tab);
@@ -2302,6 +2457,13 @@ export default function AdminModeration() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setTelegramPreviewOpen(true)}
+                  className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-black"
+                >
+                  Предпросмотр Telegram
+                </button>
+                <button
+                  type="button"
                   onClick={() => saveEdit({ approveAfter: true })}
                   disabled={editSaving || editLoading || !publishReady}
                   className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
@@ -2316,6 +2478,19 @@ export default function AdminModeration() {
           </div>,
           document.body
         )}
+
+      {telegramPreviewOpen && (
+        <TelegramPreviewModal
+          serviceId={editItemId}
+          form={editForm}
+          details={editDetails}
+          images={editImages}
+          onClose={() => setTelegramPreviewOpen(false)}
+          onPublish={() => saveEdit({ approveAfter: true })}
+          publishDisabled={!publishReady || editLoading}
+          saving={editSaving}
+        />
+      )}
 
       <ProofLightbox
         image={proofViewer}
