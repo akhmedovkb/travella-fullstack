@@ -287,6 +287,7 @@ function Card({
     })),
     ...cardAnalysis.warningIssues,
   ].slice(0, 4);
+  const quickFixes = quickCorrectionOptions(cardAnalysis).slice(0, 5);
 
   const cover = pickFirst(
     images[0],
@@ -955,26 +956,59 @@ function Card({
         )}
       </div>
 
+      {tab === "pending" && quickFixes.length > 0 && (
+        <div className="mt-3 rounded-xl border border-rose-100 bg-white p-2">
+          <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
+            Быстро запросить
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {quickFixes.map((fix) => (
+              <button
+                key={fix.key}
+                type="button"
+                onClick={() =>
+                  onCorrectionClick
+                    ? onCorrectionClick(s, cardAnalysis, fix)
+                    : onRejectClick
+                    ? onRejectClick(s)
+                    : onReject(s.id, fix.reason, fix.reasonCode)
+                }
+                disabled={actionBusy === s.id}
+                className="rounded-full border border-rose-200 bg-rose-50 px-2.5 py-1.5 text-[11px] font-bold text-rose-700 hover:bg-rose-100 disabled:opacity-60"
+              >
+                {fix.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
           onClick={() => onEdit(s.id)}
           className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
         >
-          {t("common.edit", { defaultValue: "Редактировать" })}
+          {cardAnalysis.hasCorrectionHistory ? "Проверить повторно" : t("common.edit", { defaultValue: "Редактировать" })}
         </button>
 
         <button
           type="button"
           onClick={() => onApprove(s.id)}
           disabled={actionBusy === s.id}
-          className="px-3 py-1.5 rounded bg-emerald-600 text-white text-sm hover:bg-emerald-700 disabled:opacity-60"
+          className={`px-3 py-1.5 rounded text-sm disabled:opacity-60 ${
+            cardAnalysis.ready
+              ? "bg-emerald-600 text-white font-bold shadow-sm hover:bg-emerald-700"
+              : "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+          }`}
         >
           {actionBusy === s.id
             ? t("common.saving", { defaultValue: "Сохранение..." })
             : tab === "rejected"
             ? t("moderation.confirm", { defaultValue: "Подтвердить" })
-            : t("moderation.approve", { defaultValue: "Approve" })}
+            : cardAnalysis.ready
+            ? "Опубликовать"
+            : "Опубликовать после проверки"}
         </button>
 
         {tab === "pending" && (
@@ -1241,6 +1275,65 @@ function moderationActionLabel(action) {
   if (normalized === "rejected") return "Запрошено исправление";
   if (normalized === "unpublished") return "Снято";
   return action || "";
+}
+
+function quickCorrectionOptions(analysis) {
+  const hasIssue = (key) =>
+    analysis.dangerIssues.some((issue) => issue.key === key) ||
+    analysis.missingRequired.some((item) => item.key === key);
+  const options = [];
+
+  if (hasIssue("no-proof")) {
+    options.push({
+      key: "no-proof",
+      label: "Нет proof",
+      reasonCode: "NO_PROOF",
+      reason:
+        "Пожалуйста, загрузите proof/подтверждение подлинности предложения: фото брони, скрин отеля/авиа/поставщика или другой документ. После этого отправьте карточку на модерацию повторно.",
+    });
+  }
+
+  if (hasIssue("no-photo") || hasIssue("photo")) {
+    options.push({
+      key: "no-photo",
+      label: "Нет фото",
+      reasonCode: "MISSING_DETAILS",
+      reason:
+        "Пожалуйста, добавьте фото для карточки. Без фото предложение хуже выглядит в канале и на сайте. После добавления отправьте карточку на модерацию повторно.",
+    });
+  }
+
+  if (hasIssue("no-contact") || hasIssue("contact")) {
+    options.push({
+      key: "no-contact",
+      label: "Нет контакта",
+      reasonCode: "MISSING_DETAILS",
+      reason:
+        "Пожалуйста, укажите Telegram контакт поставщика. Клиент должен понимать, с кем связаться по этому предложению. После исправления отправьте карточку на модерацию повторно.",
+    });
+  }
+
+  if (hasIssue("gross-below-net") || hasIssue("price")) {
+    options.push({
+      key: "bad-price",
+      label: "Плохая цена",
+      reasonCode: "BAD_PRICE",
+      reason:
+        "Пожалуйста, проверьте цену. Укажите корректные Netto/Gross и обязательно уточните, цена указана за 1 человека/билет или за весь пакет. После исправления отправьте карточку на модерацию повторно.",
+    });
+  }
+
+  if (hasIssue("past-date") || hasIssue("date")) {
+    options.push({
+      key: "bad-date",
+      label: "Даты прошли",
+      reasonCode: "NO_DATES",
+      reason:
+        "Пожалуйста, проверьте даты предложения: дата начала/вылета/заезда не должна быть в прошлом. После исправления отправьте карточку на модерацию повторно.",
+    });
+  }
+
+  return options;
 }
 
 function getQueueMetrics(items = []) {
@@ -2150,16 +2243,20 @@ export default function AdminModeration() {
       reasonCode
     );
   };
-  const openCorrectionFromCard = (svc, analysis) => {
+  const openCorrectionFromCard = (svc, analysis, template = null) => {
     const currentAnalysis = analysis || analyzeModerationService(svc);
-    const reason = buildCorrectionReason(
-      currentAnalysis.readinessItems,
-      currentAnalysis.dangerIssues
-    );
-    const reasonCode = correctionReasonCode(
-      currentAnalysis.readinessItems,
-      currentAnalysis.dangerIssues
-    );
+    const reason =
+      template?.reason ||
+      buildCorrectionReason(
+        currentAnalysis.readinessItems,
+        currentAnalysis.dangerIssues
+      );
+    const reasonCode =
+      template?.reasonCode ||
+      correctionReasonCode(
+        currentAnalysis.readinessItems,
+        currentAnalysis.dangerIssues
+      );
     openReject(svc, reason, reasonCode);
   };
   const displayedItems = items
