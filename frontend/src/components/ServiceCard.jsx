@@ -183,6 +183,21 @@ const buildPriceDisplay = ({ rawPrice, details = {}, categoryRaw = "" }) => {
     unit = "билет";
     totalLabel = `за ${count} ${pluralRu(count, "билет", "билета", "билетов")}`;
     perLabel = "за 1 билет";
+  } else if (cat === "refused_hotel") {
+    count =
+      guestsFromAges ||
+      toPositiveInt(firstNonEmpty(
+        details.peopleCount,
+        details.persons,
+        details.people,
+        details.guests,
+        details.pax
+      )) ||
+      inferPlacementCount(details);
+    unit = "номер";
+    totalLabel = "за номер / весь период";
+    perLabel = "за 1 человека";
+    note = buildGuestCompositionLabel({ adt, chd, inf });
   } else {
     count =
       guestsFromAges ||
@@ -608,6 +623,7 @@ function extractServiceFields(item, viewerRole, t) {
   );
 
   const categoryRaw = String(firstNonEmpty(svc.category, item.category, details?.category, details?.type) || "").toLowerCase();
+  const isRefusedHotel = categoryRaw === "refused_hotel";
   const priceDisplay = buildPriceDisplay({ rawPrice, details, categoryRaw });
   const prettyPrice = priceDisplay?.total || null;
   const isAuthorTour = categoryRaw === "author_tour";
@@ -652,23 +668,39 @@ function extractServiceFields(item, viewerRole, t) {
     details?.supportsProject
   );
 
-const left = firstNonEmpty(
-  bag.hotel_check_in,
-  bag.checkIn,
-  bag.startDate,
-  bag.start_flight_date,
-  bag.startFlightDate,
-  bag.departureFlightDate
-);
-const right = firstNonEmpty(
-  bag.hotel_check_out,
-  bag.checkOut,
-  bag.endDate,
-  bag.end_flight_date,
-  bag.endFlightDate,
-  bag.returnFlightDate,
-  bag.returnDate
-);
+const left = isRefusedHotel
+  ? firstNonEmpty(
+      bag.hotel_check_in,
+      bag.checkIn,
+      bag.checkInDate,
+      bag.arrivalDate,
+      bag.startDate
+    )
+  : firstNonEmpty(
+      bag.hotel_check_in,
+      bag.checkIn,
+      bag.startDate,
+      bag.start_flight_date,
+      bag.startFlightDate,
+      bag.departureFlightDate
+    );
+const right = isRefusedHotel
+  ? firstNonEmpty(
+      bag.hotel_check_out,
+      bag.checkOut,
+      bag.checkOutDate,
+      bag.departureDate,
+      bag.endDate
+    )
+  : firstNonEmpty(
+      bag.hotel_check_out,
+      bag.checkOut,
+      bag.endDate,
+      bag.end_flight_date,
+      bag.endFlightDate,
+      bag.returnFlightDate,
+      bag.returnDate
+    );
 
 function formatDateShort(value) {
   if (!value) return null;
@@ -711,7 +743,7 @@ const nightsCount =
   leftDate && rightDate
     ? Math.max(
         0,
-        Math.round((rightDate.getTime() - leftDate.getTime()) / 86400000) - 1
+        Math.round((rightDate.getTime() - leftDate.getTime()) / 86400000)
       )
     : null;
 
@@ -832,12 +864,14 @@ const dates =
 
   const status = firstNonEmpty(svc.status, item.status, details?.status);
 
-  const flightDetails = firstNonEmpty(
-    details?.flightDetails,
-    details?.flight_details,
-    details?.flight_info,
-    Array.isArray(details?.flights) ? details.flights.join("\n") : null
-  );
+  const flightDetails = isRefusedHotel
+    ? null
+    : firstNonEmpty(
+        details?.flightDetails,
+        details?.flight_details,
+        details?.flight_info,
+        Array.isArray(details?.flights) ? details.flights.join("\n") : null
+      );
 
   return {
     svc,
@@ -858,6 +892,7 @@ const dates =
     status,
     flightDetails,
     categoryRaw,
+    isRefusedHotel,
     isAuthorTour,
     authorProgram,
     authorIncluded,
@@ -871,7 +906,7 @@ const dates =
     providerSupportsProject,
     insuranceIncluded: details?.insuranceIncluded,
     earlyCheckIn: details?.earlyCheckIn,
-    arrivalFastTrack: details?.arrivalFastTrack,
+    arrivalFastTrack: isRefusedHotel ? null : details?.arrivalFastTrack,
   };
 }
 
@@ -909,6 +944,7 @@ export default function ServiceCard({
     details,
     flightDetails,
     categoryRaw,
+    isRefusedHotel,
     isAuthorTour,
     authorProgram,
     authorIncluded,
@@ -2416,10 +2452,12 @@ return (
               {dates && (
                 <div className="rounded-2xl bg-slate-950 px-4 py-3 text-white shadow-[0_16px_34px_rgba(15,23,42,0.18)] sm:col-span-2">
                   <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/45">
-                    {t("marketplace.details_dates_title", { defaultValue: "Даты поездки" })}
+                    {isRefusedHotel
+                      ? t("marketplace.hotel_stay_dates", { defaultValue: "Проживание" })
+                      : t("marketplace.details_dates_title", { defaultValue: "Даты поездки" })}
                   </div>
                   <div className="mt-1 flex items-center gap-2 text-lg font-black leading-tight tracking-[-0.03em]">
-                    <span>🗓</span>
+                    <span>{isRefusedHotel ? "🏨" : "🗓"}</span>
                     <span>{dates}</span>
                   </div>
                 </div>
@@ -2428,7 +2466,9 @@ return (
               {prettyPrice && (
                 <div className="rounded-2xl bg-gradient-to-br from-orange-500 to-amber-400 px-4 py-3 text-white shadow-[0_16px_34px_rgba(249,115,22,0.24)]">
                   <div className="text-[10px] font-black uppercase tracking-[0.14em] text-white/70">
-                    {t("marketplace.price_package", { defaultValue: "Цена пакета" })}
+                    {isRefusedHotel
+                      ? t("marketplace.hotel_price_period", { defaultValue: "Цена за номер" })
+                      : t("marketplace.price_package", { defaultValue: "Цена пакета" })}
                   </div>
                   <div className="mt-1 text-2xl font-black leading-none tracking-[-0.05em]">
                     {prettyPrice}
@@ -2451,7 +2491,7 @@ return (
               )}
             </div>
 
-            {(direction || accommodation || transfer || authorFormat || authorDuration || authorPax || authorGuideLang || authorMeetingPoint || details.insuranceIncluded || details.earlyCheckIn || details.arrivalFastTrack) && (
+            {((!isRefusedHotel && direction) || accommodation || transfer || authorFormat || authorDuration || authorPax || authorGuideLang || authorMeetingPoint || details.insuranceIncluded || details.earlyCheckIn || (!isRefusedHotel && details.arrivalFastTrack)) && (
               <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
@@ -2465,7 +2505,7 @@ return (
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {direction && (
+                  {!isRefusedHotel && direction && (
                     <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
                         {t("marketplace.route", { defaultValue: "Маршрут" })}
@@ -2545,7 +2585,7 @@ return (
                       <div className="mt-1 text-sm font-black">🏨 {t("marketplace.included", { defaultValue: "Включено" })}</div>
                     </div>
                   )}
-                  {details.arrivalFastTrack && (
+                  {!isRefusedHotel && details.arrivalFastTrack && (
                     <div className="rounded-2xl bg-violet-50 px-3 py-2.5 text-violet-800 ring-1 ring-violet-100">
                       <div className="text-[10px] font-black uppercase tracking-wide text-violet-600/70">
                         {t("arrival_fast_track", { defaultValue: "Fast Track" })}
