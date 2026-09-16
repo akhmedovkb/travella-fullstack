@@ -1256,6 +1256,24 @@ const priceKind =
     return lines.join("\n");
   };
 
+  const hotelPriceLine = () => {
+    if (priceWithCur == null || !String(priceWithCur).trim()) return "";
+    const audience = inferPriceAudience();
+    const priceNumber = parseMoneyNumber(priceRaw);
+    const currency = extractCurrencyLabel(priceWithCur);
+    const count = Number(audience?.count || 0);
+    const lines = [
+      `💵 <b>${escapeHtml(String(priceWithCur))}</b> <i>за номер / весь период</i>`,
+    ];
+    if (priceNumber && count > 1) {
+      lines.push(`👤 <b>за 1 человека:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
+    }
+    if (audience?.note) {
+      lines.push(`👥 <b>${escapeHtml(audience.note)}</b>`);
+    }
+    return lines.join("\n");
+  };
+
   const smartBadges = (kind = "refused") => {
     const arr = [];
     if (kind === "refused") arr.push("🔥 отказное");
@@ -1865,39 +1883,58 @@ const priceKind =
     const city = firstValue(d.directionTo, d.city, d.locationCity, d.toCity);
     const country2 = firstValue(d.directionCountry, d.country, d.locationCountry);
     if (hotelName && !lineContainsValue(offerNameLine, hotelName)) parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
-    const place = joinUniqueClean([city, country2], ", ");
-    if (place) parts.push(`📍 ${escapeHtml(place)}`);
-
-    const dateBits = [];
-    if (dates) dateBits.push(`${dates}${nights ? ` • ${nights} ноч.` : ""}`);
-    if (accommodation) dateBits.push(accommodationLabel(accommodation));
-    if (dateBits.length) parts.push(`📅 ${escapeHtml(dateBits.join(" • "))}`);
-
-    const priceLine = priceHeroLine();
-    if (priceLine) parts.push(priceLine);
 
     const roomCatRaw = d.accommodationCategory || d.roomCategory || d.room || d.roomType || "";
     const roomCat = shortRoomLabel(stripStarsFromRoomCat(roomCatRaw));
     const foodPretty = shortMealLabel(d.food || d.meal || d.mealType);
     const transfers = transferItems();
 
+    const locationLines = hotelLocationLines();
+    if (locationLines.length) {
+      pushDivider(parts);
+      parts.push(...locationLines);
+    } else {
+      const place = joinUniqueClean([city, country2], ", ");
+      if (place) parts.push(`📍 ${escapeHtml(place)}`);
+    }
+
+    const dateLines = hotelDatesLines();
+    if (dateLines.length) {
+      pushDivider(parts);
+      parts.push(...dateLines);
+    } else if (dates) {
+      parts.push(labelLine("📅", "Период проживания", `${dates}${nights ? ` • ${nights} ноч.` : ""}`));
+    }
+
+    const stayLines = [];
+    if (roomCat) stayLines.push(labelLine("🛏", "Номер", roomCat));
+    if (accommodation) stayLines.push(labelLine("👥", "Размещение", accommodationLabel(accommodation)));
+    if (foodPretty) stayLines.push(labelLine("🍽", "Питание", `${foodPretty}${d.halal ? " Halal" : ""}`));
+    if (stayLines.length) {
+      pushDivider(parts);
+      parts.push(...stayLines);
+    }
+
+    const priceLine = hotelPriceLine();
+    if (priceLine) {
+      pushDivider(parts);
+      parts.push(priceLine);
+    }
+
     const included = [];
     const starsPretty = extractStars(d);
     if (starsPretty) included.push(starsPretty.replace("⭐️", "⭐"));
-    if (roomCat) included.push(`🛏 ${roomCat}`);
-    if (foodPretty) included.push(`🍽 ${foodPretty}${d.halal ? " Halal" : ""}`);
     if (transfers.length) included.push(`🚐 ${transfers.join(" / ")}`);
     if (hasPositiveFlag(d.insuranceIncluded, d.insurance, d.hasInsurance)) included.push("🛡 страховка");
     if (hasPositiveFlag(d.earlyCheckIn)) included.push("🏨 ранний заезд");
     if (hasPositiveFlag(d.lateCheckOut)) included.push("🕘 поздний выезд");
-    if (hasPositiveFlag(d.arrivalFastTrack)) included.push("🛬 fast track");
     if (firstValue(d.spa, d.spaIncluded)) included.push(`💆 ${firstValue(d.spa, d.spaIncluded)}`);
     if (firstValue(d.treatment, d.medicalPackage, d.therapyPackage)) included.push(`🩺 ${firstValue(d.treatment, d.medicalPackage, d.therapyPackage)}`);
 
     const includedLine = compactIncludedLine(included, 8);
     if (includedLine) {
       pushDivider(parts);
-      parts.push(`✅ <b>Главное:</b> ${escapeHtml(includedLine)}`);
+      parts.push(`✅ <b>Дополнительно:</b> ${escapeHtml(includedLine)}`);
     }
 
     pushDivider(parts);
