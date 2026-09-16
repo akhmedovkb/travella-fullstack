@@ -11,9 +11,9 @@ import {
 
 const STATUSES = [
   { val: "", label: "— все статусы —" },
-  { val: "new", label: "new" },
-  { val: "working", label: "working" },
-  { val: "closed", label: "closed" },
+  { val: "new", label: "Новые" },
+  { val: "working", label: "В работе" },
+  { val: "closed", label: "Закрытые" },
 ];
 
 const LANGS = [
@@ -40,13 +40,36 @@ function Badge({ children, className = "" }) {
   );
 }
 
+function StatCard({ label, value, hint, tone = "slate" }) {
+  const toneClass =
+    tone === "blue"
+      ? "border-blue-200 bg-blue-50 text-blue-950"
+      : tone === "green"
+      ? "border-green-200 bg-green-50 text-green-950"
+      : tone === "amber"
+      ? "border-amber-200 bg-amber-50 text-amber-950"
+      : tone === "red"
+      ? "border-red-200 bg-red-50 text-red-950"
+      : "border-slate-200 bg-white text-slate-950";
+
+  return (
+    <div className={clsx("rounded-2xl border px-4 py-3 shadow-sm", toneClass)}>
+      <div className="text-xs font-bold uppercase tracking-[0.14em] text-slate-500">
+        {label}
+      </div>
+      <div className="mt-1 text-2xl font-black">{value}</div>
+      {hint ? <div className="mt-1 text-xs text-slate-500">{hint}</div> : null}
+    </div>
+  );
+}
+
 function SourceBadge({ source }) {
   const src = String(source || "").toLowerCase();
 
   if (src === "telegram_client") {
     return (
       <Badge className="bg-blue-50 text-blue-700 border-blue-200">
-        telegram_client
+        Telegram клиент
       </Badge>
     );
   }
@@ -54,7 +77,7 @@ function SourceBadge({ source }) {
   if (src === "telegram_provider") {
     return (
       <Badge className="bg-green-50 text-green-700 border-green-200">
-        telegram_provider
+        Telegram поставщик
       </Badge>
     );
   }
@@ -79,14 +102,14 @@ function RoleBadge({ role }) {
 
   if (rr === "client") {
     return (
-      <Badge className="bg-blue-50 text-blue-700 border-blue-200">client</Badge>
+      <Badge className="bg-blue-50 text-blue-700 border-blue-200">Клиент</Badge>
     );
   }
 
   if (rr === "agent" || rr === "provider") {
     return (
       <Badge className="bg-green-50 text-green-700 border-green-200">
-        {rr === "provider" ? "agent" : rr}
+        Поставщик
       </Badge>
     );
   }
@@ -106,7 +129,7 @@ function DecisionBadge({ decision }) {
   if (!d) {
     return (
       <Badge className="bg-yellow-50 text-yellow-700 border-yellow-200">
-        pending
+        Нужно решить
       </Badge>
     );
   }
@@ -114,7 +137,7 @@ function DecisionBadge({ decision }) {
   if (d === "approved_client") {
     return (
       <Badge className="bg-blue-50 text-blue-700 border-blue-200">
-        approved_client
+        Клиент одобрен
       </Badge>
     );
   }
@@ -122,14 +145,14 @@ function DecisionBadge({ decision }) {
   if (d === "approved_provider") {
     return (
       <Badge className="bg-green-50 text-green-700 border-green-200">
-        approved_provider
+        Поставщик одобрен
       </Badge>
     );
   }
 
   if (d === "rejected") {
     return (
-      <Badge className="bg-red-50 text-red-700 border-red-200">rejected</Badge>
+      <Badge className="bg-red-50 text-red-700 border-red-200">Отклонён</Badge>
     );
   }
 
@@ -141,7 +164,7 @@ function LinkedEntityBadge({ kind, row }) {
     return (
       <div className="space-y-1">
         <Badge className="bg-blue-50 text-blue-700 border-blue-200">
-          CLIENT #{row.client_match_id}
+          Клиент #{row.client_match_id}
         </Badge>
         <div className="text-xs text-gray-500">
           {row.client_match_name || "—"}
@@ -155,7 +178,7 @@ function LinkedEntityBadge({ kind, row }) {
     return (
       <div className="space-y-1">
         <Badge className="bg-green-50 text-green-700 border-green-200">
-          PROVIDER #{row.provider_match_id}
+          Поставщик #{row.provider_match_id}
         </Badge>
         <div className="text-xs text-gray-500">
           {row.provider_match_name || "—"}
@@ -185,7 +208,7 @@ function DuplicateWarningBadge({ row }) {
   return (
     <div className="space-y-1">
       <Badge className="bg-red-50 text-red-700 border-red-200">
-        DUBLICATE WARNING
+        Проверить дубль
       </Badge>
       <div className="text-xs text-red-600">{reason}</div>
     </div>
@@ -267,6 +290,28 @@ export default function AdminLeads() {
       return hay.includes(needle);
     });
   }, [items, q]);
+
+  const stats = useMemo(() => {
+    const rows = filtered || [];
+    const newCount = rows.filter((r) => String(r.status || "new") === "new").length;
+    const closedCount = rows.filter((r) => String(r.status || "") === "closed").length;
+    const clientCount = rows.filter(isClientLead).length;
+    const providerCount = rows.filter(isProviderLead).length;
+    const duplicateCount = rows.filter((r) => r.has_both_client_and_provider).length;
+    const unlinkedCount = rows.filter(
+      (r) => !r.client_match_id && !r.provider_match_id && !r.decision
+    ).length;
+
+    return {
+      total: rows.length,
+      newCount,
+      closedCount,
+      clientCount,
+      providerCount,
+      duplicateCount,
+      unlinkedCount,
+    };
+  }, [filtered]);
 
   async function fetchLeads() {
     try {
@@ -560,21 +605,31 @@ export default function AdminLeads() {
           className="px-3 py-2 rounded border bg-white hover:bg-gray-50 text-sm"
           title="Проверить, кем сервер видит текущую сессию/токен"
         >
-          Whoami
+          Проверить доступ
         </button>
 
         {whoamiErr ? <span className="text-sm text-red-600">{whoamiErr}</span> : null}
 
         {whoami ? (
           <span className="text-sm text-gray-700">
-            role: <span className="font-mono">{String(whoami.role || "")}</span> | roles:{" "}
+            Роль: <span className="font-mono">{String(whoami.role || "")}</span> | роли:{" "}
             <span className="font-mono">
               {Array.isArray(whoami.roles) ? whoami.roles.join(",") : ""}
             </span>{" "}
-            | is_admin: <span className="font-mono">{String(!!whoami.is_admin)}</span> | id:{" "}
+            | админ: <span className="font-mono">{String(!!whoami.is_admin)}</span> | id:{" "}
             <span className="font-mono">{String(whoami.id)}</span>
           </span>
         ) : null}
+      </div>
+
+      <div className="mb-4 grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-7">
+        <StatCard label="Всего" value={stats.total} hint="в текущей выдаче" tone="blue" />
+        <StatCard label="Новые" value={stats.newCount} hint="нужно разобрать" tone="amber" />
+        <StatCard label="Клиенты" value={stats.clientCount} hint="заявки клиентов" tone="blue" />
+        <StatCard label="Поставщики" value={stats.providerCount} hint="регистрации" tone="green" />
+        <StatCard label="Закрытые" value={stats.closedCount} hint="уже обработаны" />
+        <StatCard label="Дубли" value={stats.duplicateCount} hint="проверить вручную" tone="red" />
+        <StatCard label="Без связи" value={stats.unlinkedCount} hint="нет профиля/решения" tone="amber" />
       </div>
 
       <div className="flex flex-wrap gap-3 items-center mb-4">
@@ -643,15 +698,14 @@ export default function AdminLeads() {
       </div>
 
       <div className="overflow-x-auto">
-        <table className="min-w-[1750px] text-sm">
+        <table className="min-w-[1500px] text-sm">
           <thead>
             <tr className="border-b text-left">
-              <th className="py-2 pr-4">Дата</th>
-              <th className="py-2 pr-4">Имя</th>
-              <th className="py-2 pr-4">Телефон</th>
+              <th className="py-2 pr-4">Когда</th>
+              <th className="py-2 pr-4">Контакт</th>
               <th className="py-2 pr-4">Источник</th>
               <th className="py-2 pr-4">Роль</th>
-              <th className="py-2 pr-4">Decision</th>
+              <th className="py-2 pr-4">Решение</th>
               <th className="py-2 pr-4">Статус</th>
               <th className="py-2 pr-4">Telegram</th>
               <th className="py-2 pr-4">Связано</th>
@@ -670,7 +724,11 @@ export default function AdminLeads() {
                 <tr
                   key={r.id}
                   className={`border-b align-top ${
-                    r.has_both_client_and_provider ? "bg-red-50/60" : ""
+                    r.has_both_client_and_provider
+                      ? "bg-red-50/60"
+                      : String(r.status || "new") === "new"
+                      ? "bg-amber-50/40"
+                      : ""
                   }`}
                 >
                   <td className="py-2 pr-4 whitespace-nowrap">
@@ -679,14 +737,13 @@ export default function AdminLeads() {
 
                   <td className="py-2 pr-4">
                     <div className="font-medium">{r.name || "—"}</div>
+                    <div className="mt-1 text-xs text-gray-600">{r.phone || "телефон не указан"}</div>
                     {r.comment ? (
                       <div className="text-xs text-gray-500 mt-1 line-clamp-2">
                         {r.comment}
                       </div>
                     ) : null}
                   </td>
-
-                  <td className="py-2 pr-4 whitespace-nowrap">{r.phone || "—"}</td>
 
                   <td className="py-2 pr-4">
                     <div className="flex items-center gap-2">
@@ -725,10 +782,17 @@ export default function AdminLeads() {
                     {isTelegramLead ? (
                       <div className="space-y-1">
                         <div className="text-xs text-gray-700">
-                          chat_id: <span className="font-mono">{String(r.telegram_chat_id)}</span>
+                          ID <span className="font-mono">{String(r.telegram_chat_id)}</span>
                         </div>
                         {r.telegram_username ? (
-                          <div className="text-xs text-gray-500">@{r.telegram_username}</div>
+                          <a
+                            href={`https://t.me/${String(r.telegram_username).replace(/^@/, "")}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-xs text-blue-600 hover:underline"
+                          >
+                            @{String(r.telegram_username).replace(/^@/, "")}
+                          </a>
                         ) : null}
                       </div>
                     ) : (
@@ -781,7 +845,7 @@ export default function AdminLeads() {
                             className="px-2 py-1 text-xs rounded bg-orange-500 text-white hover:bg-orange-600 whitespace-nowrap"
                             title="Сбросить telegram_chat_id у клиента и вернуть telegram-lead в new"
                           >
-                            Reset client
+                            Снять связь с клиентом
                           </button>
                         ) : null}
 
@@ -791,7 +855,7 @@ export default function AdminLeads() {
                             className="px-2 py-1 text-xs rounded bg-rose-600 text-white hover:bg-rose-700 whitespace-nowrap"
                             title="Сбросить telegram_chat_id у поставщика и вернуть telegram-lead в new"
                           >
-                            Reset provider
+                            Снять связь с поставщиком
                           </button>
                         ) : null}
 
@@ -819,7 +883,7 @@ export default function AdminLeads() {
                           className="px-2 py-1 text-xs rounded bg-black text-white hover:bg-red-700 whitespace-nowrap"
                           title="Полностью удалить лид и пользователя"
                         >
-                          🗑 Удалить
+                          Удалить
                         </button>
                       </div>
                     ) : (
