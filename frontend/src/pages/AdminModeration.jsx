@@ -24,6 +24,60 @@ function isRefusedCategory(cat) {
   return String(cat || "").toLowerCase().startsWith("refused_");
 }
 
+function isRefusedHotelCategory(cat) {
+  return String(cat || "").toLowerCase() === "refused_hotel";
+}
+
+function parseDateLoose(value) {
+  if (!value) return null;
+  const d = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
+function calcNights(from, to) {
+  const start = parseDateLoose(from);
+  const end = parseDateLoose(to);
+  if (!start || !end) return "";
+  const a = new Date(start.getFullYear(), start.getMonth(), start.getDate());
+  const b = new Date(end.getFullYear(), end.getMonth(), end.getDate());
+  const diff = Math.round((b.getTime() - a.getTime()) / 86400000);
+  return diff > 0 && diff < 90 ? diff : "";
+}
+
+function positiveInt(value) {
+  const match = String(value ?? "").match(/\d+/);
+  if (!match) return 0;
+  const n = Number(match[0]);
+  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 0;
+}
+
+function hotelGuestCount(details = {}) {
+  const d = normalizeDetails(details);
+  const direct = positiveInt(pickFirst(d.peopleCount, d.persons, d.people, d.guests, d.pax));
+  if (direct) return direct;
+  const adt = positiveInt(pickFirst(d.adt, d.adults, d.accommodationADT));
+  const chd = positiveInt(pickFirst(d.chd, d.children, d.accommodationCHD));
+  const inf = positiveInt(pickFirst(d.inf, d.infants, d.accommodationINF));
+  const total = adt + chd + inf;
+  if (total) return total;
+  const raw = String(pickFirst(d.accommodation, d.placement, d.room, d.roomType, d.roomCategory) || "").toUpperCase();
+  if (/\bSGL\b|SINGLE|ОДНОМЕСТ/.test(raw)) return 1;
+  if (/\bDBL\b|DOUBLE|TWIN|ДВУХМЕСТ/.test(raw)) return 2;
+  if (/\bTRPL\b|\bTPL\b|TRIPLE|ТР[ЕЁ]ХМЕСТ/.test(raw)) return 3;
+  if (/\bQDPL\b|QUAD|QUADRUPLE|ЧЕТЫР[ЕЁ]ХМЕСТ/.test(raw)) return 4;
+  return 0;
+}
+
+function parseMoneyNumber(value) {
+  if (typeof value === "number") return Number.isFinite(value) ? value : 0;
+  const raw = String(value ?? "")
+    .replace(/\s+/g, "")
+    .replace(",", ".")
+    .replace(/[^\d.]/g, "");
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : 0;
+}
+
 function formatDt(val) {
   if (!val) return "";
   const d = val instanceof Date ? val : new Date(val);
@@ -303,6 +357,7 @@ function Card({
 
   const prov = providerFrom(s);
   const isRefused = isRefusedCategory(s.category);
+  const isHotel = isRefusedHotelCategory(s.category);
   const createdAtLabel = formatDt(
     s.created_at ||
       s.createdAt ||
@@ -358,21 +413,25 @@ function Card({
     d.prevPrice
   );
 
-  const dateFrom = pickFirst(
-    d.departureFlightDate,
-    d.departureDate,
-    d.startFlightDate,
-    d.startDate,
-    d.checkInDate,
-    d.eventDate
-  );
+  const dateFrom = isHotel
+    ? pickFirst(d.checkIn, d.checkInDate, d.arrivalDate, d.startDate)
+    : pickFirst(
+        d.departureFlightDate,
+        d.departureDate,
+        d.startFlightDate,
+        d.startDate,
+        d.checkInDate,
+        d.eventDate
+      );
 
-  const dateTo = pickFirst(
-    d.returnFlightDate,
-    d.endFlightDate,
-    d.endDate,
-    d.checkOutDate
-  );
+  const dateTo = isHotel
+    ? pickFirst(d.checkOut, d.checkOutDate, d.departureDate, d.endDate)
+    : pickFirst(
+        d.returnFlightDate,
+        d.endFlightDate,
+        d.endDate,
+        d.checkOutDate
+      );
 
   const roomCategory = pickFirst(
     d.roomCategory,
@@ -805,7 +864,7 @@ function Card({
             </div>
           )}
 
-          {(d.departureFlightDate ||
+          {!isHotel && (d.departureFlightDate ||
             d.departureDate ||
             d.startFlightDate ||
             d.returnFlightDate ||
@@ -829,7 +888,7 @@ function Card({
             </div>
           )}
 
-          {flightType && (
+          {!isHotel && flightType && (
             <div>
               <span className="text-gray-500">
                 {t("moderation.flight_type", {
@@ -841,7 +900,7 @@ function Card({
             </div>
           )}
 
-          {(d.flightDetails || d.flight_details || d.flight_info) && (
+          {!isHotel && (d.flightDetails || d.flight_details || d.flight_info) && (
             <div className="mt-1 rounded-md bg-white border border-gray-200 px-2 py-1.5 text-[11px] whitespace-pre-wrap leading-snug">
               <div className="font-semibold mb-1">
                 {t("moderation.flight_details_title", {
@@ -1764,6 +1823,7 @@ function ReadinessChecklist({ items }) {
 }
 
 function buildTelegramPreview(serviceId, form, details, images) {
+  const isHotel = isRefusedHotelCategory(form.category);
   const title = pickFirst(
     form.title,
     details.title,
@@ -1782,42 +1842,81 @@ function buildTelegramPreview(serviceId, form, details, images) {
   const from = pickFirst(details.directionFrom, details.fromCity, details.departureCity);
   const hotel = pickFirst(details.hotel, details.eventName, details.accommodation);
   const room = pickFirst(details.roomCategory, details.accommodationCategory, details.accommodation);
-  const dateFrom = pickFirst(
-    details.departureFlightDate,
-    details.departureDate,
-    details.startFlightDate,
-    details.startDate,
-    details.checkInDate,
-    details.eventDate
-  );
-  const dateTo = pickFirst(
-    details.returnFlightDate,
-    details.endFlightDate,
-    details.endDate,
-    details.checkOutDate
-  );
-  const nights = pickFirst(details.nights, details.nightsCount);
+  const dateFrom = isHotel
+    ? pickFirst(details.checkIn, details.checkInDate, details.arrivalDate, details.startDate)
+    : pickFirst(
+        details.departureFlightDate,
+        details.departureDate,
+        details.startFlightDate,
+        details.startDate,
+        details.checkInDate,
+        details.eventDate
+      );
+  const dateTo = isHotel
+    ? pickFirst(details.checkOut, details.checkOutDate, details.departureDate, details.endDate)
+    : pickFirst(
+        details.returnFlightDate,
+        details.endFlightDate,
+        details.endDate,
+        details.checkOutDate
+      );
+  const nights = pickFirst(details.nights, details.nightsCount) || calcNights(dateFrom, dateTo);
   const grossPrice = pickFirst(details.grossPrice, details.gross_price, details.price, form.price);
   const netPrice = pickFirst(details.netPrice, details.net_price, details.priceNet, details.price_net);
   const priceFor = pickFirst(details.priceFor, details.pricePer, details.priceType);
-  const perPerson = pickFirst(details.pricePerPerson);
+  const guestsCount = isHotel ? hotelGuestCount(details) : 0;
+  const grossPriceNumber = parseMoneyNumber(grossPrice);
+  const computedPerPerson = isHotel && guestsCount > 1 && grossPriceNumber
+    ? `${fmt(grossPriceNumber / guestsCount)} USD`
+    : "";
+  const perPerson = pickFirst(details.pricePerPerson, computedPerPerson);
   const isRefused = form.category?.includes("refused") || yesNoValue(details.isRefused);
   const proofImages = normalizeImages(details.proofImages);
   const photos = normalizeImages(images);
   const hasPhoto = photos.length > 0 || hasText(details.image) || hasText(details.imageUrl);
   const included = [
-    yesNoValue(details.flightIncluded || details.airTickets || details.aviaTickets) ? "авиабилеты" : null,
-    hotel ? "проживание" : null,
+    !isHotel && yesNoValue(details.flightIncluded || details.airTickets || details.aviaTickets) ? "авиабилеты" : null,
+    !isHotel && hotel ? "проживание" : null,
     details.food ? `питание ${details.food}` : null,
     yesNoValue(details.transferIncluded || details.hasTransfer || details.transfer) ? "трансфер" : null,
     yesNoValue(details.insurance || details.insuranceIncluded) ? "страховка" : null,
-    yesNoValue(details.visa || details.visaIncluded) ? "виза" : null,
+    !isHotel && yesNoValue(details.visa || details.visaIncluded) ? "виза" : null,
   ].filter(Boolean);
-  const flightDetails = pickFirst(details.flightDetails, details.flight_details, details.flight_info);
+  const flightDetails = isHotel ? "" : pickFirst(details.flightDetails, details.flight_details, details.flight_info);
   const providerName = pickFirst(form.provider_name, details.providerName, details.supplierName);
   const contactVisible = hasText(pickFirst(form.telegram_refused_chat_id, form.telegram_web_chat_id, form.telegram_chat_id));
 
-  const lines = [
+  const hotelLines = isHotel ? [
+    "через @OTKAZNYX_TUROV_UZB_BOT",
+    `🏨 ОТКАЗНОЙ ОТЕЛЬ #${serviceId || ""}`.trim(),
+    `📝 ${title}`,
+    direction ? `📍 ${direction}` : null,
+    hotel ? `🏨 ${hotel}` : null,
+    dateFrom ? `🟢 Заезд: ${dateFrom}` : null,
+    dateTo ? `🔴 Выезд: ${dateTo}` : null,
+    nights ? `🌙 Ночей: ${nights}` : null,
+    room ? `🛏 Номер: ${room}` : null,
+    details.accommodation ? `👥 Размещение: ${details.accommodation}` : null,
+    details.food ? `🍽 Питание: ${details.food}` : null,
+    grossPrice ? `💵 ${fmt(grossPrice)} USD за номер / весь период` : null,
+    perPerson ? `👤 за 1 человека: ${perPerson}` : null,
+    netPrice ? `Netto: ${fmt(netPrice)} USD` : null,
+    included.length ? ["", "✅ Дополнительно:", ...included.map((item) => `• ${item}`)].join("\n") : null,
+    "",
+    `🔥 отказной отель · ${
+      pickFirst(details.expiration, details.expiration_at, details.expiration_ts) ? "⚡ срочно" : "⏳ срок не указан"
+    }`,
+    "",
+    contactVisible
+      ? providerName
+        ? `🤝 ${providerName}`
+        : "🤝 Контакт поставщика будет доступен"
+      : "🔒 Контакты откроются после оплаты.",
+    hasPhoto ? null : "⚠️ Фото не прикреплено.",
+    proofImages.length ? null : "⚠️ Proof не прикреплён.",
+  ].filter((line) => line !== null && typeof line !== "undefined") : null;
+
+  const lines = hotelLines || [
     "через @OTKAZNYX_TUROV_UZB_BOT",
     `📍 ${isRefused ? "ОТКАЗНОЙ ТУР" : "УСЛУГА"} #${serviceId || ""}`.trim(),
     `📝 ${title}`,
@@ -1851,7 +1950,7 @@ function buildTelegramPreview(serviceId, form, details, images) {
     buttons: [
       "💬 Связаться с поставщиком",
       "🌐 Подробнее на сайте",
-      flightDetails ? "✈️ Детали рейса" : null,
+      !isHotel && flightDetails ? "✈️ Детали рейса" : null,
     ].filter(Boolean),
   };
 }
@@ -1917,6 +2016,7 @@ function TelegramPreviewModal({ serviceId, form, details, images, onClose, onPub
 }
 
 function ModerationPreview({ serviceId, form, details, images }) {
+  const isHotel = isRefusedHotelCategory(form.category);
   const title = pickFirst(
     form.title,
     details.title,
@@ -1933,20 +2033,26 @@ function ModerationPreview({ serviceId, form, details, images }) {
     details.location
   );
   const hotel = pickFirst(details.hotel, details.eventName, details.accommodation);
-  const dateFrom = pickFirst(
-    details.departureFlightDate,
-    details.departureDate,
-    details.startFlightDate,
-    details.startDate,
-    details.checkInDate,
-    details.eventDate
-  );
-  const dateTo = pickFirst(
-    details.returnFlightDate,
-    details.endFlightDate,
-    details.endDate,
-    details.checkOutDate
-  );
+  const dateFrom = isHotel
+    ? pickFirst(details.checkIn, details.checkInDate, details.arrivalDate, details.startDate)
+    : pickFirst(
+        details.departureFlightDate,
+        details.departureDate,
+        details.startFlightDate,
+        details.startDate,
+        details.checkInDate,
+        details.eventDate
+      );
+  const dateTo = isHotel
+    ? pickFirst(details.checkOut, details.checkOutDate, details.departureDate, details.endDate)
+    : pickFirst(
+        details.returnFlightDate,
+        details.endFlightDate,
+        details.endDate,
+        details.checkOutDate
+      );
+  const nights = pickFirst(details.nights, details.nightsCount) || calcNights(dateFrom, dateTo);
+  const room = pickFirst(details.roomCategory, details.accommodationCategory, details.room, details.roomType);
   const grossPrice = pickFirst(details.grossPrice, details.gross_price, details.price, form.price);
   const netPrice = pickFirst(details.netPrice, details.net_price, details.priceNet, details.price_net);
   const proofImages = normalizeImages(details.proofImages);
@@ -1961,15 +2067,20 @@ function ModerationPreview({ serviceId, form, details, images }) {
     details.photoUrl
   );
   const included = [
-    details.flightIncluded || details.airTickets || details.aviaTickets ? "авиабилеты" : null,
-    details.accommodation || details.hotel ? "проживание" : null,
+    !isHotel && (details.flightIncluded || details.airTickets || details.aviaTickets) ? "авиабилеты" : null,
+    !isHotel && (details.accommodation || details.hotel) ? "проживание" : null,
     details.food ? `питание ${details.food}` : null,
     details.transfer ? "трансфер" : null,
     details.insurance ? "страховка" : null,
-    details.visaIncluded ? "виза" : null,
+    !isHotel && details.visaIncluded ? "виза" : null,
   ].filter(Boolean);
   const isRefused = form.category?.includes("refused") || yesNoValue(details.isRefused);
   const priceAudience = pickFirst(details.priceFor, details.pricePer, details.priceType);
+  const guestsCount = isHotel ? hotelGuestCount(details) : 0;
+  const grossPriceNumber = parseMoneyNumber(grossPrice);
+  const hotelPerPerson = isHotel && guestsCount > 1 && grossPriceNumber
+    ? `${fmt(grossPriceNumber / guestsCount)} USD`
+    : "";
   const urgencyBadge = pickFirst(details.expiration, details.expiration_at, details.expiration_ts)
     ? "⚡ срочно"
     : "⏳ срок не указан";
@@ -1988,27 +2099,46 @@ function ModerationPreview({ serviceId, form, details, images }) {
         {cover && <img src={cover} alt="" className="h-44 w-full object-cover bg-white" />}
         <div className="space-y-2 p-4 text-sm leading-snug">
           <div className="text-xs text-emerald-700">через @OTKAZNYX_TUROV_UZB_BOT</div>
-          <div className="font-bold">📍 {isRefused ? "ОТКАЗНОЙ ТУР" : "УСЛУГА"} #{serviceId}</div>
+          <div className="font-bold">
+            {isHotel ? "🏨 ОТКАЗНОЙ ОТЕЛЬ" : `📍 ${isRefused ? "ОТКАЗНОЙ ТУР" : "УСЛУГА"}`} #{serviceId}
+          </div>
           <div className="font-semibold">📝 {title}</div>
           {direction && <div>🌎 {direction}</div>}
-          {details.directionFrom && <div>🛫 Вылет из: <b>{details.directionFrom}</b></div>}
+          {!isHotel && details.directionFrom && <div>🛫 Вылет из: <b>{details.directionFrom}</b></div>}
           {hotel && <div>🏨 {hotel}</div>}
-          {(dateFrom || dateTo) && (
-            <div>
-              📅 {dateFrom || "—"} {dateTo ? `→ ${dateTo}` : ""}
-            </div>
+          {isHotel ? (
+            <>
+              {dateFrom && <div>🟢 Заезд: {dateFrom}</div>}
+              {dateTo && <div>🔴 Выезд: {dateTo}</div>}
+              {nights && <div>🌙 Ночей: {nights}</div>}
+              {room && <div>🛏 Номер: {room}</div>}
+              {details.accommodation && <div>👥 Размещение: {details.accommodation}</div>}
+              {details.food && <div>🍽 Питание: {details.food}</div>}
+            </>
+          ) : (
+            (dateFrom || dateTo) && (
+              <div>
+                📅 {dateFrom || "—"} {dateTo ? `→ ${dateTo}` : ""}
+              </div>
+            )
           )}
           {grossPrice && (
             <div>
               💵 <b>{fmt(grossPrice)} USD</b>
-              {priceAudience ? <span className="text-xs"> · {priceAudience}</span> : null}
+              {isHotel ? (
+                <span className="text-xs"> · за номер / весь период</span>
+              ) : priceAudience ? (
+                <span className="text-xs"> · {priceAudience}</span>
+              ) : null}
               {netPrice ? <span className="text-xs"> · Netto {fmt(netPrice)}</span> : null}
             </div>
           )}
-          {details.pricePerPerson && <div>👤 за 1 человека: {details.pricePerPerson}</div>}
+          {(details.pricePerPerson || hotelPerPerson) && (
+            <div>👤 за 1 человека: {pickFirst(details.pricePerPerson, hotelPerPerson)}</div>
+          )}
           {included.length > 0 && (
             <div className="pt-2">
-              <div className="font-semibold">✅ Включено:</div>
+              <div className="font-semibold">{isHotel ? "✅ Дополнительно:" : "✅ Включено:"}</div>
               {included.map((x) => (
                 <div key={x}>• {x}</div>
               ))}
