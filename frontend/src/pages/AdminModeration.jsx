@@ -1494,6 +1494,151 @@ function QueuePanel({ items, filter, onFilterChange }) {
   );
 }
 
+function getPublishedMetrics(items = []) {
+  return items.reduce(
+    (acc, svc) => {
+      acc.total += 1;
+      acc.views += Number(svc.views_count || 0);
+      acc.unlocks += Number(svc.contact_unlocks_count || 0);
+      acc.requests += Number(svc.quick_requests_count || 0);
+      if (String(svc.last_moderation_action || "").toLowerCase() === "telegram_failed") acc.telegramFailed += 1;
+      if (Number(svc.contact_unlocks_count || 0) === 0) acc.noUnlocks += 1;
+      if (Number(svc.quick_requests_count || 0) === 0) acc.noRequests += 1;
+      if (Number(svc.quick_requests_count || 0) > 0) acc.hasRequests += 1;
+      return acc;
+    },
+    { total: 0, views: 0, unlocks: 0, requests: 0, telegramFailed: 0, noUnlocks: 0, noRequests: 0, hasRequests: 0 }
+  );
+}
+
+function publishedSearchText(svc = {}) {
+  const details = normalizeDetails(svc.details);
+  const provider = providerFrom(svc);
+  return [
+    svc.id,
+    svc.title,
+    svc.description,
+    svc.category,
+    provider.name,
+    details.title,
+    details.direction,
+    details.directionCountry,
+    details.directionFrom,
+    details.directionTo,
+    details.hotel,
+    details.eventName,
+    details.location,
+    details.accommodation,
+    details.roomCategory,
+  ]
+    .filter((x) => x !== null && typeof x !== "undefined")
+    .join(" ")
+    .toLowerCase();
+}
+
+function matchesPublishedFilter(svc, filter) {
+  const action = String(svc.last_moderation_action || "").toLowerCase();
+  const unlocks = Number(svc.contact_unlocks_count || 0);
+  const requests = Number(svc.quick_requests_count || 0);
+  if (filter === "telegramFailed") return action === "telegram_failed";
+  if (filter === "noUnlocks") return unlocks === 0;
+  if (filter === "noRequests") return requests === 0;
+  if (filter === "hasRequests") return requests > 0;
+  return true;
+}
+
+function comparePublishedItems(a, b, sort) {
+  if (sort === "views") return Number(b.views_count || 0) - Number(a.views_count || 0);
+  if (sort === "unlocks") return Number(b.contact_unlocks_count || 0) - Number(a.contact_unlocks_count || 0);
+  if (sort === "requests") return Number(b.quick_requests_count || 0) - Number(a.quick_requests_count || 0);
+  if (sort === "problems") {
+    const score = (svc) =>
+      (String(svc.last_moderation_action || "").toLowerCase() === "telegram_failed" ? 100 : 0) +
+      (Number(svc.contact_unlocks_count || 0) === 0 ? 10 : 0) +
+      (Number(svc.quick_requests_count || 0) === 0 ? 5 : 0);
+    const diff = score(b) - score(a);
+    if (diff) return diff;
+  }
+  const at = new Date(a.published_at || a.approved_at || a.updated_at || 0).getTime();
+  const bt = new Date(b.published_at || b.approved_at || b.updated_at || 0).getTime();
+  return bt - at;
+}
+
+function PublishedControls({
+  items,
+  query,
+  onQueryChange,
+  filter,
+  onFilterChange,
+  sort,
+  onSortChange,
+}) {
+  const metrics = getPublishedMetrics(items);
+  const filters = [
+    { key: "all", label: "Все", count: metrics.total },
+    { key: "telegramFailed", label: "Telegram ошибка", count: metrics.telegramFailed },
+    { key: "noUnlocks", label: "Нет контактов", count: metrics.noUnlocks },
+    { key: "noRequests", label: "Нет заявок", count: metrics.noRequests },
+    { key: "hasRequests", label: "Есть заявки", count: metrics.hasRequests },
+  ];
+
+  return (
+    <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+        <div>
+          <div className="text-sm font-bold uppercase tracking-wide text-slate-500">
+            Контроль опубликованных
+          </div>
+          <div className="text-lg font-semibold text-slate-950">
+            Поиск проблемных карточек после публикации
+          </div>
+        </div>
+        <div className="text-sm text-slate-500">
+          {metrics.views} просмотров · {metrics.unlocks} контактов · {metrics.requests} заявок
+        </div>
+      </div>
+
+      <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_220px]">
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm"
+          placeholder="Поиск: #ID, направление, отель, поставщик..."
+        />
+        <select
+          value={sort}
+          onChange={(e) => onSortChange(e.target.value)}
+          className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm"
+        >
+          <option value="newest">Сначала новые</option>
+          <option value="problems">Проблемные сверху</option>
+          <option value="views">Много просмотров</option>
+          <option value="unlocks">Много открытий</option>
+          <option value="requests">Много заявок</option>
+        </select>
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {filters.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => onFilterChange(item.key)}
+            className={`rounded-full border px-3 py-1.5 text-sm font-semibold ${
+              filter === item.key
+                ? "border-slate-950 bg-slate-950 text-white"
+                : "border-slate-200 bg-slate-50 text-slate-700 hover:bg-slate-100"
+            }`}
+          >
+            {item.label} · {item.count}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function DangerIssuesPanel({ issues }) {
   if (!issues.length) {
     return (
@@ -2099,6 +2244,9 @@ export default function AdminModeration() {
   const [actionBusy, setActionBusy] = useState(null);
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
   const [queueFilter, setQueueFilter] = useState("all");
+  const [publishedQuery, setPublishedQuery] = useState("");
+  const [publishedFilter, setPublishedFilter] = useState("all");
+  const [publishedSort, setPublishedSort] = useState("newest");
   const [publishConfirm, setPublishConfirm] = useState(null);
   const [publishResult, setPublishResult] = useState(null);
   const [rebroadcastBusy, setRebroadcastBusy] = useState(false);
@@ -2182,6 +2330,8 @@ export default function AdminModeration() {
   useEffect(() => {
     load(tab);
     setQueueFilter("all");
+    setPublishedFilter("all");
+    setPublishedQuery("");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -2637,16 +2787,26 @@ export default function AdminModeration() {
       );
     openReject(svc, reason, reasonCode);
   };
-  const displayedItems = items
-    .filter((it) => matchesQueueFilter(it, queueFilter))
-    .sort((a, b) => {
-      const aa = analyzeModerationService(a);
-      const bb = analyzeModerationService(b);
-      if (bb.priority !== aa.priority) return bb.priority - aa.priority;
-      const at = new Date(a.created_at || a.submitted_at || a.updated_at || 0).getTime();
-      const bt = new Date(b.created_at || b.submitted_at || b.updated_at || 0).getTime();
-      return bt - at;
-    });
+  const displayedItems = tab === "published"
+    ? items
+        .filter((it) => matchesPublishedFilter(it, publishedFilter))
+        .filter((it) => {
+          const q = String(publishedQuery || "").trim().toLowerCase();
+          if (!q) return true;
+          const normalized = q.replace(/^#/, "");
+          return publishedSearchText(it).includes(q) || String(it.id) === normalized;
+        })
+        .sort((a, b) => comparePublishedItems(a, b, publishedSort))
+    : items
+        .filter((it) => matchesQueueFilter(it, queueFilter))
+        .sort((a, b) => {
+          const aa = analyzeModerationService(a);
+          const bb = analyzeModerationService(b);
+          if (bb.priority !== aa.priority) return bb.priority - aa.priority;
+          const at = new Date(a.created_at || a.submitted_at || a.updated_at || 0).getTime();
+          const bt = new Date(b.created_at || b.submitted_at || b.updated_at || 0).getTime();
+          return bt - at;
+        });
 
   return (
     <>
@@ -2710,11 +2870,23 @@ export default function AdminModeration() {
           </button>
         </div>
 
-        {!loading && items.length > 0 && (
+        {!loading && items.length > 0 && tab !== "published" && (
           <QueuePanel
             items={items}
             filter={queueFilter}
             onFilterChange={setQueueFilter}
+          />
+        )}
+
+        {!loading && items.length > 0 && tab === "published" && (
+          <PublishedControls
+            items={items}
+            query={publishedQuery}
+            onQueryChange={setPublishedQuery}
+            filter={publishedFilter}
+            onFilterChange={setPublishedFilter}
+            sort={publishedSort}
+            onSortChange={setPublishedSort}
           />
         )}
 
