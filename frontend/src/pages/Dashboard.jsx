@@ -2273,7 +2273,7 @@ useEffect(() => {
               {category === "refused_hotel" && profile.type === "agent" && (
                 <>
                   <div className="mb-2">
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("direction_country")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("hotel_country", "Страна отеля")}</label>
                     <Select
                       options={countryOptions}
                       value={selectedCountry}
@@ -2287,12 +2287,12 @@ useEffect(() => {
                         setDepartureCity(null);
                         setDetails((d) => ({ ...d, directionTo: "" }));
                       }}
-                      placeholder={t("direction_country")}
+                      placeholder={tr("hotel_country", "Страна отеля")}
                     />
                   </div>
 
                   <div className="mb-2">
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("refused_hotel_city")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("refused_hotel_city", "Город / курорт")}</label>
                     <AsyncSelect
                       cacheOptions
                       loadOptions={loadCitiesTo}
@@ -2304,12 +2304,12 @@ useEffect(() => {
                       }}
                       noOptionsMessage={ASYNC_I18N.noOptionsMessage}
                       loadingMessage={ASYNC_I18N.loadingMessage}
-                      placeholder={t("select_city")}
+                      placeholder={tr("select_city", "Выберите город / курорт")}
                     />
                   </div>
 
                   <div className="mb-2">
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("refused_hotel_name")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("refused_hotel_name", "Название отеля")}</label>
                       <HotelSelect
                        t={t}
                        loadOptions={loadHotelOptions}
@@ -2320,7 +2320,7 @@ useEffect(() => {
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                     <div className="min-w-0">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel_check_in")}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("hotel_check_in", "Заезд")}</label>
                       <input
                         type="date"
                         min={todayLocalDate()}
@@ -2330,7 +2330,7 @@ useEffect(() => {
                       />
                     </div>
                     <div className="min-w-0">
-                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel_check_out")}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("hotel_check_out", "Выезд")}</label>
                       <input
                         type="date"
                         min={details.startDate || todayLocalDate()}
@@ -2342,12 +2342,13 @@ useEffect(() => {
                   </div>
 
                   <div className="mb-2">
-                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("accommodation_category")}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("hotel_room", "Номер / категория номера")}</label>
                     <input
                       type="text"
                       value={details.accommodationCategory || ""}
                       onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
                       className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+                      placeholder={tr("hotel_room_placeholder", "Например: Standard, Deluxe, DBL+EB")}
                     />
                   </div>
 
@@ -2362,7 +2363,7 @@ useEffect(() => {
                       value={details.accommodation || ""}
                       onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
                       className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-                      placeholder={tr("enter_accommodation", "Тип размещения")}
+                      placeholder={tr("hotel_accommodation_placeholder", "Например: 2ADT+2CHD, DBL, SGL")}
                     />
                   </div>
 
@@ -2434,27 +2435,21 @@ useEffect(() => {
                     />
                     {t("early_check_in")}
                   </label>
-                  <br />
-                  <label className="inline-flex items-center mb-2">
-                    <input
-                      type="checkbox"
-                      checked={details.arrivalFastTrack || false}
-                      onChange={(e) => setDetails({ ...details, arrivalFastTrack: e.target.checked })}
-                      className="mr-2 h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-200"
-                    />
-                    {t("arrival_fast_track")}
-                  </label>
                   <div className="mb-2">
+                     <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                       {tr("hotel_price_hint", "Цена указывается за номер за весь период проживания. Цена за человека будет показана отдельно, если заполнено размещение.")}
+                     </div>
                      <MoneyField
-                       label={null}
+                       label={tr("hotel_net_price", "Netto за номер / весь период")}
                        value={details.netPrice}
                        onChange={(v) => setDetails({ ...details, netPrice: v })}
-                       placeholder={t("net_price")}
+                       placeholder={tr("hotel_net_price", "Netto за номер / весь период")}
                      />              
                      <MoneyField
+                       label={tr("hotel_gross_price", "Цена клиенту за номер / весь период")}
                        value={details.grossPrice}
                        onChange={(v) => setDetails({ ...details, grossPrice: v })}
-                       placeholder={t("gross_price")}
+                       placeholder={tr("hotel_gross_price", "Цена клиенту за номер / весь период")}
                      />
                   </div>
 
@@ -3249,7 +3244,7 @@ useEffect(() => {
                       />
 
                       <div className="mb-2">
-                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("direction_country")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("hotel_country", "Страна отеля")}</label>
                         <input
                           type="text"
                           value={details.directionCountry || ""}
@@ -3258,24 +3253,24 @@ useEffect(() => {
                             setDepartureCity(null);
                             setDetails((d) => ({ ...d, directionCountry: e.target.value }));
                           }}
-                          placeholder={tr(["service_form.ph_country", "direction_country"], "Страна направления")}
+                          placeholder={tr("hotel_country", "Страна отеля")}
                           className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
                       <div className="mb-2">
-                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("refused_hotel_city")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("refused_hotel_city", "Город / курорт")}</label>
                         <input
                           type="text"
                           value={details.directionTo || ""}
                           onChange={(e) => setDetails((d) => ({ ...d, directionTo: e.target.value }))}
-                          placeholder={tr(["service_form.ph_to", "select_city"], "Город")}
+                          placeholder={tr("select_city", "Город / курорт")}
                           className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
                         />
                       </div>
 
                       <div className="mb-2">
-                       <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("refused_hotel_name")}</label>
+                       <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("refused_hotel_name", "Название отеля")}</label>
                           <HotelSelect
                              t={t}
                              loadOptions={loadHotelOptions}
@@ -3286,7 +3281,7 @@ useEffect(() => {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-2">
                         <div className="min-w-0">
-                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel_check_in")}</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("hotel_check_in", "Заезд")}</label>
                           <input
                             type="date"
                             min={todayLocalDate()}
@@ -3296,7 +3291,7 @@ useEffect(() => {
                           />
                         </div>
                         <div className="min-w-0">
-                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{t("hotel_check_out")}</label>
+                          <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("hotel_check_out", "Выезд")}</label>
                           <input
                             type="date"
                             min={details.startDate || todayLocalDate()}
@@ -3308,13 +3303,13 @@ useEffect(() => {
                       </div>
 
                       <div className="mb-2">
-                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("accommodation_category", "Категория размещения")}</label>
+                        <label className="block text-sm font-semibold text-gray-700 mb-1.5">{tr("hotel_room", "Номер / категория номера")}</label>
                         <input
                           type="text"
                           value={details.accommodationCategory || ""}
                           onChange={(e) => setDetails({ ...details, accommodationCategory: e.target.value })}
                           className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100 mb-3"
-                          placeholder={tr("enter_category", "Категория размещения")}
+                          placeholder={tr("hotel_room_placeholder", "Например: Standard, Deluxe, DBL+EB")}
                         />
                       </div>
 
@@ -3325,7 +3320,7 @@ useEffect(() => {
                           value={details.accommodation || ""}
                           onChange={(e) => setDetails({ ...details, accommodation: e.target.value })}
                           className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-                          placeholder={tr("enter_accommodation", "Тип размещения")}
+                          placeholder={tr("hotel_accommodation_placeholder", "Например: 2ADT+2CHD, DBL, SGL")}
                         />
                       </div>
 
@@ -3379,18 +3374,22 @@ useEffect(() => {
                       </div>
 
                     <div className="mb-2">
+                        <div className="mb-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                          {tr("hotel_price_hint", "Цена указывается за номер за весь период проживания. Цена за человека будет показана отдельно, если заполнено размещение.")}
+                        </div>
                         
                         <MoneyField
-                          label={null}
+                          label={tr("hotel_net_price", "Netto за номер / весь период")}
                           value={details.netPrice}
                           onChange={(v) => setDetails({ ...details, netPrice: v })}
-                          placeholder={t("net_price")}
+                          placeholder={tr("hotel_net_price", "Netto за номер / весь период")}
                         />
                          
                         <MoneyField
+                           label={tr("hotel_gross_price", "Цена клиенту за номер / весь период")}
                            value={details.grossPrice}
                            onChange={(v) => setDetails({ ...details, grossPrice: v })}
-                           placeholder={t("gross_price")}
+                           placeholder={tr("hotel_gross_price", "Цена клиенту за номер / весь период")}
                          />
                       </div>
 
