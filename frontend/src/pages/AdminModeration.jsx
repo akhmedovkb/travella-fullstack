@@ -1273,6 +1273,8 @@ function moderationActionLabel(action) {
   const normalized = String(action || "").toLowerCase();
   if (normalized === "approved_clean") return "Одобрено без предупреждений";
   if (normalized === "approved_with_warnings") return "Одобрено с предупреждениями";
+  if (normalized === "telegram_sent") return "Telegram отправлен";
+  if (normalized === "telegram_failed") return "Telegram не отправлен";
   if (normalized === "approved") return "Одобрено";
   if (normalized === "rejected") return "Запрошено исправление";
   if (normalized === "unpublished") return "Снято";
@@ -1930,6 +1932,86 @@ function PublishConfirmModal({
   );
 }
 
+function PublishResultModal({ result, saving = false, onClose, onRetry }) {
+  if (!result) return null;
+  const broadcast = result.broadcast || {};
+  const ok = Boolean(broadcast.ok);
+  const recipients = Number(broadcast.recipients || 0);
+  const delivered = Number(broadcast.delivered || 0);
+  const failed = Number(broadcast.failed || 0);
+
+  return createPortal(
+    <div className="fixed inset-0 z-[5700] bg-black/65 flex items-center justify-center p-4">
+      <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+        <div className="border-b px-5 py-4">
+          <div className="text-lg font-bold text-slate-950">Результат публикации</div>
+          <div className="mt-1 text-sm text-slate-500">
+            #{result.service?.id || result.serviceId} · {result.service?.title || "service"}
+          </div>
+        </div>
+
+        <div className="space-y-3 p-5">
+          <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+            <div className="font-bold">Сайт: опубликовано</div>
+            <div className="mt-1 text-xs opacity-80">Карточка approved/published и доступна на сайте после обновления выдачи.</div>
+          </div>
+
+          <div
+            className={`rounded-2xl border p-4 text-sm ${
+              ok ? "border-emerald-200 bg-emerald-50 text-emerald-900" : "border-rose-200 bg-rose-50 text-rose-900"
+            }`}
+          >
+            <div className="font-bold">
+              Telegram: {ok ? "отправлено" : "не отправлено"}
+            </div>
+            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+              <div className="rounded-xl bg-white/80 px-2 py-2">
+                <div className="text-lg font-bold">{recipients}</div>
+                <div className="text-[11px]">получателей</div>
+              </div>
+              <div className="rounded-xl bg-white/80 px-2 py-2">
+                <div className="text-lg font-bold">{delivered}</div>
+                <div className="text-[11px]">доставлено</div>
+              </div>
+              <div className="rounded-xl bg-white/80 px-2 py-2">
+                <div className="text-lg font-bold">{failed}</div>
+                <div className="text-[11px]">ошибок</div>
+              </div>
+            </div>
+            {!ok && (
+              <div className="mt-3 rounded-xl bg-white/80 px-3 py-2 text-xs">
+                Причина: {broadcast.reason || broadcast.error || "unknown"}
+              </div>
+            )}
+          </div>
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t px-5 py-4">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-200 disabled:opacity-60"
+          >
+            Закрыть
+          </button>
+          {!ok && (
+            <button
+              type="button"
+              onClick={onRetry}
+              disabled={saving}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-black disabled:opacity-60"
+            >
+              {saving ? "Отправляем..." : "Повторить Telegram"}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export default function AdminModeration() {
   const { t } = useTranslation();
 
@@ -1964,6 +2046,8 @@ export default function AdminModeration() {
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
   const [queueFilter, setQueueFilter] = useState("all");
   const [publishConfirm, setPublishConfirm] = useState(null);
+  const [publishResult, setPublishResult] = useState(null);
+  const [rebroadcastBusy, setRebroadcastBusy] = useState(false);
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -2046,7 +2130,7 @@ export default function AdminModeration() {
     const warnings = Array.isArray(options.warnings) ? options.warnings : [];
     setActionBusy(id);
     try {
-      await axios.post(
+      const res = await axios.post(
         `${API_BASE}/api/admin/services/${id}/approve`,
         {
           approvalMode: warnings.length ? "with_warnings" : "clean",
@@ -2056,6 +2140,11 @@ export default function AdminModeration() {
       );
       tSuccess(t("moderation.approved", { defaultValue: "Опубликовано" }));
       setPublishConfirm(null);
+      setPublishResult({
+        serviceId: id,
+        service: items.find((x) => x.id === id) || { id },
+        broadcast: res.data?.broadcast || null,
+      });
       setItems((prev) => prev.filter((x) => x.id !== id));
       setCounts((c) => ({
         ...c,
@@ -2101,6 +2190,29 @@ export default function AdminModeration() {
     approve(publishConfirm.service.id, {
       warnings: publishConfirm.warnings || [],
     });
+  };
+
+  const retryBroadcast = async () => {
+    const serviceId = publishResult?.serviceId || publishResult?.service?.id;
+    if (!serviceId) return;
+    setRebroadcastBusy(true);
+    try {
+      const res = await axios.post(
+        `${API_BASE}/api/admin/services/${serviceId}/rebroadcast`,
+        {},
+        cfg
+      );
+      setPublishResult((prev) => ({
+        ...(prev || {}),
+        broadcast: res.data?.broadcast || null,
+      }));
+      if (res.data?.broadcast?.ok) tSuccess("Telegram отправлен повторно");
+      else tError("Telegram всё ещё не отправлен");
+    } catch {
+      tError("Не удалось повторить Telegram-публикацию");
+    } finally {
+      setRebroadcastBusy(false);
+    }
   };
 
   const openReject = (svc, reason = "", reasonCode = "") => {
@@ -2304,8 +2416,9 @@ export default function AdminModeration() {
         cfg
       );
 
+      let approveRes = null;
       if (approveAfter) {
-        await axios.post(
+        approveRes = await axios.post(
           `${API_BASE}/api/admin/services/${editItemId}/approve`,
           {
             approvalMode: warnings.length ? "with_warnings" : "clean",
@@ -2325,6 +2438,17 @@ export default function AdminModeration() {
       setEditOpen(false);
       setTelegramPreviewOpen(false);
       setPublishConfirm(null);
+      if (approveAfter) {
+        setPublishResult({
+          serviceId: editItemId,
+          service: {
+            id: editItemId,
+            title: pickFirst(editForm.title, details.title, details.hotel, details.eventName),
+            category: editForm.category,
+          },
+          broadcast: approveRes?.data?.broadcast || null,
+        });
+      }
       setEditItemId(null);
       setModerationEvents([]);
       await load(tab);
@@ -3146,6 +3270,13 @@ export default function AdminModeration() {
         saving={Boolean(actionBusy === publishConfirm?.service?.id || editSaving)}
         onCancel={() => setPublishConfirm(null)}
         onConfirm={confirmPublish}
+      />
+
+      <PublishResultModal
+        result={publishResult}
+        saving={rebroadcastBusy}
+        onClose={() => setPublishResult(null)}
+        onRetry={retryBroadcast}
       />
 
       <ProofLightbox

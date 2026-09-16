@@ -462,14 +462,67 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
   // - не подмешивает provider.telegram_web_chat_id старого бота;
   // - если sendPhoto не проходит, делает fallback на текст;
   // - считает реальную доставку, а не fulfilled Promise с false.
+  let broadcastResult = null;
   try {
-    const broadcastResult = await broadcastApprovedService(rows[0].id, { db: pool });
+    broadcastResult = await broadcastApprovedService(rows[0].id, { db: pool });
     console.log("[admin approve] service approval broadcast result:", broadcastResult);
   } catch (e) {
+    broadcastResult = { ok: false, reason: "BROADCAST_EXCEPTION", error: e?.message || String(e) };
     console.error("[admin approve] broadcast failed:", e?.message || e);
   }
 
-  res.json({ ok: true, service: rows[0] });
+  await logServiceModerationEvent(pool, {
+    serviceId: rows[0].id,
+    actorId: adminId,
+    actorRole: "admin",
+    action: broadcastResult?.ok ? "telegram_sent" : "telegram_failed",
+    reasonCode: broadcastResult?.reason || null,
+    reason: broadcastResult?.ok
+      ? `Telegram broadcast delivered: ${broadcastResult.delivered || 0}/${broadcastResult.recipients || 0}`
+      : `Telegram broadcast failed: ${broadcastResult?.reason || broadcastResult?.error || "unknown"}`,
+    before: rows[0],
+    after: rows[0],
+    meta: { broadcast: broadcastResult },
+  });
+
+  res.json({ ok: true, service: rows[0], broadcast: broadcastResult });
+});
+
+// repeat Telegram broadcast for already published service
+router.post("/services/:id(\\d+)/rebroadcast", authenticateToken, requireAdmin, async (req, res) => {
+  const adminId = req.user.id;
+  const serviceId = Number(req.params.id);
+
+  if (!Number.isFinite(serviceId) || serviceId <= 0) {
+    return res.status(400).json({ ok: false, message: "Bad service id" });
+  }
+
+  let broadcastResult = null;
+  try {
+    broadcastResult = await broadcastApprovedService(serviceId, {
+      db: pool,
+      logPrefix: "[admin rebroadcast]",
+    });
+  } catch (e) {
+    broadcastResult = { ok: false, reason: "BROADCAST_EXCEPTION", error: e?.message || String(e) };
+    console.error("[admin rebroadcast] failed:", e?.message || e);
+  }
+
+  await logServiceModerationEvent(pool, {
+    serviceId,
+    actorId: adminId,
+    actorRole: "admin",
+    action: broadcastResult?.ok ? "telegram_sent" : "telegram_failed",
+    reasonCode: broadcastResult?.reason || null,
+    reason: broadcastResult?.ok
+      ? `Telegram rebroadcast delivered: ${broadcastResult.delivered || 0}/${broadcastResult.recipients || 0}`
+      : `Telegram rebroadcast failed: ${broadcastResult?.reason || broadcastResult?.error || "unknown"}`,
+    before: { id: serviceId },
+    after: { id: serviceId },
+    meta: { broadcast: broadcastResult, repeat: true },
+  });
+
+  res.json({ ok: Boolean(broadcastResult?.ok), broadcast: broadcastResult });
 });
 
 // reject / request correction (только для pending)
