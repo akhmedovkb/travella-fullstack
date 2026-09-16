@@ -7084,7 +7084,13 @@ function getCalendarConfig(state, draft = {}) {
     case "svc_create_tour_start":
       return { title: "📅 Выберите дату начала тура", field: "startDate", next: "svc_create_tour_end", kind: "date", required: true };
     case "svc_create_tour_end":
-      return { title: "📅 Выберите дату окончания тура", field: "endDate", next: "svc_create_flight_details", kind: "date", required: true };
+      return {
+        title: "📅 Выберите дату окончания тура",
+        field: "endDate",
+        next: draft.category === "refused_hotel" ? "svc_hotel_name" : "svc_create_flight_details",
+        kind: "date",
+        required: true
+      };
     case "svc_create_flight_departure":
       return {
         title: "🛫 Выберите дату рейса вылета",
@@ -16817,6 +16823,11 @@ bot.on("text", async (ctx, next) => {
           draft.title = v;
         
           pushWizardState(ctx, "svc_create_title");
+          if (draft.category === "refused_hotel") {
+            ctx.session.state = "svc_hotel_country";
+            await promptWizardState(ctx, "svc_hotel_country");
+            return;
+          }
           ctx.session.state = "svc_create_tour_country";
           await promptWizardState(ctx, "svc_create_tour_country");
           return;
@@ -16918,6 +16929,11 @@ bot.on("text", async (ctx, next) => {
           }
           draft.endDate = normEnd;
           pushWizardState(ctx, "svc_create_tour_end");
+          if (draft.category === "refused_hotel") {
+            ctx.session.state = "svc_hotel_name";
+            await promptWizardState(ctx, "svc_hotel_name");
+            return;
+          }
           ctx.session.state = "svc_create_flight_details";
           await promptWizardState(ctx, "svc_create_flight_details");
           return;
