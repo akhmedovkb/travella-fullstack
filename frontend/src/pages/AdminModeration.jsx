@@ -267,6 +267,7 @@ function Card({
   onRejectClick,
   onCorrectionClick,
   onUnpublish,
+  onRebroadcast,
   actionBusy,
   t,
   onOpenProof,
@@ -471,6 +472,10 @@ function Card({
     d.flightDetails ||
     d.flight_details ||
     d.flight_info;
+  const isPublishedTab = tab === "published";
+  const telegramFailed = Number(s.telegram_failed_count || 0) > 0 &&
+    String(s.last_moderation_action || "").toLowerCase() === "telegram_failed";
+  const siteUrl = `https://travella.uz?service=${encodeURIComponent(s.id)}`;
 
   return (
     <div className="border rounded-lg p-4 bg-white shadow-sm flex flex-col relative">
@@ -919,6 +924,32 @@ function Card({
         </div>
       )}
 
+      {isPublishedTab && (
+        <div className="mt-3 grid grid-cols-3 gap-2 text-center text-xs">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 px-2 py-2">
+            <div className="text-lg font-bold text-slate-950">{Number(s.views_count || 0)}</div>
+            <div className="text-slate-500">просмотров</div>
+          </div>
+          <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-2 py-2">
+            <div className="text-lg font-bold text-emerald-800">{Number(s.contact_unlocks_count || 0)}</div>
+            <div className="text-emerald-700">контактов</div>
+          </div>
+          <div className="rounded-xl border border-blue-200 bg-blue-50 px-2 py-2">
+            <div className="text-lg font-bold text-blue-800">{Number(s.quick_requests_count || 0)}</div>
+            <div className="text-blue-700">заявок</div>
+          </div>
+        </div>
+      )}
+
+      {isPublishedTab && telegramFailed && (
+        <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-800">
+          <div className="font-bold">Telegram отправка с ошибкой</div>
+          <div className="mt-1 opacity-80">
+            Нажмите “Повторить Telegram”, чтобы отправить карточку ещё раз.
+          </div>
+        </div>
+      )}
+
       <div className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-2">
         <div className="mb-2 flex items-center justify-between gap-2">
           <span className="text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -992,24 +1023,47 @@ function Card({
           {cardAnalysis.hasCorrectionHistory ? "Проверить повторно" : t("common.edit", { defaultValue: "Редактировать" })}
         </button>
 
-        <button
-          type="button"
-          onClick={() => onApprove(s.id)}
-          disabled={actionBusy === s.id}
-          className={`px-3 py-1.5 rounded text-sm disabled:opacity-60 ${
-            cardAnalysis.ready
-              ? "bg-emerald-600 text-white font-bold shadow-sm hover:bg-emerald-700"
-              : "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
-          }`}
-        >
-          {actionBusy === s.id
-            ? t("common.saving", { defaultValue: "Сохранение..." })
-            : tab === "rejected"
-            ? t("moderation.confirm", { defaultValue: "Подтвердить" })
-            : cardAnalysis.ready
-            ? "Опубликовать"
-            : "Опубликовать после проверки"}
-        </button>
+        {!isPublishedTab && (
+          <button
+            type="button"
+            onClick={() => onApprove(s.id)}
+            disabled={actionBusy === s.id}
+            className={`px-3 py-1.5 rounded text-sm disabled:opacity-60 ${
+              cardAnalysis.ready
+                ? "bg-emerald-600 text-white font-bold shadow-sm hover:bg-emerald-700"
+                : "bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100"
+            }`}
+          >
+            {actionBusy === s.id
+              ? t("common.saving", { defaultValue: "Сохранение..." })
+              : tab === "rejected"
+              ? t("moderation.confirm", { defaultValue: "Подтвердить" })
+              : cardAnalysis.ready
+              ? "Опубликовать"
+              : "Опубликовать после проверки"}
+          </button>
+        )}
+
+        {isPublishedTab && (
+          <>
+            <a
+              href={siteUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="px-3 py-1.5 rounded bg-slate-900 text-white text-sm hover:bg-black"
+            >
+              Открыть на сайте
+            </a>
+            <button
+              type="button"
+              onClick={() => onRebroadcast(s)}
+              disabled={actionBusy === `rebroadcast:${s.id}`}
+              className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60"
+            >
+              {actionBusy === `rebroadcast:${s.id}` ? "Отправляем..." : "Повторить Telegram"}
+            </button>
+          </>
+        )}
 
         {tab === "pending" && (
           <button
@@ -2018,7 +2072,7 @@ export default function AdminModeration() {
   const [tab, setTab] = useState("pending");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [counts, setCounts] = useState({ pending: 0, rejected: 0 });
+  const [counts, setCounts] = useState({ pending: 0, rejected: 0, published: 0 });
   const [proofViewer, setProofViewer] = useState(null);
   const [rejectTarget, setRejectTarget] = useState(null);
   const [rejectForm, setRejectForm] = useState({ reasonCode: "NO_PROOF", reason: REJECT_REASON_OPTIONS[0].text });
@@ -2078,6 +2132,8 @@ export default function AdminModeration() {
     const url =
       which === "pending"
         ? `${API_BASE}/api/admin/services/pending`
+        : which === "published"
+        ? `${API_BASE}/api/admin/services/published`
         : `${API_BASE}/api/admin/services/rejected`;
     const res = await axios.get(url, cfg);
     return Array.isArray(res.data) ? res.data : res.data?.items || [];
@@ -2102,15 +2158,18 @@ export default function AdminModeration() {
 
   const refreshCounts = async () => {
     try {
-      const [p, r] = await Promise.all([
+      const [p, r, pub] = await Promise.all([
         axios.get(`${API_BASE}/api/admin/services/pending`, cfg),
         axios.get(`${API_BASE}/api/admin/services/rejected`, cfg),
+        axios.get(`${API_BASE}/api/admin/services/published`, cfg),
       ]);
       const pending = (Array.isArray(p.data) ? p.data : p.data?.items || [])
         .length;
       const rejected = (Array.isArray(r.data) ? r.data : r.data?.items || [])
         .length;
-      setCounts({ pending, rejected });
+      const published = (Array.isArray(pub.data) ? pub.data : pub.data?.items || [])
+        .length;
+      setCounts({ pending, rejected, published });
     } catch {}
   };
 
@@ -2212,6 +2271,30 @@ export default function AdminModeration() {
       tError("Не удалось повторить Telegram-публикацию");
     } finally {
       setRebroadcastBusy(false);
+    }
+  };
+
+  const rebroadcastFromCard = async (svc) => {
+    if (!svc?.id) return;
+    setActionBusy(`rebroadcast:${svc.id}`);
+    try {
+      const res = await axios.post(
+        `${API_BASE}/api/admin/services/${svc.id}/rebroadcast`,
+        {},
+        cfg
+      );
+      setPublishResult({
+        serviceId: svc.id,
+        service: svc,
+        broadcast: res.data?.broadcast || null,
+      });
+      await load(tab);
+      if (res.data?.broadcast?.ok) tSuccess("Telegram отправлен повторно");
+      else tError("Telegram не отправлен");
+    } catch {
+      tError("Не удалось повторить Telegram-публикацию");
+    } finally {
+      setActionBusy(null);
     }
   };
 
@@ -2611,6 +2694,20 @@ export default function AdminModeration() {
               {counts.rejected || 0}
             </span>
           </button>
+
+          <button
+            className={`px-4 py-1.5 text-sm font-medium ${
+              tab === "published"
+                ? "bg-gray-900 text-white"
+                : "text-gray-700 hover:bg-gray-100"
+            }`}
+            onClick={() => setTab("published")}
+          >
+            Опубликованные
+            <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
+              {counts.published || 0}
+            </span>
+          </button>
         </div>
 
         {!loading && items.length > 0 && (
@@ -2619,6 +2716,33 @@ export default function AdminModeration() {
             filter={queueFilter}
             onFilterChange={setQueueFilter}
           />
+        )}
+
+        {!loading && tab === "published" && items.length > 0 && (
+          <div className="mb-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">На сайте</div>
+              <div className="mt-1 text-2xl font-bold text-slate-950">{items.length}</div>
+            </div>
+            <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">Открытий контактов</div>
+              <div className="mt-1 text-2xl font-bold text-emerald-900">
+                {items.reduce((sum, it) => sum + Number(it.contact_unlocks_count || 0), 0)}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-blue-700">Telegram-заявок</div>
+              <div className="mt-1 text-2xl font-bold text-blue-900">
+                {items.reduce((sum, it) => sum + Number(it.quick_requests_count || 0), 0)}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
+              <div className="text-xs font-bold uppercase tracking-wide text-rose-700">Telegram ошибки</div>
+              <div className="mt-1 text-2xl font-bold text-rose-900">
+                {items.filter((it) => String(it.last_moderation_action || "").toLowerCase() === "telegram_failed").length}
+              </div>
+            </div>
+          </div>
         )}
 
         {loading ? (
@@ -2649,6 +2773,7 @@ export default function AdminModeration() {
                 onRejectClick={openReject}
                 onCorrectionClick={openCorrectionFromCard}
                 onUnpublish={unpublish}
+                onRebroadcast={rebroadcastFromCard}
                 actionBusy={actionBusy}
                 onOpenProof={setProofViewer}
                 t={t}

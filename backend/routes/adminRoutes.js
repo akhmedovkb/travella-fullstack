@@ -82,6 +82,50 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
   res.json(q.rows);
 });
 
+// /api/admin/services/published
+router.get("/services/published", authenticateToken, requireAdmin, async (req, res) => {
+  await ensureServiceModerationEvents(pool);
+  const q = await pool.query(
+    `SELECT
+        s.*,
+        p.name AS provider_name,
+        p.type AS provider_type,
+        ev.action AS last_moderation_action,
+        ev.reason_code AS last_moderation_reason_code,
+        ev.reason AS last_moderation_reason,
+        ev.created_at AS last_moderation_at,
+        ev.actor_id AS last_moderation_actor_id,
+        COALESCE(stats.views_count, 0)::int AS views_count,
+        COALESCE(stats.unlocks_count, 0)::int AS contact_unlocks_count,
+        COALESCE(stats.quick_requests_count, 0)::int AS quick_requests_count,
+        COALESCE(stats.telegram_failed_count, 0)::int AS telegram_failed_count,
+        COALESCE(stats.telegram_sent_count, 0)::int AS telegram_sent_count
+       FROM services s
+       JOIN providers p ON p.id = s.provider_id
+       LEFT JOIN LATERAL (
+         SELECT action, reason_code, reason, created_at, actor_id
+           FROM service_moderation_events
+          WHERE service_id = s.id
+          ORDER BY created_at DESC
+          LIMIT 1
+       ) ev ON TRUE
+       LEFT JOIN LATERAL (
+         SELECT
+           (SELECT COUNT(*) FROM service_views v WHERE v.service_id = s.id) AS views_count,
+           (SELECT COUNT(*) FROM client_service_contact_unlocks u WHERE u.service_id = s.id) AS unlocks_count,
+           (SELECT COUNT(*) FROM telegram_quick_requests q WHERE q.service_id = s.id) AS quick_requests_count,
+           (SELECT COUNT(*) FROM service_moderation_events me WHERE me.service_id = s.id AND me.action = 'telegram_failed') AS telegram_failed_count,
+           (SELECT COUNT(*) FROM service_moderation_events me WHERE me.service_id = s.id AND me.action = 'telegram_sent') AS telegram_sent_count
+       ) stats ON TRUE
+      WHERE s.deleted_at IS NULL
+        AND LOWER(COALESCE(s.status, '')) IN ('published','approved','active')
+        AND COALESCE(LOWER(s.moderation_status), 'approved') IN ('approved','published','active')
+      ORDER BY COALESCE(s.published_at, s.approved_at, s.updated_at) DESC
+      LIMIT 200`
+  );
+  res.json(q.rows);
+});
+
 /* ---------- ДЕЙСТВИЯ и карточка (после списков; :id только цифры) ---------- */
 
 // карточка услуги для предпросмотра
