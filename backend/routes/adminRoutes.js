@@ -374,6 +374,15 @@ router.patch("/services/:id(\\d+)/price", authenticateToken, requireAdmin, async
 // approve (только для pending)
 router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, async (req, res) => {
   const adminId = req.user.id;
+  const body = req.body || {};
+  const approvalMode = String(body.approvalMode || body.approval_mode || "clean").trim().toLowerCase();
+  const approvalWarnings = Array.isArray(body.warnings)
+    ? body.warnings.map((x) => String(x || "").trim()).filter(Boolean).slice(0, 20)
+    : [];
+  const approvalAction =
+    approvalMode === "with_warnings" || approvalWarnings.length
+      ? "approved_with_warnings"
+      : "approved_clean";
 
   const beforeRes = await pool.query(
     `SELECT id, status, moderation_status, details FROM services WHERE id = $1`,
@@ -405,9 +414,13 @@ router.post("/services/:id(\\d+)/approve", authenticateToken, requireAdmin, asyn
     serviceId: rows[0].id,
     actorId: adminId,
     actorRole: "admin",
-    action: "approved",
+    action: approvalAction,
     before,
     after: rows[0],
+    meta: {
+      approvalMode: approvalAction,
+      warnings: approvalWarnings,
+    },
   });
 
   // TG → поставщику (выбор правильного чата + правильного бота)

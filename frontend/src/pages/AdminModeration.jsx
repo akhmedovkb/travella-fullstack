@@ -1271,6 +1271,8 @@ function analyzeModerationService(svc = {}) {
 
 function moderationActionLabel(action) {
   const normalized = String(action || "").toLowerCase();
+  if (normalized === "approved_clean") return "Одобрено без предупреждений";
+  if (normalized === "approved_with_warnings") return "Одобрено с предупреждениями";
   if (normalized === "approved") return "Одобрено";
   if (normalized === "rejected") return "Запрошено исправление";
   if (normalized === "unpublished") return "Снято";
@@ -1835,6 +1837,99 @@ function ModerationPreview({ serviceId, form, details, images }) {
   );
 }
 
+function PublishConfirmModal({
+  target,
+  warnings = [],
+  clean = false,
+  saving = false,
+  onCancel,
+  onConfirm,
+}) {
+  if (!target) return null;
+  const hasWarnings = warnings.length > 0;
+
+  return createPortal(
+    <div className="fixed inset-0 z-[5600] bg-black/65 flex items-center justify-center p-4">
+      <div className="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+        <div className="border-b px-5 py-4">
+          <div className="text-lg font-bold text-slate-950">
+            {hasWarnings ? "Публикация с предупреждениями" : "Подтвердить публикацию"}
+          </div>
+          <div className="mt-1 text-sm text-slate-500">
+            #{target.id} · {target.title || target.category || "service"}
+          </div>
+        </div>
+
+        <div className="space-y-4 p-5">
+          <div
+            className={`rounded-2xl border p-4 text-sm ${
+              hasWarnings
+                ? "border-amber-200 bg-amber-50 text-amber-900"
+                : "border-emerald-200 bg-emerald-50 text-emerald-900"
+            }`}
+          >
+            <div className="font-bold">
+              {hasWarnings
+                ? "Карточка не идеальная. Проверьте риски перед публикацией."
+                : "Карточка готова: обязательные поля заполнены, блокирующих рисков нет."}
+            </div>
+            {clean && (
+              <div className="mt-1 text-xs opacity-80">
+                В историю уйдёт метка approved_clean.
+              </div>
+            )}
+          </div>
+
+          {hasWarnings && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-sm font-bold text-slate-900">Что проверить</div>
+              <div className="mt-3 space-y-2">
+                {warnings.map((warning) => (
+                  <div
+                    key={warning}
+                    className="rounded-xl border border-amber-200 bg-white px-3 py-2 text-sm text-amber-900"
+                  >
+                    {warning}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3 text-xs text-slate-500">
+                Если всё равно публикуете, в историю уйдёт метка approved_with_warnings.
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-end gap-2 border-t px-5 py-4">
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={saving}
+            className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-200 disabled:opacity-60"
+          >
+            Отмена
+          </button>
+          <button
+            type="button"
+            onClick={onConfirm}
+            disabled={saving}
+            className={`rounded-lg px-4 py-2 text-sm font-bold text-white disabled:opacity-60 ${
+              hasWarnings ? "bg-amber-600 hover:bg-amber-700" : "bg-emerald-600 hover:bg-emerald-700"
+            }`}
+          >
+            {saving
+              ? "Публикуем..."
+              : hasWarnings
+              ? "Всё равно опубликовать"
+              : "Опубликовать"}
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+}
+
 export default function AdminModeration() {
   const { t } = useTranslation();
 
@@ -1868,6 +1963,7 @@ export default function AdminModeration() {
   const [actionBusy, setActionBusy] = useState(null);
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
   const [queueFilter, setQueueFilter] = useState("all");
+  const [publishConfirm, setPublishConfirm] = useState(null);
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -1946,11 +2042,20 @@ export default function AdminModeration() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
-  const approve = async (id) => {
+  const approve = async (id, options = {}) => {
+    const warnings = Array.isArray(options.warnings) ? options.warnings : [];
     setActionBusy(id);
     try {
-      await axios.post(`${API_BASE}/api/admin/services/${id}/approve`, {}, cfg);
+      await axios.post(
+        `${API_BASE}/api/admin/services/${id}/approve`,
+        {
+          approvalMode: warnings.length ? "with_warnings" : "clean",
+          warnings,
+        },
+        cfg
+      );
       tSuccess(t("moderation.approved", { defaultValue: "Опубликовано" }));
+      setPublishConfirm(null);
       setItems((prev) => prev.filter((x) => x.id !== id));
       setCounts((c) => ({
         ...c,
@@ -1963,6 +2068,39 @@ export default function AdminModeration() {
     } finally {
       setActionBusy(null);
     }
+  };
+
+  const publishWarningsForAnalysis = (analysis) => [
+    ...analysis.blockingIssues.map((issue) => issue.title),
+    ...analysis.warningIssues.map((issue) => issue.title),
+    ...analysis.missingRequired.map((item) => `Нет: ${item.label}`),
+  ];
+
+  const requestPublish = (svc, analysis = null) => {
+    const currentAnalysis = analysis || analyzeModerationService(svc);
+    const warnings = publishWarningsForAnalysis(currentAnalysis);
+    if (!warnings.length) {
+      return approve(svc.id, { warnings: [] });
+    }
+    setPublishConfirm({
+      service: svc,
+      warnings,
+      clean: false,
+    });
+  };
+
+  const confirmPublish = () => {
+    if (!publishConfirm?.service?.id) return;
+    if (publishConfirm.source === "edit") {
+      return saveEdit({
+        approveAfter: true,
+        forceApprove: true,
+        warnings: publishConfirm.warnings || [],
+      });
+    }
+    approve(publishConfirm.service.id, {
+      warnings: publishConfirm.warnings || [],
+    });
   };
 
   const openReject = (svc, reason = "", reasonCode = "") => {
@@ -2119,7 +2257,7 @@ export default function AdminModeration() {
     setEditDetailsRows((prev) => [...prev, { key: "", value: "" }]);
   };
   
-  const saveEdit = async ({ approveAfter = false } = {}) => {
+  const saveEdit = async ({ approveAfter = false, forceApprove = false, warnings = [] } = {}) => {
     const details = rowsToDetails(editDetailsRows);
     const images = Array.isArray(editImages)
       ? editImages.filter((x) => String(x || "").trim())
@@ -2142,7 +2280,7 @@ export default function AdminModeration() {
       );
     }
 
-    if (approveAfter && !publishReady) {
+    if (approveAfter && !publishReady && !forceApprove) {
       return tInfo("Сначала заполните обязательные пункты чеклиста готовности.");
     }
 
@@ -2167,7 +2305,14 @@ export default function AdminModeration() {
       );
 
       if (approveAfter) {
-        await axios.post(`${API_BASE}/api/admin/services/${editItemId}/approve`, {}, cfg);
+        await axios.post(
+          `${API_BASE}/api/admin/services/${editItemId}/approve`,
+          {
+            approvalMode: warnings.length ? "with_warnings" : "clean",
+            warnings,
+          },
+          cfg
+        );
       }
 
       tSuccess(
@@ -2179,6 +2324,7 @@ export default function AdminModeration() {
       );
       setEditOpen(false);
       setTelegramPreviewOpen(false);
+      setPublishConfirm(null);
       setEditItemId(null);
       setModerationEvents([]);
       await load(tab);
@@ -2222,6 +2368,31 @@ export default function AdminModeration() {
   const publishReady = readinessItems
     .filter((item) => item.required)
     .every((item) => item.ok) && blockingIssues.length === 0;
+  const requestPublishFromEdit = () => {
+    if (!editItemId) return;
+    const warnings = [
+      ...blockingIssues.map((issue) => issue.title),
+      ...dangerIssues.filter((issue) => !issue.blocking).map((issue) => issue.title),
+      ...readinessItems
+        .filter((item) => item.required && !item.ok)
+        .map((item) => `Нет: ${item.label}`),
+    ];
+
+    if (!warnings.length) {
+      return saveEdit({ approveAfter: true, warnings: [] });
+    }
+
+    setPublishConfirm({
+      source: "edit",
+      service: {
+        id: editItemId,
+        title: pickFirst(editForm.title, editDetails.title, editDetails.hotel, editDetails.eventName),
+        category: editForm.category,
+      },
+      warnings,
+      clean: false,
+    });
+  };
   const toggleDetailBool = (key) => setDetailValue(key, yesNoValue(editDetails[key]) ? "false" : "true");
   const applyPerPersonSuggestion = () => {
     if (!perPersonSuggestion) return;
@@ -2349,7 +2520,7 @@ export default function AdminModeration() {
                 tab={tab}
                 analysis={analysis}
                 onEdit={openEdit}
-                onApprove={approve}
+                onApprove={() => requestPublish(it, analysis)}
                 onReject={reject}
                 onRejectClick={openReject}
                 onCorrectionClick={openCorrectionFromCard}
@@ -2940,10 +3111,10 @@ export default function AdminModeration() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => saveEdit({ approveAfter: true })}
-                  disabled={editSaving || editLoading || !publishReady}
+                  onClick={requestPublishFromEdit}
+                  disabled={editSaving || editLoading}
                   className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
-                  title={!publishReady ? "Заполните обязательные пункты чеклиста" : ""}
+                  title={!publishReady ? "Есть предупреждения: перед публикацией будет подтверждение" : ""}
                 >
                   {editSaving
                     ? t("common.saving", { defaultValue: "Сохранение..." })
@@ -2967,6 +3138,15 @@ export default function AdminModeration() {
           saving={editSaving}
         />
       )}
+
+      <PublishConfirmModal
+        target={publishConfirm?.service || null}
+        warnings={publishConfirm?.warnings || []}
+        clean={publishConfirm?.clean || false}
+        saving={Boolean(actionBusy === publishConfirm?.service?.id || editSaving)}
+        onCancel={() => setPublishConfirm(null)}
+        onConfirm={confirmPublish}
+      />
 
       <ProofLightbox
         image={proofViewer}
