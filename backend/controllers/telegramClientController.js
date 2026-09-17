@@ -792,10 +792,6 @@ async function searchClientServices(req, res) {
             s.expiration_at IS NULL
             OR s.expiration_at > NOW()
           )
-          AND (
-            (s.details::jsonb->>'expiration') IS NULL
-            OR NULLIF(s.details::jsonb->>'expiration', '')::timestamp > NOW()
-          )
         ORDER BY
           s.created_at DESC
         LIMIT 200
