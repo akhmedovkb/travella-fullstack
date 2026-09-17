@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo } from "../shared/toast";
+import { getServiceUrgency } from "../utils/serviceUrgency";
 
 const fmt = (n) => new Intl.NumberFormat().format(Number(n || 0));
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -2081,9 +2082,9 @@ function ModerationPreview({ serviceId, form, details, images }) {
   const hotelPerPerson = isHotel && guestsCount > 1 && grossPriceNumber
     ? `${fmt(grossPriceNumber / guestsCount)} USD`
     : "";
-  const urgencyBadge = pickFirst(details.expiration, details.expiration_at, details.expiration_ts)
-    ? "⚡ срочно"
-    : "⏳ срок не указан";
+  const urgencyBadge = getServiceUrgency(
+    pickFirst(details.expiration, details.expiration_at, details.expiration_ts)
+  ).badge;
 
   return (
     <div className="sticky top-4 rounded-2xl border border-slate-200 bg-slate-950 p-4 text-white shadow-xl">

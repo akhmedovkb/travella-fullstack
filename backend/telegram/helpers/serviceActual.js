@@ -246,8 +246,8 @@ function isServiceActual(details, svc = {}) {
   const d = toObj(details);
   const status = String(svc.status || "").trim().toLowerCase();
 
-  // deleted / archived are never actual
-  if (status === "deleted" || status === "archived") {
+  // Terminal/inactive database states always override stale positive flags in details.
+  if (["deleted", "archived", "inactive", "expired", "rejected", "cancelled", "canceled"].includes(status)) {
     return false;
   }
 

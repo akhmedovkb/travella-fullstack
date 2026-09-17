@@ -1,6 +1,8 @@
 // backend/utils/telegramServiceCard.js
 
 const { getServiceDisplayTitle } = require("./serviceDisplay");
+const { getServiceUrgencyFromService } = require("./serviceUrgency");
+const { isServiceActual } = require("../telegram/helpers/serviceActual");
 
 /* ===================== CONFIG (как в bot.js) ===================== */
 
@@ -1056,7 +1058,7 @@ const priceKind =
           note: composition ? `Туристы: ${composition}` : "",
         };
       }
-      const label = `${guestsFromAges} ${pluralRu(guestsFromAges, "человека", "человек", "человек")}`;
+      const label = `${guestsFromAges} ${pluralRu(guestsFromAges, "человека", "человека", "человек")}`;
       return { count: guestsFromAges, unit: "чел.", totalLabel: `за ${label}`, perLabel: "за 1 человека" };
     }
 
@@ -1110,7 +1112,7 @@ const priceKind =
       return {
         count,
         unit: "чел.",
-        totalLabel: `за ${count} ${pluralRu(count, "человека", "человек", "человек")}`,
+        totalLabel: `за ${count} ${pluralRu(count, "человека", "человека", "человек")}`,
         perLabel: "за 1 человека",
       };
     }
@@ -1226,6 +1228,12 @@ const priceKind =
 
   const priceHeroLine = () => {
     if (priceWithCur == null || !String(priceWithCur).trim()) return "";
+    const explicitPerPerson = formatPriceWithCurrency(firstValue(
+      d.pricePerPerson,
+      d.price_per_person,
+      d.perPersonPrice,
+      d.per_person_price
+    ));
     const explicitAudience = firstValue(
       d.priceFor,
       d.pricePer,
@@ -1235,7 +1243,14 @@ const priceKind =
       d.passengersCount ? `за ${d.passengersCount} пассаж.` : "",
       d.ticketsCount ? `за ${d.ticketsCount} билет.` : ""
     );
-    const audience = explicitAudience || inferPriceAudience();
+    const inferredAudience = inferPriceAudience();
+    const explicitAudienceConflictsWithPerPerson =
+      explicitPerPerson &&
+      Number(inferredAudience?.count || 0) > 1 &&
+      /(?:за|на)\s*1\s*(?:чел|челов)/i.test(explicitAudience);
+    const audience = explicitAudience && !explicitAudienceConflictsWithPerPerson
+      ? explicitAudience
+      : inferredAudience;
     const totalLabel = typeof audience === "string" ? audience : audience.totalLabel;
     const count = typeof audience === "string" ? 0 : Number(audience.count || 0);
     const perLabel = typeof audience === "string" ? "" : audience.perLabel;
@@ -1247,7 +1262,9 @@ const priceKind =
         ? `💵 <b>${escapeHtml(String(priceWithCur))}</b> <i>${escapeHtml(totalLabel)}</i>`
         : `💵 <b>${escapeHtml(String(priceWithCur))}</b>`,
     ];
-    if (priceNumber && count > 1 && perLabel) {
+    if (explicitPerPerson) {
+      lines.push(`👤 <b>за 1 человека:</b> ${escapeHtml(String(explicitPerPerson))}`);
+    } else if (priceNumber && count > 1 && perLabel) {
       lines.push(`👤 <b>${escapeHtml(perLabel)}:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
     }
     if (note) {
@@ -1274,6 +1291,28 @@ const priceKind =
     return lines.join("\n");
   };
 
+  const serviceStateBadge = () => {
+    const status = String(svc?.status || "").trim().toLowerCase();
+    const moderation = String(svc?.moderation_status || svc?.moderationStatus || "")
+      .trim()
+      .toLowerCase();
+
+    if (status === "deleted") return "🗑 удалено";
+    if (status === "archived") return "📦 архив";
+    if (status === "cancelled" || status === "canceled") return "⛔ отменено";
+    if (status === "expired") return "🔴 истекло";
+    if (status === "inactive") return "🔴 неактуально";
+    if (status === "rejected" || moderation === "rejected") return "⛔ отклонено";
+    if (status === "draft") return "📝 черновик";
+    if (status === "pending" || moderation === "pending") return "🟠 на модерации";
+
+    const urgency = getServiceUrgencyFromService({ ...svc, details: d });
+    if (!isServiceActual(d, svc)) {
+      return urgency.expired ? "🔴 истекло" : "🔴 неактуально";
+    }
+    return String(urgency.badge || "🟢 Актуально").trim();
+  };
+
   const smartBadges = (kind = "refused") => {
     const arr = [];
     if (kind === "refused") arr.push("🔥 отказное");
@@ -1281,8 +1320,7 @@ const priceKind =
     if (kind === "ticket") arr.push("🎫 мероприятие");
     if (d.changeable === false || d.fixedPackage === true || d.isFixedPackage === true) arr.push("🔒 фикс-пакет");
     if (d.changeable === true) arr.push("🔁 можно менять");
-    if (badgeClean) arr.push(`⏳ ${badgeClean}`);
-    arr.push("⚡ срочно");
+    arr.push(serviceStateBadge());
     return arr.join(" • ");
   };
 
