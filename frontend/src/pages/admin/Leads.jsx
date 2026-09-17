@@ -23,6 +23,15 @@ const LANGS = [
   { val: "en", label: "en" },
 ];
 
+const QUICK_FILTERS = [
+  { val: "all", label: "Все" },
+  { val: "new", label: "Новые" },
+  { val: "providers", label: "Поставщики" },
+  { val: "clients", label: "Клиенты" },
+  { val: "duplicates", label: "Дубли" },
+  { val: "unlinked", label: "Без связи" },
+];
+
 function clsx(...a) {
   return a.filter(Boolean).join(" ");
 }
@@ -236,11 +245,24 @@ export default function AdminLeads() {
   const lang = params.get("lang") || "";
   const page = params.get("page") || "";
   const q = params.get("q") || "";
+  const quick = params.get("quick") || "all";
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
 
     return items.filter((r) => {
+      const quickMatch =
+        quick === "all" ||
+        (quick === "new" && String(r.status || "new") === "new") ||
+        (quick === "providers" && isProviderLead(r)) ||
+        (quick === "clients" && isClientLead(r)) ||
+        (quick === "duplicates" && !!r.has_both_client_and_provider) ||
+        (quick === "unlinked" &&
+          !r.client_match_id &&
+          !r.provider_match_id &&
+          !r.decision);
+
+      if (!quickMatch) return false;
       if (!needle) return true;
 
       const u = r.utm || {};
@@ -289,7 +311,7 @@ export default function AdminLeads() {
 
       return hay.includes(needle);
     });
-  }, [items, q]);
+  }, [items, q, quick]);
 
   const stats = useMemo(() => {
     const rows = filtered || [];
@@ -349,6 +371,17 @@ export default function AdminLeads() {
   async function decide(id, decision) {
     await apiDecideLead(id, decision);
     await fetchLeads();
+  }
+
+  function setQuickFilter(nextQuick) {
+    const next = new URLSearchParams(params);
+    if (nextQuick === "all") {
+      next.delete("quick");
+    } else {
+      next.set("quick", nextQuick);
+    }
+    next.delete("status");
+    setParams(next, { replace: true });
   }
 
   function getAPIBase() {
@@ -632,6 +665,27 @@ export default function AdminLeads() {
         <StatCard label="Без связи" value={stats.unlinkedCount} hint="нет профиля/решения" tone="amber" />
       </div>
 
+      <div className="mb-4 flex flex-wrap gap-2">
+        {QUICK_FILTERS.map((filter) => {
+          const active = quick === filter.val || (!params.get("quick") && filter.val === "all");
+          return (
+            <button
+              key={filter.val}
+              type="button"
+              onClick={() => setQuickFilter(filter.val)}
+              className={clsx(
+                "rounded-full border px-4 py-2 text-sm font-semibold transition",
+                active
+                  ? "border-slate-900 bg-slate-900 text-white"
+                  : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"
+              )}
+            >
+              {filter.label}
+            </button>
+          );
+        })}
+      </div>
+
       <div className="flex flex-wrap gap-3 items-center mb-4">
         <select
           value={status}
@@ -719,6 +773,7 @@ export default function AdminLeads() {
               const isTelegramLead = !!r.telegram_chat_id;
               const undecided = !r.decision;
               const canAutoAccept = isTelegramLead && undecided;
+              const telegramUsername = String(r.telegram_username || "").replace(/^@/, "");
 
               return (
                 <tr
@@ -814,6 +869,26 @@ export default function AdminLeads() {
                   <td className="py-2 pr-4">
                     {isTelegramLead ? (
                       <div className="flex flex-wrap gap-2">
+                        {telegramUsername ? (
+                          <a
+                            href={`https://t.me/${telegramUsername}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="px-2 py-1 text-xs rounded bg-blue-600 text-white hover:bg-blue-700 whitespace-nowrap"
+                          >
+                            Открыть Telegram
+                          </a>
+                        ) : null}
+
+                        {r.phone ? (
+                          <a
+                            href={`tel:${String(r.phone).replace(/[^\d+]/g, "")}`}
+                            className="px-2 py-1 text-xs rounded bg-white border border-slate-200 text-slate-800 hover:bg-slate-50 whitespace-nowrap"
+                          >
+                            Позвонить
+                          </a>
+                        ) : null}
+
                         {canAutoAccept ? (
                           <>
                             <button
@@ -893,6 +968,19 @@ export default function AdminLeads() {
                 </tr>
               );
             })}
+
+            {!filtered.length ? (
+              <tr>
+                <td colSpan={10} className="py-12 text-center">
+                  <div className="text-base font-semibold text-slate-700">
+                    Лидов по этому фильтру нет
+                  </div>
+                  <div className="mt-1 text-sm text-slate-500">
+                    Попробуйте выбрать другой быстрый фильтр или очистить поиск.
+                  </div>
+                </td>
+              </tr>
+            ) : null}
           </tbody>
         </table>
       </div>
