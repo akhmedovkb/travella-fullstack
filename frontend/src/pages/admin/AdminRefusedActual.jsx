@@ -124,7 +124,7 @@ const REFUSED_FILTER_DEFAULTS = {
 };
 
 const REFUSED_FILTER_ALLOWED = {
-  category: new Set(["", "refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_ticket"]),
+  category: new Set(["", "refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_event_ticket"]),
   status: new Set(["all", "showcase", "published", "approved", "draft", "pending", "rejected", "archived"]),
   actuality: new Set(["all", "actual", "inactive"]),
   visibility: new Set(["active", "deleted", "all"]),
@@ -410,6 +410,7 @@ function readStoredRefusedUi() {
       // Before the publication-state UI existed, an empty status meant the hidden
       // default "showcase only" filter. Migrate it once so drafts cannot disappear.
       if (key === "status" && value === "") value = "all";
+      if (key === "category" && value === "refused_ticket") value = "refused_event_ticket";
       next[key] = REFUSED_FILTER_ALLOWED[key].has(value) ? value : fallback[key];
     }
 
@@ -481,8 +482,8 @@ function categoryHumanLabel(category) {
     author_tour: "Авторский тур",
     refused_hotel: "Отказной отель",
     refused_flight: "Авиабилет",
-    refused_ticket: "Билет",
-    refused_event_ticket: "Билет",
+    refused_ticket: "Билет (старая категория)",
+    refused_event_ticket: "Билет на мероприятие",
   };
   return map[category] || category || "Отказ";
 }
@@ -2008,7 +2009,7 @@ export default function AdminRefusedActual() {
       if (it?.category === "author_tour") authorTourCount += 1;
       if (it?.category === "refused_hotel") hotelCount += 1;
       if (it?.category === "refused_flight") flightCount += 1;
-      if (it?.category === "refused_ticket" || it?.category === "refused_event_ticket") ticketCount += 1;
+      if (it?.category === "refused_event_ticket") ticketCount += 1;
 
       const effectiveTg = serviceTelegramId(it);
       if (!effectiveTg) tgMissingCount += 1;
@@ -3558,7 +3559,7 @@ async function saveInlineEdit(item) {
     { value: "author_tour", label: "Авторский тур" },
     { value: "refused_hotel", label: "Отказной отель" },
     { value: "refused_flight", label: "Отказной авиабилет" },
-    { value: "refused_ticket", label: "Отказной билет" },
+    { value: "refused_event_ticket", label: "Отказной билет на мероприятие" },
   ];
 
   const categoryQuickActions = [
@@ -3567,7 +3568,7 @@ async function saveInlineEdit(item) {
     { value: "author_tour", label: "Авторские", count: pageStats.authorTourCount },
     { value: "refused_hotel", label: "Отели", count: pageStats.hotelCount },
     { value: "refused_flight", label: "Авиа", count: pageStats.flightCount },
-    { value: "refused_ticket", label: "Билеты", count: pageStats.ticketCount },
+    { value: "refused_event_ticket", label: "Мероприятия", count: pageStats.ticketCount },
   ];
 
   const statuses = [

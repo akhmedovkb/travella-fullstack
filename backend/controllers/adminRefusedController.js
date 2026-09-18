@@ -313,7 +313,7 @@ function isAdminRefusedCategoryValue(value) {
 exports.listActualRefused = async (req, res) => {
   try {
     const {
-      category = "", // refused_tour / refused_hotel / refused_flight / refused_ticket
+      category = "", // refused_tour / refused_hotel / refused_flight / refused_event_ticket
       status = "", // published / approved / draft / rejected / deleted
       q = "",
       page = "1",
@@ -358,11 +358,8 @@ exports.listActualRefused = async (req, res) => {
     }
 
     if (category && isAdminRefusedCategoryValue(category)) {
-      const categoryValues = category === "refused_ticket"
-        ? ["refused_ticket", "refused_event_ticket"]
-        : [category];
-      params.push(categoryValues);
-      where.push(`s.category = ANY($${params.length}::text[])`);
+      params.push(category);
+      where.push(`s.category = $${params.length}`);
     }
 
     if (status === "all") {
