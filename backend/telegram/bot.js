@@ -1506,6 +1506,32 @@ function cacheSet(key, data, ttlMs = INLINE_CACHE_TTL_MS) {
   }
 }
 
+async function answerInlineResults(ctx, results, options) {
+  try {
+    return await ctx.answerInlineQuery(results, options);
+  } catch (error) {
+    // Telegram rejects the complete inline response when even one remote thumbnail
+    // cannot be fetched. Retry the same cards without thumbnails so actual offers
+    // remain visible instead of replacing the whole list with an empty response.
+    const withoutThumbs = (Array.isArray(results) ? results : []).map((result) => {
+      const safeResult = { ...result };
+      delete safeResult.thumb_url;
+      delete safeResult.thumbnail_url;
+      return safeResult;
+    });
+
+    console.error(
+      "[tg-bot] answerInlineQuery retry without thumbnails:",
+      error?.response?.data || error?.message || error
+    );
+    return ctx.answerInlineQuery(withoutThumbs, {
+      ...options,
+      cache_time: 0,
+      is_personal: true,
+    });
+  }
+}
+
 // Чтобы не долбить API при быстрых inline-вводах (Telegram шлёт много запросов)
 async function getOrFetchCached(key, ttlMs, fetcher, hardTimeoutMs = 9000) {
   const cached = cacheGet(key);
@@ -18160,8 +18186,8 @@ bot.on("inline_query", async (ctx) => {
     // ✅ Для client-search results-cache можно использовать только если stamp учтён (мы учли)
 const cachedRes = cacheGet(resKey);
 if (cachedRes && Array.isArray(cachedRes.page)) {
-  await ctx.answerInlineQuery(cachedRes.page, {
-    cache_time: roleForInline === "client" && !isMy ? 1 : 11,
+  await answerInlineResults(ctx, cachedRes.page, {
+    cache_time: 0,
     is_personal: true,
     next_offset: cachedRes.nextOffset || "",
   });
@@ -18498,8 +18524,8 @@ const nextOffset = offset + pageSize < results.length ? String(offset + pageSize
 cacheSet(resKey, { page, nextOffset }, 30000);
 
     try {
-      await ctx.answerInlineQuery(page, {
-        cache_time: roleForInline === "client" && !isMy ? 1 : 11,
+      await answerInlineResults(ctx, page, {
+        cache_time: 0,
         is_personal: true,
         next_offset: nextOffset,
       });

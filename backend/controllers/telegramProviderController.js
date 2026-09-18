@@ -732,22 +732,25 @@ async function getProviderServicesAll(req, res) {
       FROM services s
       LEFT JOIN providers p ON p.id = s.provider_id
       WHERE s.provider_id = $1
+        AND s.category = ANY($2::text[])
         AND s.deleted_at IS NULL
-        AND s.status IN ('published', 'approved', 'active')
+        AND LOWER(COALESCE(s.status, '')) IN ('published', 'approved', 'active')
         AND COALESCE(LOWER(s.moderation_status), 'approved') IN ('approved', 'published', 'active')
-        AND (
-          s.expiration_at IS NULL
-          OR s.expiration_at > NOW()
-        )
-        AND COALESCE((s.details::jsonb ->> 'isActive')::boolean, true) = true
       ORDER BY s.created_at DESC
       `,
-      [providerId]
+      [providerId, REFUSED_CATEGORIES]
+    );
+
+    // Keep the provider's "Actual" list aligned with marketplace and inline search.
+    // The shared helper understands legacy date fields and false-like values without
+    // brittle PostgreSQL boolean casts.
+    const items = servicesRes.rows.filter((service) =>
+      isServiceActual(service.details, service)
     );
 
     return res.json({
       success: true,
-      items: servicesRes.rows,
+      items,
     });
   } catch (e) {
     if (sendTelegramProviderResolutionError(res, e)) return;
