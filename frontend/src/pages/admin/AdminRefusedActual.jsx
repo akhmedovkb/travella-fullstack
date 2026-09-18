@@ -765,6 +765,23 @@ function isServiceReadyForPublishing(it) {
   return !!it?.isActual && getServiceQualityFlags(it, !!effectiveTg).length === 0;
 }
 
+function isServiceOnPublicShowcase(it) {
+  return ["published", "approved", "active"].includes(
+    String(it?.status || "").trim().toLowerCase()
+  );
+}
+
+function publicationStatusMeta(it) {
+  const status = String(it?.status || "draft").trim().toLowerCase();
+  if (isServiceOnPublicShowcase(it)) {
+    return { label: "на витрине", tone: "green" };
+  }
+  if (status === "pending") return { label: "на модерации", tone: "amber" };
+  if (status === "rejected") return { label: "отклонён", tone: "red" };
+  if (["deleted", "archived"].includes(status)) return { label: "в архиве", tone: "amber" };
+  return { label: "черновик", tone: "gray" };
+}
+
 function getPublicChannelPublication(it) {
   const meta = it?.meta || {};
   return {
@@ -3288,7 +3305,7 @@ async function saveInlineEdit(item) {
     const publication = getPublicChannelPublication(item);
     const confirmText = alreadyPublished
       ? `Эта карточка уже публиковалась ${formatDate(publication.publishedAt)}.\n\nОтправить повторно в Telegram канал?`
-      : `Опубликовать отказ #${item.id} в Telegram канал?`;
+      : `Опубликовать отказ #${item.id}?\n\nПосле публикации он появится на сайте, в списке бота и в Telegram-канале.`;
     if (!window.confirm(confirmText)) return;
 
     setSendingId(item.id);
@@ -3304,7 +3321,7 @@ async function saveInlineEdit(item) {
         throw new Error(data?.message || "Не удалось опубликовать");
       }
 
-      showToast("ok", `✅ Опубликовано в канал${data.messageId ? `, message ${data.messageId}` : ""}`);
+      showToast("ok", `✅ Опубликовано на сайте, в боте и канале${data.messageId ? `, message ${data.messageId}` : ""}`);
       await loadList(page);
 
       if (detailsItem?.id === item.id) {
@@ -4078,6 +4095,8 @@ const sortLabel = useMemo(() => {
                 const meta = it.meta || {};
                 const publication = getPublicChannelPublication(it);
                 const alreadyPublished = hasPublicChannelPublication(it);
+                const publicationState = publicationStatusMeta(it);
+                const onPublicShowcase = isServiceOnPublicShowcase(it);
                 const fixMeta = getFixRequestMeta(it);
                 const fixRequested = hasFixRequest(it);
                 const fixOverdue = elapsedHours(fixMeta.requestedAt) >= 24;
@@ -4094,7 +4113,10 @@ const sortLabel = useMemo(() => {
                           <div className="text-[11px] font-black uppercase tracking-[0.16em]">{categoryHumanLabel(it.category)} #{it.id}</div>
                           <div className="mt-2 line-clamp-2 text-lg font-black tracking-[-0.03em] text-slate-950">{serviceMainTitle(it)}</div>
                         </div>
-                        <Badge tone={actual ? "green" : "red"}>{actual ? "актуален" : "неактуален"}</Badge>
+                        <div className="flex flex-col items-end gap-1">
+                          <Badge tone={actual ? "green" : "red"}>{actual ? "срок актуален" : "неактуален"}</Badge>
+                          <Badge tone={publicationState.tone}>{publicationState.label}</Badge>
+                        </div>
                       </div>
                     </div>
 
@@ -4162,6 +4184,13 @@ const sortLabel = useMemo(() => {
                         onFix={(flag) => handleQualityFlagClick(it, flag)}
                       />
 
+                      {!onPublicShowcase && !deleted ? (
+                        <div className="rounded-2xl border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-900">
+                          Сейчас это черновик: он не показывается на сайте и в списке бота.
+                          {readyForPublish ? " Нажмите «Опубликовать»." : " Сначала исправьте замечания выше."}
+                        </div>
+                      ) : null}
+
                       <div className="rounded-2xl border border-slate-100 bg-white p-3">
                         <div className="text-[11px] font-bold uppercase text-slate-400">Провайдер</div>
                         <div className="mt-1 flex flex-wrap items-center gap-2">
@@ -4201,9 +4230,9 @@ const sortLabel = useMemo(() => {
                               onClick={() => publishPublicService(it)}
                               disabled={!readyForPublish || sendingId === it.id}
                               className="rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-xs font-bold text-orange-700 hover:bg-orange-100 disabled:cursor-not-allowed disabled:opacity-50"
-                              title={readyForPublish ? (alreadyPublished ? "Повторно опубликовать карточку в Telegram канал" : "Опубликовать public-safe карточку в Telegram канал") : "Сначала исправьте готовность карточки"}
+                              title={readyForPublish ? (alreadyPublished ? "Повторно опубликовать карточку в Telegram канал" : "Показать карточку на сайте, в боте и Telegram-канале") : "Сначала исправьте готовность карточки"}
                             >
-                              {alreadyPublished ? "Повторить в канал" : "В канал"}
+                              {alreadyPublished ? "Повторить в канал" : "Опубликовать"}
                             </button>
                           </>
                         ) : (
@@ -4473,6 +4502,7 @@ const sortLabel = useMemo(() => {
                   const meta = it.meta || {};
                   const publication = getPublicChannelPublication(it);
                   const alreadyPublished = hasPublicChannelPublication(it);
+                  const publicationState = publicationStatusMeta(it);
                   const fixMeta = getFixRequestMeta(it);
                   const fixRequested = hasFixRequest(it);
                   const fixOverdue = elapsedHours(fixMeta.requestedAt) >= 24;
@@ -4517,7 +4547,8 @@ const sortLabel = useMemo(() => {
                         <Badge tone="blue">{categoryHumanLabel(it.category)}</Badge>
                         <div className="mt-1 font-mono text-[11px] text-slate-500">{it.category || "—"}</div>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          <Badge tone={actual ? "green" : "red"}>{actual ? "actual" : "inactive"}</Badge>
+                          <Badge tone={actual ? "green" : "red"}>{actual ? "срок актуален" : "неактуален"}</Badge>
+                          <Badge tone={publicationState.tone}>{publicationState.label}</Badge>
                           {deleted ? <Badge tone="amber">deleted</Badge> : null}
                         </div>
                       </td>
@@ -4826,9 +4857,9 @@ const sortLabel = useMemo(() => {
                                     ? "cursor-not-allowed border-gray-200 bg-gray-50 text-gray-400"
                                     : "border-orange-200 bg-orange-50 text-orange-700 hover:bg-orange-100"
                                 )}
-                                title={readyForPublish ? (alreadyPublished ? "Повторно опубликовать карточку в Telegram канал" : "Опубликовать public-safe карточку в Telegram канал") : "Сначала исправьте готовность карточки"}
+                                title={readyForPublish ? (alreadyPublished ? "Повторно опубликовать карточку в Telegram канал" : "Показать карточку на сайте, в боте и Telegram-канале") : "Сначала исправьте готовность карточки"}
                               >
-                                {alreadyPublished ? "Повторить в канал" : "В канал"}
+                                {alreadyPublished ? "Повторить в канал" : "Опубликовать"}
                               </button>
 
                               <button
