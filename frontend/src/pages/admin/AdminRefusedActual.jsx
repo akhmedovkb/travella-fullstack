@@ -112,7 +112,7 @@ const REFUSED_ACTUAL_STORAGE_KEY = "travella.admin.refusedActual.ui";
 
 const REFUSED_FILTER_DEFAULTS = {
   category: "",
-  status: "",
+  status: "all",
   actuality: "actual",
   visibility: "active",
   limit: 30,
@@ -124,7 +124,7 @@ const REFUSED_FILTER_DEFAULTS = {
 
 const REFUSED_FILTER_ALLOWED = {
   category: new Set(["", "refused_tour", "author_tour", "refused_hotel", "refused_flight", "refused_ticket"]),
-  status: new Set(["", "published", "approved", "draft", "rejected", "archived"]),
+  status: new Set(["all", "showcase", "published", "approved", "draft", "pending", "rejected", "archived"]),
   actuality: new Set(["all", "actual", "inactive"]),
   visibility: new Set(["active", "deleted", "all"]),
   limit: new Set([20, 30, 50, 100]),
@@ -405,7 +405,10 @@ function readStoredRefusedUi() {
     const next = { ...fallback };
 
     for (const key of ["category", "status", "actuality", "visibility", "sortBy", "sortOrder", "viewMode", "quickFilter"]) {
-      const value = typeof parsed?.[key] === "string" ? parsed[key] : fallback[key];
+      let value = typeof parsed?.[key] === "string" ? parsed[key] : fallback[key];
+      // Before the publication-state UI existed, an empty status meant the hidden
+      // default "showcase only" filter. Migrate it once so drafts cannot disappear.
+      if (key === "status" && value === "") value = "all";
       next[key] = REFUSED_FILTER_ALLOWED[key].has(value) ? value : fallback[key];
     }
 
@@ -2378,7 +2381,7 @@ export default function AdminRefusedActual() {
     setError("");
     try {
       const showDeleted = visibility === "active" ? "0" : "1";
-      const effectiveStatus = visibility === "deleted" ? "deleted" : status || "";
+      const effectiveStatus = visibility === "deleted" ? "deleted" : status || "all";
 
       const resp = await http.get(apiPath("/admin/refused/actual"), {
         params: {
@@ -3520,10 +3523,12 @@ async function saveInlineEdit(item) {
   ];
 
   const statuses = [
-    { value: "", label: "На витрине (published/approved)" },
+    { value: "all", label: "Все статусы" },
+    { value: "showcase", label: "На витрине (published/approved)" },
     { value: "published", label: "published" },
     { value: "approved", label: "approved" },
     { value: "draft", label: "draft" },
+    { value: "pending", label: "pending" },
     { value: "rejected", label: "rejected" },
     { value: "archived", label: "archived" },
   ];

@@ -358,11 +358,18 @@ exports.listActualRefused = async (req, res) => {
     }
 
     if (category && isAdminRefusedCategoryValue(category)) {
-      params.push(category);
-      where.push(`s.category = $${params.length}`);
+      const categoryValues = category === "refused_ticket"
+        ? ["refused_ticket", "refused_event_ticket"]
+        : [category];
+      params.push(categoryValues);
+      where.push(`s.category = ANY($${params.length}::text[])`);
     }
 
-    if (status) {
+    if (status === "all") {
+      // All non-deleted lifecycle states. Deleted rows remain controlled by showDeleted.
+    } else if (status === "showcase") {
+      where.push(`LOWER(s.status) IN ('published', 'approved', 'active')`);
+    } else if (status) {
       params.push(status);
       where.push(`LOWER(s.status) = LOWER($${params.length})`);
     } else if (String(showDeleted) === "1") {
