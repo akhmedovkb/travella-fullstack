@@ -1,6 +1,7 @@
 // frontend/src/pages/admin/AdminRefusedActual.jsx
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
+import ConfirmModal from "../../components/ConfirmModal";
 
 /**
  * Admin tool: shows refused_* services + manual actions + full edit modal
@@ -1951,6 +1952,25 @@ export default function AdminRefusedActual() {
   const [viewMode, setViewMode] = useState(initialUi.viewMode);
   const [quickFilter, setQuickFilter] = useState(initialUi.quickFilter);
   const [actionMenuOpen, setActionMenuOpen] = useState(null);
+  const [confirmDialog, setConfirmDialog] = useState(null);
+
+  function requestConfirmation({
+    title = "Подтвердите действие",
+    message,
+    confirmLabel = "Подтвердить",
+    danger = false,
+  }) {
+    return new Promise((resolve) => {
+      setConfirmDialog({ title, message, confirmLabel, danger, resolve });
+    });
+  }
+
+  function closeConfirmation(result = false) {
+    setConfirmDialog((current) => {
+      current?.resolve?.(result);
+      return null;
+    });
+  }
 
   const pageCount = useMemo(() => {
     const c = Math.ceil((total || 0) / (limit || 1));
@@ -2519,13 +2539,16 @@ export default function AdminRefusedActual() {
       openEdit(item.id, flag.action || "main");
     }
 
-    function closeEditEditor() {
+    async function closeEditEditor() {
     if (editSaving) return;
 
     if (hasUnsavedEditChanges) {
-      const confirmed = window.confirm(
-        "Есть несохранённые изменения.\n\nЗакрыть редактор и потерять изменения?"
-      );
+      const confirmed = await requestConfirmation({
+        title: "Закрыть без сохранения?",
+        message: "Есть несохранённые изменения. После закрытия они будут потеряны.",
+        confirmLabel: "Закрыть",
+        danger: true,
+      });
 
       if (!confirmed) return;
     }
@@ -3268,7 +3291,12 @@ async function saveInlineEdit(item) {
       return;
     }
 
-    if (!window.confirm(`Опубликовать готовые карточки в Telegram канал: ${ids.length}?`)) return;
+    const confirmed = await requestConfirmation({
+      title: "Опубликовать выбранные",
+      message: `Готовых карточек: ${ids.length}. Они появятся на сайте, в боте и Telegram-канале.`,
+      confirmLabel: "Опубликовать",
+    });
+    if (!confirmed) return;
 
     setBulkSending(true);
     setError("");
@@ -3309,7 +3337,12 @@ async function saveInlineEdit(item) {
     const confirmText = alreadyPublished
       ? `Эта карточка уже публиковалась ${formatDate(publication.publishedAt)}.\n\nОтправить повторно в Telegram канал?`
       : `Опубликовать отказ #${item.id}?\n\nПосле публикации он появится на сайте, в списке бота и в Telegram-канале.`;
-    if (!window.confirm(confirmText)) return;
+    const confirmed = await requestConfirmation({
+      title: alreadyPublished ? "Повторить публикацию?" : `Опубликовать #${item.id}`,
+      message: confirmText,
+      confirmLabel: alreadyPublished ? "Повторить" : "Опубликовать",
+    });
+    if (!confirmed) return;
 
     setSendingId(item.id);
     setError("");
@@ -3354,7 +3387,12 @@ async function saveInlineEdit(item) {
     const confirmText = overdueOnly
       ? `Повторно отправить просьбу исправить карточки, которые ждут 24+ часа: ${ids.length}?`
       : `Отправить поставщикам просьбу исправить карточки: ${ids.length}?`;
-    if (!window.confirm(confirmText)) return;
+    const confirmed = await requestConfirmation({
+      title: overdueOnly ? "Повторить запрос" : "Запросить исправления",
+      message: confirmText,
+      confirmLabel: "Отправить",
+    });
+    if (!confirmed) return;
 
     setBulkSending(true);
     setError("");
@@ -3399,7 +3437,12 @@ async function saveInlineEdit(item) {
     const confirmText = fixMeta.requestedAt
       ? `Поставщику уже отправляли просьбу ${formatDate(fixMeta.requestedAt)}.\n\nОтправить повторно?`
       : `Попросить поставщика исправить карточку #${item.id}?`;
-    if (!window.confirm(confirmText)) return;
+    const confirmed = await requestConfirmation({
+      title: "Запросить исправление",
+      message: confirmText,
+      confirmLabel: "Отправить",
+    });
+    if (!confirmed) return;
 
     setSendingId(item.id);
     setError("");
@@ -3452,7 +3495,12 @@ async function saveInlineEdit(item) {
   }
 
   async function deleteService(id) {
-    const ok = window.confirm(`Удалить услугу #${id}?`);
+    const ok = await requestConfirmation({
+      title: `Удалить услугу #${id}?`,
+      message: "Услуга будет скрыта из активных списков и перемещена в архив.",
+      confirmLabel: "Удалить",
+      danger: true,
+    });
     if (!ok) return;
 
     setSendingId(id);
@@ -5950,6 +5998,17 @@ const sortLabel = useMemo(() => {
           <div className="text-sm text-gray-600">Нет данных для редактирования.</div>
         )}
       </Modal>
+
+      <ConfirmModal
+        open={!!confirmDialog}
+        title={confirmDialog?.title}
+        message={confirmDialog?.message}
+        confirmLabel={confirmDialog?.confirmLabel}
+        cancelLabel="Отмена"
+        danger={!!confirmDialog?.danger}
+        onClose={() => closeConfirmation(false)}
+        onConfirm={() => closeConfirmation(true)}
+      />
     </div>
   );
 }
