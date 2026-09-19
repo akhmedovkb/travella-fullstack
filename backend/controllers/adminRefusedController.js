@@ -157,7 +157,6 @@ function hasRefusedImages(row, detailsObj) {
     detailsObj?.images,
     detailsObj?.photos,
     detailsObj?.photoUrls,
-    detailsObj?.proofImages,
   ];
   if (arrays.some((arr) => Array.isArray(arr) && arr.some((x) => !isBlank(x)))) return true;
 

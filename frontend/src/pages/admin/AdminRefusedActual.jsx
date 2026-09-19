@@ -145,6 +145,8 @@ const REFUSED_FILTER_ALLOWED = {
     "no_tg",
     "no_price",
     "no_photo",
+    "proof_pending",
+    "proof_rejected",
   ]),
 };
 
@@ -719,7 +721,6 @@ function hasServiceImages(it) {
     d.images,
     d.photos,
     d.photoUrls,
-    d.proofImages,
   ];
   if (arrays.some((arr) => Array.isArray(arr) && arr.some((x) => !isBlank(x)))) return true;
 
@@ -762,7 +763,21 @@ function getServiceQualityFlags(it, tgOk) {
   if (!hasServiceImages(it)) flags.push({ key: "photo", label: "нет фото", tone: "amber", action: "images" });
   if (!hasProviderContact(it)) flags.push({ key: "contact", label: "нет контакта", tone: "red", action: "provider" });
   if (!tgOk) flags.push({ key: "tg", label: "нет TG", tone: "red", action: "tg" });
+  const proof = getProofReviewMeta(it);
+  if (proof.status === "pending") flags.push({ key: "proof_pending", label: "подтверждение не проверено", tone: "amber", action: "proof" });
+  if (proof.status === "rejected") flags.push({ key: "proof_rejected", label: "подтверждение отклонено", tone: "red", action: "proof" });
   return flags;
+}
+
+function getProofReviewMeta(it) {
+  const details = it?.details && typeof it.details === "object" ? it.details : {};
+  const count = normalizeImagesArray(details.proofImages || []).length;
+  if (!count) return { count: 0, status: "none", label: "нет подтверждения", tone: "slate" };
+
+  const status = String(details.proofReviewStatus || "pending").trim().toLowerCase();
+  if (status === "approved") return { count, status, label: "подтверждено", tone: "green" };
+  if (status === "rejected") return { count, status, label: "подтверждение отклонено", tone: "red" };
+  return { count, status: "pending", label: "подтверждение не проверено", tone: "amber" };
 }
 
 function isServiceReadyForPublishing(it) {
@@ -961,6 +976,8 @@ function quickFilterLabel(value) {
     not_ready: "не готовые",
     no_price: "без цены",
     no_photo: "без фото",
+    proof_pending: "подтверждение не проверено",
+    proof_rejected: "подтверждение отклонено",
   };
   return map[value] || "текущий фильтр";
 }
@@ -1191,6 +1208,8 @@ function syncEditFormProofImages(prev, nextImages) {
   const nextDetails = {
     ...((prev && prev.details && typeof prev.details === "object") ? prev.details : {}),
     proofImages: normalized,
+    proofReviewStatus: normalized.length ? "pending" : "",
+    proofReviewNote: "",
   };
   return {
     ...(prev || {}),
@@ -1993,6 +2012,8 @@ export default function AdminRefusedActual() {
     let fixNoResponseCount = 0;
     let noPriceCount = 0;
     let noPhotoCount = 0;
+    let proofPendingCount = 0;
+    let proofRejectedCount = 0;
     let readyCount = 0;
     let notReadyCount = 0;
     let urgentCount = 0;
@@ -2026,6 +2047,9 @@ export default function AdminRefusedActual() {
       if (meta.fixNoResponseAt) fixNoResponseCount += 1;
       if (!hasServicePrice(it)) noPriceCount += 1;
       if (!hasServiceImages(it)) noPhotoCount += 1;
+      const proof = getProofReviewMeta(it);
+      if (proof.status === "pending") proofPendingCount += 1;
+      if (proof.status === "rejected") proofRejectedCount += 1;
       if (isServiceReadyForPublishing(it)) readyCount += 1;
       else notReadyCount += 1;
 
@@ -2047,6 +2071,8 @@ export default function AdminRefusedActual() {
       fixNoResponseCount,
       noPriceCount,
       noPhotoCount,
+      proofPendingCount,
+      proofRejectedCount,
       readyCount,
       notReadyCount,
       urgentCount,
@@ -2093,6 +2119,12 @@ export default function AdminRefusedActual() {
     if (quickFilter === "no_photo") {
       return list.filter((it) => !hasServiceImages(it));
     }
+    if (quickFilter === "proof_pending") {
+      return list.filter((it) => getProofReviewMeta(it).status === "pending");
+    }
+    if (quickFilter === "proof_rejected") {
+      return list.filter((it) => getProofReviewMeta(it).status === "rejected");
+    }
     if (quickFilter === "ready") {
       return list.filter((it) => isServiceReadyForPublishing(it));
     }
@@ -2108,7 +2140,7 @@ export default function AdminRefusedActual() {
   );
 
   const visibleQualityStats = useMemo(() => {
-    const stats = { actual: 0, price: 0, photo: 0, contact: 0, tg: 0 };
+    const stats = { actual: 0, price: 0, photo: 0, contact: 0, tg: 0, proof_pending: 0, proof_rejected: 0 };
     for (const it of visibleItems) {
       const flags = getServiceQualityFlags(it, !!serviceTelegramId(it));
       for (const flag of flags) {
@@ -2121,6 +2153,8 @@ export default function AdminRefusedActual() {
       { key: "photo", label: "нет фото", value: stats.photo, filter: "no_photo" },
       { key: "contact", label: "нет контакта", value: stats.contact, filter: "no_contact" },
       { key: "tg", label: "нет TG", value: stats.tg, filter: "no_tg" },
+      { key: "proof_pending", label: "подтверждение не проверено", value: stats.proof_pending, filter: "proof_pending" },
+      { key: "proof_rejected", label: "подтверждение отклонено", value: stats.proof_rejected, filter: "proof_rejected" },
     ].filter((x) => x.value > 0);
   }, [visibleItems]);
 
@@ -3908,6 +3942,8 @@ const sortLabel = useMemo(() => {
         <StatCard label="Без TG" value={pageStats.tgMissingCount} hint="нельзя спросить" tone={pageStats.tgMissingCount ? "red" : "slate"} />
         <StatCard label="Без ответа" value={pageStats.noAnswerCount} hint="после запроса" tone={pageStats.noAnswerCount ? "amber" : "slate"} />
         <StatCard label="Без фото" value={pageStats.noPhotoCount} hint="нужно оформить" tone={pageStats.noPhotoCount ? "amber" : "slate"} />
+        <StatCard label="Подтверждение ждёт" value={pageStats.proofPendingCount} hint="нужна проверка" tone={pageStats.proofPendingCount ? "amber" : "slate"} />
+        <StatCard label="Подтверждение отклонено" value={pageStats.proofRejectedCount} hint="нужна замена" tone={pageStats.proofRejectedCount ? "red" : "slate"} />
       </div>
 
       <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
@@ -3926,6 +3962,8 @@ const sortLabel = useMemo(() => {
               <QuickChip active={quickFilter === "no_tg"} onClick={() => setQuickFilter("no_tg")}>Без Telegram</QuickChip>
               <QuickChip active={quickFilter === "no_price"} onClick={() => setQuickFilter("no_price")}>Без цены</QuickChip>
               <QuickChip active={quickFilter === "no_photo"} onClick={() => setQuickFilter("no_photo")}>Без фото</QuickChip>
+              <QuickChip active={quickFilter === "proof_pending"} onClick={() => setQuickFilter("proof_pending")}>Подтверждение ждёт проверки</QuickChip>
+              <QuickChip active={quickFilter === "proof_rejected"} onClick={() => setQuickFilter("proof_rejected")}>Подтверждение отклонено</QuickChip>
             </div>
             <div className="mt-2 text-xs font-medium text-slate-500">
               Показано после быстрых фильтров: <span className="font-bold text-slate-900">{visibleItems.length}</span> из {pageStats.shown}
@@ -4197,6 +4235,7 @@ const sortLabel = useMemo(() => {
                 const fixNoResponse = hasFixNoResponse(it);
                 const price = servicePriceSummary(it);
                 const qualityFlags = getServiceQualityFlags(it, tgOk);
+                const proofReview = getProofReviewMeta(it);
                 const readyForPublish = !deleted && isServiceReadyForPublishing(it);
                 const canRequestFix = !deleted && tgOk && qualityFlags.length > 0;
                 return (
@@ -4238,6 +4277,7 @@ const sortLabel = useMemo(() => {
                       <div className="flex flex-wrap gap-2">
                         <Badge tone={urgency.tone}>{urgency.text}</Badge>
                         {tgOk ? <Badge tone="green">TG OK</Badge> : null}
+                        {proofReview.count ? <Badge tone={proofReview.tone}>{proofReview.label} · {proofReview.count}</Badge> : null}
                         {qualityFlags.map((flag) => (
                           <QualityFlagButton
                             key={flag.key}
@@ -4607,6 +4647,7 @@ const sortLabel = useMemo(() => {
                   const lastSentBy = String(meta.lastSentBy || "").toLowerCase();
                   const price = servicePriceSummary(it);
                   const qualityFlags = getServiceQualityFlags(it, tgOk);
+                  const proofReview = getProofReviewMeta(it);
                   const readyForPublish = !deleted && isServiceReadyForPublishing(it);
                   const canRequestFix = !deleted && tgOk && qualityFlags.length > 0;
 
@@ -4643,6 +4684,7 @@ const sortLabel = useMemo(() => {
                         <div className="mt-1 flex flex-wrap gap-1">
                           <Badge tone={actual ? "green" : "red"}>{actual ? "срок актуален" : "неактуален"}</Badge>
                           <Badge tone={publicationState.tone}>{publicationState.label}</Badge>
+                          {proofReview.count ? <Badge tone={proofReview.tone}>{proofReview.label} · {proofReview.count}</Badge> : null}
                           {deleted ? <Badge tone="amber">deleted</Badge> : null}
                         </div>
                       </td>
