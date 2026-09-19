@@ -1913,6 +1913,7 @@ export default function AdminRefusedActual() {
   const [imageUploadBusy, setImageUploadBusy] = useState(false);
   const [proofImageUrlDraft, setProofImageUrlDraft] = useState("");
   const [proofImageUploadBusy, setProofImageUploadBusy] = useState(false);
+  const [proofDragActive, setProofDragActive] = useState(false);
   const [previewGallery, setPreviewGallery] = useState([]);
   const [previewIndex, setPreviewIndex] = useState(-1);
   const [previewImageTitle, setPreviewImageTitle] = useState("");
@@ -2512,6 +2513,7 @@ export default function AdminRefusedActual() {
       setHotelOptions([]);
       setImageUrlDraft("");
       setProofImageUrlDraft("");
+      setProofDragActive(false);
 
       try {
         const resp = await http.get(apiPath(`/admin/services/${id}`));
@@ -2662,7 +2664,15 @@ export default function AdminRefusedActual() {
     setImageUrlDraft("");
   }
 
-  function handleRemoveProofImage(index) {
+  async function handleRemoveProofImage(index) {
+    const confirmed = await requestConfirmation({
+      title: "Удалить подтверждение?",
+      message: `Изображение №${index + 1} будет удалено после сохранения изменений.`,
+      confirmLabel: "Удалить",
+      danger: true,
+    });
+    if (!confirmed) return;
+
     setEditForm((prev) => {
       const current = normalizeImagesArray(prev?.details?.proofImages || []);
       const nextImages = current.filter((_, idx) => idx !== index);
@@ -2670,8 +2680,8 @@ export default function AdminRefusedActual() {
     });
   }
 
-  async function handleAddProofImagesFromFiles(event) {
-    const files = Array.from(event?.target?.files || []);
+  async function addProofImagesFromFiles(filesInput) {
+    const files = Array.from(filesInput || []);
     if (!files.length) return;
 
     setEditError("");
@@ -2680,7 +2690,12 @@ export default function AdminRefusedActual() {
     try {
       const dataUrls = [];
       for (const file of files) {
-        if (!String(file?.type || "").startsWith("image/")) continue;
+        if (!String(file?.type || "").startsWith("image/")) {
+          throw new Error(`Файл «${file?.name || "без имени"}» не является изображением`);
+        }
+        if (Number(file?.size || 0) > 8 * 1024 * 1024) {
+          throw new Error(`Файл «${file?.name || "без имени"}» больше 8 МБ`);
+        }
         dataUrls.push(await fileToDataUrl(file));
       }
 
@@ -2688,15 +2703,40 @@ export default function AdminRefusedActual() {
 
       setEditForm((prev) => {
         const current = normalizeImagesArray(prev?.details?.proofImages || []);
+        if (current.length >= 20) return prev;
         const nextImages = [...current, ...dataUrls].slice(0, 20);
         return syncEditFormProofImages(prev, nextImages);
       });
     } catch (e) {
-      setEditError(e?.message || "Не удалось добавить proof-изображения");
+      setEditError(e?.message || "Не удалось добавить подтверждение");
     } finally {
       setProofImageUploadBusy(false);
-      if (event?.target) event.target.value = "";
     }
+  }
+
+  async function handleAddProofImagesFromFiles(event) {
+    await addProofImagesFromFiles(event?.target?.files);
+    if (event?.target) event.target.value = "";
+  }
+
+  async function handleProofDrop(event) {
+    event.preventDefault();
+    setProofDragActive(false);
+    await addProofImagesFromFiles(event.dataTransfer?.files);
+  }
+
+  function updateProofReviewField(field, value) {
+    setEditForm((prev) => {
+      const nextDetails = {
+        ...((prev?.details && typeof prev.details === "object") ? prev.details : {}),
+        [field]: value,
+      };
+      return {
+        ...(prev || {}),
+        details: nextDetails,
+        rawDetailsText: JSON.stringify(nextDetails, null, 2),
+      };
+    });
   }
 
   function handleAddProofImageByUrl() {
@@ -5871,13 +5911,35 @@ const sortLabel = useMemo(() => {
                   Эти изображения используются для проверки услуги и не показываются клиентам в публичной карточке.
                 </div>
                 </div>
-                <div className="text-xs text-gray-500">Максимум 20 изображений</div>
+                <div className="rounded-full bg-gray-100 px-3 py-1 text-xs font-medium text-gray-600">
+                  {Array.isArray(editForm?.details?.proofImages) ? editForm.details.proofImages.length : 0} из 20
+                </div>
               </div>
 
-              <div className="mt-4 flex flex-wrap items-center gap-3">
+              <div
+                onDragEnter={(event) => {
+                  event.preventDefault();
+                  setProofDragActive(true);
+                }}
+                onDragOver={(event) => event.preventDefault()}
+                onDragLeave={(event) => {
+                  if (!event.currentTarget.contains(event.relatedTarget)) setProofDragActive(false);
+                }}
+                onDrop={handleProofDrop}
+                className={classNames(
+                  "mt-4 flex min-h-28 flex-col items-center justify-center rounded-2xl border-2 border-dashed px-5 py-5 text-center transition",
+                  proofDragActive
+                    ? "border-violet-500 bg-violet-50"
+                    : "border-gray-300 bg-gray-50 hover:border-violet-300 hover:bg-violet-50/40"
+                )}
+              >
+                <div className="text-sm font-semibold text-gray-900">
+                  {proofImageUploadBusy ? "Добавляем изображения..." : "Перетащите подтверждения сюда"}
+                </div>
+                <div className="mt-1 text-xs text-gray-500">JPG, PNG или WEBP, до 8 МБ каждый</div>
                 <label className={classNames(
-                  "inline-flex cursor-pointer items-center rounded-xl border px-3 py-2 text-sm",
-                  proofImageUploadBusy ? "border-gray-200 bg-gray-50 text-gray-400" : "border-violet-200 bg-violet-50 text-violet-700 hover:bg-violet-100"
+                  "mt-3 inline-flex cursor-pointer items-center rounded-xl border px-4 py-2 text-sm font-medium",
+                  proofImageUploadBusy ? "border-gray-200 bg-gray-100 text-gray-400" : "border-violet-200 bg-white text-violet-700 hover:bg-violet-100"
                 )}>
                   <input
                     type="file"
@@ -5887,14 +5949,17 @@ const sortLabel = useMemo(() => {
                     onChange={handleAddProofImagesFromFiles}
                     disabled={proofImageUploadBusy}
                   />
-                  {proofImageUploadBusy ? "Загрузка..." : "Добавить файлы"}
+                  {proofImageUploadBusy ? "Обработка..." : "Выбрать файлы"}
                 </label>
+              </div>
 
-                <div className="flex min-w-[260px] flex-1 items-center gap-2">
+              <details className="mt-3 rounded-xl border border-gray-200 bg-white px-3 py-2">
+                <summary className="cursor-pointer text-sm font-medium text-gray-700">Добавить изображение по ссылке</summary>
+                <div className="mt-3 flex min-w-[260px] items-center gap-2">
                   <TextInput
                     value={proofImageUrlDraft}
                     onChange={(e) => setProofImageUrlDraft(e.target.value)}
-                    placeholder="https://... или data:image/..."
+                    placeholder="https://..."
                   />
                   <button
                     type="button"
@@ -5904,26 +5969,49 @@ const sortLabel = useMemo(() => {
                     Добавить ссылку
                   </button>
                 </div>
+              </details>
+
+              <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-[260px_1fr]">
+                <div>
+                  <div className="mb-1 text-xs font-medium text-gray-700">Результат проверки</div>
+                  <SelectInput
+                    value={editForm?.details?.proofReviewStatus || "pending"}
+                    onChange={(event) => updateProofReviewField("proofReviewStatus", event.target.value)}
+                    options={[
+                      { value: "pending", label: "Не проверено" },
+                      { value: "approved", label: "Подтверждено" },
+                      { value: "rejected", label: "Отклонено" },
+                    ]}
+                  />
+                </div>
+                <div>
+                  <div className="mb-1 text-xs font-medium text-gray-700">Комментарий модератора</div>
+                  <TextInput
+                    value={editForm?.details?.proofReviewNote || ""}
+                    onChange={(event) => updateProofReviewField("proofReviewNote", event.target.value)}
+                    placeholder="Например: бронь подтверждена, данные совпадают"
+                  />
+                </div>
               </div>
 
               {Array.isArray(editForm?.details?.proofImages) && editForm.details.proofImages.length ? (
-                <div className="mt-4 grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-4">
+                <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
                   {editForm.details.proofImages.map((src, idx) => (
                     <div key={`proof-${idx}-${String(src).slice(0, 30)}`} className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
-                      <div className="aspect-[4/3] bg-gray-100">
+                      <div className="aspect-[4/3] bg-slate-100 p-2">
                         <button
                             type="button"
                             onClick={() => {
                               openPreview(editForm?.details?.proofImages || [], idx, "Изображения пруфа");
                             }}
-                            className="block h-full w-full cursor-zoom-in"
+                            className="block h-full w-full cursor-zoom-in overflow-hidden rounded-lg bg-white"
                           >
-                            <img src={src} alt={`proof-${idx + 1}`} className="h-full w-full object-cover" />
+                            <img src={src} alt={`Подтверждение ${idx + 1}`} className="h-full w-full object-contain" />
                           </button>
                       </div>
                       <div className="border-t border-gray-100 p-2">
-                        <div className="truncate text-[11px] text-gray-500">
-                          {String(src).startsWith("data:image/") ? `proof data:image #${idx + 1}` : short(String(src), 48)}
+                        <div className="truncate text-xs font-medium text-gray-700">
+                          {String(src).startsWith("data:image/") ? `Подтверждение №${idx + 1}` : short(String(src), 48)}
                         </div>
                         <button
                           type="button"
@@ -5938,7 +6026,7 @@ const sortLabel = useMemo(() => {
                 </div>
               ) : (
                 <div className="mt-4 rounded-2xl border border-dashed border-gray-300 bg-gray-50 px-4 py-6 text-sm text-gray-500">
-                  Пока нет proof-изображений.
+                  Подтверждения ещё не загружены.
                 </div>
               )}
             </div>
