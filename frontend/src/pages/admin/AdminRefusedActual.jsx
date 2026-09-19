@@ -1210,6 +1210,7 @@ function syncEditFormProofImages(prev, nextImages) {
     proofImages: normalized,
     proofReviewStatus: normalized.length ? "pending" : "",
     proofReviewNote: "",
+    proofReviewedAt: "",
   };
   return {
     ...(prev || {}),
@@ -2765,6 +2766,12 @@ export default function AdminRefusedActual() {
         ...((prev?.details && typeof prev.details === "object") ? prev.details : {}),
         [field]: value,
       };
+      if (field === "proofReviewStatus") {
+        nextDetails.proofReviewedAt = value === "approved" || value === "rejected"
+          ? new Date().toISOString()
+          : "";
+        nextDetails.proofReviewedBy = null;
+      }
       return {
         ...(prev || {}),
         details: nextDetails,
@@ -6035,6 +6042,19 @@ const sortLabel = useMemo(() => {
                   />
                 </div>
               </div>
+
+              {editForm?.details?.proofReviewedAt ? (
+                <div className={classNames(
+                  "mt-3 rounded-xl border px-3 py-2 text-xs font-medium",
+                  editForm?.details?.proofReviewStatus === "approved"
+                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                    : "border-red-200 bg-red-50 text-red-800"
+                )}>
+                  Решение зафиксировано: {formatDate(editForm.details.proofReviewedAt)}.
+                  {editForm?.details?.proofReviewedBy ? ` Администратор #${editForm.details.proofReviewedBy}.` : ""}
+                  При замене или удалении изображения подтверждение автоматически вернётся на проверку.
+                </div>
+              ) : null}
 
               {Array.isArray(editForm?.details?.proofImages) && editForm.details.proofImages.length ? (
                 <div className="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">

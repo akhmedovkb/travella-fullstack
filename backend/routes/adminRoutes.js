@@ -208,6 +208,24 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
       return res.status(400).json({ message: "Invalid JSON payload" });
     }
 
+    if (nextDetails && typeof nextDetails === "object" && !Array.isArray(nextDetails)) {
+      const previousDetails = row.details && typeof row.details === "object" && !Array.isArray(row.details)
+        ? row.details
+        : {};
+      const previousProofStatus = String(previousDetails.proofReviewStatus || "").trim().toLowerCase();
+      const nextProofStatus = String(nextDetails.proofReviewStatus || "").trim().toLowerCase();
+
+      if (nextProofStatus !== previousProofStatus) {
+        if (nextProofStatus === "approved" || nextProofStatus === "rejected") {
+          nextDetails.proofReviewedAt = new Date().toISOString();
+          nextDetails.proofReviewedBy = req.user?.id || null;
+        } else {
+          nextDetails.proofReviewedAt = "";
+          nextDetails.proofReviewedBy = null;
+        }
+      }
+    }
+
     const nextTitle =
       typeof body.title === "undefined" ? row.title : body.title;
     const nextDescription =
