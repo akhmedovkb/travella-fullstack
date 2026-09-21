@@ -1,10 +1,12 @@
 // backend/routes/adminRoutes.js
 const express = require("express");
+const multer = require("multer");
 const router = express.Router();
 const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
 const leadController = require("../controllers/leadController");
+const { uploadBufferToCloudinary } = require("../utils/cloudinary");
 
 const {
   tgSend,
@@ -23,6 +25,17 @@ const {
 function phoneToDigits(phone) {
   return String(phone || "").replace(/\D/g, "");
 }
+
+const refusedProofUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { files: 20, fileSize: 8 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (String(file?.mimetype || "").toLowerCase().startsWith("image/")) return cb(null, true);
+    const error = new Error("unsupported_image_type");
+    error.code = "unsupported_image_type";
+    return cb(error);
+  },
+});
 
 /* ---------- СПИСКИ (идут первыми) ---------- */
 
@@ -146,6 +159,51 @@ router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
   if (!q.rows.length) return res.status(404).json({ message: "Not found" });
   res.json(q.rows[0]);
 });
+
+router.post(
+  "/services/:id(\\d+)/proof-images/upload",
+  authenticateToken,
+  requireAdmin,
+  refusedProofUpload.array("files", 20),
+  async (req, res) => {
+    try {
+      const serviceId = Number(req.params.id);
+      if (!Number.isFinite(serviceId) || serviceId <= 0) {
+        return res.status(400).json({ ok: false, message: "Bad service id" });
+      }
+
+      const exists = await pool.query(`SELECT id FROM services WHERE id = $1 LIMIT 1`, [serviceId]);
+      if (!exists.rows.length) return res.status(404).json({ ok: false, message: "Service not found" });
+
+      const files = Array.isArray(req.files) ? req.files : [];
+      if (!files.length) return res.status(400).json({ ok: false, message: "No images uploaded" });
+
+      const uploaded = [];
+      for (const file of files) {
+        const result = await uploadBufferToCloudinary(file, {
+          folder: "travella/refused-proof",
+          resource_type: "image",
+          public_prefix: `service-${serviceId}-proof`,
+        });
+        uploaded.push({
+          url: result.url,
+          width: result.width,
+          height: result.height,
+          publicId: result.public_id,
+        });
+      }
+
+      return res.json({ ok: true, images: uploaded });
+    } catch (error) {
+      console.error("[admin proof upload] error:", error?.message || error);
+      const notConfigured = error?.code === "cloudinary_not_configured";
+      return res.status(notConfigured ? 503 : 500).json({
+        ok: false,
+        message: notConfigured ? "Хранилище изображений не настроено" : "Не удалось загрузить подтверждение",
+      });
+    }
+  }
+);
 
 router.get("/services/:id(\\d+)/moderation-events", authenticateToken, requireAdmin, async (req, res) => {
   try {

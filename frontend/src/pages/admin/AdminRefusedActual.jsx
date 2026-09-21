@@ -2718,12 +2718,26 @@ export default function AdminRefusedActual() {
   async function addProofImagesFromFiles(filesInput) {
     const files = Array.from(filesInput || []);
     if (!files.length) return;
+    if (!editForm?.id) {
+      setEditError("Сначала откройте сохранённую услугу");
+      return;
+    }
+
+    const currentCount = normalizeImagesArray(editForm?.details?.proofImages || []).length;
+    const remainingCount = Math.max(0, 20 - currentCount);
+    if (!remainingCount) {
+      setEditError("Уже загружено максимальное количество подтверждений: 20");
+      return;
+    }
+    if (files.length > remainingCount) {
+      setEditError(`Можно добавить ещё только ${remainingCount}`);
+      return;
+    }
 
     setEditError("");
     setProofImageUploadBusy(true);
 
     try {
-      const dataUrls = [];
       for (const file of files) {
         if (!String(file?.type || "").startsWith("image/")) {
           throw new Error(`Файл «${file?.name || "без имени"}» не является изображением`);
@@ -2731,15 +2745,24 @@ export default function AdminRefusedActual() {
         if (Number(file?.size || 0) > 8 * 1024 * 1024) {
           throw new Error(`Файл «${file?.name || "без имени"}» больше 8 МБ`);
         }
-        dataUrls.push(await fileToDataUrl(file));
       }
 
-      if (!dataUrls.length) throw new Error("Выбери изображения");
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+      const response = await http.post(
+        apiPath(`/admin/services/${editForm?.id}/proof-images/upload`),
+        formData
+      );
+      const data = ensureJsonOrThrow(response, "proofImageUpload");
+      const uploadedUrls = Array.isArray(data?.images)
+        ? data.images.map((item) => String(item?.url || "").trim()).filter(Boolean)
+        : [];
+      if (!data?.ok || !uploadedUrls.length) throw new Error(data?.message || "Файлы не загружены");
 
       setEditForm((prev) => {
         const current = normalizeImagesArray(prev?.details?.proofImages || []);
         if (current.length >= 20) return prev;
-        const nextImages = [...current, ...dataUrls].slice(0, 20);
+        const nextImages = [...current, ...uploadedUrls].slice(0, 20);
         return syncEditFormProofImages(prev, nextImages);
       });
     } catch (e) {
