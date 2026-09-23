@@ -2,6 +2,12 @@
 
 const PROVIDER_TELEGRAM_ID_AMBIGUOUS = "PROVIDER_TELEGRAM_ID_AMBIGUOUS";
 const PROVIDER_TELEGRAM_ID_INVALID = "PROVIDER_TELEGRAM_ID_INVALID";
+const TELEGRAM_FIELD_PRIORITY = {
+  telegram_refused_chat_id: 1,
+  telegram_chat_id: 2,
+  tg_chat_id: 3,
+  telegram_web_chat_id: 4,
+};
 
 class ProviderTelegramResolutionError extends Error {
   constructor(code, message, details = {}) {
@@ -56,13 +62,30 @@ async function resolveProviderByTelegramActorId(db, actorTelegramId, options = {
     matchesByProvider.get(providerId).push(row.field_name);
   }
 
-  const providerIds = [...matchesByProvider.keys()];
+  const allProviderIds = [...matchesByProvider.keys()];
+  const strongestPriority = allProviderIds.length
+    ? Math.min(
+        ...allProviderIds.flatMap((providerId) =>
+          matchesByProvider
+            .get(providerId)
+            .map((fieldName) => TELEGRAM_FIELD_PRIORITY[fieldName] ?? Number.MAX_SAFE_INTEGER)
+        )
+      )
+    : null;
+  const providerIds = allProviderIds.filter((providerId) =>
+    matchesByProvider
+      .get(providerId)
+      .some((fieldName) => TELEGRAM_FIELD_PRIORITY[fieldName] === strongestPriority)
+  );
   const diagnostic = {
     actorTelegramId: actorId,
     ctxFromId: options.ctxFromId ? String(options.ctxFromId) : null,
     ctxChatId: options.ctxChatId ? String(options.ctxChatId) : null,
     matchedProviderIds: providerIds,
     matchedFields: Object.fromEntries(matchesByProvider),
+    ignoredLowerPriorityProviderIds: allProviderIds.filter(
+      (providerId) => !providerIds.includes(providerId)
+    ),
     endpoint: options.endpoint || null,
     action: options.action || null,
     serviceId: options.serviceId ? Number(options.serviceId) : null,

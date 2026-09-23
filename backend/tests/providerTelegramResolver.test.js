@@ -56,10 +56,22 @@ test("web chat collision does not override the Telegram bot actor", async () => 
   assert.equal(resolved.matchedField, "telegram_refused_chat_id");
 });
 
-test("duplicate primary bot ID fails instead of choosing LIMIT 1", async () => {
+test("a refused-bot link wins over another provider's generic Telegram link", async () => {
   const db = fakeDb([
     ...fixture,
     { id: 1500, telegram_chat_id: "6720291137" },
+  ]);
+  const resolved = await resolveProviderByTelegramActorId(db, "6720291137", {
+    log: false,
+  });
+  assert.equal(resolved.id, 1468);
+  assert.equal(resolved.matchedField, "telegram_refused_chat_id");
+});
+
+test("duplicate refused-bot IDs still fail instead of choosing LIMIT 1", async () => {
+  const db = fakeDb([
+    ...fixture,
+    { id: 1500, telegram_refused_chat_id: "6720291137" },
   ]);
   await assert.rejects(
     resolveProviderByTelegramActorId(db, "6720291137", { log: false }),
