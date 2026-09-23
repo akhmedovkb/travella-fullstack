@@ -139,6 +139,25 @@ function normalizeImages(images) {
   return [];
 }
 
+function getPublicServiceImages(images, detailsInput) {
+  const details = normalizeDetails(detailsInput);
+  const candidates = [
+    ...normalizeImages(images),
+    ...normalizeImages(details.images),
+    ...normalizeImages(details.photos),
+    ...normalizeImages(details.photoUrls),
+    ...normalizeImages(details.galleryImages),
+    details.image,
+    details.imageUrl,
+    details.cover,
+    details.coverImage,
+    details.photo,
+    details.photoUrl,
+  ];
+
+  return [...new Set(candidates.map((value) => String(value || "").trim()).filter(Boolean))];
+}
+
 function formatDetailValue(value) {
   if (value === null || typeof value === "undefined") return "";
   if (typeof value === "object") return JSON.stringify(value, null, 2);
@@ -330,9 +349,11 @@ function Card({
   const s = item || {};
   const d = normalizeDetails(s.details);
   const images = normalizeImages(s.images);
+  const publicImages = getPublicServiceImages(images, d);
   const proofImages = normalizeImages(d.proofImages);
   const hasProof = proofImages.length > 0;
   const cardAnalysis = analysis || analyzeModerationService(s);
+  const issueKeys = new Set();
   const topIssues = [
     ...cardAnalysis.blockingIssues,
     ...cardAnalysis.missingRequired.map((item) => ({
@@ -342,19 +363,15 @@ function Card({
       blocking: true,
     })),
     ...cardAnalysis.warningIssues,
-  ].slice(0, 4);
+  ].filter((issue) => {
+    const semanticKey = String(issue?.key || "").replace(/^(no-|missing-)/, "");
+    if (issueKeys.has(semanticKey)) return false;
+    issueKeys.add(semanticKey);
+    return true;
+  }).slice(0, 4);
   const quickFixes = quickCorrectionOptions(cardAnalysis).slice(0, 5);
 
-  const cover = pickFirst(
-    images[0],
-    proofImages[0],
-    d.image,
-    d.imageUrl,
-    d.cover,
-    d.coverImage,
-    d.photo,
-    d.photoUrl
-  );
+  const cover = publicImages[0] || "";
 
   const prov = providerFrom(s);
   const isRefused = isRefusedCategory(s.category);
@@ -555,7 +572,11 @@ function Card({
         <div className="w-24 h-16 bg-gray-100 rounded overflow-hidden shrink-0">
           {cover ? (
             <img src={cover} alt="" className="w-full h-full object-cover" />
-          ) : null}
+          ) : (
+            <div className="flex h-full w-full items-center justify-center px-2 text-center text-[10px] font-medium text-gray-500">
+              Нет публичного фото
+            </div>
+          )}
         </div>
 
         <div className="flex-1 min-w-0">
@@ -1225,16 +1246,7 @@ function getModerationReadiness(form, details, images) {
     details.eventDate
   );
   const price = pickFirst(details.grossPrice, details.gross_price, details.price, form.price);
-  const cover = pickFirst(
-    images?.[0],
-    normalizeImages(details.proofImages)[0],
-    details.image,
-    details.imageUrl,
-    details.cover,
-    details.coverImage,
-    details.photo,
-    details.photoUrl
-  );
+  const cover = getPublicServiceImages(images, details)[0] || "";
   const providerContact = pickFirst(
     form.telegram_refused_chat_id,
     form.telegram_web_chat_id,
@@ -1276,7 +1288,7 @@ function getDangerIssues(form, details, images) {
   today.setHours(0, 0, 0, 0);
   const proofImages = normalizeImages(details.proofImages);
   const hasProof = proofImages.length > 0 || hasText(details.telegramProofFileId) || hasText(details.proofUrl);
-  const hasPhoto = normalizeImages(images).length > 0 || hasText(details.image) || hasText(details.imageUrl);
+  const hasPhoto = getPublicServiceImages(images, details).length > 0;
   const hasProviderContact = hasText(
     pickFirst(form.telegram_refused_chat_id, form.telegram_web_chat_id, form.telegram_chat_id)
   );
@@ -1876,8 +1888,8 @@ function buildTelegramPreview(serviceId, form, details, images) {
   const perPerson = pickFirst(details.pricePerPerson, computedPerPerson);
   const isRefused = form.category?.includes("refused") || yesNoValue(details.isRefused);
   const proofImages = normalizeImages(details.proofImages);
-  const photos = normalizeImages(images);
-  const hasPhoto = photos.length > 0 || hasText(details.image) || hasText(details.imageUrl);
+  const photos = getPublicServiceImages(images, details);
+  const hasPhoto = photos.length > 0;
   const included = [
     !isHotel && yesNoValue(details.flightIncluded || details.airTickets || details.aviaTickets) ? "авиабилеты" : null,
     !isHotel && hotel ? "проживание" : null,
@@ -2060,16 +2072,7 @@ function ModerationPreview({ serviceId, form, details, images }) {
   const grossPrice = pickFirst(details.grossPrice, details.gross_price, details.price, form.price);
   const netPrice = pickFirst(details.netPrice, details.net_price, details.priceNet, details.price_net);
   const proofImages = normalizeImages(details.proofImages);
-  const cover = pickFirst(
-    images?.[0],
-    proofImages[0],
-    details.image,
-    details.imageUrl,
-    details.cover,
-    details.coverImage,
-    details.photo,
-    details.photoUrl
-  );
+  const cover = getPublicServiceImages(images, details)[0] || "";
   const included = [
     !isHotel && (details.flightIncluded || details.airTickets || details.aviaTickets) ? "авиабилеты" : null,
     !isHotel && (details.accommodation || details.hotel) ? "проживание" : null,
