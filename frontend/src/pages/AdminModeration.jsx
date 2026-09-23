@@ -1339,12 +1339,15 @@ function editFormFromService(svc = {}) {
     vehicle_model: svc.vehicle_model || "",
     telegram_refused_chat_id:
       svc.telegram_refused_chat_id ||
+      svc.provider_telegram_refused_chat_id ||
       provider.telegram_refused_chat_id ||
+      svc.provider_tg_chat_id ||
       provider.telegram_chat_id ||
       "",
     telegram_web_chat_id:
-      svc.telegram_web_chat_id || provider.telegram_web_chat_id || "",
-    telegram_chat_id: svc.telegram_chat_id || provider.telegram_chat_id || "",
+      svc.telegram_web_chat_id || svc.provider_telegram_web_chat_id || provider.telegram_web_chat_id || "",
+    telegram_chat_id:
+      svc.telegram_chat_id || svc.provider_telegram_chat_id || svc.provider_tg_chat_id || provider.telegram_chat_id || "",
   };
 }
 

@@ -6,7 +6,7 @@ const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
 const leadController = require("../controllers/leadController");
-const { uploadBufferToCloudinary } = require("../utils/cloudinary");
+const { uploadBufferToR2 } = require("../utils/r2Upload");
 
 const {
   tgSend,
@@ -47,6 +47,12 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
         s.*,
         p.name AS provider_name,
         p.type AS provider_type,
+        p.phone AS provider_phone,
+        p.social AS provider_social,
+        p.telegram_refused_chat_id AS provider_telegram_refused_chat_id,
+        p.telegram_web_chat_id AS provider_telegram_web_chat_id,
+        p.telegram_chat_id AS provider_telegram_chat_id,
+        p.tg_chat_id AS provider_tg_chat_id,
         ev.action AS last_moderation_action,
         ev.reason_code AS last_moderation_reason_code,
         ev.reason AS last_moderation_reason,
@@ -75,6 +81,12 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
         s.*,
         p.name AS provider_name,
         p.type AS provider_type,
+        p.phone AS provider_phone,
+        p.social AS provider_social,
+        p.telegram_refused_chat_id AS provider_telegram_refused_chat_id,
+        p.telegram_web_chat_id AS provider_telegram_web_chat_id,
+        p.telegram_chat_id AS provider_telegram_chat_id,
+        p.tg_chat_id AS provider_tg_chat_id,
         ev.action AS last_moderation_action,
         ev.reason_code AS last_moderation_reason_code,
         ev.reason AS last_moderation_reason,
@@ -103,6 +115,12 @@ router.get("/services/published", authenticateToken, requireAdmin, async (req, r
         s.*,
         p.name AS provider_name,
         p.type AS provider_type,
+        p.phone AS provider_phone,
+        p.social AS provider_social,
+        p.telegram_refused_chat_id AS provider_telegram_refused_chat_id,
+        p.telegram_web_chat_id AS provider_telegram_web_chat_id,
+        p.telegram_chat_id AS provider_telegram_chat_id,
+        p.tg_chat_id AS provider_tg_chat_id,
         ev.action AS last_moderation_action,
         ev.reason_code AS last_moderation_reason_code,
         ev.reason AS last_moderation_reason,
@@ -180,9 +198,8 @@ router.post(
 
       const uploaded = [];
       for (const file of files) {
-        const result = await uploadBufferToCloudinary(file, {
-          folder: "travella/refused-proof",
-          resource_type: "image",
+        const result = await uploadBufferToR2(file, {
+          folder: "refused-services/proof",
           public_prefix: `service-${serviceId}-proof`,
         });
         uploaded.push({
@@ -196,7 +213,7 @@ router.post(
       return res.json({ ok: true, images: uploaded });
     } catch (error) {
       console.error("[admin proof upload] error:", error?.message || error);
-      const notConfigured = error?.code === "cloudinary_not_configured";
+      const notConfigured = error?.code === "r2_not_configured";
       return res.status(notConfigured ? 503 : 500).json({
         ok: false,
         message: notConfigured ? "Хранилище изображений не настроено" : "Не удалось загрузить подтверждение",
