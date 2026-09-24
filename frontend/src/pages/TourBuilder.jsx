@@ -572,15 +572,6 @@ async function fetchHotelsByCity(city, starsFilter = "") {
   }));
 }
 
-// Берём первое положительное число из списка значений
-const pickPos = (...vals) => {
-  for (const v of vals) {
-    const n = Number(v);
-    if (Number.isFinite(n) && n > 0) return n;
-  }
-  return 0;
-};
-
 // матчинг звёзд ('' = любая)
 const matchStars = (hotelStars, filter) => {
   if (filter === "" || filter === null || filter === undefined) return true;
@@ -588,94 +579,28 @@ const matchStars = (hotelStars, filter) => {
   return Number.isFinite(n) && Number.isFinite(f) ? n === f : false;
 };
 
-// helpers
-const toBool = (v) =>
-  v === true || v === 1 || v === "1" || String(v).toLowerCase() === "true";
-
-// вместо: async function fetchHotelBrief(hotelId) { return await fetchJSON(`/api/hotels/${hotelId}/brief`); }
 async function fetchHotelBrief(hotelId) {
-  // параллельно тянем короткий бриф и полный профиль
-  const [briefRaw, fullRaw] = await Promise.all([
-    fetchJSONLoose(`/api/hotels/${hotelId}/brief`),
-    fetchJSONLoose(`/api/hotels/${hotelId}`),
-  ]);
-
-  const brief = briefRaw || {};
-  const full  = fullRaw  || {};
-
-  // валюта — из brief, иначе из полного профиля, иначе UZS
-  const currency = brief.currency ?? full.currency ?? "UZS";
-
-  // Доп. место (шт/ночь): из brief → full → (если вдруг положили в taxes)
-  const extra_bed_cost = pickPos(
-    brief.extra_bed_cost,
-    brief.extra_bed_price,
-    full.extra_bed_cost,
-    full.extra_bed_price,
-    full?.taxes?.extra_bed_price
-  );
-
-  // Туристический сбор (чел/ночь): резидент/нерезидент — из brief → full → taxes.touristTax
-  const tourism_fee_resident = pickPos(
-    brief.tourism_fee_resident,
-    brief.tourism_fee_res,
-    full.tourism_fee_resident,
-    full.tourism_fee_res,
-    full?.taxes?.touristTax?.residentPerNight
-  );
-
-  const tourism_fee_nonresident = pickPos(
-    brief.tourism_fee_nonresident,
-    brief.tourism_fee_nrs,
-    full.tourism_fee_nonresident,
-    full.tourism_fee_nrs,
-    full?.taxes?.touristTax?.nonResidentPerNight
-  );
-  
-  // НДС: флаг включённости и ставка (в %)
-  const vatIncluded = toBool(
-    (brief?.vat_included ?? brief?.vatIncluded ?? brief?.taxes?.vatIncluded ??
-     full?.vat_included  ?? full?.vatIncluded  ?? full?.taxes?.vatIncluded)
-  );
-  const vatRate = Number(
-    brief?.vat_rate ?? brief?.vatRate ?? brief?.taxes?.vatRate ??
-    full?.vat_rate  ?? full?.vatRate  ?? full?.taxes?.vatRate ?? 0
-  ) || 0;
-
-  // возвращаем бриф, дополненный нужными полями
-  return {
-    ...full,           // на случай, если в brief чего-то нет (например, rooms)
-    ...brief,          // а brief приоритетнее по отображаемым данным
-    currency,
-    extra_bed_cost,
-    tourism_fee_resident,
-    tourism_fee_nonresident,
-    vatIncluded,
-    vatRate,
-  };
+  return await fetchJSON(`/api/hotels/${hotelId}/brief`);
 }
 
-
-
-async function fetchHotelSeasons(hotelId) {
-  // [{ id, label:'low'|'high', start_date:'YYYY-MM-DD', end_date:'YYYY-MM-DD' }, ...]
-  return await fetchJSON(`/api/hotels/${hotelId}/seasons`);
+async function fetchHotelQuote(payload) {
+  return await postJSON("/api/hotels/quote", payload);
 }
 
-// Return the configured season for a date. Missing coverage must stay visible:
-// silently treating a gap as low season can produce an incorrect quote.
-function resolveSeasonLabel(ymd, seasons) {
-  if (!Array.isArray(seasons) || seasons.length === 0) return null;
-  for (const s of seasons) {
-    if (!s?.start_date || !s?.end_date) continue;
-    if (ymd >= s.start_date && ymd <= s.end_date) {
-      const label = String(s.label || "").trim().toLowerCase();
-      return ["low", "shoulder", "high"].includes(label) ? label : null;
-    }
+function hotelQuoteWarningText(warning) {
+  const value = String(warning || "");
+  if (value === "room_required") return "не выбран номер";
+  if (value === "usd_rate_required") return "укажите курс USD";
+  if (value.startsWith("season_missing:")) return `не задан сезон на ${value.split(":")[1] || "дату"}`;
+  if (value.startsWith("room_not_found:")) return `тип номера не найден: ${value.slice("room_not_found:".length)}`;
+  if (value.startsWith("room_stock_exceeded:")) return `превышено количество номеров: ${value.slice("room_stock_exceeded:".length)}`;
+  if (value.startsWith("rate_missing:")) {
+    const [, date, room, meal, season] = value.split(":");
+    return `нет тарифа ${room || "номер"} / ${meal || "питание"} / ${season || "сезон"} на ${date || "дату"}`;
   }
-  return null;
+  if (value.startsWith("unsupported_currency:")) return `валюта не поддерживается: ${value.split(":")[1] || ""}`;
+  return value || "проверьте тариф отеля";
 }
-
 
 const normalizeProvider = (row, kind) => ({
   id: row.id ?? row._id ?? String(Math.random()),
@@ -1626,6 +1551,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
         if (svcId && !b.service_id) b.service_id = String(svcId);
         b.dates.push(dateKey);
       }
+      // отель: котировка уже содержит владельца предложения и точный snapshot
+      const hotelQuote = st?.hotelBreakdown?.quoteSnapshot;
+      const hotelProviderId = hotelQuote?.hotel?.provider_id;
+      if (hotelQuote?.valid === true && hotelProviderId) {
+        const pid = String(hotelProviderId);
+        const key = `hotel:${pid}`;
+        if (!buckets.has(key)) buckets.set(key, { kind: "hotel", provider_id: pid, service_id: null, dates: [] });
+        buckets.get(key).dates.push(dateKey);
+      }
     }
    // формируем payload'ы
     const payloads = [];
@@ -1661,6 +1595,18 @@ const makeTransportLoader = (dateKey) => async (input) => {
   const handleSendRequests = async () => {
   if (!range?.from || !range?.to)
     return alert("Выберите даты маршрута."); // можно потом тоже перевести/заменить
+
+  const hotelDays = Object.entries(byDay).filter(([, state]) => state?.hotel?.id);
+  const invalidHotelDay = hotelDays.find(([, state]) => state?.hotelBreakdown?.quoteValid !== true);
+  if (invalidHotelDay) {
+    const [date, state] = invalidHotelDay;
+    const reason = state?.hotelBreakdown?.warnings?.map(hotelQuoteWarningText).join("; ") || "расчёт ещё не готов";
+    return alert(`Нельзя создать заявку: отель на ${date} не рассчитан (${reason}).`);
+  }
+
+  const hotelQuoteSnapshots = hotelDays
+    .map(([date, state]) => ({ date, ...state?.hotelBreakdown?.quoteSnapshot }))
+    .filter((quote) => quote.quote_version);
 
   const payloads = buildBookings();
   if (!payloads.length)
@@ -1699,6 +1645,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
             to_city: routeCities.to || "",
             tour_program: Array.isArray(p.tour_program) ? p.tour_program : [],
             tour_program_text: p.tour_program_text || "",
+            hotel_quotes: hotelQuoteSnapshots,
           },
           legs,
         };
@@ -2407,16 +2354,12 @@ const makeTransportLoader = (dateKey) => async (input) => {
                          }));
                          if (!hotel) return;
                          try {
-                           const [brief, seasons] = await Promise.all([
-                             fetchHotelBrief(hotel.id).catch(() => null),
-                             fetchHotelSeasons(hotel.id).catch(() => []),
-                           ]);
+                           const brief = await fetchHotelBrief(hotel.id);
                            setByDay((p) => ({
                              ...p,
                              [k]: { 
                                ...p[k],
                                hotelBrief: brief,
-                               hotelSeasons: Array.isArray(seasons) ? seasons : [],
                                hotelLoading: false
                              }
                            }));
@@ -2434,13 +2377,13 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       {st.hotel && st.hotelBrief && (
                         <HotelRoomPicker
                           hotelBrief={st.hotelBrief}
-                          seasons={st.hotelSeasons || []}
                           // для конструктора «по дню» ночёвка ровно одна: передаем текущую дату
                           nightDates={[k]}                              // ['YYYY-MM-DD']
                           residentFlag={residentType === "res"}        // true/false
                           adt={toNum(adt, 0)}
                           chd={toNum(chd, 0)}
                           paxCount={Math.max(1, toNum(adt) + toNum(chd))}
+                          usdRate={usdRate}
                           onBreakdown={(b) =>
                              setByDay((p) => ({ ...p, [k]: { ...p[k], hotelBreakdown: b } }))
                            }
@@ -2468,7 +2411,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                     {st.hotelBreakdown?.quoteValid === false ? (
                       <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800">
-                        Расчёт недоступен: {st.hotelBreakdown.warnings?.join("; ") || "проверьте сезоны и тарифы отеля"}.
+                        Расчёт недоступен: {st.hotelBreakdown.warnings?.map(hotelQuoteWarningText).join("; ") || "проверьте сезоны и тарифы отеля"}.
                       </div>
                     ) : null}
  
@@ -3007,7 +2950,7 @@ function EffectAutoPick({ days, byDay, adt, chd, servicesCache, onRecalc }) {
   return null;
 }
 
-function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCount = 1, onTotalChange, onBreakdown }) {
+function HotelRoomPicker({ hotelBrief, nightDates, residentFlag, paxCount = 1, usdRate = 0, onTotalChange, onBreakdown }) {
     // локализация внутри дочернего компонента
   const { t } = useTranslation();
   const MEALS = ["BB","HB","FB","AI","UAI"];
@@ -3015,8 +2958,15 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
   // карта количеств по типам: { 'Double': 2, 'Triple': 1, ... }
   const [qty, setQty] = useState({});
   const [extraBeds, setExtraBeds] = useState(0); // кол-во доп. мест на эту ночь
+  const [quoteLoading, setQuoteLoading] = useState(false);
+  const quoteSequence = useRef(0);
+  const onTotalChangeRef = useRef(onTotalChange);
+  const onBreakdownRef = useRef(onBreakdown);
   const nightDatesKey = (Array.isArray(nightDates) ? nightDates : []).join(",");
   const quoteNightDates = useMemo(() => nightDatesKey.split(",").filter(Boolean), [nightDatesKey]);
+
+  useEffect(() => { onTotalChangeRef.current = onTotalChange; }, [onTotalChange]);
+  useEffect(() => { onBreakdownRef.current = onBreakdown; }, [onBreakdown]);
 
   useEffect(() => {
     // обнуляем при смене отеля
@@ -3042,10 +2992,6 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
 
   
   // --- универсальные геттеры числовых полей из брифа ---
-  const toNumSafe = (v) => {
-    const n = Number(v);
-    return Number.isFinite(n) ? n : 0;
-  };
   // ищем по цепочке ключей на любом уровне вложенности (1-2 уровня хватит для брифа)
   const getByPath = (obj, path) =>
   path.split(".").reduce((o,k)=> (o && o[k] != null ? o[k] : undefined), obj);
@@ -3068,83 +3014,69 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
     return 0;
   };
 
-  // пересчёт тотала при каждом изменении
+  // The backend is the pricing authority. Keep the returned payload as the
+  // immutable quote candidate that will be attached to booking details.
   useEffect(() => {
-    let sum = 0;
-    let roomsSubtotal = 0;
-    const warnings = [];
-    const personKey = residentFlag ? "resident" : "nonResident";
-    const nights = quoteNightDates.length;
-    for (const ymd of quoteNightDates) {
-      const season = resolveSeasonLabel(ymd, seasons);
-      if (!season) {
-        warnings.push(`на ${ymd} не задан сезон`);
-        continue;
-      }
-      for (const [type, n] of Object.entries(qty)) {
-        const count = Number(n) || 0;
-        if (!count) continue;
-        const row = mapByType.get(type);
-        const rawPrice = row?.prices?.[season]?.[personKey]?.[meal];
-        const price = Number(rawPrice);
-        if (!Number.isFinite(price) || price <= 0) {
-          warnings.push(`${type}: нет тарифа ${meal}/${season} на ${ymd}`);
-          continue;
-        }
-        roomsSubtotal += count * price;
-      }
-    }
-    sum += roomsSubtotal;
-      
-    
-        // 1) Доп. место (за чел/ночь)
-    const extraBedUnit = pickNumeric(hotelBrief, [
-     "extra_bed_cost", "extra_bed_price", "extra_bed",
-      "extra_bed_uzs", "extra_bed_per_night", "extraBed",
-      "extra_bed_amount"
-    ]);
-    const extraBedsTotal = Math.max(0, Number(extraBeds) || 0) * extraBedUnit * nights;
-    sum += extraBedsTotal;
-
-    // 2) Туристический сбор (за чел/ночь)
-    const feeResident = pickNumeric(hotelBrief, [
-      "taxes.touristTax.residentPerNight",
-      "tourism_fee_resident", "tourism_fee_res", "tourist_fee_resident",
-      "resident_tourist_fee", "tourism_tax_resident", "resident_city_tax"
-    ]);
-    const feeNonResident = pickNumeric(hotelBrief, [
-      "taxes.touristTax.nonResidentPerNight",
-      "tourism_fee_nonresident", "tourism_fee_nrs", "tourist_fee_nonresident",
-      "nonresident_tourist_fee", "tourism_tax_nonresident", "nonresident_city_tax"
-    ]);
-
-    const feePerPerson = residentFlag ? feeResident : feeNonResident;
-    const tourismFeeTotal = Math.max(0, Number(paxCount) || 0) * feePerPerson * nights;
-    sum += tourismFeeTotal;
-    // 3) НДС (если не включён в цены)
-    const vatIncluded = toBool(hotelBrief?.vatIncluded ?? hotelBrief?.vat_included);
-    const vatRate = Number(hotelBrief?.vatRate ?? hotelBrief?.vat_rate ?? 0) || 0;
-    const vatBase = roomsSubtotal + extraBedsTotal; // турсбор не облагаем
-    const vat = (!vatIncluded && vatRate > 0) ? Math.round(vatBase * (vatRate / 100)) : 0;
-    sum += vat;
-
     const selectedRooms = Object.values(qty).some((n) => Number(n) > 0);
-    if (!selectedRooms) warnings.push("не выбран номер");
-    const quoteValid = warnings.length === 0;
-    onTotalChange?.(quoteValid ? sum : 0);
-    onBreakdown?.({
-      rooms: roomsSubtotal,
-      extraBeds: extraBedsTotal,
-      tourismFee: tourismFeeTotal,
-      vat,
-      vatIncluded,
-      nights,
-      pax: paxCount,
-      currency: String(hotelBrief?.currency || "UZS").toUpperCase(),
-      quoteValid,
-      warnings: Array.from(new Set(warnings))
-    });
-  }, [qty, meal, quoteNightDates, seasons, residentFlag, mapByType, extraBeds, paxCount, hotelBrief]);
+    if (!hotelBrief?.id || !selectedRooms || !quoteNightDates.length) {
+      onTotalChangeRef.current?.(0);
+      onBreakdownRef.current?.({
+        rooms: 0, extraBeds: 0, tourismFee: 0, vat: 0,
+        vatIncluded: false, nights: quoteNightDates.length, pax: paxCount,
+        currency: String(hotelBrief?.currency || "UZS").toUpperCase(),
+        quoteValid: false,
+        warnings: [!selectedRooms ? "не выбран номер" : "не выбраны даты"]
+      });
+      return undefined;
+    }
+
+    const sequence = ++quoteSequence.current;
+    const timer = setTimeout(async () => {
+      setQuoteLoading(true);
+      try {
+        const quote = await fetchHotelQuote({
+          hotel_id: hotelBrief.id,
+          dates: quoteNightDates,
+          residency: residentFlag ? "resident" : "non_resident",
+          meal_plan: meal,
+          rooms: Object.entries(qty).map(([type, quantity]) => ({ type, quantity })),
+          extra_beds: extraBeds,
+          pax: paxCount,
+          fx: { usd_uzs: Number(usdRate) || 0 },
+        });
+        if (sequence !== quoteSequence.current) return;
+        const totals = quote?.totals || {};
+        onTotalChangeRef.current?.(quote?.valid ? Number(totals.total || 0) : 0);
+        onBreakdownRef.current?.({
+          rooms: Number(totals.rooms || 0),
+          extraBeds: Number(totals.extra_beds || 0),
+          tourismFee: Number(totals.tourism_fee || 0),
+          vat: Number(totals.vat || 0),
+          vatIncluded: quote?.tax_details?.vat_included === true,
+          nights: Number(quote?.nights || 0),
+          pax: paxCount,
+          currency: quote?.currency || "UZS",
+          quoteValid: quote?.valid === true,
+          warnings: Array.isArray(quote?.warnings) ? quote.warnings : [],
+          quoteSnapshot: quote,
+        });
+      } catch (error) {
+        if (sequence !== quoteSequence.current) return;
+        onTotalChangeRef.current?.(0);
+        onBreakdownRef.current?.({
+          rooms: 0, extraBeds: 0, tourismFee: 0, vat: 0,
+          vatIncluded: false, nights: quoteNightDates.length, pax: paxCount,
+          currency: String(hotelBrief?.currency || "UZS").toUpperCase(),
+          quoteValid: false,
+          warnings: [error?.message || "сервер не смог рассчитать отель"]
+        });
+      } finally {
+        if (sequence === quoteSequence.current) setQuoteLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timer);
+  }, [qty, meal, quoteNightDates, residentFlag, extraBeds, paxCount, hotelBrief?.id, hotelBrief?.currency, usdRate]);
 
   return (
     <div className="mt-3 border rounded p-2">
@@ -3154,6 +3086,7 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
           {MEALS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
         <div className="text-xs text-gray-500">({residentFlag ? t('tb.residents') : t('tb.nonresidents')})</div>
+        {quoteLoading ? <div className="text-xs font-medium text-blue-600">Расчёт…</div> : null}
       </div>
 
         {/* Доп. место и подсказка по тур. сбору */}

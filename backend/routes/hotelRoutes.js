@@ -12,6 +12,7 @@ const {
   updateHotel,
   getHotelBrief,          
   listHotelsByCity,       
+  quoteHotel,
   // инспекции
   listHotelInspections,
   createHotelInspection,
@@ -95,6 +96,7 @@ router.get("/media/:key", getHotelInspectionMedia);
 
 /* ===  список по городу для каскада === */
 router.get("/by-city", listHotelsByCity);   // /api/hotels/by-city?city=Samarkand
+router.post("/quote", tryAuth, quoteHotel);
 
 /* ===== МОИ ОТЕЛИ (для провайдера) — ДО динамических ===== */
 router.get("/mine", providerOnly, listMyHotels);

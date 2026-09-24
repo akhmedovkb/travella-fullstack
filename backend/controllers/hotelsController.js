@@ -10,7 +10,7 @@ const { uploadBufferToR2, getR2ObjectStream } = require("../utils/r2Upload");
 async function getHotelBrief(req, res) {
   const { id } = req.params;
   const q = `
-    SELECT id, name, stars, city, country, currency, rooms
+    SELECT id, name, stars, city, country, currency, rooms, extra_bed_price, taxes, updated_at
     FROM hotels
     WHERE id = $1
   `;
@@ -26,6 +26,9 @@ async function getHotelBrief(req, res) {
     country: h.country,
     currency: h.currency,
     rooms: h.rooms || [],
+    extra_bed_price: Number(h.extra_bed_price) || 0,
+    taxes: h.taxes || {},
+    updated_at: h.updated_at,
   });
 };
 
@@ -51,6 +54,190 @@ async function listHotelsByCity(req, res) {
   `;
   const { rows } = await db.query(sql, params);
   res.json(rows);
+}
+
+function quoteNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function quoteValue(source, paths = []) {
+  for (const path of paths) {
+    const value = String(path).split('.').reduce((current, key) => current?.[key], source);
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) return n;
+  }
+  return 0;
+}
+
+function normalizeQuoteDate(value) {
+  const text = String(value || '').trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
+}
+
+// POST /api/hotels/quote
+// Authoritative quote over the current rooms JSON. This contract remains stable
+// while rates are moved to normalized hotel_offers/hotel_rates tables.
+async function quoteHotel(req, res) {
+  const hotelId = parseIntSafe(req.body?.hotel_id ?? req.body?.hotelId);
+  if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
+
+  const dates = [...new Set((Array.isArray(req.body?.dates) ? req.body.dates : [])
+    .map(normalizeQuoteDate)
+    .filter(Boolean))].sort();
+  if (!dates.length) return res.status(400).json({ error: 'dates_required' });
+
+  const residency = String(req.body?.residency || 'resident').toLowerCase();
+  const personKey = residency === 'nonresident' || residency === 'non_resident'
+    ? 'nonResident'
+    : 'resident';
+  const mealPlan = String(req.body?.meal_plan ?? req.body?.mealPlan ?? 'BB').trim().toUpperCase();
+  if (!['BB', 'HB', 'FB', 'AI', 'UAI'].includes(mealPlan)) {
+    return res.status(400).json({ error: 'bad_meal_plan' });
+  }
+
+  const requestedRooms = (Array.isArray(req.body?.rooms) ? req.body.rooms : [])
+    .map((room) => ({ type: String(room?.type || room?.room_type || '').trim(), quantity: Math.max(0, Math.trunc(quoteNumber(room?.quantity, 0))) }))
+    .filter((room) => room.type && room.quantity > 0);
+
+  try {
+    const hotelResult = await db.query(
+      `SELECT id, name, provider_id, currency, rooms, extra_bed_price, taxes, updated_at
+         FROM hotels
+        WHERE id=$1
+        LIMIT 1`,
+      [hotelId]
+    );
+    if (!hotelResult.rowCount) return res.status(404).json({ error: 'hotel_not_found' });
+
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS hotel_seasons (
+        id SERIAL PRIMARY KEY,
+        hotel_id INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
+        label TEXT NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+        CHECK (start_date <= end_date)
+      )
+    `);
+    const seasonResult = await db.query(
+      `SELECT id, label, start_date::text AS start_date, end_date::text AS end_date, updated_at
+         FROM hotel_seasons
+        WHERE hotel_id=$1 AND start_date <= $3::date AND end_date >= $2::date
+        ORDER BY start_date, id`,
+      [hotelId, dates[0], dates[dates.length - 1]]
+    );
+
+    const hotel = hotelResult.rows[0];
+    const roomRows = Array.isArray(hotel.rooms) ? hotel.rooms : [];
+    const roomMap = new Map(roomRows.map((room) => [String(room?.type || '').trim(), room]));
+    const warnings = [];
+    const lines = [];
+
+    if (!requestedRooms.length) warnings.push('room_required');
+    for (const requested of requestedRooms) {
+      const room = roomMap.get(requested.type);
+      if (!room) warnings.push(`room_not_found:${requested.type}`);
+      const stock = Math.max(0, Math.trunc(quoteNumber(room?.count, 0)));
+      if (stock && requested.quantity > stock) warnings.push(`room_stock_exceeded:${requested.type}`);
+    }
+
+    for (const date of dates) {
+      const season = seasonResult.rows.find((row) => date >= row.start_date && date <= row.end_date);
+      const label = String(season?.label || '').toLowerCase();
+      if (!['low', 'shoulder', 'high'].includes(label)) {
+        warnings.push(`season_missing:${date}`);
+        continue;
+      }
+      for (const requested of requestedRooms) {
+        const room = roomMap.get(requested.type);
+        if (!room) continue;
+        const unitAmount = quoteNumber(room?.prices?.[label]?.[personKey]?.[mealPlan], 0);
+        if (unitAmount <= 0) {
+          warnings.push(`rate_missing:${date}:${requested.type}:${mealPlan}:${label}`);
+          continue;
+        }
+        lines.push({
+          date,
+          season: label,
+          season_id: season.id,
+          room_type: requested.type,
+          meal_plan: mealPlan,
+          residency: personKey,
+          quantity: requested.quantity,
+          unit_amount: unitAmount,
+          subtotal: unitAmount * requested.quantity,
+        });
+      }
+    }
+
+    const roomsSubtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
+    const nights = dates.length;
+    const extraBeds = Math.max(0, Math.trunc(quoteNumber(req.body?.extra_beds ?? req.body?.extraBeds, 0)));
+    const pax = Math.max(1, Math.trunc(quoteNumber(req.body?.pax, 1)));
+    const taxes = hotel.taxes && typeof hotel.taxes === 'object' ? hotel.taxes : {};
+    const extraBedUnit = quoteValue({ hotel, taxes }, [
+      'hotel.extra_bed_price', 'taxes.extra_bed_price', 'taxes.extraBedPrice'
+    ]);
+    const feePerPerson = personKey === 'resident'
+      ? quoteValue(taxes, ['touristTax.residentPerNight', 'tourism_fee_resident'])
+      : quoteValue(taxes, ['touristTax.nonResidentPerNight', 'tourism_fee_nonresident']);
+    const extraBedsTotal = extraBeds * extraBedUnit * nights;
+    const tourismFee = pax * feePerPerson * nights;
+    const vatIncluded = taxes.vatIncluded === true || taxes.vat_included === true;
+    const vatRate = quoteNumber(taxes.vatRate ?? taxes.vat_rate, 0);
+    const vat = !vatIncluded && vatRate > 0 ? Math.round((roomsSubtotal + extraBedsTotal) * vatRate / 100) : 0;
+    const total = roomsSubtotal + extraBedsTotal + tourismFee + vat;
+    const currency = String(hotel.currency || 'UZS').toUpperCase();
+    const usdUzs = quoteNumber(req.body?.fx?.usd_uzs ?? req.body?.usd_rate, 0);
+    const totalUzs = currency === 'UZS' ? total : currency === 'USD' && usdUzs > 0 ? total * usdUzs : null;
+    if (currency === 'USD' && usdUzs <= 0) warnings.push('usd_rate_required');
+    if (!['UZS', 'USD'].includes(currency)) warnings.push(`unsupported_currency:${currency}`);
+
+    const uniqueWarnings = [...new Set(warnings)];
+    const versionSource = JSON.stringify({
+      hotel_id: hotel.id,
+      hotel_updated_at: hotel.updated_at,
+      seasons: seasonResult.rows.map((row) => [row.id, row.label, row.start_date, row.end_date, row.updated_at]),
+      dates,
+      rooms: requestedRooms,
+      meal_plan: mealPlan,
+      residency: personKey,
+      extra_beds: extraBeds,
+      pax,
+      fx_usd_uzs: usdUzs || null,
+      totals: { roomsSubtotal, extraBedsTotal, tourismFee, vat, total, totalUzs },
+    });
+    const quoteVersion = crypto.createHash('sha256').update(versionSource).digest('hex').slice(0, 16);
+
+    return res.json({
+      valid: uniqueWarnings.length === 0,
+      quote_version: quoteVersion,
+      quoted_at: new Date().toISOString(),
+      hotel: { id: hotel.id, name: hotel.name, provider_id: hotel.provider_id || null },
+      rate_source: 'hotels.rooms_json',
+      currency,
+      nights,
+      dates,
+      lines,
+      totals: {
+        rooms: roomsSubtotal,
+        extra_beds: extraBedsTotal,
+        tourism_fee: tourismFee,
+        vat,
+        total,
+        total_uzs: totalUzs,
+      },
+      tax_details: { extra_bed_unit: extraBedUnit, tourism_fee_per_person: feePerPerson, vat_included: vatIncluded, vat_rate: vatRate },
+      fx: currency === 'USD' ? { usd_uzs: usdUzs || null } : null,
+      warnings: uniqueWarnings,
+    });
+  } catch (error) {
+    console.error('quoteHotel error', error);
+    return res.status(500).json({ error: 'hotel_quote_failed' });
+  }
 }
 
 // GET /api/hotels/mine?q=&city=&page=&limit=
@@ -2033,6 +2220,7 @@ module.exports = {
   listMyHotels,
   getHotelBrief,
   listHotelsByCity,
+  quoteHotel,
   // инспекции + лайки
   listHotelInspections,
   listAllHotelInspections,
