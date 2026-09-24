@@ -662,6 +662,141 @@ async function listHotels(req, res) {
   }
 }
 
+function roomHasPositiveRate(room) {
+  const prices = room?.prices;
+  if (!prices || typeof prices !== 'object') return false;
+  const stack = [prices];
+  while (stack.length) {
+    const current = stack.pop();
+    for (const value of Object.values(current || {})) {
+      if (value && typeof value === 'object') stack.push(value);
+      else if (Number.isFinite(Number(value)) && Number(value) > 0) return true;
+    }
+  }
+  return false;
+}
+
+function hotelReadiness(row) {
+  const rooms = Array.isArray(row.rooms) ? row.rooms : [];
+  const images = Array.isArray(row.images) ? row.images : [];
+  const missingProfile = [];
+  if (!String(row.name || '').trim()) missingProfile.push('name');
+  if (!String(row.city || '').trim()) missingProfile.push('city');
+  if (!String(row.country || '').trim()) missingProfile.push('country');
+  if (!String(row.address || '').trim()) missingProfile.push('address');
+  if (!(Number(row.stars) > 0)) missingProfile.push('stars');
+  if (!images.length) missingProfile.push('images');
+
+  const hasRooms = rooms.some((room) => String(room?.type || '').trim() && Number(room?.count) > 0);
+  const hasRates = rooms.some(roomHasPositiveRate);
+  const hasSeasons = Number(row.season_count || 0) > 0;
+  const hasOwner = Number(row.provider_id) > 0;
+  const currency = String(row.currency || '').trim().toUpperCase();
+  const currencyReady = ['UZS', 'USD'].includes(currency);
+  const profileReady = missingProfile.length === 0;
+  const pricingReady = hasRooms && hasRates && hasSeasons && currencyReady;
+  const passportReady = Number(row.approved_inspection_count || 0) > 0;
+  const tourBuilderReady = profileReady && pricingReady && hasOwner;
+
+  const issues = [];
+  if (!profileReady) issues.push(...missingProfile.map((field) => `profile:${field}`));
+  if (!hasOwner) issues.push('owner_missing');
+  if (!hasRooms) issues.push('rooms_missing');
+  if (!hasRates) issues.push('rates_missing');
+  if (!hasSeasons) issues.push('seasons_missing');
+  if (!currencyReady) issues.push('currency_invalid');
+  if (!passportReady) issues.push('passport_missing');
+
+  return {
+    profile_ready: profileReady,
+    pricing_ready: pricingReady,
+    passport_ready: passportReady,
+    tour_builder_ready: tourBuilderReady,
+    has_owner: hasOwner,
+    has_rooms: hasRooms,
+    has_rates: hasRates,
+    has_seasons: hasSeasons,
+    currency_ready: currencyReady,
+    issues,
+  };
+}
+
+// GET /api/hotels/readiness - operational view for hotel owners and admins.
+async function listHotelReadiness(req, res) {
+  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || '200', 10)));
+  const name = String(req.query.name || req.query.q || '').trim();
+  const city = String(req.query.city || '').trim();
+  const params = [];
+  const where = [];
+
+  if (!isAdminLike(req.user)) {
+    params.push(Number(req.user?.id) || 0);
+    where.push(`h.provider_id = $${params.length}`);
+  }
+  if (name) {
+    params.push(`%${name}%`);
+    where.push(`h.name ILIKE $${params.length}`);
+  }
+  if (city) {
+    params.push(`%${city}%`);
+    where.push(`COALESCE(h.city,h.location,'') ILIKE $${params.length}`);
+  }
+  params.push(limit);
+
+  try {
+    await ensureInspectionsTable();
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS hotel_seasons (
+        id SERIAL PRIMARY KEY,
+        hotel_id INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
+        label TEXT NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+        CHECK (start_date <= end_date)
+      )
+    `);
+    const { rows } = await db.query(
+      `SELECT h.id, h.name, COALESCE(h.city,h.location) AS city, h.country, h.address,
+              h.stars, h.provider_id, h.currency, h.rooms, h.images, h.updated_at,
+              COALESCE(s.season_count,0)::int AS season_count,
+              s.season_from, s.season_to,
+              COALESCE(i.approved_count,0)::int AS approved_inspection_count,
+              COALESCE(i.verified_count,0)::int AS verified_inspection_count
+         FROM hotels h
+         LEFT JOIN (
+           SELECT hotel_id, COUNT(*) AS season_count, MIN(start_date) AS season_from, MAX(end_date) AS season_to
+             FROM hotel_seasons GROUP BY hotel_id
+         ) s ON s.hotel_id=h.id
+         LEFT JOIN (
+           SELECT hotel_id,
+                  COUNT(*) FILTER (WHERE moderation_status='approved' AND deleted_at IS NULL) AS approved_count,
+                  COUNT(*) FILTER (WHERE moderation_status='approved' AND verified_visit=true AND deleted_at IS NULL) AS verified_count
+             FROM inspections GROUP BY hotel_id
+         ) i ON i.hotel_id=h.id
+        ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
+        ORDER BY h.name ASC, h.id ASC
+        LIMIT $${params.length}`,
+      params
+    );
+    const items = rows.map((row) => ({ ...row, readiness: hotelReadiness(row) }));
+    const summary = items.reduce((acc, item) => {
+      acc.total += 1;
+      if (item.readiness.profile_ready) acc.profile_ready += 1;
+      if (item.readiness.pricing_ready) acc.pricing_ready += 1;
+      if (item.readiness.passport_ready) acc.passport_ready += 1;
+      if (item.readiness.tour_builder_ready) acc.tour_builder_ready += 1;
+      if (!item.readiness.has_owner) acc.without_owner += 1;
+      return acc;
+    }, { total: 0, profile_ready: 0, pricing_ready: 0, passport_ready: 0, tour_builder_ready: 0, without_owner: 0 });
+    return res.json({ items, summary });
+  } catch (error) {
+    console.error('listHotelReadiness error', error);
+    return res.status(500).json({ error: 'hotel_readiness_failed' });
+  }
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * UPDATE (динамически по существующим колонкам)
  * ──────────────────────────────────────────────────────────────────────────── */
@@ -2216,6 +2351,7 @@ module.exports = {
   createHotel,
   getHotel,
   listHotels,
+  listHotelReadiness,
   updateHotel,
   listMyHotels,
   getHotelBrief,

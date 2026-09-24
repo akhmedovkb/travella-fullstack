@@ -9,6 +9,7 @@ const {
   getHotel,
   createHotel,
   listHotels,
+  listHotelReadiness,
   updateHotel,
   getHotelBrief,          
   listHotelsByCity,       
@@ -89,6 +90,7 @@ const canLike = allowRoles("provider", "tour_agent", "agency", "supplier", "clie
 router.get("/search", tryAuth, searchHotels);
 router.get("/ranked", tryAuth, listRankedHotels);
 router.get("/_list", tryAuth, listHotels);
+router.get("/readiness", allowRoles("provider", "tour_agent", "agency", "supplier", "hotel"), listHotelReadiness);
 // R2 media proxy for Hotel Passport uploads. Must stay before dynamic /:id route.
 // R2 object keys contain slashes, therefore the wildcard route is required.
 router.get("/media/*", getHotelInspectionMedia);

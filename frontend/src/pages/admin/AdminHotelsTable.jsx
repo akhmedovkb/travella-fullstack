@@ -48,14 +48,9 @@ const isProviderRole = ({ roles, role, type }) =>
   new Set([role, type, ...roles]).has("provider");
 
 /* ====== api helpers ====== */
-async function apiGetMyHotels({ q = "", city = "", page = 1, limit = 200 } = {}) {
-  const qs = new URLSearchParams({ q, city, page, limit }).toString();
-  return apiGet(`/api/hotels/mine?${qs}`, "provider");
-}
-
-async function apiSearchHotels({ name = "", city = "", limit = 200 } = {}) {
+async function apiHotelReadiness({ name = "", city = "", limit = 200, providerMode = false } = {}) {
   const qs = new URLSearchParams({ name, city, limit }).toString();
-  return apiGet(`/api/hotels/search?${qs}`, true);
+  return apiGet(`/api/hotels/readiness?${qs}`, providerMode ? "provider" : "admin");
 }
 
 /* ====== normalize ====== */
@@ -69,16 +64,33 @@ const normalizeHotel = (h) => ({
   stars: h.stars ?? h.star_rating ?? "",
   providerId: h.provider_id ?? h.providerId ?? "",
   currency: normalizeText(h.currency),
+  seasonCount: Number(h.season_count || 0),
+  seasonFrom: h.season_from || "",
+  seasonTo: h.season_to || "",
+  inspectionCount: Number(h.approved_inspection_count || 0),
+  verifiedInspectionCount: Number(h.verified_inspection_count || 0),
+  readiness: h.readiness || null,
   raw: h,
 });
 
 function hotelCompleteness(h) {
+  if (h.readiness) {
+    const dimensions = [
+      h.readiness.profile_ready,
+      h.readiness.pricing_ready,
+      h.readiness.has_owner,
+      h.readiness.passport_ready,
+    ];
+    const percent = Math.round((dimensions.filter(Boolean).length / dimensions.length) * 100);
+    if (h.readiness.tour_builder_ready) return { label: "Готов", tone: "emerald", percent };
+    return { label: "Нужно исправить", tone: "amber", percent };
+  }
   const checks = [
     Boolean(h.name),
     Boolean(h.city),
     Boolean(h.country),
     Boolean(h.stars),
-    Boolean(h.providerId || h.providerId === 0),
+    Number(h.providerId) > 0,
     Boolean(h.currency),
   ];
   const done = checks.filter(Boolean).length;
@@ -87,6 +99,24 @@ function hotelCompleteness(h) {
   if (percent >= 50) return { label: "Проверить", tone: "amber", percent };
   return { label: "Черновик", tone: "rose", percent };
 }
+
+const issueLabels = {
+  "profile:name": "нет названия",
+  "profile:city": "нет города",
+  "profile:country": "нет страны",
+  "profile:address": "нет адреса",
+  "profile:stars": "нет категории",
+  "profile:images": "нет фото",
+  owner_missing: "нет владельца",
+  rooms_missing: "нет номеров",
+  rates_missing: "нет цен",
+  seasons_missing: "нет сезонов",
+  currency_invalid: "неверная валюта",
+  passport_missing: "нет Hotel Passport",
+};
+
+const readinessIssueText = (hotel) =>
+  (hotel.readiness?.issues || []).map((issue) => issueLabels[issue] || issue).join(", ");
 
 function Badge({ children, tone = "slate" }) {
   const tones = {
@@ -143,12 +173,10 @@ export default function AdminHotelsTable({
     setLoading(true);
     setError("");
     try {
-      const data = providerMode
-        ? await apiGetMyHotels({ q: qName.trim(), city: qCity.trim(), limit: 200 })
-        : await apiSearchHotels({ name: qName.trim(), city: qCity.trim(), limit: 200 });
-
-      const rows =
-        (providerMode ? data?.items : Array.isArray(data) ? data : data?.items) || [];
+      const data = await apiHotelReadiness({
+        name: qName.trim(), city: qCity.trim(), limit: 200, providerMode,
+      });
+      const rows = data?.items || [];
       if (reqIdRef.current === myReq) setItems(rows.map(normalizeHotel));
     } catch (e) {
       if (reqIdRef.current === myReq) setError("Не удалось загрузить список отелей");
@@ -170,17 +198,24 @@ export default function AdminHotelsTable({
   const stats = useMemo(() => {
     const cities = new Set(items.map((h) => h.city).filter(Boolean));
     const withoutCity = items.filter((h) => !h.city).length;
-    const withoutOwner = items.filter((h) => !(h.providerId || h.providerId === 0)).length;
-    const needsCheck = items.filter((h) => hotelCompleteness(h).percent < 84).length;
-    return { total: items.length, cities: cities.size, withoutCity, withoutOwner, needsCheck };
+    const withoutOwner = items.filter((h) => !(Number(h.providerId) > 0)).length;
+    const profileReady = items.filter((h) => h.readiness?.profile_ready).length;
+    const pricingReady = items.filter((h) => h.readiness?.pricing_ready).length;
+    const passportReady = items.filter((h) => h.readiness?.passport_ready).length;
+    const tourBuilderReady = items.filter((h) => h.readiness?.tour_builder_ready).length;
+    return { total: items.length, cities: cities.size, withoutCity, withoutOwner, profileReady, pricingReady, passportReady, tourBuilderReady };
   }, [items]);
 
   const visibleItems = useMemo(() => {
     let rows = [...items];
 
-    if (quickFilter === "needs_check") rows = rows.filter((h) => hotelCompleteness(h).percent < 84);
+    if (quickFilter === "needs_check") rows = rows.filter((h) => !h.readiness?.tour_builder_ready);
     if (quickFilter === "without_city") rows = rows.filter((h) => !h.city);
-    if (quickFilter === "without_owner") rows = rows.filter((h) => !(h.providerId || h.providerId === 0));
+    if (quickFilter === "without_owner") rows = rows.filter((h) => !(Number(h.providerId) > 0));
+    if (quickFilter === "without_rates") rows = rows.filter((h) => !h.readiness?.has_rates);
+    if (quickFilter === "without_seasons") rows = rows.filter((h) => !h.readiness?.has_seasons);
+    if (quickFilter === "without_passport") rows = rows.filter((h) => !h.readiness?.passport_ready);
+    if (quickFilter === "tour_builder") rows = rows.filter((h) => h.readiness?.tour_builder_ready);
 
     const dir = sortDir === "desc" ? -1 : 1;
     rows.sort((a, b) => {
@@ -257,11 +292,12 @@ export default function AdminHotelsTable({
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <StatCard label="Всего" value={stats.total} hint="загружено в список" />
-          <StatCard label="Города" value={stats.cities} hint="уникальные города" />
-          <StatCard label="Проверить" value={stats.needsCheck} hint="неполные карточки" />
-          <StatCard label="Без города" value={stats.withoutCity} hint="нужно дополнить" />
+          <StatCard label="Профиль готов" value={stats.profileReady} hint="карточка заполнена" />
+          <StatCard label="Цены готовы" value={stats.pricingReady} hint="номера, тарифы, сезоны" />
+          <StatCard label="Tour Builder" value={stats.tourBuilderReady} hint="можно рассчитывать" />
+          <StatCard label="Hotel Passport" value={stats.passportReady} hint="есть публикации" />
           <StatCard label="Без владельца" value={stats.withoutOwner} hint="provider_id пустой" />
         </div>
 
@@ -317,6 +353,10 @@ export default function AdminHotelsTable({
             {[
               ["all", "Все"],
               ["needs_check", "Проверить"],
+              ["tour_builder", "Готовы для Tour Builder"],
+              ["without_rates", "Без цен"],
+              ["without_seasons", "Без сезонов"],
+              ["without_passport", "Без Hotel Passport"],
               ["without_city", "Без города"],
               ["without_owner", "Без владельца"],
             ].map(([id, label]) => (
@@ -361,7 +401,7 @@ export default function AdminHotelsTable({
                   <th className="w-[220px] px-4 py-3"><SortButton id="city">Локация</SortButton></th>
                   <th className="w-[110px] px-4 py-3">Звёзды</th>
                   <th className="w-[140px] px-4 py-3">Владелец</th>
-                  <th className="w-[150px] px-4 py-3">Статус</th>
+                  <th className="w-[260px] px-4 py-3">Готовность</th>
                   <th className="w-[260px] px-4 py-3 text-right">Действия</th>
                 </tr>
               </thead>
@@ -398,17 +438,27 @@ export default function AdminHotelsTable({
                           {h.stars ? `${h.stars}★` : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-4 py-3 text-sm font-bold text-slate-700">
-                          {h.providerId || h.providerId === 0 ? h.providerId : <span className="text-amber-600">нет</span>}
+                          {Number(h.providerId) > 0 ? h.providerId : <span className="text-amber-600">нет</span>}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1.5">
                             <Badge tone={completeness.tone}>{completeness.label}</Badge>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge tone={h.readiness?.profile_ready ? "emerald" : "rose"}>Профиль</Badge>
+                              <Badge tone={h.readiness?.pricing_ready ? "emerald" : "rose"}>Цены</Badge>
+                              <Badge tone={h.readiness?.passport_ready ? "sky" : "slate"}>Passport {h.inspectionCount || 0}</Badge>
+                            </div>
                             <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
                               <div
                                 className="h-full rounded-full bg-slate-900"
                                 style={{ width: `${completeness.percent}%` }}
                               />
                             </div>
+                            {!h.readiness?.tour_builder_ready ? (
+                              <div className="max-w-[250px] text-[11px] font-semibold leading-4 text-rose-600">
+                                {readinessIssueText(h)}
+                              </div>
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-4 py-3">
