@@ -52,7 +52,7 @@ export async function createInspection(hotelId, payload) {
     try {
       res = await fetch(buildUrl(url), {
         method: "POST",
-        headers: getAuthHeaders("provider"),
+        headers: getAuthHeaders(),
         body: payload,
         credentials: "include",
       });

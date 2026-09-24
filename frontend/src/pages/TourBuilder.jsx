@@ -662,16 +662,18 @@ async function fetchHotelSeasons(hotelId) {
   return await fetchJSON(`/api/hotels/${hotelId}/seasons`);
 }
 
-// Определить сезон на конкретную дату (если попали в high-интервал — high, иначе low)
+// Return the configured season for a date. Missing coverage must stay visible:
+// silently treating a gap as low season can produce an incorrect quote.
 function resolveSeasonLabel(ymd, seasons) {
-  if (!Array.isArray(seasons) || seasons.length === 0) return "low";
+  if (!Array.isArray(seasons) || seasons.length === 0) return null;
   for (const s of seasons) {
     if (!s?.start_date || !s?.end_date) continue;
     if (ymd >= s.start_date && ymd <= s.end_date) {
-      return (s.label === "high" ? "high" : "low");
+      const label = String(s.label || "").trim().toLowerCase();
+      return ["low", "shoulder", "high"].includes(label) ? label : null;
     }
   }
-  return "low";
+  return null;
 }
 
 
@@ -1518,11 +1520,21 @@ const makeTransportLoader = (dateKey) => async (input) => {
     return toNum(st?.transportService?.price, toNum(st?.transport?.price_per_day, 0));
   };
   
+  const moneyToUZS = (amount, currency) => {
+    const value = toNum(amount, 0);
+    const code = String(currency || "UZS").trim().toUpperCase();
+    if (code === "UZS") return value;
+    if (code === "USD") return Number(usdRate) > 0 ? value * Number(usdRate) : 0;
+    return 0;
+  };
+
   const calcHotelForDay = (dateKey) => {
-  const st = byDay[dateKey] || {};
-  // если выбрали номера — берём сумму из пикера; иначе fallback на простое поле price
-  return toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0));
-};
+    const st = byDay[dateKey] || {};
+    if (st.hotelBreakdown?.quoteValid === false) return 0;
+    const amount = toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0));
+    const currency = st.hotelBrief?.currency || st.hotel?.currency || "UZS";
+    return moneyToUZS(amount, currency);
+  };
 
   
   // стоимость межгородних трансферов за день в UZS
@@ -2442,17 +2454,23 @@ const makeTransportLoader = (dateKey) => async (input) => {
                      <div className="text-xs text-gray-600 mt-1">
                        {t('tb.price_per_night')}:{" "}
                        <b style={{ color: BRAND.primary }}>
-                         {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} UZS
+                         {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotelBrief?.currency || st.hotel?.currency || "UZS"}
                        </b>
                        {(() => {
                          const baseCur = st.hotelBrief?.currency || st.hotel?.currency;
                          return baseCur && baseCur.toUpperCase() !== 'UZS'
                            ? <span className="ml-1 text-[11px] text-gray-500">
-                               ({t('tb.hotel_base_currency', { defaultValue: 'база:' })} {baseCur})
+                               ({calcHotelForDay(k).toFixed(2)} UZS)
                              </span>
                            : null;
                        })()}
                      </div>
+
+                    {st.hotelBreakdown?.quoteValid === false ? (
+                      <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800">
+                        Расчёт недоступен: {st.hotelBreakdown.warnings?.join("; ") || "проверьте сезоны и тарифы отеля"}.
+                      </div>
+                    ) : null}
  
                     {/* Разбивка по отелю за ночь: номера / доп. места / тур. сбор */}
                     {!!st.hotelBreakdown && (
@@ -2460,15 +2478,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         <div className="flex flex-wrap gap-x-3 gap-y-1">
                           <span>
                                 {t('tb.rooms')}:{' '}
-                                <b>{Number(st.hotelBreakdown.rooms || 0).toFixed(2)} UZS</b>
+                                <b>{Number(st.hotelBreakdown.rooms || 0).toFixed(2)} {st.hotelBreakdown.currency || "UZS"}</b>
                           </span>
                           <span>
                                 {t('tb.extra_beds_short')}:{' '}
-                                <b>{Number(st.hotelBreakdown.extraBeds || 0).toFixed(2)} UZS</b>
+                                <b>{Number(st.hotelBreakdown.extraBeds || 0).toFixed(2)} {st.hotelBreakdown.currency || "UZS"}</b>
                           </span>
                           <span>
                                 {t('tb.tourism_fee_short')}:{' '}
-                                <b>{Number(st.hotelBreakdown.tourismFee || 0).toFixed(2)} UZS</b>
+                                <b>{Number(st.hotelBreakdown.tourismFee || 0).toFixed(2)} {st.hotelBreakdown.currency || "UZS"}</b>
                           </span>
                               {st.hotelBreakdown.vatIncluded ? (
                                 <span>
@@ -2478,7 +2496,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               ) : (
                                 <span>
                                   {t('tb.vat')}:{' '}
-                                  <b>{Number(st.hotelBreakdown.vat || 0).toFixed(2)} UZS</b>
+                                  <b>{Number(st.hotelBreakdown.vat || 0).toFixed(2)} {st.hotelBreakdown.currency || "UZS"}</b>
                                 </span>
                               )}
                         </div>
@@ -2997,6 +3015,8 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
   // карта количеств по типам: { 'Double': 2, 'Triple': 1, ... }
   const [qty, setQty] = useState({});
   const [extraBeds, setExtraBeds] = useState(0); // кол-во доп. мест на эту ночь
+  const nightDatesKey = (Array.isArray(nightDates) ? nightDates : []).join(",");
+  const quoteNightDates = useMemo(() => nightDatesKey.split(",").filter(Boolean), [nightDatesKey]);
 
   useEffect(() => {
     // обнуляем при смене отеля
@@ -3052,17 +3072,25 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
   useEffect(() => {
     let sum = 0;
     let roomsSubtotal = 0;
+    const warnings = [];
     const personKey = residentFlag ? "resident" : "nonResident";
-    const nights = Array.isArray(nightDates) ? nightDates.length : 0;
-    for (const ymd of (nightDates || [])) {
-      const season = resolveSeasonLabel(ymd, seasons); // 'low' | 'high'
+    const nights = quoteNightDates.length;
+    for (const ymd of quoteNightDates) {
+      const season = resolveSeasonLabel(ymd, seasons);
+      if (!season) {
+        warnings.push(`на ${ymd} не задан сезон`);
+        continue;
+      }
       for (const [type, n] of Object.entries(qty)) {
         const count = Number(n) || 0;
         if (!count) continue;
         const row = mapByType.get(type);
-        const price = Number(
-          row?.prices?.[season]?.[personKey]?.[meal] ?? 0
-        );
+        const rawPrice = row?.prices?.[season]?.[personKey]?.[meal];
+        const price = Number(rawPrice);
+        if (!Number.isFinite(price) || price <= 0) {
+          warnings.push(`${type}: нет тарифа ${meal}/${season} на ${ymd}`);
+          continue;
+        }
         roomsSubtotal += count * price;
       }
     }
@@ -3100,7 +3128,10 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
     const vat = (!vatIncluded && vatRate > 0) ? Math.round(vatBase * (vatRate / 100)) : 0;
     sum += vat;
 
-    onTotalChange?.(sum);
+    const selectedRooms = Object.values(qty).some((n) => Number(n) > 0);
+    if (!selectedRooms) warnings.push("не выбран номер");
+    const quoteValid = warnings.length === 0;
+    onTotalChange?.(quoteValid ? sum : 0);
     onBreakdown?.({
       rooms: roomsSubtotal,
       extraBeds: extraBedsTotal,
@@ -3108,9 +3139,12 @@ function HotelRoomPicker({ hotelBrief, seasons, nightDates, residentFlag, paxCou
       vat,
       vatIncluded,
       nights,
-      pax: paxCount
+      pax: paxCount,
+      currency: String(hotelBrief?.currency || "UZS").toUpperCase(),
+      quoteValid,
+      warnings: Array.from(new Set(warnings))
     });
-  }, [qty, meal, nightDates, seasons, residentFlag, mapByType, extraBeds, paxCount, hotelBrief, onTotalChange, onBreakdown]);
+  }, [qty, meal, quoteNightDates, seasons, residentFlag, mapByType, extraBeds, paxCount, hotelBrief]);
 
   return (
     <div className="mt-3 border rounded p-2">

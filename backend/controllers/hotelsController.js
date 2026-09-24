@@ -1855,6 +1855,8 @@ async function moderateHotelInspection(req, res) {
   if (!canModerateHotelInspection(req)) return res.status(403).json({ error: "forbidden" });
   const next = normalizeInspectionStatus(req.body?.status || req.body?.moderation_status || req.body?.moderationStatus, 'pending');
   const reason = String(req.body?.reason || req.body?.rejection_reason || '').trim() || null;
+  const verifiedProvided = Object.prototype.hasOwnProperty.call(req.body || {}, 'verified_visit')
+    || Object.prototype.hasOwnProperty.call(req.body || {}, 'verifiedVisit');
   const verified = req.body?.verified_visit === true || req.body?.verifiedVisit === true;
   try {
     await ensureInspectionsTable();
@@ -1867,13 +1869,13 @@ async function moderateHotelInspection(req, res) {
           SET status=$2,
               moderation_status=$2,
               rejection_reason=$3,
-              verified_visit = CASE WHEN $4::boolean THEN true ELSE verified_visit END,
+              verified_visit = CASE WHEN $4::boolean THEN $5::boolean ELSE verified_visit END,
               hidden_at = ${hiddenAt},
               deleted_at = ${deletedAt},
               updated_at=NOW()
         WHERE id=$1
         RETURNING id, hotel_id, status, moderation_status, verified_visit, rejection_reason`,
-      [inspectionId, next, reason, verified]
+      [inspectionId, next, reason, verifiedProvided, verified]
     );
     await ensureHotelsAggregates(row.hotel_id);
     return res.json({ item: rows[0] });

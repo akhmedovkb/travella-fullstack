@@ -34,6 +34,36 @@ function allowRoles(...roles) {
 
 const canWrite = allowRoles('provider', 'tour_agent', 'agency', 'supplier');
 
+function isAdminLike(user = {}) {
+  const roles = [user.role, user.type, ...(Array.isArray(user.roles) ? user.roles : [])]
+    .filter(Boolean)
+    .map((role) => String(role).toLowerCase());
+  return user.is_admin === true || roles.includes('admin') || roles.includes('moderator');
+}
+
+async function requireHotelOwner(req, res, next) {
+  try {
+    if (isAdminLike(req.user)) return next();
+    const hotelId = Number(req.params.id);
+    const providerId = Number(req.user?.id);
+    if (!hotelId || !providerId) return res.status(403).json({ error: 'forbidden' });
+    const { rows } = await db.query(`SELECT provider_id FROM hotels WHERE id=$1 LIMIT 1`, [hotelId]);
+    if (!rows.length) return res.status(404).json({ error: 'hotel_not_found' });
+    if (Number(rows[0].provider_id) !== providerId) return res.status(403).json({ error: 'forbidden' });
+    return next();
+  } catch (error) {
+    return next(error);
+  }
+}
+
+const canWriteHotel = [canWrite, requireHotelOwner];
+const VALID_LABELS = new Set(['low', 'shoulder', 'high']);
+
+function seasonLabel(value) {
+  const label = String(value || '').trim().toLowerCase();
+  return VALID_LABELS.has(label) ? label : null;
+}
+
 // утилиты
 function iso(d) {
   // принимает 'YYYY-MM-DD' или Date и нормализует к 'YYYY-MM-DD'
@@ -95,11 +125,13 @@ router.get('/', tryAuth, async (req, res, next) => {
 });
 
 /* ==================== CREATE ==================== */
-router.post('/', canWrite, async (req, res, next) => {
+router.post('/', ...canWriteHotel, async (req, res, next) => {
   try {
     await ensureTable();
     const { id: hotelId } = req.params;
     const { label = 'low', start_date, end_date } = req.body || {};
+    const normalizedLabel = seasonLabel(label);
+    if (!normalizedLabel) return res.status(400).json({ error: 'bad_season_label' });
 
     const start = iso(start_date);
     const end = iso(end_date);
@@ -119,18 +151,20 @@ router.post('/', canWrite, async (req, res, next) => {
          label,
          start_date::text AS start_date,
          end_date::text AS end_date`,
-      [hotelId, String(label).trim() || 'low', start, end]
+      [hotelId, normalizedLabel, start, end]
     );
     res.json(rows[0]);
   } catch (e) { next(e); }
 });
 
 /* ==================== UPDATE ==================== */
-router.put('/:seasonId', canWrite, async (req, res, next) => {
+router.put('/:seasonId(\\d+)', ...canWriteHotel, async (req, res, next) => {
   try {
     await ensureTable();
     const { id: hotelId, seasonId } = req.params;
     const { label = 'low', start_date, end_date } = req.body || {};
+    const normalizedLabel = seasonLabel(label);
+    if (!normalizedLabel) return res.status(400).json({ error: 'bad_season_label' });
 
     const start = iso(start_date);
     const end = iso(end_date);
@@ -151,7 +185,7 @@ router.put('/:seasonId', canWrite, async (req, res, next) => {
           label,
           start_date::text AS start_date,
           end_date::text AS end_date`,
-      [String(label).trim() || 'low', start, end, seasonId, hotelId]
+      [normalizedLabel, start, end, seasonId, hotelId]
     );
     if (!rows.length) return res.status(404).json({ error: 'not_found' });
     res.json(rows[0]);
@@ -159,7 +193,7 @@ router.put('/:seasonId', canWrite, async (req, res, next) => {
 });
 
 /* ==================== DELETE ==================== */
-router.delete('/:seasonId', canWrite, async (req, res, next) => {
+router.delete('/:seasonId(\\d+)', ...canWriteHotel, async (req, res, next) => {
   try {
     await ensureTable();
     const { id: hotelId, seasonId } = req.params;
@@ -178,7 +212,7 @@ router.delete('/:seasonId', canWrite, async (req, res, next) => {
  * body: { items: [{label,start_date,end_date}, ...] }
  * Полностью заменяет сезоны у отеля.
  */
-router.put('/bulk', canWrite, async (req, res, next) => {
+router.put('/bulk', ...canWriteHotel, async (req, res, next) => {
   const client = await db.connect();
   try {
     await ensureTable();
@@ -189,10 +223,10 @@ router.put('/bulk', canWrite, async (req, res, next) => {
     const items = list.map((x) => {
       const start = iso(x.start_date);
       const end = iso(x.end_date);
-      return { label: (x.label || 'low').trim() || 'low', start, end };
+      return { label: seasonLabel(x.label || 'low'), start, end };
     });
 
-    if (items.some(it => !it.start || !it.end || it.start > it.end)) {
+    if (items.some(it => !it.label || !it.start || !it.end || it.start > it.end)) {
       return res.status(400).json({ error: 'bad_dates' });
     }
 

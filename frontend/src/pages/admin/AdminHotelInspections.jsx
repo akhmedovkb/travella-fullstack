@@ -125,28 +125,6 @@ function MediaCarousel({ items = [] }) {
           })}
         </div>
       ) : null}
-      {rejecting ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
-          <div className="w-full max-w-xl rounded-[28px] bg-white p-5 shadow-2xl ring-1 ring-slate-200">
-            <div className="text-xs font-black uppercase tracking-[0.16em] text-red-600">Hotel Passport moderation</div>
-            <h3 className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">Отклонить инспекцию #{rejecting.id}</h3>
-            <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
-              Причина будет показана автору обзора в карточке отеля. Напишите конкретно, что нужно исправить: фото, даты, текст, доказательства или качество обзора.
-            </p>
-            <textarea
-              value={rejectReason}
-              onChange={(e) => setRejectReason(e.target.value)}
-              rows={5}
-              className="mt-4 w-full rounded-2xl border border-slate-200 p-3 text-sm font-semibold outline-none focus:border-red-300 focus:ring-4 focus:ring-red-50"
-              placeholder="Например: добавьте фото территории/номера и уточните дату посещения."
-            />
-            <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <button type="button" onClick={() => { setRejecting(null); setRejectReason(""); }} className="rounded-2xl bg-slate-100 px-4 py-2 text-sm font-black text-slate-700 hover:bg-slate-200">Отмена</button>
-              <button type="button" onClick={() => setModeration(rejecting, "rejected", rejectReason)} className="rounded-2xl bg-red-600 px-4 py-2 text-sm font-black text-white hover:bg-red-700">⛔ Отклонить с причиной</button>
-            </div>
-          </div>
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -206,7 +184,6 @@ export default function AdminHotelInspections({ embedded = false }) {
       const res = await moderateInspection(item.id, {
         status: nextStatus,
         reason: nextStatus === "rejected" ? cleanReason : "",
-        verified_visit: nextStatus === "approved",
       });
       const next = res?.item || { id: item.id, status: nextStatus, moderation_status: nextStatus };
       setItems((prev) => prev.map((x) => x.id === item.id ? { ...x, ...next } : x));
