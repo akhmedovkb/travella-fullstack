@@ -964,6 +964,8 @@ app.use("/api/admin/broadcast", adminBroadcastRoutes);
 /** ===================== HotelsSeasons ===================== */
 const hotelSeasonsRouter = require("./routes/hotelSeasons");
 app.use("/api/hotels/:id/seasons", hotelSeasonsRouter);
+const hotelOffersRouter = require("./routes/hotelOffers");
+app.use("/api/hotels/:id/offers", hotelOffersRouter);
 
 /** ===================== TBtemplates ===================== */
 app.use("/api/tour-templates", tbTemplatesRoutes);

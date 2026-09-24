@@ -583,6 +583,11 @@ async function fetchHotelBrief(hotelId) {
   return await fetchJSON(`/api/hotels/${hotelId}/brief`);
 }
 
+async function fetchHotelOffers(hotelId) {
+  const data = await fetchJSON(`/api/hotels/${hotelId}/offers`, { status: "active" });
+  return Array.isArray(data?.items) ? data.items : [];
+}
+
 async function fetchHotelQuote(payload) {
   return await postJSON("/api/hotels/quote", payload);
 }
@@ -594,6 +599,10 @@ function hotelQuoteWarningText(warning) {
   if (value.startsWith("season_missing:")) return `не задан сезон на ${value.split(":")[1] || "дату"}`;
   if (value.startsWith("room_not_found:")) return `тип номера не найден: ${value.slice("room_not_found:".length)}`;
   if (value.startsWith("room_stock_exceeded:")) return `превышено количество номеров: ${value.slice("room_stock_exceeded:".length)}`;
+  if (value.startsWith("min_stay:")) {
+    const [, room, nights] = value.split(":");
+    return `минимум ${nights || "?"} ноч. для номера ${room || ""}`;
+  }
   if (value.startsWith("rate_missing:")) {
     const [, date, room, meal, season] = value.split(":");
     return `нет тарифа ${room || "номер"} / ${meal || "питание"} / ${season || "сезон"} на ${date || "дату"}`;
@@ -1314,7 +1323,7 @@ export default function TourBuilder() {
         if (!st.city) continue;
         loadHotelOptionsForDay(k, st.city);
         if (st.hotel && !matchStars(st.hotel.stars, hotelStars)) {
-          next[k] = { ...st, hotel: null, hotelBrief: null, hotelSeasons: [], hotelRoomsTotal: 0, hotelBreakdown: null };
+          next[k] = { ...st, hotel: null, hotelBrief: null, hotelOffers: [], hotelOffer: null, hotelSeasons: [], hotelRoomsTotal: 0, hotelBreakdown: null };
         }
       }
       return next;
@@ -2347,6 +2356,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
                              ...p[k],
                              hotel,
                              hotelBrief: null,
+                             hotelOffers: [],
+                             hotelOffer: null,
                              hotelSeasons: [],
                              hotelRoomsTotal: 0,
                              hotelLoading: !!hotel
@@ -2354,12 +2365,17 @@ const makeTransportLoader = (dateKey) => async (input) => {
                          }));
                          if (!hotel) return;
                          try {
-                           const brief = await fetchHotelBrief(hotel.id);
+                           const [brief, offers] = await Promise.all([
+                             fetchHotelBrief(hotel.id),
+                             fetchHotelOffers(hotel.id).catch(() => []),
+                           ]);
                            setByDay((p) => ({
                              ...p,
                              [k]: { 
                                ...p[k],
                                hotelBrief: brief,
+                               hotelOffers: offers,
+                               hotelOffer: offers[0] || null,
                                hotelLoading: false
                              }
                            }));
@@ -2374,9 +2390,30 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                     {/* ▼ ФОРМА ВЫБОРА НОМЕРОВ + моментальный расчёт */}
                     {st.hotelLoading && <div className="text-xs text-gray-500 mt-2">{t('tb.loading_hotel')}</div>}
+                      {st.hotel && st.hotelBrief && Array.isArray(st.hotelOffers) && st.hotelOffers.length > 0 ? (
+                        <label className="mt-2 block">
+                          <span className="mb-1 block text-xs font-medium text-gray-600">Поставщик и тариф</span>
+                          <select
+                            className="h-9 w-full rounded border px-2 text-sm"
+                            value={st.hotelOffer?.id || ""}
+                            onChange={(event) => {
+                              const offer = st.hotelOffers.find((item) => Number(item.id) === Number(event.target.value)) || null;
+                              setByDay((p) => ({ ...p, [k]: { ...p[k], hotelOffer: offer, hotelRoomsTotal: 0, hotelBreakdown: null } }));
+                            }}
+                          >
+                            {st.hotelOffers.map((offer) => (
+                              <option key={offer.id} value={offer.id}>
+                                {offer.is_direct ? "Отель напрямую" : offer.provider_name}
+                                {offer.min_rate ? ` — от ${Number(offer.min_rate).toLocaleString("ru-RU")} ${offer.currency}` : ""}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                      ) : null}
                       {st.hotel && st.hotelBrief && (
                         <HotelRoomPicker
                           hotelBrief={st.hotelBrief}
+                          offer={st.hotelOffer || null}
                           // для конструктора «по дню» ночёвка ровно одна: передаем текущую дату
                           nightDates={[k]}                              // ['YYYY-MM-DD']
                           residentFlag={residentType === "res"}        // true/false
@@ -2397,10 +2434,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
                      <div className="text-xs text-gray-600 mt-1">
                        {t('tb.price_per_night')}:{" "}
                        <b style={{ color: BRAND.primary }}>
-                         {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotelBrief?.currency || st.hotel?.currency || "UZS"}
+                         {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotelOffer?.currency || st.hotelBrief?.currency || st.hotel?.currency || "UZS"}
                        </b>
                        {(() => {
-                         const baseCur = st.hotelBrief?.currency || st.hotel?.currency;
+                         const baseCur = st.hotelOffer?.currency || st.hotelBrief?.currency || st.hotel?.currency;
                          return baseCur && baseCur.toUpperCase() !== 'UZS'
                            ? <span className="ml-1 text-[11px] text-gray-500">
                                ({calcHotelForDay(k).toFixed(2)} UZS)
@@ -2950,10 +2987,10 @@ function EffectAutoPick({ days, byDay, adt, chd, servicesCache, onRecalc }) {
   return null;
 }
 
-function HotelRoomPicker({ hotelBrief, nightDates, residentFlag, paxCount = 1, usdRate = 0, onTotalChange, onBreakdown }) {
+function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount = 1, usdRate = 0, onTotalChange, onBreakdown }) {
     // локализация внутри дочернего компонента
   const { t } = useTranslation();
-  const MEALS = ["BB","HB","FB","AI","UAI"];
+  const MEALS = ["RO","BB","HB","FB","AI","UAI"];
   const [meal, setMeal] = useState("BB");
   // карта количеств по типам: { 'Double': 2, 'Triple': 1, ... }
   const [qty, setQty] = useState({});
@@ -2973,15 +3010,17 @@ function HotelRoomPicker({ hotelBrief, nightDates, residentFlag, paxCount = 1, u
     setQty({});
     setMeal("BB");
     setExtraBeds(0);
-  }, [hotelBrief?.id]);
+  }, [hotelBrief?.id, offer?.id]);
 
   // список типов из брифа
   const roomTypes = useMemo(() => {
-    const arr = Array.isArray(hotelBrief?.rooms) ? hotelBrief.rooms : [];
+    const arr = offer
+      ? (Array.isArray(offer.room_types) ? offer.room_types.map((type) => ({ type })) : [])
+      : (Array.isArray(hotelBrief?.rooms) ? hotelBrief.rooms : []);
     // уникальные имена типов (в брифе они приходят как { type, count, prices:{low/high...} })
     const names = Array.from(new Set(arr.map(r => r.type).filter(Boolean)));
     return names;
-  }, [hotelBrief]);
+  }, [hotelBrief, offer]);
 
   // быстрый доступ к объекту по type
   const mapByType = useMemo(() => {
@@ -3036,6 +3075,7 @@ function HotelRoomPicker({ hotelBrief, nightDates, residentFlag, paxCount = 1, u
       try {
         const quote = await fetchHotelQuote({
           hotel_id: hotelBrief.id,
+          offer_id: offer?.id || undefined,
           dates: quoteNightDates,
           residency: residentFlag ? "resident" : "non_resident",
           meal_plan: meal,
@@ -3076,7 +3116,7 @@ function HotelRoomPicker({ hotelBrief, nightDates, residentFlag, paxCount = 1, u
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [qty, meal, quoteNightDates, residentFlag, extraBeds, paxCount, hotelBrief?.id, hotelBrief?.currency, usdRate]);
+  }, [qty, meal, quoteNightDates, residentFlag, extraBeds, paxCount, hotelBrief?.id, hotelBrief?.currency, offer?.id, usdRate]);
 
   return (
     <div className="mt-3 border rounded p-2">
@@ -3133,17 +3173,18 @@ function HotelRoomPicker({ hotelBrief, nightDates, residentFlag, paxCount = 1, u
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
         {roomTypes.map((type) => {
           const max = Number(mapByType.get(type)?.count ?? 0);
+          const upperLimit = offer ? 99 : Math.max(0, max);
           return (
             <label key={type} className="flex items-center justify-between border rounded px-2 py-1">
               <span className="text-sm">{type}{max ? ` (≤ ${max})` : ""}</span>
               <input
                 type="number"
                 min={0}
-                max={Math.max(0, max)}
+                max={upperLimit}
                 className="h-8 w-20 border rounded px-2 text-sm"
                 value={qty[type] ?? 0}
                 onChange={(e) => {
-                  const v = Math.max(0, Math.min(Number(e.target.value || 0), Math.max(0, max)));
+                  const v = Math.max(0, Math.min(Number(e.target.value || 0), upperLimit));
                   setQty((p) => ({ ...p, [type]: v }));
                 }}
               />

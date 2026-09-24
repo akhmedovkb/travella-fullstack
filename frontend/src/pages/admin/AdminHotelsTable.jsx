@@ -486,6 +486,12 @@ export default function AdminHotelsTable({
                               >
                                 Сезоны
                               </Link>
+                              <Link
+                                to={`/admin/hotels/${h.id}/offers`}
+                                className="inline-flex items-center rounded-xl bg-orange-600 px-3 py-2 text-xs font-black text-white transition hover:bg-orange-700"
+                              >
+                                Поставщики
+                              </Link>
                             </div>
                           ) : (
                             <span className="text-sm font-medium text-slate-400">локальная подсказка</span>

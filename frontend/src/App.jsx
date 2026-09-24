@@ -20,6 +20,7 @@ import HotelInspections from "./pages/HotelInspections";
 import AdminHotelsTable from "./pages/admin/AdminHotelsTable";
 import AdminProviders from "./pages/admin/AdminProviders";
 import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
+import AdminHotelOffers from "./pages/admin/AdminHotelOffers";
 import AdminHotelInspections from "./pages/admin/AdminHotelInspections";
 import AdminLeads from "./pages/admin/Leads";
 import AdminRefusedActual from "./pages/admin/AdminRefusedActual";
@@ -531,6 +532,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminHotelSeasons />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/hotels/:id/offers"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminHotelOffers />
                   </AdminRoute>
                 </PrivateRoute>
               }

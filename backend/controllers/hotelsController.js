@@ -5,6 +5,7 @@ const axios = require("axios");
 const crypto = require("crypto");
 const { Pool } = require("pg");
 const { uploadBufferToR2, getR2ObjectStream } = require("../utils/r2Upload");
+const { ensureHotelOfferTables } = require('../utils/hotelOffersSchema');
 
 // /api/hotels/:id/brief
 async function getHotelBrief(req, res) {
@@ -80,6 +81,7 @@ function normalizeQuoteDate(value) {
 // while rates are moved to normalized hotel_offers/hotel_rates tables.
 async function quoteHotel(req, res) {
   const hotelId = parseIntSafe(req.body?.hotel_id ?? req.body?.hotelId);
+  const offerId = parseIntSafe(req.body?.offer_id ?? req.body?.offerId);
   if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
 
   const dates = [...new Set((Array.isArray(req.body?.dates) ? req.body.dates : [])
@@ -92,7 +94,7 @@ async function quoteHotel(req, res) {
     ? 'nonResident'
     : 'resident';
   const mealPlan = String(req.body?.meal_plan ?? req.body?.mealPlan ?? 'BB').trim().toUpperCase();
-  if (!['BB', 'HB', 'FB', 'AI', 'UAI'].includes(mealPlan)) {
+  if (!['RO', 'BB', 'HB', 'FB', 'AI', 'UAI'].includes(mealPlan)) {
     return res.status(400).json({ error: 'bad_meal_plan' });
   }
 
@@ -109,6 +111,23 @@ async function quoteHotel(req, res) {
       [hotelId]
     );
     if (!hotelResult.rowCount) return res.status(404).json({ error: 'hotel_not_found' });
+
+    await ensureHotelOfferTables();
+    let selectedOffer = null;
+    if (offerId) {
+      const offerResult = await db.query(
+        `SELECT o.*, p.name AS provider_name, p.type AS provider_type
+           FROM hotel_offers o
+           JOIN providers p ON p.id=o.provider_id
+          WHERE o.id=$1 AND o.hotel_id=$2 AND o.status='active'
+            AND (o.valid_from IS NULL OR o.valid_from <= $4::date)
+            AND (o.valid_to IS NULL OR o.valid_to >= $3::date)
+          LIMIT 1`,
+        [offerId, hotelId, dates[0], dates[dates.length - 1]]
+      );
+      if (!offerResult.rowCount) return res.status(404).json({ error: 'active_offer_not_found' });
+      selectedOffer = offerResult.rows[0];
+    }
 
     await db.query(`
       CREATE TABLE IF NOT EXISTS hotel_seasons (
@@ -137,39 +156,62 @@ async function quoteHotel(req, res) {
     const lines = [];
 
     if (!requestedRooms.length) warnings.push('room_required');
-    for (const requested of requestedRooms) {
-      const room = roomMap.get(requested.type);
-      if (!room) warnings.push(`room_not_found:${requested.type}`);
-      const stock = Math.max(0, Math.trunc(quoteNumber(room?.count, 0)));
-      if (stock && requested.quantity > stock) warnings.push(`room_stock_exceeded:${requested.type}`);
-    }
-
-    for (const date of dates) {
-      const season = seasonResult.rows.find((row) => date >= row.start_date && date <= row.end_date);
-      const label = String(season?.label || '').toLowerCase();
-      if (!['low', 'shoulder', 'high'].includes(label)) {
-        warnings.push(`season_missing:${date}`);
-        continue;
+    if (selectedOffer) {
+      const rateResult = await db.query(
+        `SELECT id,room_type,meal_plan,residency,date_from::text,date_to::text,
+                amount::numeric,allotment,min_stay,refundable
+           FROM hotel_offer_rates
+          WHERE offer_id=$1 AND meal_plan=$2
+            AND residency IN ($3,'all')
+            AND date_from <= $5::date AND date_to >= $4::date
+          ORDER BY CASE WHEN residency=$3 THEN 0 ELSE 1 END,date_from DESC,id DESC`,
+        [selectedOffer.id, mealPlan, personKey === 'nonResident' ? 'non_resident' : 'resident', dates[0], dates[dates.length - 1]]
+      );
+      const offerRates = rateResult.rows;
+      for (const date of dates) {
+        for (const requested of requestedRooms) {
+          const rate = offerRates.find((row) => row.room_type === requested.type && date >= row.date_from && date <= row.date_to);
+          if (!rate) {
+            warnings.push(`rate_missing:${date}:${requested.type}:${mealPlan}:offer`);
+            continue;
+          }
+          const allotment = rate.allotment == null ? null : Math.max(0, Math.trunc(Number(rate.allotment)));
+          if (allotment != null && requested.quantity > allotment) warnings.push(`room_stock_exceeded:${requested.type}`);
+          const unitAmount = quoteNumber(rate.amount, 0);
+          lines.push({
+            date, rate_id: rate.id, room_type: requested.type, meal_plan: mealPlan,
+            residency: rate.residency, quantity: requested.quantity, unit_amount: unitAmount,
+            subtotal: unitAmount * requested.quantity, refundable: rate.refundable !== false,
+            min_stay: Number(rate.min_stay || 1),
+          });
+        }
       }
+    } else {
       for (const requested of requestedRooms) {
         const room = roomMap.get(requested.type);
-        if (!room) continue;
-        const unitAmount = quoteNumber(room?.prices?.[label]?.[personKey]?.[mealPlan], 0);
-        if (unitAmount <= 0) {
-          warnings.push(`rate_missing:${date}:${requested.type}:${mealPlan}:${label}`);
+        if (!room) warnings.push(`room_not_found:${requested.type}`);
+        const stock = Math.max(0, Math.trunc(quoteNumber(room?.count, 0)));
+        if (stock && requested.quantity > stock) warnings.push(`room_stock_exceeded:${requested.type}`);
+      }
+      for (const date of dates) {
+        const season = seasonResult.rows.find((row) => date >= row.start_date && date <= row.end_date);
+        const label = String(season?.label || '').toLowerCase();
+        if (!['low', 'shoulder', 'high'].includes(label)) {
+          warnings.push(`season_missing:${date}`);
           continue;
         }
-        lines.push({
-          date,
-          season: label,
-          season_id: season.id,
-          room_type: requested.type,
-          meal_plan: mealPlan,
-          residency: personKey,
-          quantity: requested.quantity,
-          unit_amount: unitAmount,
-          subtotal: unitAmount * requested.quantity,
-        });
+        for (const requested of requestedRooms) {
+          const room = roomMap.get(requested.type);
+          if (!room) continue;
+          const unitAmount = quoteNumber(room?.prices?.[label]?.[personKey]?.[mealPlan], 0);
+          if (unitAmount <= 0) {
+            warnings.push(`rate_missing:${date}:${requested.type}:${mealPlan}:${label}`);
+            continue;
+          }
+          lines.push({ date, season: label, season_id: season.id, room_type: requested.type,
+            meal_plan: mealPlan, residency: personKey, quantity: requested.quantity,
+            unit_amount: unitAmount, subtotal: unitAmount * requested.quantity });
+        }
       }
     }
 
@@ -190,7 +232,7 @@ async function quoteHotel(req, res) {
     const vatRate = quoteNumber(taxes.vatRate ?? taxes.vat_rate, 0);
     const vat = !vatIncluded && vatRate > 0 ? Math.round((roomsSubtotal + extraBedsTotal) * vatRate / 100) : 0;
     const total = roomsSubtotal + extraBedsTotal + tourismFee + vat;
-    const currency = String(hotel.currency || 'UZS').toUpperCase();
+    const currency = String(selectedOffer?.currency || hotel.currency || 'UZS').toUpperCase();
     const usdUzs = quoteNumber(req.body?.fx?.usd_uzs ?? req.body?.usd_rate, 0);
     const totalUzs = currency === 'UZS' ? total : currency === 'USD' && usdUzs > 0 ? total * usdUzs : null;
     if (currency === 'USD' && usdUzs <= 0) warnings.push('usd_rate_required');
@@ -200,6 +242,7 @@ async function quoteHotel(req, res) {
     const versionSource = JSON.stringify({
       hotel_id: hotel.id,
       hotel_updated_at: hotel.updated_at,
+      offer: selectedOffer ? [selectedOffer.id, selectedOffer.provider_id, selectedOffer.updated_at] : null,
       seasons: seasonResult.rows.map((row) => [row.id, row.label, row.start_date, row.end_date, row.updated_at]),
       dates,
       rooms: requestedRooms,
@@ -216,8 +259,13 @@ async function quoteHotel(req, res) {
       valid: uniqueWarnings.length === 0,
       quote_version: quoteVersion,
       quoted_at: new Date().toISOString(),
-      hotel: { id: hotel.id, name: hotel.name, provider_id: hotel.provider_id || null },
-      rate_source: 'hotels.rooms_json',
+      hotel: { id: hotel.id, name: hotel.name, provider_id: selectedOffer?.provider_id || hotel.provider_id || null },
+      offer: selectedOffer ? {
+        id: selectedOffer.id, provider_id: selectedOffer.provider_id,
+        provider_name: selectedOffer.provider_name, supplier_type: selectedOffer.supplier_type,
+        is_direct: selectedOffer.is_direct === true,
+      } : null,
+      rate_source: selectedOffer ? 'hotel_offer_rates' : 'hotels.rooms_json',
       currency,
       nights,
       dates,
@@ -690,21 +738,26 @@ function hotelReadiness(row) {
   const hasRooms = rooms.some((room) => String(room?.type || '').trim() && Number(room?.count) > 0);
   const hasRates = rooms.some(roomHasPositiveRate);
   const hasSeasons = Number(row.season_count || 0) > 0;
+  const hasActiveOffer = Number(row.active_offer_count || 0) > 0;
+  const hasOfferRates = Number(row.active_offer_rate_count || 0) > 0;
+  const hasOfferRooms = Number(row.active_offer_room_count || 0) > 0;
   const hasOwner = Number(row.provider_id) > 0;
   const currency = String(row.currency || '').trim().toUpperCase();
   const currencyReady = ['UZS', 'USD'].includes(currency);
   const profileReady = missingProfile.length === 0;
-  const pricingReady = hasRooms && hasRates && hasSeasons && currencyReady;
+  const legacyPricingReady = hasRooms && hasRates && hasSeasons && currencyReady;
+  const offerPricingReady = hasActiveOffer && hasOfferRates && hasOfferRooms;
+  const pricingReady = legacyPricingReady || offerPricingReady;
   const passportReady = Number(row.approved_inspection_count || 0) > 0;
-  const tourBuilderReady = profileReady && pricingReady && hasOwner;
+  const tourBuilderReady = profileReady && pricingReady && (hasOwner || hasActiveOffer);
 
   const issues = [];
   if (!profileReady) issues.push(...missingProfile.map((field) => `profile:${field}`));
-  if (!hasOwner) issues.push('owner_missing');
-  if (!hasRooms) issues.push('rooms_missing');
-  if (!hasRates) issues.push('rates_missing');
-  if (!hasSeasons) issues.push('seasons_missing');
-  if (!currencyReady) issues.push('currency_invalid');
+  if (!hasOwner && !hasActiveOffer) issues.push('owner_missing');
+  if (!hasRooms && !hasOfferRooms) issues.push('rooms_missing');
+  if (!hasRates && !hasOfferRates) issues.push('rates_missing');
+  if (!hasSeasons && !offerPricingReady) issues.push('seasons_missing');
+  if (!currencyReady && !offerPricingReady) issues.push('currency_invalid');
   if (!passportReady) issues.push('passport_missing');
 
   return {
@@ -713,9 +766,12 @@ function hotelReadiness(row) {
     passport_ready: passportReady,
     tour_builder_ready: tourBuilderReady,
     has_owner: hasOwner,
-    has_rooms: hasRooms,
-    has_rates: hasRates,
+    has_rooms: hasRooms || hasOfferRooms,
+    has_rates: hasRates || hasOfferRates,
     has_seasons: hasSeasons,
+    has_active_offer: hasActiveOffer,
+    active_offer_count: Number(row.active_offer_count || 0),
+    active_offer_rate_count: Number(row.active_offer_rate_count || 0),
     currency_ready: currencyReady,
     issues,
   };
@@ -745,6 +801,7 @@ async function listHotelReadiness(req, res) {
 
   try {
     await ensureInspectionsTable();
+    await ensureHotelOfferTables();
     await db.query(`
       CREATE TABLE IF NOT EXISTS hotel_seasons (
         id SERIAL PRIMARY KEY,
@@ -763,7 +820,10 @@ async function listHotelReadiness(req, res) {
               COALESCE(s.season_count,0)::int AS season_count,
               s.season_from, s.season_to,
               COALESCE(i.approved_count,0)::int AS approved_inspection_count,
-              COALESCE(i.verified_count,0)::int AS verified_inspection_count
+              COALESCE(i.verified_count,0)::int AS verified_inspection_count,
+              COALESCE(o.active_offer_count,0)::int AS active_offer_count,
+              COALESCE(o.active_offer_rate_count,0)::int AS active_offer_rate_count,
+              COALESCE(o.active_offer_room_count,0)::int AS active_offer_room_count
          FROM hotels h
          LEFT JOIN (
            SELECT hotel_id, COUNT(*) AS season_count, MIN(start_date) AS season_from, MAX(end_date) AS season_to
@@ -775,6 +835,18 @@ async function listHotelReadiness(req, res) {
                   COUNT(*) FILTER (WHERE moderation_status='approved' AND verified_visit=true AND deleted_at IS NULL) AS verified_count
              FROM inspections GROUP BY hotel_id
          ) i ON i.hotel_id=h.id
+         LEFT JOIN (
+           SELECT ho.hotel_id,
+                  COUNT(DISTINCT ho.id) AS active_offer_count,
+                  COUNT(hor.id) AS active_offer_rate_count,
+                  COUNT(DISTINCT hor.room_type) AS active_offer_room_count
+             FROM hotel_offers ho
+             LEFT JOIN hotel_offer_rates hor ON hor.offer_id=ho.id
+            WHERE ho.status='active'
+              AND (ho.valid_from IS NULL OR ho.valid_from <= CURRENT_DATE)
+              AND (ho.valid_to IS NULL OR ho.valid_to >= CURRENT_DATE)
+            GROUP BY ho.hotel_id
+         ) o ON o.hotel_id=h.id
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY h.name ASC, h.id ASC
         LIMIT $${params.length}`,
