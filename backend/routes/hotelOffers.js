@@ -8,6 +8,7 @@ const OFFER_STATUSES = new Set(['draft', 'active', 'paused', 'archived']);
 const SUPPLIER_TYPES = new Set(['hotel', 'tour_operator', 'dmc', 'agency', 'supplier']);
 const MEAL_PLANS = new Set(['RO', 'BB', 'HB', 'FB', 'AI', 'UAI']);
 const RESIDENCIES = new Set(['resident', 'non_resident', 'all']);
+const OFFER_PROVIDER_TYPES = new Set(['hotel', 'agent', 'tour_agent', 'agency', 'supplier', 'tour_operator', 'dmc']);
 
 function rolesOf(user = {}) {
   return [user.role, user.type, ...(Array.isArray(user.roles) ? user.roles : [])]
@@ -64,6 +65,13 @@ router.get('/', async (req, res, next) => {
     await ensureHotelOfferTables();
     const hotelId = positiveInt(req.params.id);
     if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
+    const params = [hotelId, req.query.status ? String(req.query.status).toLowerCase() : null];
+    const mineOnly = String(req.query.mine || '') === '1';
+    let visibilityFilter = '';
+    if (!isAdmin(req.user)) {
+      params.push(positiveInt(req.user?.id) || 0);
+      visibilityFilter = mineOnly ? ` AND o.provider_id=$3` : ` AND (o.status='active' OR o.provider_id=$3)`;
+    }
     const { rows } = await db.query(
       `SELECT o.id, o.hotel_id, o.provider_id, p.name AS provider_name, p.type AS provider_type,
               o.supplier_type, o.is_direct, o.currency, o.status, o.title, o.terms,
@@ -77,9 +85,10 @@ router.get('/', async (req, res, next) => {
          LEFT JOIN hotel_offer_rates r ON r.offer_id=o.id
         WHERE o.hotel_id=$1 AND o.status <> 'archived'
           AND ($2::text IS NULL OR o.status=$2)
+          ${visibilityFilter}
         GROUP BY o.id, p.name, p.type
         ORDER BY o.is_direct DESC, o.status='active' DESC, p.name, o.id`,
-      [hotelId, req.query.status ? String(req.query.status).toLowerCase() : null]
+      params
     );
     return res.json({ items: rows });
   } catch (error) { return next(error); }
@@ -96,8 +105,10 @@ router.post('/', async (req, res, next) => {
     const providerResult = await db.query(`SELECT id, name, type FROM providers WHERE id=$1 LIMIT 1`, [providerId]);
     if (!providerResult.rowCount) return res.status(404).json({ error: 'provider_not_found' });
     const provider = providerResult.rows[0];
+    const providerType = String(provider.type || '').toLowerCase();
+    if (!OFFER_PROVIDER_TYPES.has(providerType)) return res.status(400).json({ error: 'invalid_offer_provider_type' });
     const directRequested = req.body?.is_direct === true || req.body?.isDirect === true;
-    const providerIsHotel = String(provider.type || '').toLowerCase() === 'hotel';
+    const providerIsHotel = providerType === 'hotel';
     if (directRequested && !providerIsHotel) return res.status(400).json({ error: 'direct_offer_requires_hotel_provider' });
 
     const supplierTypeRaw = String(req.body?.supplier_type || provider.type || 'supplier').toLowerCase();
@@ -173,6 +184,7 @@ router.get('/:offerId/rates', async (req, res, next) => {
     const offerId = positiveInt(req.params.offerId);
     const offer = await getOffer(offerId, hotelId);
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
+    if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
     const { rows } = await db.query(
       `SELECT id,offer_id,room_type,meal_plan,residency,date_from::text,date_to::text,
               amount::numeric,allotment,min_stay,refundable,created_at,updated_at

@@ -63,6 +63,9 @@ const normalizeHotel = (h) => ({
   country: normalizeText(h.country || h.country_name),
   stars: h.stars ?? h.star_rating ?? "",
   providerId: h.provider_id ?? h.providerId ?? "",
+  myOfferId: h.my_offer_id ?? null,
+  myOfferStatus: h.my_offer_status || "",
+  myOfferDirect: h.my_offer_is_direct === true,
   currency: normalizeText(h.currency),
   seasonCount: Number(h.season_count || 0),
   seasonFrom: h.season_from || "",
@@ -78,7 +81,7 @@ function hotelCompleteness(h) {
     const dimensions = [
       h.readiness.profile_ready,
       h.readiness.pricing_ready,
-      h.readiness.has_owner,
+      h.readiness.has_owner || h.readiness.has_active_offer,
       h.readiness.passport_ready,
     ];
     const percent = Math.round((dimensions.filter(Boolean).length / dimensions.length) * 100);
@@ -150,8 +153,6 @@ export default function AdminHotelsTable({
   onEdit, // (row) => void
   onNew, // () => void
 } = {}) {
-  void providerId;
-
   const who = useMemo(() => parseJwtRoles(), []);
   const admin = isAdminLike(who);
   const provider = isProviderRole(who);
@@ -438,7 +439,9 @@ export default function AdminHotelsTable({
                           {h.stars ? `${h.stars}★` : <span className="text-slate-400">—</span>}
                         </td>
                         <td className="px-4 py-3 text-sm font-bold text-slate-700">
-                          {Number(h.providerId) > 0 ? h.providerId : <span className="text-amber-600">нет</span>}
+                          {providerMode && h.myOfferId ? (
+                            <div><span className="text-emerald-700">назначен</span><div className="text-[11px] font-medium text-slate-500">{h.myOfferDirect ? "прямой тариф" : h.myOfferStatus || "черновик"}</div></div>
+                          ) : Number(h.providerId) > 0 ? h.providerId : <span className="text-amber-600">нет</span>}
                         </td>
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1.5">
@@ -464,7 +467,7 @@ export default function AdminHotelsTable({
                         <td className="px-4 py-3">
                           {h.id ? (
                             <div className="flex items-center justify-end gap-2">
-                              {onEdit ? (
+                              {onEdit && (!providerMode || Number(h.providerId) === Number(providerId)) ? (
                                 <button
                                   type="button"
                                   onClick={() => onEdit(h)}
@@ -472,25 +475,20 @@ export default function AdminHotelsTable({
                                 >
                                   Карточка
                                 </button>
-                              ) : (
+                              ) : !providerMode ? (
                                 <Link
                                   to={`/admin/hotels/${h.id}/edit`}
                                   className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50"
                                 >
                                   Карточка
                                 </Link>
-                              )}
+                              ) : <Link to={`/hotels/${h.id}`} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50">Карточка</Link>}
+                              {!providerMode ? <Link to={`/admin/hotels/${h.id}/seasons`} className="inline-flex items-center rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white transition hover:bg-slate-800">Сезоны</Link> : null}
                               <Link
-                                to={`/admin/hotels/${h.id}/seasons`}
-                                className="inline-flex items-center rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white transition hover:bg-slate-800"
-                              >
-                                Сезоны
-                              </Link>
-                              <Link
-                                to={`/admin/hotels/${h.id}/offers`}
+                                to={providerMode ? `/provider/hotels/${h.id}/offer` : `/admin/hotels/${h.id}/offers`}
                                 className="inline-flex items-center rounded-xl bg-orange-600 px-3 py-2 text-xs font-black text-white transition hover:bg-orange-700"
                               >
-                                Поставщики
+                                {providerMode ? "Мои тарифы" : "Поставщики"}
                               </Link>
                             </div>
                           ) : (

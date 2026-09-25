@@ -787,7 +787,10 @@ async function listHotelReadiness(req, res) {
 
   if (!isAdminLike(req.user)) {
     params.push(Number(req.user?.id) || 0);
-    where.push(`h.provider_id = $${params.length}`);
+    where.push(`(h.provider_id = $${params.length} OR EXISTS (
+      SELECT 1 FROM hotel_offers mine
+       WHERE mine.hotel_id=h.id AND mine.provider_id=$${params.length} AND mine.status <> 'archived'
+    ))`);
   }
   if (name) {
     params.push(`%${name}%`);
@@ -824,6 +827,9 @@ async function listHotelReadiness(req, res) {
               COALESCE(o.active_offer_count,0)::int AS active_offer_count,
               COALESCE(o.active_offer_rate_count,0)::int AS active_offer_rate_count,
               COALESCE(o.active_offer_room_count,0)::int AS active_offer_room_count
+              ,mine_offer.id AS my_offer_id
+              ,mine_offer.status AS my_offer_status
+              ,mine_offer.is_direct AS my_offer_is_direct
          FROM hotels h
          LEFT JOIN (
            SELECT hotel_id, COUNT(*) AS season_count, MIN(start_date) AS season_from, MAX(end_date) AS season_to
@@ -847,6 +853,10 @@ async function listHotelReadiness(req, res) {
               AND (ho.valid_to IS NULL OR ho.valid_to >= CURRENT_DATE)
             GROUP BY ho.hotel_id
          ) o ON o.hotel_id=h.id
+         LEFT JOIN hotel_offers mine_offer
+           ON mine_offer.hotel_id=h.id
+          AND mine_offer.provider_id=${!isAdminLike(req.user) ? '$1' : 'h.provider_id'}
+          AND mine_offer.status <> 'archived'
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
         ORDER BY h.name ASC, h.id ASC
         LIMIT $${params.length}`,

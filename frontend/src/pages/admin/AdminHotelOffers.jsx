@@ -24,9 +24,11 @@ function statusTone(status) {
   return "bg-slate-100 text-slate-600 ring-slate-200";
 }
 
-export default function AdminHotelOffers() {
+export default function AdminHotelOffers({ scope = "admin" }) {
   const { id } = useParams();
   const hotelId = Number(id);
+  const providerMode = scope === "provider";
+  const apiRole = providerMode ? "provider" : "admin";
   const [hotel, setHotel] = useState(null);
   const [providers, setProviders] = useState([]);
   const [offers, setOffers] = useState([]);
@@ -43,18 +45,18 @@ export default function AdminHotelOffers() {
     setLoading(true);
     try {
       const [hotelData, offersData, providersData] = await Promise.all([
-        apiGet(`/api/hotels/${hotelId}`, "admin"),
-        apiGet(`/api/hotels/${hotelId}/offers`, "admin"),
-        apiGet(`/api/admin/providers-table?limit=200`, "admin"),
+        apiGet(`/api/hotels/${hotelId}${providerMode ? "/brief" : ""}`, apiRole),
+        apiGet(`/api/hotels/${hotelId}/offers${providerMode ? "?mine=1" : ""}`, apiRole),
+        providerMode ? Promise.resolve({ items: [] }) : apiGet(`/api/admin/providers-table?limit=200`, "admin"),
       ]);
       setHotel(hotelData || null);
       setOffers(offersData?.items || []);
       const providerPayload = providersData?.data?.items ? providersData.data : providersData;
-      setProviders(providerPayload?.items || []);
+      setProviders((providerPayload?.items || []).filter((provider) => ['hotel','agent','tour_agent','agency','supplier','tour_operator','dmc'].includes(String(provider.type || '').toLowerCase())));
     } catch (error) {
       setMessage(error?.message || "Не удалось загрузить предложения");
     } finally { setLoading(false); }
-  }, [hotelId]);
+  }, [hotelId, apiRole, providerMode]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -66,7 +68,7 @@ export default function AdminHotelOffers() {
       await apiPost(`/api/hotels/${hotelId}/offers`, {
         ...form, provider_id: Number(form.provider_id),
         valid_from: form.valid_from || null, valid_to: form.valid_to || null,
-      }, "admin");
+      }, apiRole);
       setForm(emptyOffer);
       setMessage("Предложение сохранено");
       await load();
@@ -77,7 +79,7 @@ export default function AdminHotelOffers() {
   async function openRates(offer) {
     setSelectedId(offer.id); setMessage("");
     try {
-      const data = await apiGet(`/api/hotels/${hotelId}/offers/${offer.id}/rates`, "admin");
+      const data = await apiGet(`/api/hotels/${hotelId}/offers/${offer.id}/rates`, apiRole);
       setRates((data?.items || []).map((rate) => ({ ...rate, amount: String(rate.amount ?? ""), allotment: rate.allotment ?? "" })));
     } catch (error) { setMessage(error?.message || "Не удалось загрузить тарифы"); }
   }
@@ -89,7 +91,7 @@ export default function AdminHotelOffers() {
         currency: offer.currency, title: offer.title || "", terms: offer.terms || {},
         valid_from: offer.valid_from || null, valid_to: offer.valid_to || null,
         ...patch,
-      }, "admin");
+      }, apiRole);
       await load();
     } catch (error) { setMessage(error?.message || "Не удалось обновить предложение"); }
     finally { setSaving(false); }
@@ -99,7 +101,7 @@ export default function AdminHotelOffers() {
     if (!window.confirm(`Архивировать предложение ${offer.provider_name}?`)) return;
     setSaving(true);
     try {
-      await apiDelete(`/api/hotels/${hotelId}/offers/${offer.id}`, "admin");
+      await apiDelete(`/api/hotels/${hotelId}/offers/${offer.id}`, apiRole);
       if (Number(selectedId) === Number(offer.id)) { setSelectedId(null); setRates([]); }
       await load();
     } catch (error) { setMessage(error?.message || "Не удалось архивировать предложение"); }
@@ -116,7 +118,7 @@ export default function AdminHotelOffers() {
     try {
       await apiPut(`/api/hotels/${hotelId}/offers/${selected.id}/rates`, { items: rates.map((rate) => ({
         ...rate, amount: Number(rate.amount), allotment: rate.allotment === "" ? null : Number(rate.allotment), min_stay: Number(rate.min_stay) || 1,
-      })) }, "admin");
+      })) }, apiRole);
       setMessage("Тарифы сохранены. Перед публикацией проверьте предложение и включите статус «Активно».");
       await load();
       await openRates(selected);
@@ -134,14 +136,14 @@ export default function AdminHotelOffers() {
             <p className="mt-1 text-sm font-medium text-slate-500">Одна карточка отеля, отдельные тарифы каждого поставщика.</p>
           </div>
           <div className="flex gap-2">
-            <Link to={`/admin/hotels/${hotelId}/edit`} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700">Карточка</Link>
-            <Link to="/admin/hotels" className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-black text-white">К базе отелей</Link>
+            <Link to={providerMode ? `/hotels/${hotelId}` : `/admin/hotels/${hotelId}/edit`} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700">Карточка</Link>
+            <Link to={providerMode ? "/dashboard" : "/admin/hotels"} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-black text-white">{providerMode ? "В кабинет" : "К базе отелей"}</Link>
           </div>
         </header>
 
         {message ? <div className="border-l-4 border-orange-500 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">{message}</div> : null}
 
-        <section className="border-b border-slate-200 bg-white p-4">
+        {!providerMode ? <section className="border-b border-slate-200 bg-white p-4">
           <h2 className="text-lg font-black text-slate-950">Добавить поставщика</h2>
           <form onSubmit={createOffer} className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
             <Field label="Поставщик"><select className={inputClass} value={form.provider_id} onChange={(e) => { const provider = providers.find((item) => Number(item.id) === Number(e.target.value)); setForm({ ...form, provider_id: e.target.value, supplier_type: provider?.type === "hotel" ? "hotel" : form.supplier_type === "hotel" ? "supplier" : form.supplier_type, is_direct: provider?.type === "hotel" ? form.is_direct : false }); }}><option value="">Выберите</option>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.type || "supplier"} · #{provider.id}</option>)}</select></Field>
@@ -153,7 +155,7 @@ export default function AdminHotelOffers() {
             <Field label="Название тарифа"><input className={inputClass} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Прямой тариф, FIT 2026..." /></Field>
             <label className="flex h-10 items-center gap-2 self-end text-sm font-bold text-slate-700"><input type="checkbox" disabled={selectedProvider?.type !== "hotel"} checked={form.is_direct} onChange={(e) => setForm({ ...form, is_direct: e.target.checked })} /> Прямой тариф отеля</label>
           </form>
-        </section>
+        </section> : null}
 
         <section className="overflow-x-auto bg-white">
           <table className="w-full min-w-[1050px] border-collapse">
@@ -165,8 +167,8 @@ export default function AdminHotelOffers() {
                   <td className="px-4 py-3 text-sm font-bold text-slate-700">{offer.supplier_type}</td>
                   <td className="px-4 py-3 text-sm text-slate-600">{offer.valid_from || "—"} → {offer.valid_to || "—"}</td>
                   <td className="px-4 py-3"><div className="font-black">{offer.rate_count || 0}</div><div className="text-xs text-slate-500">{offer.min_rate ? `от ${offer.min_rate} ${offer.currency}` : "цены не заполнены"}</div></td>
-                  <td className="px-4 py-3"><select className={`${inputClass} max-w-36 ${statusTone(offer.status)}`} value={offer.status} disabled={saving} onChange={(e) => updateOffer(offer, { status: e.target.value })}><option value="draft">Черновик</option><option value="active">Активно</option><option value="paused">Пауза</option></select></td>
-                  <td className="px-4 py-3"><div className="flex justify-end gap-2"><button type="button" onClick={() => openRates(offer)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">Тарифы</button><button type="button" onClick={() => archiveOffer(offer)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">Архив</button></div></td>
+                  <td className="px-4 py-3">{providerMode ? <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${statusTone(offer.status)}`}>{offer.status === 'active' ? 'Активно' : offer.status === 'paused' ? 'Пауза' : 'На проверке'}</span> : <select className={`${inputClass} max-w-36 ${statusTone(offer.status)}`} value={offer.status} disabled={saving} onChange={(e) => updateOffer(offer, { status: e.target.value })}><option value="draft">Черновик</option><option value="active">Активно</option><option value="paused">Пауза</option></select>}</td>
+                  <td className="px-4 py-3"><div className="flex justify-end gap-2"><button type="button" onClick={() => openRates(offer)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">Тарифы</button>{!providerMode ? <button type="button" onClick={() => archiveOffer(offer)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">Архив</button> : null}</div></td>
                 </tr>
               )) : <tr><td colSpan={6} className="p-8 text-center font-bold text-slate-500">У отеля пока нет предложений поставщиков</td></tr>}
             </tbody>

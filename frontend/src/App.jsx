@@ -547,6 +547,14 @@ export default function App() {
               }
             />
             <Route
+              path="/provider/hotels/:id/offer"
+              element={
+                <PrivateRoute>
+                  <AdminHotelOffers scope="provider" />
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/admin/inside-requests"
               element={
                 <PrivateRoute>

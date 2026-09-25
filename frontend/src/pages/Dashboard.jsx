@@ -1719,42 +1719,12 @@ useEffect(() => {
             {/* === Отель: прайс и карточка === */}
           {profile?.type === "hotel" && (
             <div className="mb-6">
-              {/* Таблица со СВОИМИ отелями и действиями «Править/Сезоны» */}
               <AdminHotelsTable
-                scope="provider"              // ⬅️ скажем таблице работать от лица провайдера
-                providerId={profile?.id}      // ⬅️ ограничить «моими» отелями
-                onEdit={openEditHotel}        // ⬅️ клик «Править» откроет форму
-                onNew={openNewHotel}          // ⬅️ (если в таблице есть своя кнопка)
+                scope="provider"
+                providerId={profile?.id}
+                onEdit={openEditHotel}
+                onNew={openNewHotel}
               />
-              {profile?.type === "hotel" && (
-                    <div className="mb-6">
-                      <AdminHotelsTable
-                        scope="provider"
-                        providerId={profile?.id}
-                        onEdit={openEditHotel}
-                        onNew={openNewHotel}
-                      />
-                  
-                      {/* ✅ модалка/форма создания-редактирования */}
-                      {hotelFormOpen && (
-                        <div className="fixed inset-0 z-50 grid place-items-center bg-black/40">
-                          <div className="w-full max-w-3xl rounded-xl bg-white p-4 shadow-lg">
-                            <AdminHotelForm
-                              scope="provider"
-                              providerId={profile?.id}
-                              initial={hotelToEdit}
-                              onClose={closeHotelForm}
-                              onSaved={() => {
-                                // если таблица сама умеет перезагружаться — ок
-                                // иначе можно дать ей key или вызвать ее reload (если есть)
-                                closeHotelForm();
-                              }}
-                            />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
             </div>
           )}
 
