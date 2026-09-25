@@ -13,6 +13,7 @@ const { buildSvcActualKeyboard } = require("./keyboards/serviceActual");
 const { handleServiceActualCallback } = require("./handlers/serviceActualHandler");
 const { buildServiceMessage } = require("../utils/telegramServiceCard");
 const { telegramActivityMiddleware } = require("../utils/activityLogger");
+const { sanitizeTelegramText, sanitizeTelegramMethodArgs } = require("../utils/telegramText");
 const { getDraftProgress } = require("../utils/serviceFieldMatrix");
 const {
   SERVICE_FIELD_OPTIONS,
@@ -1717,7 +1718,7 @@ bot.use(async (ctx, next) => {
     if (!fn) return fn;
     return (...args) => {
       try {
-        const p = fn(...args);
+        const p = fn(...sanitizeTelegramMethodArgs(name, args));
         // если это Promise — гасим ошибки отправки
         if (p && typeof p.then === "function" && typeof p.catch === "function") {
           return p.catch((err) => {
@@ -1742,6 +1743,7 @@ bot.use(async (ctx, next) => {
   // callbacks / edits
   ctx.answerCbQuery = wrap("ctx.answerCbQuery", ctx.answerCbQuery?.bind(ctx));
   ctx.editMessageText = wrap("ctx.editMessageText", ctx.editMessageText?.bind(ctx));
+  ctx.editMessageCaption = wrap("ctx.editMessageCaption", ctx.editMessageCaption?.bind(ctx));
   ctx.editMessageReplyMarkup = wrap(
     "ctx.editMessageReplyMarkup",
     ctx.editMessageReplyMarkup?.bind(ctx)
@@ -2884,7 +2886,7 @@ async function renderDrafts(ctx) {
 
   if (messageIdToEdit) {
     try {
-      await ctx.telegram.editMessageText(chatId, messageIdToEdit, undefined, text, {
+      await ctx.telegram.editMessageText(chatId, messageIdToEdit, undefined, sanitizeTelegramText(text), {
         parse_mode: "HTML",
         reply_markup,
       });
@@ -2920,7 +2922,7 @@ async function renderArchive(ctx) {
 
   if (messageIdToEdit) {
     try {
-      await ctx.telegram.editMessageText(chatId, messageIdToEdit, undefined, text, {
+      await ctx.telegram.editMessageText(chatId, messageIdToEdit, undefined, sanitizeTelegramText(text), {
         parse_mode: "HTML",
         reply_markup,
       });
@@ -3073,7 +3075,7 @@ async function renderTrash(ctx, opts = {}) {
   // 2) Если у нас есть сохранённый messageId корзины — пробуем редактировать его через API
   if (messageIdToEdit) {
     try {
-      await ctx.telegram.editMessageText(chatId, messageIdToEdit, undefined, text, {
+      await ctx.telegram.editMessageText(chatId, messageIdToEdit, undefined, sanitizeTelegramText(text), {
         parse_mode: "HTML",
         reply_markup,
       });
