@@ -12,6 +12,7 @@ import "react-day-picker/dist/style.css";
 import { pickProviderService } from "../utils/pickProviderService";
 import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 import BookingResultModal from "../components/tourbuilder/BookingResultModal";
+import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -583,9 +584,31 @@ async function fetchHotelBrief(hotelId) {
   return await fetchJSON(`/api/hotels/${hotelId}/brief`);
 }
 
-async function fetchHotelOffers(hotelId) {
-  const data = await fetchJSON(`/api/hotels/${hotelId}/offers`, { status: "active" });
+async function fetchHotelOffers(hotelId, date) {
+  const data = await fetchJSON(`/api/hotels/${hotelId}/offers`, { status: "active", date });
   return Array.isArray(data?.items) ? data.items : [];
+}
+
+function pickBestHotelOffer(offers = [], usdRate = 0) {
+  const candidates = [...offers].filter((offer) => Number(offer.rate_count || 0) > 0);
+  const currencies = new Set(candidates.map((offer) => String(offer.currency || "UZS").toUpperCase()));
+  const canComparePrice = currencies.size <= 1 || Number(usdRate) > 0;
+  const comparablePrice = (offer) => {
+    const amount = Number(offer.min_rate || Number.MAX_SAFE_INTEGER);
+    return String(offer.currency || "UZS").toUpperCase() === "UZS" && Number(usdRate) > 0 ? amount / Number(usdRate) : amount;
+  };
+  return candidates
+    .sort((a, b) => {
+      const availabilityA = a.unlimited_allotment || a.has_allotment ? 0 : 1;
+      const availabilityB = b.unlimited_allotment || b.has_allotment ? 0 : 1;
+      if (availabilityA !== availabilityB) return availabilityA - availabilityB;
+      if (canComparePrice) {
+        const priceA = comparablePrice(a);
+        const priceB = comparablePrice(b);
+        if (priceA !== priceB) return priceA - priceB;
+      }
+      return Number(b.is_direct === true) - Number(a.is_direct === true);
+    })[0] || null;
 }
 
 async function fetchHotelQuote(payload) {
@@ -1007,6 +1030,7 @@ const HotelOption = (props) => {
 export default function TourBuilder() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [bookingResult, setBookingResult] = useState(null);
+  const [bookingConfirmation, setBookingConfirmation] = useState(null);
 
   useEffect(() => {
     setIsAdmin(isAdminFromJwt());
@@ -1600,6 +1624,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
   };
 
   const [sending, setSending] = useState(false);
+  const bookingSendLockRef = useRef(false);
   
   const handleSendRequests = async () => {
   if (!range?.from || !range?.to)
@@ -1623,6 +1648,14 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
   const routeCities = computeRouteCities(byDay);
   const legs = buildLegsFromByDay(byDay);
+  setBookingConfirmation({ hotelQuoteSnapshots, payloads, routeCities, legs });
+};
+
+  const confirmSendRequests = async () => {
+  const plan = bookingConfirmation;
+  if (!plan || sending || bookingSendLockRef.current) return;
+  bookingSendLockRef.current = true;
+  const { hotelQuoteSnapshots, payloads, routeCities, legs } = plan;
   setSending(true);
 
   try {
@@ -1673,6 +1706,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
     if (ok && !fail) {
       setBookingResult({
         status: "success",
+        created: ok,
         ok,
         fail,
         groupId,
@@ -1681,6 +1715,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
     } else if (ok && fail) {
       setBookingResult({
         status: "partial",
+        created: ok,
         ok,
         fail,
         groupId,
@@ -1689,6 +1724,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
     } else {
       setBookingResult({
         status: "error",
+        created: ok,
         ok,
         fail,
         groupId: null,
@@ -1696,7 +1732,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
       });
     }
   } finally {
+    bookingSendLockRef.current = false;
     setSending(false);
+    setBookingConfirmation(null);
   }
 };
 
@@ -2367,7 +2405,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                          try {
                            const [brief, offers] = await Promise.all([
                              fetchHotelBrief(hotel.id),
-                             fetchHotelOffers(hotel.id).catch(() => []),
+                             fetchHotelOffers(hotel.id, k).catch(() => []),
                            ]);
                            setByDay((p) => ({
                              ...p,
@@ -2375,7 +2413,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                                ...p[k],
                                hotelBrief: brief,
                                hotelOffers: offers,
-                               hotelOffer: offers[0] || null,
+                               hotelOffer: pickBestHotelOffer(offers, usdRate),
                                hotelLoading: false
                              }
                            }));
@@ -2391,7 +2429,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     {/* ▼ ФОРМА ВЫБОРА НОМЕРОВ + моментальный расчёт */}
                     {st.hotelLoading && <div className="text-xs text-gray-500 mt-2">{t('tb.loading_hotel')}</div>}
                       {st.hotel && st.hotelBrief && Array.isArray(st.hotelOffers) && st.hotelOffers.length > 0 ? (
-                        <label className="mt-2 block">
+                        <div className="mt-2">
                           <span className="mb-1 block text-xs font-medium text-gray-600">Поставщик и тариф</span>
                           <select
                             className="h-9 w-full rounded border px-2 text-sm"
@@ -2408,7 +2446,16 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               </option>
                             ))}
                           </select>
-                        </label>
+                          {st.hotelOffer ? (
+                            <div className="mt-2 flex flex-wrap gap-1.5">
+                              {st.hotelOffer.is_direct ? <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-bold text-sky-700 ring-1 ring-sky-200">Прямой тариф</span> : null}
+                              {Number(st.hotelOffer.id) === Number(pickBestHotelOffer(st.hotelOffers, usdRate)?.id) ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">Лучшая доступная цена</span> : null}
+                              {st.hotelOffer.unlimited_allotment ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">Свободная продажа</span> : st.hotelOffer.has_allotment ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">Квота до {st.hotelOffer.max_allotment}</span> : <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200">По запросу</span>}
+                              {st.hotelOffer.fully_refundable === true ? <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">Возвратный</span> : st.hotelOffer.fully_refundable === false ? <span className="rounded-full bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-700 ring-1 ring-rose-200">Невозвратный</span> : null}
+                              {Number(st.hotelOffer.min_stay || 1) > 1 ? <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">Мин. {st.hotelOffer.min_stay} ноч.</span> : null}
+                            </div>
+                          ) : null}
+                        </div>
                       ) : null}
                       {st.hotel && st.hotelBrief && (
                         <HotelRoomPicker
@@ -2455,6 +2502,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     {/* Разбивка по отелю за ночь: номера / доп. места / тур. сбор */}
                     {!!st.hotelBreakdown && (
                       <div className="text-xs text-gray-700 mt-2">
+                        {st.hotelBreakdown.quoteSnapshot?.offer ? (
+                          <div className="mb-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-emerald-800">
+                            Зафиксировано: <b>{st.hotelBreakdown.quoteSnapshot.offer.provider_name}</b> · предложение #{st.hotelBreakdown.quoteSnapshot.offer.id} · версия {st.hotelBreakdown.quoteSnapshot.quote_version}
+                          </div>
+                        ) : null}
                         <div className="flex flex-wrap gap-x-3 gap-y-1">
                           <span>
                                 {t('tb.rooms')}:{' '}
@@ -2958,9 +3010,17 @@ const makeTransportLoader = (dateKey) => async (input) => {
         </div>
       )}
             {/* Модал результата создания бронирований */}
+      <HotelQuoteConfirmModal
+        open={!!bookingConfirmation}
+        quotes={bookingConfirmation?.hotelQuoteSnapshots || []}
+        requestCount={bookingConfirmation?.payloads?.length || 0}
+        sending={sending}
+        onClose={() => !sending && setBookingConfirmation(null)}
+        onConfirm={confirmSendRequests}
+      />
       <BookingResultModal
         open={!!bookingResult}
-        data={bookingResult}
+        result={bookingResult}
         onClose={() => setBookingResult(null)}
       />
     </div>
@@ -2991,6 +3051,10 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
     // локализация внутри дочернего компонента
   const { t } = useTranslation();
   const MEALS = ["RO","BB","HB","FB","AI","UAI"];
+  const availableMeals = useMemo(() => {
+    const fromOffer = Array.isArray(offer?.meal_plans) ? offer.meal_plans.filter((mealPlan) => MEALS.includes(mealPlan)) : [];
+    return fromOffer.length ? fromOffer : MEALS;
+  }, [offer]);
   const [meal, setMeal] = useState("BB");
   // карта количеств по типам: { 'Double': 2, 'Triple': 1, ... }
   const [qty, setQty] = useState({});
@@ -3008,9 +3072,9 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
   useEffect(() => {
     // обнуляем при смене отеля
     setQty({});
-    setMeal("BB");
+    setMeal(availableMeals.includes("BB") ? "BB" : availableMeals[0] || "BB");
     setExtraBeds(0);
-  }, [hotelBrief?.id, offer?.id]);
+  }, [hotelBrief?.id, offer?.id, availableMeals]);
 
   // список типов из брифа
   const roomTypes = useMemo(() => {
@@ -3123,7 +3187,7 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
       <div className="flex items-center gap-3 mb-2">
         <div className="text-sm font-medium">{t('tb.rooms_and_meals')}</div>
         <select className="h-8 border rounded px-2 text-sm" value={meal} onChange={(e) => setMeal(e.target.value)}>
-          {MEALS.map(m => <option key={m} value={m}>{m}</option>)}
+          {availableMeals.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
         <div className="text-xs text-gray-500">({residentFlag ? t('tb.residents') : t('tb.nonresidents')})</div>
         {quoteLoading ? <div className="text-xs font-medium text-blue-600">Расчёт…</div> : null}

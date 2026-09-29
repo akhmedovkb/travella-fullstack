@@ -65,12 +65,14 @@ router.get('/', async (req, res, next) => {
     await ensureHotelOfferTables();
     const hotelId = positiveInt(req.params.id);
     if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
-    const params = [hotelId, req.query.status ? String(req.query.status).toLowerCase() : null];
+    const rateDate = req.query.date ? isoDate(req.query.date) : null;
+    if (req.query.date && !rateDate) return res.status(400).json({ error: 'bad_date' });
+    const params = [hotelId, req.query.status ? String(req.query.status).toLowerCase() : null, rateDate];
     const mineOnly = String(req.query.mine || '') === '1';
     let visibilityFilter = '';
     if (!isAdmin(req.user)) {
       params.push(positiveInt(req.user?.id) || 0);
-      visibilityFilter = mineOnly ? ` AND o.provider_id=$3` : ` AND (o.status='active' OR o.provider_id=$3)`;
+      visibilityFilter = mineOnly ? ` AND o.provider_id=$4` : ` AND (o.status='active' OR o.provider_id=$4)`;
     }
     const { rows } = await db.query(
       `SELECT o.id, o.hotel_id, o.provider_id, p.name AS provider_name, p.type AS provider_type,
@@ -79,15 +81,23 @@ router.get('/', async (req, res, next) => {
               COUNT(r.id)::int AS rate_count, MIN(r.amount)::numeric AS min_rate,
               ARRAY_REMOVE(ARRAY_AGG(DISTINCT r.room_type), NULL) AS room_types,
               ARRAY_REMOVE(ARRAY_AGG(DISTINCT r.meal_plan), NULL) AS meal_plans,
+              COALESCE(BOOL_OR(r.allotment IS NULL),false) AS unlimited_allotment,
+              COALESCE(BOOL_OR(r.allotment > 0),false) AS has_allotment,
+              MAX(r.allotment)::int AS max_allotment,
+              BOOL_AND(r.refundable) FILTER (WHERE r.id IS NOT NULL) AS fully_refundable,
+              MIN(r.min_stay)::int AS min_stay,
               MIN(r.date_from)::text AS rate_from, MAX(r.date_to)::text AS rate_to
          FROM hotel_offers o
          JOIN providers p ON p.id=o.provider_id
          LEFT JOIN hotel_offer_rates r ON r.offer_id=o.id
+          AND ($3::date IS NULL OR (r.date_from <= $3::date AND r.date_to >= $3::date))
         WHERE o.hotel_id=$1 AND o.status <> 'archived'
           AND ($2::text IS NULL OR o.status=$2)
+          AND ($3::date IS NULL OR (o.valid_from IS NULL OR o.valid_from <= $3::date))
+          AND ($3::date IS NULL OR (o.valid_to IS NULL OR o.valid_to >= $3::date))
           ${visibilityFilter}
         GROUP BY o.id, p.name, p.type
-        ORDER BY o.is_direct DESC, o.status='active' DESC, p.name, o.id`,
+        ORDER BY MIN(r.amount) ASC NULLS LAST, o.is_direct DESC, p.name, o.id`,
       params
     );
     return res.json({ items: rows });
