@@ -43,6 +43,25 @@ async function ensureHotelOfferTables() {
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_offers_hotel_status ON hotel_offers(hotel_id,status)`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_offer_rates_lookup ON hotel_offer_rates(offer_id,date_from,date_to,room_type,meal_plan,residency)`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS rejection_reason TEXT`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP WITHOUT TIME ZONE`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITHOUT TIME ZONE`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS reviewed_by BIGINT`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_offer_events (
+      id BIGSERIAL PRIMARY KEY,
+      offer_id INTEGER NOT NULL REFERENCES hotel_offers(id) ON DELETE CASCADE,
+      actor_id BIGINT,
+      actor_role TEXT,
+      action TEXT NOT NULL,
+      from_status TEXT,
+      to_status TEXT,
+      note TEXT,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW()
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_offer_events_offer ON hotel_offer_events(offer_id,created_at DESC)`);
 }
 
 module.exports = { ensureHotelOfferTables };

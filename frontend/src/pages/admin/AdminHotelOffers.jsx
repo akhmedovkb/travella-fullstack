@@ -20,9 +20,20 @@ const inputClass = "h-10 w-full rounded-lg border border-slate-200 bg-white px-3
 
 function statusTone(status) {
   if (status === "active") return "bg-emerald-50 text-emerald-700 ring-emerald-200";
+  if (status === "pending_review") return "bg-blue-50 text-blue-700 ring-blue-200";
+  if (status === "rejected") return "bg-rose-50 text-rose-700 ring-rose-200";
   if (status === "paused") return "bg-amber-50 text-amber-700 ring-amber-200";
   return "bg-slate-100 text-slate-600 ring-slate-200";
 }
+
+function statusLabel(status) {
+  return ({ draft: "Черновик", pending_review: "На модерации", active: "Опубликовано", paused: "Приостановлено", rejected: "Отклонено" })[status] || status;
+}
+
+const actionLabels = {
+  created: "Предложение создано", rates_replaced: "Тарифы сохранены", submitted: "Отправлено на модерацию",
+  approved: "Опубликовано", rejected: "Отклонено", status_changed: "Статус изменён", archived: "Архивировано",
+};
 
 export default function AdminHotelOffers({ scope = "admin" }) {
   const { id } = useParams();
@@ -35,6 +46,9 @@ export default function AdminHotelOffers({ scope = "admin" }) {
   const [form, setForm] = useState(emptyOffer);
   const [selectedId, setSelectedId] = useState(null);
   const [rates, setRates] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [rejecting, setRejecting] = useState(null);
+  const [rejectReason, setRejectReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -79,8 +93,12 @@ export default function AdminHotelOffers({ scope = "admin" }) {
   async function openRates(offer) {
     setSelectedId(offer.id); setMessage("");
     try {
-      const data = await apiGet(`/api/hotels/${hotelId}/offers/${offer.id}/rates`, apiRole);
+      const [data, eventData] = await Promise.all([
+        apiGet(`/api/hotels/${hotelId}/offers/${offer.id}/rates`, apiRole),
+        apiGet(`/api/hotels/${hotelId}/offers/${offer.id}/events`, apiRole),
+      ]);
       setRates((data?.items || []).map((rate) => ({ ...rate, amount: String(rate.amount ?? ""), allotment: rate.allotment ?? "" })));
+      setEvents(eventData?.items || []);
     } catch (error) { setMessage(error?.message || "Не удалось загрузить тарифы"); }
   }
 
@@ -108,6 +126,29 @@ export default function AdminHotelOffers({ scope = "admin" }) {
     finally { setSaving(false); }
   }
 
+  async function submitOffer(offer) {
+    setSaving(true); setMessage("");
+    try {
+      await apiPost(`/api/hotels/${hotelId}/offers/${offer.id}/submit`, {}, apiRole);
+      setMessage("Предложение отправлено на модерацию");
+      await load();
+      if (Number(selectedId) === Number(offer.id)) await openRates({ ...offer, status: "pending_review" });
+    } catch (error) { setMessage(error?.message || "Не удалось отправить предложение на модерацию"); }
+    finally { setSaving(false); }
+  }
+
+  async function reviewOffer(offer, decision, reason = "") {
+    setSaving(true); setMessage("");
+    try {
+      await apiPost(`/api/hotels/${hotelId}/offers/${offer.id}/review`, { decision, reason }, "admin");
+      setRejecting(null); setRejectReason("");
+      setMessage(decision === "approve" ? "Предложение опубликовано" : "Предложение возвращено поставщику на исправление");
+      await load();
+      if (Number(selectedId) === Number(offer.id)) await openRates(offer);
+    } catch (error) { setMessage(error?.message || "Не удалось сохранить решение модерации"); }
+    finally { setSaving(false); }
+  }
+
   function updateRate(index, key, value) {
     setRates((current) => current.map((rate, i) => i === index ? { ...rate, [key]: value } : rate));
   }
@@ -119,7 +160,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
       await apiPut(`/api/hotels/${hotelId}/offers/${selected.id}/rates`, { items: rates.map((rate) => ({
         ...rate, amount: Number(rate.amount), allotment: rate.allotment === "" ? null : Number(rate.allotment), min_stay: Number(rate.min_stay) || 1,
       })) }, apiRole);
-      setMessage("Тарифы сохранены. Перед публикацией проверьте предложение и включите статус «Активно».");
+      setMessage("Тарифы сохранены. Предложение возвращено в черновик: отправьте его на модерацию.");
       await load();
       await openRates(selected);
     } catch (error) { setMessage(error?.message || "Не удалось сохранить тарифы"); }
@@ -165,10 +206,10 @@ export default function AdminHotelOffers({ scope = "admin" }) {
                 <tr key={offer.id} className={Number(selectedId) === Number(offer.id) ? "bg-orange-50/60" : ""}>
                   <td className="px-4 py-3"><div className="font-black text-slate-950">{offer.provider_name}</div><div className="text-xs text-slate-500">#{offer.provider_id} {offer.is_direct ? "· прямой тариф" : ""}</div></td>
                   <td className="px-4 py-3 text-sm font-bold text-slate-700">{offer.supplier_type}</td>
-                  <td className="px-4 py-3 text-sm text-slate-600">{offer.valid_from || "—"} → {offer.valid_to || "—"}</td>
+                  <td className="px-4 py-3 text-sm text-slate-600"><div>{offer.valid_from || "—"} → {offer.valid_to || "—"}</div>{offer.is_expired ? <div className="mt-1 text-xs font-black text-rose-600">Срок истёк</div> : offer.days_until_expiry != null && offer.days_until_expiry <= 7 ? <div className="mt-1 text-xs font-black text-amber-600">Истекает через {offer.days_until_expiry} дн.</div> : null}</td>
                   <td className="px-4 py-3"><div className="font-black">{offer.rate_count || 0}</div><div className="text-xs text-slate-500">{offer.min_rate ? `от ${offer.min_rate} ${offer.currency}` : "цены не заполнены"}</div></td>
-                  <td className="px-4 py-3">{providerMode ? <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${statusTone(offer.status)}`}>{offer.status === 'active' ? 'Активно' : offer.status === 'paused' ? 'Пауза' : 'На проверке'}</span> : <select className={`${inputClass} max-w-36 ${statusTone(offer.status)}`} value={offer.status} disabled={saving} onChange={(e) => updateOffer(offer, { status: e.target.value })}><option value="draft">Черновик</option><option value="active">Активно</option><option value="paused">Пауза</option></select>}</td>
-                  <td className="px-4 py-3"><div className="flex justify-end gap-2"><button type="button" onClick={() => openRates(offer)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">Тарифы</button>{!providerMode ? <button type="button" onClick={() => archiveOffer(offer)} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">Архив</button> : null}</div></td>
+                  <td className="px-4 py-3"><span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${statusTone(offer.status)}`}>{statusLabel(offer.status)}</span>{offer.rejection_reason ? <div className="mt-2 max-w-56 text-xs font-semibold text-rose-600">{offer.rejection_reason}</div> : null}</td>
+                  <td className="px-4 py-3"><div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={() => openRates(offer)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">Тарифы</button>{['draft','rejected','paused'].includes(offer.status) && !offer.is_expired ? <button type="button" disabled={saving || !offer.rate_count} onClick={() => submitOffer(offer)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-40">На модерацию</button> : null}{!providerMode && offer.status === 'pending_review' ? <><button type="button" disabled={saving} onClick={() => reviewOffer(offer, 'approve')} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white">Опубликовать</button><button type="button" disabled={saving} onClick={() => { setRejecting(offer); setRejectReason(""); }} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">Отклонить</button></> : null}{offer.status === 'active' ? <button type="button" disabled={saving} onClick={() => updateOffer(offer, { status: 'paused' })} className="rounded-lg border border-amber-200 px-3 py-2 text-xs font-black text-amber-700">Приостановить</button> : null}{!providerMode ? <button type="button" onClick={() => archiveOffer(offer)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black text-slate-500">Архив</button> : null}</div></td>
                 </tr>
               )) : <tr><td colSpan={6} className="p-8 text-center font-bold text-slate-500">У отеля пока нет предложений поставщиков</td></tr>}
             </tbody>
@@ -185,7 +226,10 @@ export default function AdminHotelOffers({ scope = "admin" }) {
             <td className="p-2"><input type="number" min="0" step="0.01" className={inputClass} value={rate.amount} onChange={(e) => updateRate(index, "amount", e.target.value)} /></td><td className="p-2"><input type="number" min="0" className={inputClass} value={rate.allotment} onChange={(e) => updateRate(index, "allotment", e.target.value)} placeholder="∞" /></td><td className="p-2"><input type="number" min="1" className={inputClass} value={rate.min_stay} onChange={(e) => updateRate(index, "min_stay", e.target.value)} /></td>
             <td className="p-2 text-center"><input type="checkbox" checked={rate.refundable !== false} onChange={(e) => updateRate(index, "refundable", e.target.checked)} /></td><td className="p-2"><button type="button" onClick={() => setRates((rows) => rows.filter((_, i) => i !== index))} className="text-sm font-black text-rose-600">Удалить</button></td>
           </tr>)}</tbody></table></div>
+          <div className="mt-5 border-t border-slate-200 px-1 pt-4"><h3 className="text-sm font-black text-slate-950">История предложения</h3><div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{events.length ? events.slice(0, 12).map((item) => <div key={item.id} className="border-l-2 border-slate-200 pl-3 text-xs text-slate-600"><div className="font-black text-slate-800">{actionLabels[item.action] || item.action}</div><div>{item.from_status ? `${statusLabel(item.from_status)} → ` : ""}{item.to_status ? statusLabel(item.to_status) : ""}</div>{item.note ? <div className="mt-1 text-rose-600">{item.note}</div> : null}<div className="mt-1 text-slate-400">{new Date(item.created_at).toLocaleString("ru-RU")}</div></div>) : <div className="text-sm text-slate-500">История пока пуста</div>}</div></div>
         </section> : null}
+
+        {rejecting ? <div className="fixed inset-0 z-50 grid place-items-center bg-slate-950/50 p-4"><div className="w-full max-w-lg bg-white p-5 shadow-2xl"><h2 className="text-lg font-black">Почему предложение отклонено?</h2><p className="mt-1 text-sm text-slate-500">Поставщик увидит эту причину и сможет исправить тарифы.</p><textarea autoFocus className="mt-4 min-h-28 w-full rounded-lg border border-slate-200 p-3 text-sm outline-none focus:border-rose-400" value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Например: срок действия тарифа истёк или неверно указана цена" /><div className="mt-4 flex justify-end gap-2"><button type="button" onClick={() => setRejecting(null)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-black">Отмена</button><button type="button" disabled={saving || !rejectReason.trim()} onClick={() => reviewOffer(rejecting, 'reject', rejectReason)} className="rounded-lg bg-rose-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40">Отклонить</button></div></div></div> : null}
       </div>
     </main>
   );

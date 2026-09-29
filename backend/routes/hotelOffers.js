@@ -4,7 +4,6 @@ const db = require('../db');
 const authenticateToken = require('../middleware/authenticateToken');
 const { ensureHotelOfferTables } = require('../utils/hotelOffersSchema');
 
-const OFFER_STATUSES = new Set(['draft', 'active', 'paused', 'archived']);
 const SUPPLIER_TYPES = new Set(['hotel', 'tour_operator', 'dmc', 'agency', 'supplier']);
 const MEAL_PLANS = new Set(['RO', 'BB', 'HB', 'FB', 'AI', 'UAI']);
 const RESIDENCIES = new Set(['resident', 'non_resident', 'all']);
@@ -42,6 +41,13 @@ function isoDate(value) {
   return /^\d{4}-\d{2}-\d{2}$/.test(text) ? text : null;
 }
 
+function dateOnly(value) {
+  if (!value) return null;
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString().slice(0, 10);
+  const match = String(value).match(/^\d{4}-\d{2}-\d{2}/);
+  return match ? match[0] : null;
+}
+
 async function getOffer(offerId, hotelId) {
   const { rows } = await db.query(
     `SELECT o.*, p.name AS provider_name, p.type AS provider_type
@@ -56,6 +62,19 @@ async function getOffer(offerId, hotelId) {
 
 function canEditOffer(req, offer) {
   return isAdmin(req.user) || Number(offer?.provider_id) === Number(req.user?.id);
+}
+
+function actorRole(req) {
+  return isAdmin(req.user) ? 'admin' : (rolesOf(req.user)[0] || 'provider');
+}
+
+async function addOfferEvent(client, req, offerId, action, fromStatus, toStatus, note = null, payload = {}) {
+  await client.query(
+    `INSERT INTO hotel_offer_events (offer_id,actor_id,actor_role,action,from_status,to_status,note,payload)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
+    [offerId, positiveInt(req.user?.id), actorRole(req), action, fromStatus || null, toStatus || null,
+      note ? String(note).slice(0, 2000) : null, JSON.stringify(payload || {})]
+  );
 }
 
 router.use(canUseOffers);
@@ -78,6 +97,9 @@ router.get('/', async (req, res, next) => {
       `SELECT o.id, o.hotel_id, o.provider_id, p.name AS provider_name, p.type AS provider_type,
               o.supplier_type, o.is_direct, o.currency, o.status, o.title, o.terms,
               o.valid_from::text, o.valid_to::text, o.last_verified_at, o.created_at, o.updated_at,
+              o.rejection_reason, o.submitted_at, o.reviewed_at, o.reviewed_by,
+              (o.valid_to IS NOT NULL AND o.valid_to < CURRENT_DATE) AS is_expired,
+              CASE WHEN o.valid_to IS NULL THEN NULL ELSE (o.valid_to - CURRENT_DATE)::int END AS days_until_expiry,
               COUNT(r.id)::int AS rate_count, MIN(r.amount)::numeric AS min_rate,
               ARRAY_REMOVE(ARRAY_AGG(DISTINCT r.room_type), NULL) AS room_types,
               ARRAY_REMOVE(ARRAY_AGG(DISTINCT r.meal_plan), NULL) AS meal_plans,
@@ -146,6 +168,7 @@ router.post('/', async (req, res, next) => {
       [hotelId, providerId, supplierType, directRequested && providerIsHotel, currency, status,
         String(req.body?.title || '').trim() || null, JSON.stringify(req.body?.terms || {}), validFrom, validTo]
     );
+    await addOfferEvent(db, req, rows[0].id, 'created', null, rows[0].status, null, { provider_id: providerId });
     return res.status(201).json({ item: { ...rows[0], provider_name: provider.name, provider_type: provider.type } });
   } catch (error) { return next(error); }
 });
@@ -160,19 +183,15 @@ router.put('/:offerId', async (req, res, next) => {
     if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
 
     const requestedStatus = String(req.body?.status || offer.status).toLowerCase();
-    const status = isAdmin(req.user) && OFFER_STATUSES.has(requestedStatus)
-      ? requestedStatus
-      : requestedStatus === 'paused' ? 'paused' : offer.status;
+    let status = offer.status;
+    if (requestedStatus === 'paused' && ['active', 'pending_review'].includes(offer.status)) status = 'paused';
+    if (requestedStatus === 'draft' && isAdmin(req.user) && offer.status !== 'archived') status = 'draft';
     const currency = String(req.body?.currency || offer.currency).toUpperCase();
     if (!['UZS', 'USD'].includes(currency)) return res.status(400).json({ error: 'bad_currency' });
     const validFrom = req.body?.valid_from ? isoDate(req.body.valid_from) : null;
     const validTo = req.body?.valid_to ? isoDate(req.body.valid_to) : null;
     if ((req.body?.valid_from && !validFrom) || (req.body?.valid_to && !validTo) || (validFrom && validTo && validFrom > validTo)) {
       return res.status(400).json({ error: 'bad_dates' });
-    }
-    if (status === 'active') {
-      const rateCount = await db.query(`SELECT COUNT(*)::int AS count FROM hotel_offer_rates WHERE offer_id=$1`, [offerId]);
-      if (!rateCount.rows[0]?.count) return res.status(409).json({ error: 'rates_required_before_activation' });
     }
     const { rows } = await db.query(
       `UPDATE hotel_offers SET currency=$1,status=$2,title=$3,terms=$4::jsonb,
@@ -183,6 +202,7 @@ router.put('/:offerId', async (req, res, next) => {
       [currency, status, String(req.body?.title ?? offer.title ?? '').trim() || null,
         JSON.stringify(req.body?.terms ?? offer.terms ?? {}), validFrom, validTo, offerId, hotelId]
     );
+    if (status !== offer.status) await addOfferEvent(db, req, offerId, 'status_changed', offer.status, status);
     return res.json({ item: rows[0] });
   } catch (error) { return next(error); }
 });
@@ -246,13 +266,78 @@ router.put('/:offerId/rates', async (req, res, next) => {
         [offerId,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,row.allotment,row.min_stay,row.refundable]
       );
     }
-    await client.query(`UPDATE hotel_offers SET status=CASE WHEN status='active' THEN status ELSE 'draft' END,updated_at=NOW() WHERE id=$1`, [offerId]);
+    await client.query(
+      `UPDATE hotel_offers SET status='draft',rejection_reason=NULL,submitted_at=NULL,updated_at=NOW() WHERE id=$1`,
+      [offerId]
+    );
+    await addOfferEvent(client, req, offerId, 'rates_replaced', offer.status, 'draft', null, { rate_count: items.length });
     await client.query('COMMIT');
     return res.json({ ok: true, count: items.length });
   } catch (error) {
     if (client) try { await client.query('ROLLBACK'); } catch {}
     return next(error);
   } finally { client?.release(); }
+});
+
+router.post('/:offerId/submit', async (req, res, next) => {
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id); const offerId = positiveInt(req.params.offerId);
+    const offer = await getOffer(offerId, hotelId);
+    if (!offer) return res.status(404).json({ error: 'offer_not_found' });
+    if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
+    if (!['draft', 'rejected', 'paused'].includes(offer.status)) return res.status(409).json({ error: 'offer_not_submittable' });
+    const rateCount = await db.query(`SELECT COUNT(*)::int AS count FROM hotel_offer_rates WHERE offer_id=$1`, [offerId]);
+    if (!rateCount.rows[0]?.count) return res.status(409).json({ error: 'rates_required_before_submission' });
+    if (dateOnly(offer.valid_to) && dateOnly(offer.valid_to) < new Date().toISOString().slice(0, 10)) return res.status(409).json({ error: 'offer_expired' });
+    const { rows } = await db.query(
+      `UPDATE hotel_offers SET status='pending_review',submitted_at=NOW(),rejection_reason=NULL,updated_at=NOW()
+        WHERE id=$1 RETURNING *`, [offerId]
+    );
+    await addOfferEvent(db, req, offerId, 'submitted', offer.status, 'pending_review');
+    return res.json({ item: rows[0] });
+  } catch (error) { return next(error); }
+});
+
+router.post('/:offerId/review', async (req, res, next) => {
+  try {
+    await ensureHotelOfferTables();
+    if (!isAdmin(req.user)) return res.status(403).json({ error: 'admin_required' });
+    const hotelId = positiveInt(req.params.id); const offerId = positiveInt(req.params.offerId);
+    const offer = await getOffer(offerId, hotelId);
+    if (!offer) return res.status(404).json({ error: 'offer_not_found' });
+    if (offer.status !== 'pending_review') return res.status(409).json({ error: 'offer_not_pending_review' });
+    const decision = String(req.body?.decision || '').toLowerCase();
+    if (!['approve', 'reject'].includes(decision)) return res.status(400).json({ error: 'bad_decision' });
+    const reason = String(req.body?.reason || '').trim();
+    if (decision === 'reject' && !reason) return res.status(400).json({ error: 'rejection_reason_required' });
+    if (decision === 'approve') {
+      const rateCount = await db.query(`SELECT COUNT(*)::int AS count FROM hotel_offer_rates WHERE offer_id=$1`, [offerId]);
+      if (!rateCount.rows[0]?.count) return res.status(409).json({ error: 'rates_required_before_activation' });
+      if (dateOnly(offer.valid_to) && dateOnly(offer.valid_to) < new Date().toISOString().slice(0, 10)) return res.status(409).json({ error: 'offer_expired' });
+    }
+    const nextStatus = decision === 'approve' ? 'active' : 'rejected';
+    const { rows } = await db.query(
+      `UPDATE hotel_offers SET status=$2,rejection_reason=$3,reviewed_at=NOW(),reviewed_by=$4,
+              last_verified_at=CASE WHEN $2='active' THEN NOW() ELSE last_verified_at END,updated_at=NOW()
+        WHERE id=$1 RETURNING *`,
+      [offerId, nextStatus, decision === 'reject' ? reason.slice(0, 2000) : null, positiveInt(req.user?.id)]
+    );
+    await addOfferEvent(db, req, offerId, decision === 'approve' ? 'approved' : 'rejected', offer.status, nextStatus, reason || null);
+    return res.json({ item: rows[0] });
+  } catch (error) { return next(error); }
+});
+
+router.get('/:offerId/events', async (req, res, next) => {
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id); const offerId = positiveInt(req.params.offerId);
+    const offer = await getOffer(offerId, hotelId);
+    if (!offer) return res.status(404).json({ error: 'offer_not_found' });
+    if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
+    const { rows } = await db.query(`SELECT * FROM hotel_offer_events WHERE offer_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100`, [offerId]);
+    return res.json({ items: rows });
+  } catch (error) { return next(error); }
 });
 
 router.delete('/:offerId', async (req, res, next) => {
@@ -263,6 +348,7 @@ router.delete('/:offerId', async (req, res, next) => {
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
     if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
     await db.query(`UPDATE hotel_offers SET status='archived',updated_at=NOW() WHERE id=$1`, [offerId]);
+    await addOfferEvent(db, req, offerId, 'archived', offer.status, 'archived');
     return res.json({ ok: true });
   } catch (error) { return next(error); }
 });
