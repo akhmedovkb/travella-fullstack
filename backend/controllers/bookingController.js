@@ -3,6 +3,7 @@
 const pool = require("../db");
 const tg = require("../utils/telegram");
 const { randomUUID } = require("crypto");
+const { HotelInventoryError, reserveHotelInventory } = require("../utils/hotelInventory");
 /* ================= helpers ================= */
 
 // универсально: есть ли такие колонки в таблице
@@ -126,6 +127,8 @@ const createBooking = async (req, res) => {
       legs,
       currency
     } = req.body || {};
+    const isTourBuilder = (req.body?.source === "tour_builder");
+    const tourBuilderKind = String(req.body?.tb_kind || req.body?.type || "").toLowerCase();
     let providerId = pFromBody || null;
 
     if (!providerId && service_id) {
@@ -135,7 +138,9 @@ const createBooking = async (req, res) => {
 
     const pType = await getProviderType(providerId);
     // допускаем: гид, транспорт, отель, агент
-    if (!["guide", "transport", "hotel", "agent"].includes(pType)) {
+    const hotelOfferProvider = isTourBuilder && tourBuilderKind === "hotel"
+      && ["hotel", "agent", "tour_agent", "agency", "supplier", "tour_operator", "dmc"].includes(String(pType || "").toLowerCase());
+    if (!["guide", "transport", "hotel", "agent"].includes(pType) && !hotelOfferProvider) {
       return res.status(400).json({ message: "Бронирование доступно только для гида, транспорта, отеля или агента" });
     }
 
@@ -146,7 +151,7 @@ const createBooking = async (req, res) => {
 
    // Для отелей и агентств фильтра по доступности нет — не блокируем создание.
     // Для остальных типов проверяем как раньше.
-    if (!["hotel", "agent"].includes(pType)) {
+    if (!["hotel", "agent"].includes(pType) && !hotelOfferProvider) {
       const ok = await isDatesFree(providerId, days);
       if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
     }
@@ -165,7 +170,6 @@ const createBooking = async (req, res) => {
       "group_id"
     ]);
     // Источник — турбилдер?
-    const isTourBuilder = (req.body?.source === "tour_builder");
     // Если пришёл заказ из турбилдера и group_id не передали — сгенерируем
     const autoGroupId = (cols.group_id && isTourBuilder && !req.body?.group_id) ? randomUUID() : null;
 
@@ -280,7 +284,26 @@ const createBooking = async (req, res) => {
       );
     }
 
-    res.status(201).json({ id: bookingId, status: "pending", dates: days });
+    let inventoryReservation = { count: 0, items: [] };
+    if (isTourBuilder && tourBuilderKind === "hotel") {
+      try {
+        inventoryReservation = await reserveHotelInventory({
+          bookingId,
+          providerId,
+          details: bag,
+          holdMinutes: 30,
+        });
+      } catch (error) {
+        await pool.query(`DELETE FROM booking_dates WHERE booking_id=$1`, [bookingId]);
+        await pool.query(`DELETE FROM bookings WHERE id=$1`, [bookingId]);
+        if (error instanceof HotelInventoryError) {
+          return res.status(409).json({ message: "Выбранные номера уже недоступны", error: error.code, details: error.details });
+        }
+        throw error;
+      }
+    }
+
+    res.status(201).json({ id: bookingId, status: "pending", dates: days, inventory: inventoryReservation });
 
     const bkg = {
       id: bookingId,

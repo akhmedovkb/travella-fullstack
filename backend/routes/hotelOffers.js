@@ -216,9 +216,20 @@ router.get('/:offerId/rates', async (req, res, next) => {
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
     if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
     const { rows } = await db.query(
-      `SELECT id,offer_id,room_type,meal_plan,residency,date_from::text,date_to::text,
-              amount::numeric,allotment,min_stay,refundable,created_at,updated_at
-         FROM hotel_offer_rates WHERE offer_id=$1 ORDER BY date_from,room_type,meal_plan,residency,id`,
+      `SELECT r.id,r.offer_id,r.room_type,r.meal_plan,r.residency,r.date_from::text,r.date_to::text,
+              r.amount::numeric,r.allotment,r.min_stay,r.refundable,r.created_at,r.updated_at,
+              COALESCE(stock.held,0)::int AS held,
+              COALESCE(stock.confirmed,0)::int AS confirmed,
+              CASE WHEN r.allotment IS NULL THEN NULL
+                   ELSE GREATEST(0,r.allotment-COALESCE(stock.held,0)-COALESCE(stock.confirmed,0))::int END AS available
+         FROM hotel_offer_rates r
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(SUM(quantity) FILTER (WHERE status='held' AND expires_at>NOW()),0) AS held,
+                  COALESCE(SUM(quantity) FILTER (WHERE status='confirmed'),0) AS confirmed
+             FROM hotel_inventory_reservations hir
+            WHERE hir.rate_id=r.id
+         ) stock ON true
+        WHERE r.offer_id=$1 ORDER BY r.date_from,r.room_type,r.meal_plan,r.residency,r.id`,
       [offerId]
     );
     return res.json({ offer, items: rows });

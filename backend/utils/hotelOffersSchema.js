@@ -62,6 +62,56 @@ async function ensureHotelOfferTables() {
     )
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_offer_events_offer ON hotel_offer_events(offer_id,created_at DESC)`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_inventory_reservations (
+      id BIGSERIAL PRIMARY KEY,
+      booking_id INTEGER NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      offer_id INTEGER NOT NULL REFERENCES hotel_offers(id) ON DELETE RESTRICT,
+      rate_id INTEGER NOT NULL,
+      stay_date DATE NOT NULL,
+      quantity INTEGER NOT NULL CHECK (quantity > 0),
+      status TEXT NOT NULL DEFAULT 'held',
+      expires_at TIMESTAMP WITHOUT TIME ZONE,
+      created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      UNIQUE (booking_id, rate_id, stay_date)
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inventory_live ON hotel_inventory_reservations(rate_id,stay_date,status,expires_at)`);
+  await db.query(`
+    CREATE OR REPLACE FUNCTION sync_hotel_inventory_reservation_status()
+    RETURNS trigger AS $$
+    BEGIN
+      IF NEW.status IN ('confirmed','completed','paid') THEN
+        UPDATE hotel_inventory_reservations
+           SET status='confirmed',expires_at=NULL,updated_at=NOW()
+         WHERE booking_id=NEW.id AND status <> 'released';
+      ELSIF NEW.status='awaiting_payment' THEN
+        UPDATE hotel_inventory_reservations
+           SET status='held',
+               expires_at=COALESCE(NULLIF(to_jsonb(NEW)->>'hold_until','')::timestamp, NOW()+INTERVAL '30 minutes'),
+               updated_at=NOW()
+         WHERE booking_id=NEW.id AND status <> 'released';
+      ELSIF NEW.status IN ('rejected','cancelled','cancelled_unpaid','expired') THEN
+        UPDATE hotel_inventory_reservations
+           SET status='released',expires_at=NULL,updated_at=NOW()
+         WHERE booking_id=NEW.id AND status <> 'released';
+      END IF;
+      RETURN NEW;
+    END;
+    $$ LANGUAGE plpgsql
+  `);
+  await db.query(`
+    DO $$
+    BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='trg_sync_hotel_inventory_reservation') THEN
+        CREATE TRIGGER trg_sync_hotel_inventory_reservation
+        AFTER UPDATE OF status ON bookings
+        FOR EACH ROW WHEN (OLD.status IS DISTINCT FROM NEW.status)
+        EXECUTE FUNCTION sync_hotel_inventory_reservation_status();
+      END IF;
+    END $$
+  `);
 }
 
 module.exports = { ensureHotelOfferTables };

@@ -622,6 +622,7 @@ function hotelQuoteWarningText(warning) {
   if (value.startsWith("season_missing:")) return `не задан сезон на ${value.split(":")[1] || "дату"}`;
   if (value.startsWith("room_not_found:")) return `тип номера не найден: ${value.slice("room_not_found:".length)}`;
   if (value.startsWith("room_stock_exceeded:")) return `превышено количество номеров: ${value.slice("room_stock_exceeded:".length)}`;
+  if (value.startsWith("min_stay_not_met:")) return `не выполнено минимальное количество ночей: ${value.slice("min_stay_not_met:".length)}`;
   if (value.startsWith("min_stay:")) {
     const [, room, nights] = value.split(":");
     return `минимум ${nights || "?"} ноч. для номера ${room || ""}`;
@@ -1598,6 +1599,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
     const payloads = [];
     for (const b of buckets.values()) {
       payloads.push({
+        kind: b.kind,
         provider_id: b.provider_id,
         ...(b.service_id ? { service_id: b.service_id } : {}), // ← только если есть реальный id
         dates: [...new Set(b.dates)].sort(),
@@ -1681,6 +1683,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           message: p.message || "",
           source: "tour_builder",
           type: p.kind,
+          tb_kind: p.tb_kind || p.kind,
           ...(p.__needs_group_id ? { group_id: groupId } : {}),
           details: {
             from_city: routeCities.from || "",

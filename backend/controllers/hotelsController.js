@@ -176,13 +176,12 @@ async function quoteHotel(req, res) {
             continue;
           }
           const allotment = rate.allotment == null ? null : Math.max(0, Math.trunc(Number(rate.allotment)));
-          if (allotment != null && requested.quantity > allotment) warnings.push(`room_stock_exceeded:${requested.type}`);
           const unitAmount = quoteNumber(rate.amount, 0);
           lines.push({
             date, rate_id: rate.id, room_type: requested.type, meal_plan: mealPlan,
             residency: rate.residency, quantity: requested.quantity, unit_amount: unitAmount,
             subtotal: unitAmount * requested.quantity, refundable: rate.refundable !== false,
-            min_stay: Number(rate.min_stay || 1),
+            min_stay: Number(rate.min_stay || 1), allotment,
           });
         }
       }
@@ -212,6 +211,26 @@ async function quoteHotel(req, res) {
             meal_plan: mealPlan, residency: personKey, quantity: requested.quantity,
             unit_amount: unitAmount, subtotal: unitAmount * requested.quantity });
         }
+      }
+    }
+
+    if (selectedOffer && lines.length) {
+      const rateIds = [...new Set(lines.map((line) => Number(line.rate_id)).filter(Boolean))];
+      const { rows: reservationRows } = await db.query(
+        `SELECT rate_id,stay_date::text AS stay_date,COALESCE(SUM(quantity),0)::int AS reserved
+           FROM hotel_inventory_reservations
+          WHERE rate_id=ANY($1::int[])
+            AND (status='confirmed' OR (status='held' AND expires_at>NOW()))
+          GROUP BY rate_id,stay_date`,
+        [rateIds]
+      );
+      const reservedByRateDate = new Map(reservationRows.map((row) => [`${row.rate_id}:${row.stay_date}`, Number(row.reserved || 0)]));
+      for (const line of lines) {
+        const reserved = reservedByRateDate.get(`${line.rate_id}:${line.date}`) || 0;
+        line.reserved = reserved;
+        line.available = line.allotment == null ? null : Math.max(0, line.allotment - reserved);
+        if (line.available != null && line.quantity > line.available) warnings.push(`room_stock_exceeded:${line.room_type}:${line.date}`);
+        if (dates.length < Number(line.min_stay || 1)) warnings.push(`min_stay_not_met:${line.room_type}:${line.min_stay}`);
       }
     }
 
