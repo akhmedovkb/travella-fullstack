@@ -53,6 +53,13 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
       [rateIds]
     );
     const rateMap = new Map(rates.map((rate) => [Number(rate.id), rate]));
+    const { rows: overrideRows } = await client.query(
+      `SELECT rate_id,stay_date::text AS stay_date,allotment,stop_sell
+         FROM hotel_inventory_overrides
+        WHERE rate_id=ANY($1::int[]) AND stay_date=ANY($2::date[])`,
+      [rateIds, [...new Set(requested.map((item) => item.date))]]
+    );
+    const overrides = new Map(overrideRows.map((row) => [`${row.rate_id}:${row.stay_date}`, row]));
     const { rows: occupiedRows } = await client.query(
       `SELECT rate_id,stay_date::text AS stay_date,COALESCE(SUM(quantity),0)::int AS quantity
          FROM hotel_inventory_reservations
@@ -72,7 +79,12 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
         || (rate.valid_from && item.date < rate.valid_from) || (rate.valid_to && item.date > rate.valid_to)) {
         throw new HotelInventoryError('hotel_rate_not_valid_for_date', { rate_id: item.rateId, date: item.date });
       }
-      const allotment = rate.allotment == null ? null : Number(rate.allotment);
+      const override = overrides.get(`${item.rateId}:${item.date}`);
+      if (override?.stop_sell === true) {
+        throw new HotelInventoryError('hotel_stop_sell', { rate_id: item.rateId, date: item.date });
+      }
+      const effectiveAllotment = override?.allotment != null ? override.allotment : rate.allotment;
+      const allotment = effectiveAllotment == null ? null : Number(effectiveAllotment);
       const used = occupied.get(`${item.rateId}:${item.date}`) || 0;
       if (allotment != null && item.quantity > Math.max(0, allotment - used)) {
         throw new HotelInventoryError('hotel_inventory_exhausted', {

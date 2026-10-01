@@ -12,6 +12,9 @@ const emptyRate = {
   date_from: "", date_to: "", amount: "", allotment: "", min_stay: 1, refundable: true,
 };
 
+const todayIso = () => new Date().toISOString().slice(0, 10);
+const plusDaysIso = (date, days) => { const value = new Date(`${date}T12:00:00`); value.setDate(value.getDate() + days); return value.toISOString().slice(0, 10); };
+
 function Field({ label, children }) {
   return <label className="block"><span className="mb-1 block text-xs font-black uppercase tracking-[0.08em] text-slate-500">{label}</span>{children}</label>;
 }
@@ -33,6 +36,7 @@ function statusLabel(status) {
 const actionLabels = {
   created: "Предложение создано", rates_replaced: "Тарифы сохранены", submitted: "Отправлено на модерацию",
   approved: "Опубликовано", rejected: "Отклонено", status_changed: "Статус изменён", archived: "Архивировано",
+  inventory_updated: "Календарь квот обновлён",
 };
 
 export default function AdminHotelOffers({ scope = "admin" }) {
@@ -47,6 +51,10 @@ export default function AdminHotelOffers({ scope = "admin" }) {
   const [selectedId, setSelectedId] = useState(null);
   const [rates, setRates] = useState([]);
   const [events, setEvents] = useState([]);
+  const [inventoryRate, setInventoryRate] = useState(null);
+  const [inventoryRows, setInventoryRows] = useState([]);
+  const [inventoryFrom, setInventoryFrom] = useState(todayIso());
+  const [inventoryTo, setInventoryTo] = useState(() => plusDaysIso(todayIso(), 30));
   const [rejecting, setRejecting] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
   const [loading, setLoading] = useState(true);
@@ -167,6 +175,46 @@ export default function AdminHotelOffers({ scope = "admin" }) {
     finally { setSaving(false); }
   }
 
+  async function openInventory(rate, from = inventoryFrom, to = inventoryTo) {
+    if (!selected) return;
+    setSaving(true); setMessage("");
+    try {
+      const data = await apiGet(`/api/hotels/${hotelId}/offers/${selected.id}/rates/${rate.id}/inventory?from=${from}&to=${to}`, apiRole);
+      setInventoryFrom(from); setInventoryTo(to);
+      setInventoryRate(rate);
+      setInventoryRows((data?.items || []).map((item) => ({ ...item, allotment: item.allotment ?? "", note: item.note || "" })));
+    } catch (error) { setMessage(error?.message || "Не удалось загрузить календарь квот"); }
+    finally { setSaving(false); }
+  }
+
+  function openRateInventory(rate) {
+    const today = todayIso();
+    const from = rate.date_to && rate.date_to < today
+      ? rate.date_from
+      : rate.date_from && rate.date_from > today ? rate.date_from : today;
+    const candidateTo = plusDaysIso(from, 30);
+    const to = rate.date_to && rate.date_to < candidateTo ? rate.date_to : candidateTo;
+    openInventory(rate, from, to);
+  }
+
+  async function saveInventory() {
+    if (!selected || !inventoryRate) return;
+    setSaving(true); setMessage("");
+    try {
+      await apiPut(`/api/hotels/${hotelId}/offers/${selected.id}/rates/${inventoryRate.id}/inventory`, {
+        items: inventoryRows.map((item) => ({ date: item.date, allotment: item.allotment, stop_sell: item.stop_sell === true, note: item.note || "" })),
+      }, apiRole);
+      setMessage("Календарь квот сохранён");
+      await openInventory(inventoryRate);
+      await openRates(selected);
+    } catch (error) { setMessage(error?.message || "Не удалось сохранить календарь квот"); }
+    finally { setSaving(false); }
+  }
+
+  function updateInventory(index, key, value) {
+    setInventoryRows((rows) => rows.map((item, i) => i === index ? { ...item, [key]: value } : item));
+  }
+
   return (
     <main className="min-h-screen bg-slate-50 px-4 py-6">
       <div className="mx-auto max-w-[1500px] space-y-4">
@@ -224,8 +272,9 @@ export default function AdminHotelOffers({ scope = "admin" }) {
             <td className="p-2"><select className={inputClass} value={rate.residency} onChange={(e) => updateRate(index, "residency", e.target.value)}><option value="all">Все</option><option value="resident">Резидент</option><option value="non_resident">Нерезидент</option></select></td>
             <td className="p-2"><input type="date" className={inputClass} value={rate.date_from} onChange={(e) => updateRate(index, "date_from", e.target.value)} /></td><td className="p-2"><input type="date" className={inputClass} value={rate.date_to} onChange={(e) => updateRate(index, "date_to", e.target.value)} /></td>
             <td className="p-2"><input type="number" min="0" step="0.01" className={inputClass} value={rate.amount} onChange={(e) => updateRate(index, "amount", e.target.value)} /></td><td className="p-2"><input type="number" min="0" className={inputClass} value={rate.allotment} onChange={(e) => updateRate(index, "allotment", e.target.value)} placeholder="∞" /></td><td className="p-2 text-sm font-bold text-amber-700">{rate.held ?? 0}</td><td className="p-2 text-sm font-bold text-emerald-700">{rate.confirmed ?? 0}</td><td className="p-2 text-sm font-black text-slate-900">{rate.available == null ? "∞" : rate.available}</td><td className="p-2"><input type="number" min="1" className={inputClass} value={rate.min_stay} onChange={(e) => updateRate(index, "min_stay", e.target.value)} /></td>
-            <td className="p-2 text-center"><input type="checkbox" checked={rate.refundable !== false} onChange={(e) => updateRate(index, "refundable", e.target.checked)} /></td><td className="p-2"><button type="button" onClick={() => setRates((rows) => rows.filter((_, i) => i !== index))} className="text-sm font-black text-rose-600">Удалить</button></td>
+            <td className="p-2 text-center"><input type="checkbox" checked={rate.refundable !== false} onChange={(e) => updateRate(index, "refundable", e.target.checked)} /></td><td className="p-2"><div className="flex gap-2">{rate.id ? <button type="button" onClick={() => openRateInventory(rate)} className="text-sm font-black text-blue-700">Календарь</button> : null}<button type="button" onClick={() => setRates((rows) => rows.filter((_, i) => i !== index))} className="text-sm font-black text-rose-600">Удалить</button></div></td>
           </tr>)}</tbody></table></div>
+          {inventoryRate ? <div className="mt-5 border-t border-slate-200 pt-4"><div className="flex flex-wrap items-end justify-between gap-3 px-1"><div><h3 className="text-base font-black">Календарь: {inventoryRate.room_type} · {inventoryRate.meal_plan}</h3><p className="text-sm text-slate-500">Пустая дневная квота наследует базовое значение тарифа.</p></div><div className="flex flex-wrap items-end gap-2"><Field label="С"><input type="date" className={inputClass} value={inventoryFrom} onChange={(e) => setInventoryFrom(e.target.value)} /></Field><Field label="До"><input type="date" className={inputClass} value={inventoryTo} onChange={(e) => setInventoryTo(e.target.value)} /></Field><button type="button" disabled={saving} onClick={() => openInventory(inventoryRate)} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-black">Показать</button><button type="button" disabled={saving} onClick={saveInventory} className="h-10 rounded-lg bg-orange-600 px-4 text-sm font-black text-white">Сохранить</button><button type="button" onClick={() => { setInventoryRate(null); setInventoryRows([]); }} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-black">Закрыть</button></div></div><div className="mt-3 max-h-[480px] overflow-auto"><table className="w-full min-w-[900px]"><thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Дата</th><th className="p-2">Дневная квота</th><th className="p-2">Стоп</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Комментарий</th></tr></thead><tbody className="divide-y divide-slate-100">{inventoryRows.map((item, index) => <tr key={item.date} className={item.stop_sell ? "bg-rose-50" : ""}><td className="p-2 text-sm font-black">{item.date}</td><td className="p-2"><input type="number" min="0" className={`${inputClass} max-w-32`} value={item.allotment} onChange={(e) => updateInventory(index, "allotment", e.target.value)} placeholder={inventoryRate.allotment == null ? "∞" : String(inventoryRate.allotment)} /></td><td className="p-2"><input type="checkbox" checked={item.stop_sell === true} onChange={(e) => updateInventory(index, "stop_sell", e.target.checked)} /></td><td className="p-2 font-bold text-amber-700">{item.held || 0}</td><td className="p-2 font-bold text-emerald-700">{item.confirmed || 0}</td><td className="p-2 font-black">{item.stop_sell ? 0 : item.available == null ? "∞" : item.available}</td><td className="p-2"><input className={inputClass} value={item.note} onChange={(e) => updateInventory(index, "note", e.target.value)} placeholder="Причина или примечание" /></td></tr>)}</tbody></table></div></div> : null}
           <div className="mt-5 border-t border-slate-200 px-1 pt-4"><h3 className="text-sm font-black text-slate-950">История предложения</h3><div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{events.length ? events.slice(0, 12).map((item) => <div key={item.id} className="border-l-2 border-slate-200 pl-3 text-xs text-slate-600"><div className="font-black text-slate-800">{actionLabels[item.action] || item.action}</div><div>{item.from_status ? `${statusLabel(item.from_status)} → ` : ""}{item.to_status ? statusLabel(item.to_status) : ""}</div>{item.note ? <div className="mt-1 text-rose-600">{item.note}</div> : null}<div className="mt-1 text-slate-400">{new Date(item.created_at).toLocaleString("ru-RU")}</div></div>) : <div className="text-sm text-slate-500">История пока пуста</div>}</div></div>
         </section> : null}
 

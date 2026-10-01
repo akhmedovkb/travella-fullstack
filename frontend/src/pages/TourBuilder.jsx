@@ -622,6 +622,7 @@ function hotelQuoteWarningText(warning) {
   if (value.startsWith("season_missing:")) return `не задан сезон на ${value.split(":")[1] || "дату"}`;
   if (value.startsWith("room_not_found:")) return `тип номера не найден: ${value.slice("room_not_found:".length)}`;
   if (value.startsWith("room_stock_exceeded:")) return `превышено количество номеров: ${value.slice("room_stock_exceeded:".length)}`;
+  if (value.startsWith("stop_sell:")) return `продажа закрыта: ${value.slice("stop_sell:".length)}`;
   if (value.startsWith("min_stay_not_met:")) return `не выполнено минимальное количество ночей: ${value.slice("min_stay_not_met:".length)}`;
   if (value.startsWith("min_stay:")) {
     const [, room, nights] = value.split(":");

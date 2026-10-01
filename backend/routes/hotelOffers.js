@@ -268,6 +268,7 @@ router.put('/:offerId/rates', async (req, res, next) => {
     }
 
     await client.query('BEGIN');
+    await client.query(`DELETE FROM hotel_inventory_overrides WHERE offer_id=$1`, [offerId]);
     await client.query(`DELETE FROM hotel_offer_rates WHERE offer_id=$1`, [offerId]);
     for (const row of items) {
       await client.query(
@@ -282,6 +283,92 @@ router.put('/:offerId/rates', async (req, res, next) => {
       [offerId]
     );
     await addOfferEvent(client, req, offerId, 'rates_replaced', offer.status, 'draft', null, { rate_count: items.length });
+    await client.query('COMMIT');
+    return res.json({ ok: true, count: items.length });
+  } catch (error) {
+    if (client) try { await client.query('ROLLBACK'); } catch {}
+    return next(error);
+  } finally { client?.release(); }
+});
+
+router.get('/:offerId/rates/:rateId/inventory', async (req, res, next) => {
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id); const offerId = positiveInt(req.params.offerId); const rateId = positiveInt(req.params.rateId);
+    const offer = await getOffer(offerId, hotelId);
+    if (!offer || !rateId) return res.status(404).json({ error: 'rate_not_found' });
+    if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
+    const from = isoDate(req.query.from); const to = isoDate(req.query.to);
+    if (!from || !to || from > to) return res.status(400).json({ error: 'bad_dates' });
+    if ((new Date(`${to}T00:00:00Z`) - new Date(`${from}T00:00:00Z`)) / 86400000 > 366) {
+      return res.status(400).json({ error: 'inventory_range_too_large' });
+    }
+    const rateResult = await db.query(
+      `SELECT id,offer_id,room_type,meal_plan,date_from::text,date_to::text,allotment
+         FROM hotel_offer_rates WHERE id=$1 AND offer_id=$2 LIMIT 1`, [rateId, offerId]
+    );
+    if (!rateResult.rowCount) return res.status(404).json({ error: 'rate_not_found' });
+    const { rows } = await db.query(
+      `SELECT d::date::text AS date,o.allotment,o.stop_sell,o.note,
+              COALESCE(SUM(r.quantity) FILTER (WHERE r.status='held' AND r.expires_at>NOW()),0)::int AS held,
+              COALESCE(SUM(r.quantity) FILTER (WHERE r.status='confirmed'),0)::int AS confirmed
+         FROM generate_series($2::date,$3::date,INTERVAL '1 day') d
+         LEFT JOIN hotel_inventory_overrides o ON o.rate_id=$1 AND o.stay_date=d::date
+         LEFT JOIN hotel_inventory_reservations r ON r.rate_id=$1 AND r.stay_date=d::date
+        WHERE d::date BETWEEN $4::date AND $5::date
+        GROUP BY d,o.allotment,o.stop_sell,o.note ORDER BY d`,
+      [rateId, from, to, rateResult.rows[0].date_from, rateResult.rows[0].date_to]
+    );
+    const baseAllotment = rateResult.rows[0].allotment == null ? null : Number(rateResult.rows[0].allotment);
+    return res.json({ rate: rateResult.rows[0], items: rows.map((row) => {
+      const effective = row.allotment == null ? baseAllotment : Number(row.allotment);
+      const used = Number(row.held || 0) + Number(row.confirmed || 0);
+      return { ...row, effective_allotment: effective, available: row.stop_sell ? 0 : effective == null ? null : Math.max(0, effective - used) };
+    }) });
+  } catch (error) { return next(error); }
+});
+
+router.put('/:offerId/rates/:rateId/inventory', async (req, res, next) => {
+  let client;
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id); const offerId = positiveInt(req.params.offerId); const rateId = positiveInt(req.params.rateId);
+    const offer = await getOffer(offerId, hotelId);
+    if (!offer || !rateId) return res.status(404).json({ error: 'rate_not_found' });
+    if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
+    const input = Array.isArray(req.body?.items) ? req.body.items.slice(0, 366) : [];
+    const items = input.map((item) => ({
+      date: isoDate(item?.date),
+      allotment: item?.allotment === '' || item?.allotment == null ? null : Math.max(0, Math.trunc(Number(item.allotment))),
+      stop_sell: item?.stop_sell === true,
+      note: String(item?.note || '').trim().slice(0, 500) || null,
+    }));
+    if (!items.length || items.some((item) => !item.date || (item.allotment != null && !Number.isFinite(item.allotment)))) {
+      return res.status(400).json({ error: 'bad_inventory_rows' });
+    }
+    client = await db.connect(); await client.query('BEGIN');
+    const rateResult = await client.query(
+      `SELECT id,date_from::text,date_to::text FROM hotel_offer_rates WHERE id=$1 AND offer_id=$2 FOR UPDATE`, [rateId, offerId]
+    );
+    if (!rateResult.rowCount) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'rate_not_found' }); }
+    const rate = rateResult.rows[0];
+    if (items.some((item) => item.date < rate.date_from || item.date > rate.date_to)) {
+      await client.query('ROLLBACK'); return res.status(400).json({ error: 'inventory_date_outside_rate' });
+    }
+    for (const item of items) {
+      if (item.allotment == null && !item.stop_sell && !item.note) {
+        await client.query(`DELETE FROM hotel_inventory_overrides WHERE rate_id=$1 AND stay_date=$2`, [rateId, item.date]);
+      } else {
+        await client.query(
+          `INSERT INTO hotel_inventory_overrides (offer_id,rate_id,stay_date,allotment,stop_sell,note)
+           VALUES ($1,$2,$3,$4,$5,$6)
+           ON CONFLICT (rate_id,stay_date) DO UPDATE SET
+             allotment=EXCLUDED.allotment,stop_sell=EXCLUDED.stop_sell,note=EXCLUDED.note,updated_at=NOW()`,
+          [offerId, rateId, item.date, item.allotment, item.stop_sell, item.note]
+        );
+      }
+    }
+    await addOfferEvent(client, req, offerId, 'inventory_updated', offer.status, offer.status, null, { rate_id: rateId, dates: items.map((item) => item.date) });
     await client.query('COMMIT');
     return res.json({ ok: true, count: items.length });
   } catch (error) {

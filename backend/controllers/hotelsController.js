@@ -225,10 +225,22 @@ async function quoteHotel(req, res) {
         [rateIds]
       );
       const reservedByRateDate = new Map(reservationRows.map((row) => [`${row.rate_id}:${row.stay_date}`, Number(row.reserved || 0)]));
+      const { rows: overrideRows } = await db.query(
+        `SELECT rate_id,stay_date::text AS stay_date,allotment,stop_sell
+           FROM hotel_inventory_overrides
+          WHERE rate_id=ANY($1::int[]) AND stay_date=ANY($2::date[])`,
+        [rateIds, dates]
+      );
+      const overridesByRateDate = new Map(overrideRows.map((row) => [`${row.rate_id}:${row.stay_date}`, row]));
       for (const line of lines) {
         const reserved = reservedByRateDate.get(`${line.rate_id}:${line.date}`) || 0;
+        const override = overridesByRateDate.get(`${line.rate_id}:${line.date}`);
+        const effectiveAllotment = override?.allotment != null ? Number(override.allotment) : line.allotment;
+        line.stop_sell = override?.stop_sell === true;
+        line.allotment = effectiveAllotment;
         line.reserved = reserved;
-        line.available = line.allotment == null ? null : Math.max(0, line.allotment - reserved);
+        line.available = line.stop_sell ? 0 : effectiveAllotment == null ? null : Math.max(0, effectiveAllotment - reserved);
+        if (line.stop_sell) warnings.push(`stop_sell:${line.room_type}:${line.date}`);
         if (line.available != null && line.quantity > line.available) warnings.push(`room_stock_exceeded:${line.room_type}:${line.date}`);
         if (dates.length < Number(line.min_stay || 1)) warnings.push(`min_stay_not_met:${line.room_type}:${line.min_stay}`);
       }

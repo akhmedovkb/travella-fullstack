@@ -79,6 +79,21 @@ async function ensureHotelOfferTables() {
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inventory_live ON hotel_inventory_reservations(rate_id,stay_date,status,expires_at)`);
   await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_inventory_overrides (
+      id BIGSERIAL PRIMARY KEY,
+      offer_id INTEGER NOT NULL REFERENCES hotel_offers(id) ON DELETE CASCADE,
+      rate_id INTEGER NOT NULL,
+      stay_date DATE NOT NULL,
+      allotment INTEGER CHECK (allotment IS NULL OR allotment >= 0),
+      stop_sell BOOLEAN NOT NULL DEFAULT false,
+      note TEXT,
+      created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      UNIQUE (rate_id, stay_date)
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inventory_overrides_lookup ON hotel_inventory_overrides(rate_id,stay_date)`);
+  await db.query(`
     CREATE OR REPLACE FUNCTION sync_hotel_inventory_reservation_status()
     RETURNS trigger AS $$
     BEGIN
