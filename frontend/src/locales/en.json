@@ -789,6 +789,8 @@
     "profile": "Profile",
     "tour_builder": "Tour Builder",
     "hotels": "Hotels",
+    "my_hotels": "My hotels",
+    "my_hotels_desc": "Profiles, rates, availability and offers",
     "providers_admin": "Providers",
     "entry_fees_admin": "Entry fees",
     "hotels_admin": "Hotels (admin)",

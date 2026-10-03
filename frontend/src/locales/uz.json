@@ -788,6 +788,8 @@
     "profile": "Profil",
     "tour_builder": "Tour Builder",
     "hotels": "Mehmonxonalar",
+    "my_hotels": "Mening mehmonxonalarim",
+    "my_hotels_desc": "Kartochkalar, tariflar, mavjudlik va takliflar",
     "providers_admin": "Provayderlar",
     "entry_fees_admin": "Entry fees",
     "hotels_admin": "Mehmonxonalar (admin)",

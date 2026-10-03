@@ -174,6 +174,15 @@ function detectAdminFromJwt() {
   }
 }
 
+function detectProviderType(profile) {
+  const raw = profile?.type ?? profile?.provider_type ?? profile?.providerType ?? "";
+  const normalized = String(raw).trim().toLowerCase();
+  if (normalized === "4" || ["hotel", "hotelier", "accommodation", "otel", "отель"].includes(normalized)) {
+    return "hotel";
+  }
+  return normalized;
+}
+
 function formatHeaderBalance(value, lang = "ru") {
   const amount = Number(value || 0) / 100;
   const locale = lang === "uz" ? "uz-UZ" : lang === "en" ? "en-US" : "ru-RU";
@@ -190,6 +199,7 @@ export default function Header() {
   const location = useLocation();
 
   const [isAdmin, setIsAdmin] = useState(false);
+  const [providerType, setProviderType] = useState("");
   const [adminOpen, setAdminOpen] = useState(false);
   const adminRef = useRef(null);
 
@@ -219,20 +229,25 @@ export default function Header() {
     let alive = true;
     (async () => {
       const jwtAdmin = detectAdminFromJwt();
-      if (jwtAdmin) {
-        if (alive) setIsAdmin(true);
-        return;
-      }
       if (role !== "provider") {
-        if (alive) setIsAdmin(false);
+        if (alive) {
+          setIsAdmin(false);
+          setProviderType("");
+        }
         return;
       }
       try {
         const p = await apiGet("/api/providers/profile", role);
-        if (alive) setIsAdmin(detectAdmin(p));
+        if (alive) {
+          setIsAdmin(jwtAdmin || detectAdmin(p));
+          setProviderType(detectProviderType(p));
+        }
       } catch {
         const v = localStorage.getItem("isAdminUiHint");
-        if (alive) setIsAdmin(!!(v && YES.has(String(v).toLowerCase())));
+        if (alive) {
+          setIsAdmin(jwtAdmin || !!(v && YES.has(String(v).toLowerCase())));
+          setProviderType("");
+        }
       }
     })();
     return () => {
@@ -524,6 +539,14 @@ export default function Header() {
                   {servicesOpen && (
                     <DropdownPanel align="right" width="w-80">
                       <DropdownCaption title={t("nav.services_group", "Управление услугами")} />
+                      {providerType === "hotel" && (
+                        <DropdownItem
+                          to="/dashboard"
+                          label={t("nav.my_hotels", "Мои отели")}
+                          description={t("nav.my_hotels_desc", "Карточки, тарифы, наличие и предложения")}
+                          icon={<IconHotel />}
+                        />
+                      )}
                       <DropdownItem
                         to="/dashboard/services/marketplace"
                         label={t("nav.services_marketplace_short", "Маркетплейс")}
@@ -739,6 +762,7 @@ export default function Header() {
             {role === "provider" && (
               <RowGroupDark title={t("nav.activity", "Активность")}>
                 <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
+                {providerType === "hotel" && <NavItemMobileDark to="/dashboard" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />}
                 <NavItemMobileDark to="/dashboard/services/marketplace" label={t("nav.services_marketplace_short", "Маркетплейс")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder_short", "Tour Builder")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
