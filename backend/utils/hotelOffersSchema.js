@@ -1,6 +1,8 @@
 const db = require('../db');
 
-async function ensureHotelOfferTables() {
+let hotelOfferTablesReadyPromise = null;
+
+async function ensureHotelOfferTablesOnce() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS hotel_offers (
       id SERIAL PRIMARY KEY,
@@ -127,6 +129,16 @@ async function ensureHotelOfferTables() {
       END IF;
     END $$
   `);
+}
+
+function ensureHotelOfferTables() {
+  if (!hotelOfferTablesReadyPromise) {
+    hotelOfferTablesReadyPromise = ensureHotelOfferTablesOnce().catch((error) => {
+      hotelOfferTablesReadyPromise = null;
+      throw error;
+    });
+  }
+  return hotelOfferTablesReadyPromise;
 }
 
 module.exports = { ensureHotelOfferTables };

@@ -7,6 +7,29 @@ const { Pool } = require("pg");
 const { uploadBufferToR2, getR2ObjectStream } = require("../utils/r2Upload");
 const { ensureHotelOfferTables } = require('../utils/hotelOffersSchema');
 
+let hotelSeasonsReadyPromise = null;
+
+function ensureHotelSeasonsTable() {
+  if (!hotelSeasonsReadyPromise) {
+    hotelSeasonsReadyPromise = db.query(`
+      CREATE TABLE IF NOT EXISTS hotel_seasons (
+        id SERIAL PRIMARY KEY,
+        hotel_id INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
+        label TEXT NOT NULL,
+        start_date DATE NOT NULL,
+        end_date DATE NOT NULL,
+        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
+        CHECK (start_date <= end_date)
+      )
+    `).catch((error) => {
+      hotelSeasonsReadyPromise = null;
+      throw error;
+    });
+  }
+  return hotelSeasonsReadyPromise;
+}
+
 // /api/hotels/:id/brief
 async function getHotelBrief(req, res) {
   const { id } = req.params;
@@ -129,18 +152,7 @@ async function quoteHotel(req, res) {
       selectedOffer = offerResult.rows[0];
     }
 
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS hotel_seasons (
-        id SERIAL PRIMARY KEY,
-        hotel_id INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
-        label TEXT NOT NULL,
-        start_date DATE NOT NULL,
-        end_date DATE NOT NULL,
-        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-        CHECK (start_date <= end_date)
-      )
-    `);
+    await ensureHotelSeasonsTable();
     const seasonResult = await db.query(
       `SELECT id, label, start_date::text AS start_date, end_date::text AS end_date, updated_at
          FROM hotel_seasons
@@ -836,18 +848,7 @@ async function listHotelReadiness(req, res) {
   try {
     await ensureInspectionsTable();
     await ensureHotelOfferTables();
-    await db.query(`
-      CREATE TABLE IF NOT EXISTS hotel_seasons (
-        id SERIAL PRIMARY KEY,
-        hotel_id INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
-        label TEXT NOT NULL,
-        start_date DATE NOT NULL,
-        end_date DATE NOT NULL,
-        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-        CHECK (start_date <= end_date)
-      )
-    `);
+    await ensureHotelSeasonsTable();
     const { rows } = await db.query(
       `SELECT h.id, h.name, COALESCE(h.city,h.location) AS city, h.country, h.address,
               h.stars, h.provider_id, h.currency, h.rooms, h.images, h.updated_at,
@@ -989,7 +990,19 @@ async function ensureHotelsAttrsColumn() {
 }
 
 // таблица инспекций + мягкие миграции
-async function ensureInspectionsTable() {
+let inspectionsSchemaReadyPromise = null;
+
+function ensureInspectionsTable() {
+  if (!inspectionsSchemaReadyPromise) {
+    inspectionsSchemaReadyPromise = ensureInspectionsTableOnce().catch((error) => {
+      inspectionsSchemaReadyPromise = null;
+      throw error;
+    });
+  }
+  return inspectionsSchemaReadyPromise;
+}
+
+async function ensureInspectionsTableOnce() {
   await db.query(`
     CREATE TABLE IF NOT EXISTS inspections (
       id          SERIAL PRIMARY KEY,
@@ -2455,6 +2468,26 @@ async function likeInspection(req, res) {
     console.error("likeInspection error", e);
     return res.status(500).json({ error: "like_failed" });
   }
+}
+
+if (process.env.NODE_ENV !== "test") {
+  setImmediate(async () => {
+    const startedAt = Date.now();
+    const results = await Promise.allSettled([
+      ensureHotelOfferTables(),
+      ensureHotelSeasonsTable(),
+      ensureInspectionsTable(),
+    ]);
+    const failed = results.filter((result) => result.status === "rejected");
+    if (failed.length) {
+      console.warn("[hotel-schema] warmup incomplete", {
+        durationMs: Date.now() - startedAt,
+        errors: failed.map((result) => result.reason?.message || String(result.reason)),
+      });
+      return;
+    }
+    console.log("[hotel-schema] ready", { durationMs: Date.now() - startedAt });
+  });
 }
 
 module.exports = {
