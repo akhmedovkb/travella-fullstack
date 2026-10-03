@@ -39,6 +39,17 @@ const actionLabels = {
   inventory_updated: "Календарь квот обновлён",
 };
 
+function offerSubmitError(error) {
+  const code = error?.code || error?.data?.error || error?.message;
+  if (code === "rates_required_before_submission") return "Сначала добавьте и сохраните хотя бы один тариф.";
+  if (code === "offer_expired") return "Срок действия предложения истёк. Обновите период тарифов.";
+  if (code === "offer_not_submittable") {
+    const status = statusLabel(error?.data?.current_status);
+    return status ? `Нельзя отправить предложение из статуса «${status}». Статус обновлён.` : "Текущий статус предложения не позволяет отправить его на модерацию.";
+  }
+  return error?.message || "Не удалось отправить предложение на модерацию";
+}
+
 export default function AdminHotelOffers({ scope = "admin" }) {
   const { id } = useParams();
   const hotelId = Number(id);
@@ -137,11 +148,14 @@ export default function AdminHotelOffers({ scope = "admin" }) {
   async function submitOffer(offer) {
     setSaving(true); setMessage("");
     try {
-      await apiPost(`/api/hotels/${hotelId}/offers/${offer.id}/submit`, {}, apiRole);
-      setMessage("Предложение отправлено на модерацию");
+      const result = await apiPost(`/api/hotels/${hotelId}/offers/${offer.id}/submit`, {}, apiRole);
+      setMessage(result?.already_submitted ? "Предложение уже находится на модерации" : "Предложение отправлено на модерацию");
       await load();
       if (Number(selectedId) === Number(offer.id)) await openRates({ ...offer, status: "pending_review" });
-    } catch (error) { setMessage(error?.message || "Не удалось отправить предложение на модерацию"); }
+    } catch (error) {
+      setMessage(offerSubmitError(error));
+      await load();
+    }
     finally { setSaving(false); }
   }
 

@@ -384,14 +384,26 @@ router.post('/:offerId/submit', async (req, res, next) => {
     const offer = await getOffer(offerId, hotelId);
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
     if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
-    if (!['draft', 'rejected', 'paused'].includes(offer.status)) return res.status(409).json({ error: 'offer_not_submittable' });
+    if (offer.status === 'pending_review') {
+      return res.json({ item: offer, already_submitted: true });
+    }
+    if (!['draft', 'rejected', 'paused'].includes(offer.status)) {
+      return res.status(409).json({ error: 'offer_not_submittable', current_status: offer.status });
+    }
     const rateCount = await db.query(`SELECT COUNT(*)::int AS count FROM hotel_offer_rates WHERE offer_id=$1`, [offerId]);
     if (!rateCount.rows[0]?.count) return res.status(409).json({ error: 'rates_required_before_submission' });
     if (dateOnly(offer.valid_to) && dateOnly(offer.valid_to) < new Date().toISOString().slice(0, 10)) return res.status(409).json({ error: 'offer_expired' });
     const { rows } = await db.query(
       `UPDATE hotel_offers SET status='pending_review',submitted_at=NOW(),rejection_reason=NULL,updated_at=NOW()
-        WHERE id=$1 RETURNING *`, [offerId]
+        WHERE id=$1 AND status IN ('draft','rejected','paused') RETURNING *`, [offerId]
     );
+    if (!rows.length) {
+      const current = await getOffer(offerId, hotelId);
+      if (current?.status === 'pending_review') {
+        return res.json({ item: current, already_submitted: true });
+      }
+      return res.status(409).json({ error: 'offer_not_submittable', current_status: current?.status || null });
+    }
     await addOfferEvent(db, req, offerId, 'submitted', offer.status, 'pending_review');
     return res.json({ item: rows[0] });
   } catch (error) { return next(error); }
