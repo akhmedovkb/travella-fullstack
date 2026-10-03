@@ -3,6 +3,10 @@ const router = express.Router({ mergeParams: true });
 const db = require('../db');
 const authenticateToken = require('../middleware/authenticateToken');
 const { ensureHotelOfferTables } = require('../utils/hotelOffersSchema');
+const {
+  notifyHotelOfferSubmitted,
+  notifyHotelOfferReviewed,
+} = require('../utils/hotelOfferModerationNotifications');
 
 const SUPPLIER_TYPES = new Set(['hotel', 'tour_operator', 'dmc', 'agency', 'supplier']);
 const MEAL_PLANS = new Set(['RO', 'BB', 'HB', 'FB', 'AI', 'UAI']);
@@ -405,6 +409,16 @@ router.post('/:offerId/submit', async (req, res, next) => {
       return res.status(409).json({ error: 'offer_not_submittable', current_status: current?.status || null });
     }
     await addOfferEvent(db, req, offerId, 'submitted', offer.status, 'pending_review');
+    notifyHotelOfferSubmitted(offerId)
+      .then((result) => {
+        if (!result?.ok) console.warn('[hotel-offer] moderation Telegram notification skipped', { offerId, reason: result?.reason || result?.error });
+      })
+      .catch((error) => {
+        console.warn('[hotel-offer] moderation Telegram notification failed', {
+          offerId,
+          error: error?.message || String(error),
+        });
+      });
     return res.json({ item: rows[0] });
   } catch (error) { return next(error); }
 });
@@ -434,6 +448,17 @@ router.post('/:offerId/review', async (req, res, next) => {
       [offerId, nextStatus, decision === 'reject' ? reason.slice(0, 2000) : null, positiveInt(req.user?.id)]
     );
     await addOfferEvent(db, req, offerId, decision === 'approve' ? 'approved' : 'rejected', offer.status, nextStatus, reason || null);
+    notifyHotelOfferReviewed(offerId, decision, reason)
+      .then((result) => {
+        if (!result?.ok) console.warn('[hotel-offer] provider Telegram notification skipped', { offerId, decision, reason: result?.reason });
+      })
+      .catch((error) => {
+        console.warn('[hotel-offer] provider Telegram notification failed', {
+          offerId,
+          decision,
+          error: error?.message || String(error),
+        });
+      });
     return res.json({ item: rows[0] });
   } catch (error) { return next(error); }
 });
