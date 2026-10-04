@@ -712,7 +712,7 @@ async function deleteLeadFully(req, res) {
     await db.query("BEGIN");
 
     const leadRes = await db.query(
-      `SELECT id, phone, telegram_chat_id, telegram_username
+      `SELECT id, phone, telegram_chat_id, telegram_username, source, requested_role
          FROM leads
         WHERE id = $1
         FOR UPDATE`,
@@ -728,14 +728,23 @@ async function deleteLeadFully(req, res) {
     const phoneDigits = String(lead.phone || "").replace(/\D/g, "");
     const chatId = lead.telegram_chat_id || null;
     const username = lead.telegram_username || null;
-
-    // --- 1) Если есть provider по телефону — удаляем безопасно (FK)
-    const provRes = await db.query(
-      `SELECT id FROM providers
-        WHERE regexp_replace(phone,'\\D','','g') = $1
-        LIMIT 1`,
-      [phoneDigits]
+    const source = String(lead.source || "").trim().toLowerCase();
+    const requestedRole = String(lead.requested_role || "").trim().toLowerCase();
+    const clientLead = source === "telegram_client" || requestedRole === "client";
+    const providerLead = !clientLead && (
+      source === "telegram_provider" ||
+      ["provider", "agent", "tour_agent", "agency", "supplier", "hotel"].includes(requestedRole)
     );
+
+    // Клиентский лид не должен удалять поставщика, даже если старое решение
+    // по этому лиду было выставлено ошибочно.
+    const provRes = providerLead ? await db.query(
+      `SELECT id FROM providers
+        WHERE ($1 <> '' AND regexp_replace(phone,'\\D','','g') = $1)
+           OR ($2::text IS NOT NULL AND (telegram_chat_id::text=$2 OR tg_chat_id::text=$2 OR telegram_refused_chat_id::text=$2))
+        LIMIT 1`,
+      [phoneDigits, chatId == null ? null : String(chatId)]
+    ) : { rowCount: 0, rows: [] };
 
     if (provRes.rowCount) {
       const providerId = provRes.rows[0].id;
@@ -757,22 +766,27 @@ async function deleteLeadFully(req, res) {
       await db.query(`DELETE FROM providers WHERE id = $1`, [providerId]);
     }
 
-    // --- 2) Клиент по телефону
-    await db.query(
-      `DELETE FROM clients
-        WHERE regexp_replace(phone,'\\D','','g') = $1`,
-      [phoneDigits]
-    );
+    // Клиент удаляется только для клиентской заявки.
+    if (clientLead) {
+      await db.query(
+        `DELETE FROM clients
+          WHERE ($1 <> '' AND regexp_replace(phone,'\\D','','g') = $1)
+             OR ($2::text IS NOT NULL AND telegram_chat_id::text=$2)`,
+        [phoneDigits, chatId == null ? null : String(chatId)]
+      );
+    }
 
     // --- 3) Удаляем все лиды по этому идентификатору (чтобы не оставалось хвостов)
     // (и сам текущий lead тоже уйдёт)
     if (chatId) {
       await db.query(`DELETE FROM leads WHERE telegram_chat_id = $1`, [chatId]);
-    } else {
+    } else if (phoneDigits) {
       await db.query(
         `DELETE FROM leads WHERE regexp_replace(phone,'\\D','','g') = $1`,
         [phoneDigits]
       );
+    } else {
+      await db.query(`DELETE FROM leads WHERE id=$1`, [id]);
     }
 
     await db.query("COMMIT");
