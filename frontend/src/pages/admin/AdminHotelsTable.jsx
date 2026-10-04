@@ -488,7 +488,7 @@ export default function AdminHotelsTable({
                                 to={providerMode ? `/provider/hotels/${h.id}/offer` : `/admin/hotels/${h.id}/offers`}
                                 className="inline-flex items-center rounded-xl bg-orange-600 px-3 py-2 text-xs font-black text-white transition hover:bg-orange-700"
                               >
-                                {providerMode ? "Мои тарифы" : "Поставщики"}
+                                {providerMode ? "Мои тарифы" : "Предложения"}
                               </Link>
                             </div>
                           ) : (
