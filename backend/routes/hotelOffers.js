@@ -70,8 +70,21 @@ function canEditOffer(req, offer) {
 
 async function canManageHotelInventory(req, hotelId) {
   if (isAdmin(req.user)) return true;
-  const { rows } = await db.query(`SELECT provider_id FROM hotels WHERE id=$1 LIMIT 1`, [hotelId]);
-  return Number(rows[0]?.provider_id) === Number(req.user?.id);
+  const providerId = positiveInt(req.user?.id);
+  if (!providerId) return false;
+  const { rows } = await db.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM hotels h
+        WHERE h.id=$1 AND h.provider_id=$2
+       UNION ALL
+       SELECT 1 FROM hotel_offers o
+        JOIN providers p ON p.id=o.provider_id
+        WHERE o.hotel_id=$1 AND o.provider_id=$2
+          AND (o.is_direct=true OR o.supplier_type='hotel' OR LOWER(COALESCE(p.type,''))='hotel')
+     ) AS allowed`,
+    [hotelId, providerId]
+  );
+  return rows[0]?.allowed === true;
 }
 
 function actorRole(req) {
