@@ -33,6 +33,16 @@ function statusLabel(status) {
   return ({ draft: "Черновик", pending_review: "На модерации", active: "Опубликовано", paused: "Приостановлено", rejected: "Отклонено" })[status] || status;
 }
 
+function supplierTypeLabel(type) {
+  return ({
+    hotel: "Отель",
+    tour_operator: "Туроператор",
+    dmc: "DMC",
+    agency: "Агентство",
+    supplier: "Поставщик",
+  })[String(type || "").toLowerCase()] || type || "Поставщик";
+}
+
 const actionLabels = {
   created: "Предложение создано", rates_replaced: "Тарифы сохранены", submitted: "Отправлено на модерацию",
   approved: "Опубликовано", rejected: "Отклонено", status_changed: "Статус изменён", archived: "Архивировано",
@@ -266,8 +276,12 @@ export default function AdminHotelOffers({ scope = "admin" }) {
             <tbody className="divide-y divide-slate-100">
               {loading ? <tr><td colSpan={6} className="p-8 text-center font-bold text-slate-500">Загрузка…</td></tr> : offers.length ? offers.map((offer) => (
                 <tr key={offer.id} className={Number(selectedId) === Number(offer.id) ? "bg-orange-50/60" : ""}>
-                  <td className="px-4 py-3"><div className="font-black text-slate-950">{offer.provider_name}</div><div className="text-xs text-slate-500">#{offer.provider_id} {offer.is_direct ? "· прямой тариф" : ""}</div></td>
-                  <td className="px-4 py-3 text-sm font-bold text-slate-700">{offer.supplier_type}</td>
+                  <td className="px-4 py-3">
+                    {offer.status === "pending_review" ? <div className="mb-1 text-[10px] font-black uppercase tracking-[0.12em] text-blue-600">Отправитель заявки</div> : null}
+                    <Link to={`/profile/provider/${offer.provider_id}`} className="font-black text-slate-950 underline-offset-2 hover:text-orange-600 hover:underline">{offer.provider_name}</Link>
+                    <div className="text-xs text-slate-500">ID #{offer.provider_id} {offer.is_direct ? "· прямой тариф" : ""}</div>
+                  </td>
+                  <td className="px-4 py-3 text-sm font-bold text-slate-700">{supplierTypeLabel(offer.supplier_type)}</td>
                   <td className="px-4 py-3 text-sm text-slate-600"><div>{offer.valid_from || "—"} → {offer.valid_to || "—"}</div>{offer.is_expired ? <div className="mt-1 text-xs font-black text-rose-600">Срок истёк</div> : offer.days_until_expiry != null && offer.days_until_expiry <= 7 ? <div className="mt-1 text-xs font-black text-amber-600">Истекает через {offer.days_until_expiry} дн.</div> : null}</td>
                   <td className="px-4 py-3"><div className="font-black">{offer.rate_count || 0}</div><div className="text-xs text-slate-500">{offer.min_rate ? `от ${offer.min_rate} ${offer.currency}` : "цены не заполнены"}</div></td>
                   <td className="px-4 py-3"><span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${statusTone(offer.status)}`}>{statusLabel(offer.status)}</span>{offer.rejection_reason ? <div className="mt-2 max-w-56 text-xs font-semibold text-rose-600">{offer.rejection_reason}</div> : null}</td>
