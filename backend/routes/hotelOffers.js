@@ -87,6 +87,14 @@ async function canManageHotelInventory(req, hotelId) {
   return rows[0]?.allowed === true;
 }
 
+async function hasHotelOfferAccess(req, hotelId) {
+  if (isAdmin(req.user) || await canManageHotelInventory(req, hotelId)) return true;
+  const providerId = positiveInt(req.user?.id);
+  if (!providerId) return false;
+  const result = await db.query(`SELECT 1 FROM hotel_offers WHERE hotel_id=$1 AND provider_id=$2 LIMIT 1`, [hotelId, providerId]);
+  return result.rowCount > 0;
+}
+
 function actorRole(req) {
   return isAdmin(req.user) ? 'admin' : (rolesOf(req.user)[0] || 'provider');
 }
@@ -102,12 +110,105 @@ async function addOfferEvent(client, req, offerId, action, fromStatus, toStatus,
 
 router.use(canUseOffers);
 
+router.get('/inventory/allocations', async (req, res, next) => {
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id);
+    if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
+    if (!(await hasHotelOfferAccess(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
+    const manager = isAdmin(req.user) || await canManageHotelInventory(req, hotelId);
+    const providerId = positiveInt(req.user?.id);
+    const params = manager ? [hotelId] : [hotelId, providerId];
+    const filter = manager ? '' : 'AND a.provider_id=$2';
+    const { rows } = await db.query(
+      `SELECT a.id,a.hotel_id,a.provider_id,a.pool_id,a.date_from::text,a.date_to::text,a.allotment,a.active,
+              p.name AS provider_name,p.type AS provider_type,rp.room_type,
+              COALESCE(usage.held,0)::int AS held,COALESCE(usage.confirmed,0)::int AS confirmed,
+              GREATEST(0,a.allotment-COALESCE(usage.occupied_peak,0))::int AS available
+         FROM hotel_supplier_inventory_allocations a
+         JOIN providers p ON p.id=a.provider_id
+         JOIN hotel_room_inventory_pools rp ON rp.id=a.pool_id
+         LEFT JOIN LATERAL (
+           SELECT COALESCE(MAX(day.held),0)::int AS held,COALESCE(MAX(day.confirmed),0)::int AS confirmed,
+                  COALESCE(MAX(day.occupied),0)::int AS occupied_peak
+             FROM (
+               SELECT hir.stay_date,
+                      COALESCE(SUM(hir.quantity) FILTER (WHERE hir.status='held' AND hir.expires_at>NOW()),0)::int AS held,
+                      COALESCE(SUM(hir.quantity) FILTER (WHERE hir.status='confirmed'),0)::int AS confirmed,
+                      COALESCE(SUM(hir.quantity) FILTER (WHERE hir.status='confirmed' OR (hir.status='held' AND hir.expires_at>NOW())),0)::int AS occupied
+                 FROM hotel_inventory_reservations hir
+                 JOIN hotel_offer_rates r ON r.id=hir.rate_id JOIN hotel_offers o ON o.id=r.offer_id
+                WHERE o.hotel_id=a.hotel_id AND o.provider_id=a.provider_id AND r.inventory_pool_id=a.pool_id
+                  AND hir.stay_date BETWEEN a.date_from AND a.date_to
+                GROUP BY hir.stay_date
+             ) day
+         ) usage ON true
+        WHERE a.hotel_id=$1 AND a.active=true ${filter}
+        ORDER BY p.name,rp.room_type,a.date_from,a.id`, params);
+    return res.json({ items: rows, can_manage: manager });
+  } catch (error) { return next(error); }
+});
+
+router.put('/inventory/allocations', async (req, res, next) => {
+  let client;
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id);
+    if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
+    if (!(isAdmin(req.user) || await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
+    const items = (Array.isArray(req.body?.items) ? req.body.items : []).map((item) => ({
+      id: positiveInt(item?.id), provider_id: positiveInt(item?.provider_id), pool_id: positiveInt(item?.pool_id),
+      date_from: isoDate(item?.date_from), date_to: isoDate(item?.date_to), allotment: Math.trunc(Number(item?.allotment)),
+    }));
+    if (items.length > 300 || items.some((item) => !item.provider_id || !item.pool_id || !item.date_from || !item.date_to
+      || item.date_from > item.date_to || !Number.isInteger(item.allotment) || item.allotment < 0)) {
+      return res.status(400).json({ error: 'bad_supplier_allocations' });
+    }
+    for (let i = 0; i < items.length; i += 1) for (let j = i + 1; j < items.length; j += 1) {
+      const a = items[i]; const b = items[j];
+      if (a.provider_id === b.provider_id && a.pool_id === b.pool_id && a.date_from <= b.date_to && b.date_from <= a.date_to) {
+        return res.status(400).json({ error: 'supplier_allocation_periods_overlap' });
+      }
+    }
+    client = await db.connect(); await client.query('BEGIN');
+    const valid = await client.query(
+      `SELECT o.provider_id,p.id AS pool_id
+         FROM hotel_offers o CROSS JOIN hotel_room_inventory_pools p
+        WHERE o.hotel_id=$1 AND p.hotel_id=$1 AND o.provider_id=ANY($2::int[]) AND p.id=ANY($3::bigint[])`,
+      [hotelId, [...new Set(items.map((x) => x.provider_id))], [...new Set(items.map((x) => x.pool_id))]]);
+    const validKeys = new Set(valid.rows.map((x) => `${x.provider_id}:${x.pool_id}`));
+    if (items.some((item) => !validKeys.has(`${item.provider_id}:${item.pool_id}`))) {
+      await client.query('ROLLBACK'); return res.status(400).json({ error: 'allocation_provider_or_pool_invalid' });
+    }
+    const ids = items.map((item) => item.id).filter(Boolean);
+    await client.query(`UPDATE hotel_supplier_inventory_allocations SET active=false,updated_at=NOW()
+      WHERE hotel_id=$1 AND active=true AND NOT (id=ANY($2::bigint[]))`, [hotelId, ids.length ? ids : [0]]);
+    for (const item of items) {
+      if (item.id) {
+        await client.query(`UPDATE hotel_supplier_inventory_allocations SET provider_id=$3,pool_id=$4,date_from=$5,date_to=$6,
+          allotment=$7,active=true,updated_at=NOW() WHERE id=$2 AND hotel_id=$1`,
+        [hotelId,item.id,item.provider_id,item.pool_id,item.date_from,item.date_to,item.allotment]);
+      } else {
+        await client.query(`INSERT INTO hotel_supplier_inventory_allocations
+          (hotel_id,provider_id,pool_id,date_from,date_to,allotment,created_by) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+        [hotelId,item.provider_id,item.pool_id,item.date_from,item.date_to,item.allotment,positiveInt(req.user?.id)]);
+      }
+    }
+    await client.query('COMMIT');
+    return res.json({ ok: true, count: items.length });
+  } catch (error) {
+    if (client) try { await client.query('ROLLBACK'); } catch {}
+    return next(error);
+  } finally { client?.release(); }
+});
+
 router.get('/inventory/rooms', async (req, res, next) => {
   try {
     await ensureHotelOfferTables();
     const hotelId = positiveInt(req.params.id);
     if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
-    if (!(await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
+    if (!(await hasHotelOfferAccess(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
+    const canManage = isAdmin(req.user) || await canManageHotelInventory(req, hotelId);
     const { rows } = await db.query(
       `SELECT id,hotel_id,room_type,base_inventory,active,created_at,updated_at
          FROM hotel_room_inventory_pools
@@ -115,7 +216,7 @@ router.get('/inventory/rooms', async (req, res, next) => {
         ORDER BY active DESC,room_type,id`,
       [hotelId]
     );
-    return res.json({ items: rows });
+    return res.json({ items: rows, can_manage: canManage });
   } catch (error) { return next(error); }
 });
 

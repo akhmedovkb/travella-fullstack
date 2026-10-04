@@ -122,6 +122,24 @@ async function ensureHotelOfferTablesOnce() {
     )
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_room_inventory_overrides_lookup ON hotel_room_inventory_overrides(pool_id,stay_date)`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_supplier_inventory_allocations (
+      id BIGSERIAL PRIMARY KEY,
+      hotel_id INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
+      provider_id INTEGER NOT NULL REFERENCES providers(id) ON DELETE CASCADE,
+      pool_id BIGINT NOT NULL REFERENCES hotel_room_inventory_pools(id) ON DELETE CASCADE,
+      date_from DATE NOT NULL,
+      date_to DATE NOT NULL,
+      allotment INTEGER NOT NULL CHECK (allotment >= 0),
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_by BIGINT,
+      created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      CHECK (date_from <= date_to)
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_supplier_allocations_lookup
+    ON hotel_supplier_inventory_allocations(hotel_id,provider_id,pool_id,date_from,date_to) WHERE active=true`);
   await db.query(`ALTER TABLE hotel_offer_rates ADD COLUMN IF NOT EXISTS inventory_pool_id BIGINT REFERENCES hotel_room_inventory_pools(id) ON DELETE RESTRICT`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_offer_rates_pool ON hotel_offer_rates(inventory_pool_id)`);
   await db.query(`

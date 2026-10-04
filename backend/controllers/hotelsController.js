@@ -301,6 +301,37 @@ async function quoteHotel(req, res) {
           if (override?.stop_sell === true) warnings.push(`stop_sell:${line.room_type}:${line.date}`);
           if (line.quantity > physicalAvailable) warnings.push(`room_stock_exceeded:${line.room_type}:${line.date}`);
         }
+
+        const { rows: allocationRows } = await db.query(
+          `SELECT pool_id,date_from::text,date_to::text,allotment
+             FROM hotel_supplier_inventory_allocations
+            WHERE hotel_id=$1 AND provider_id=$2 AND pool_id=ANY($3::bigint[]) AND active=true
+              AND date_from <= $5::date AND date_to >= $4::date
+            ORDER BY updated_at DESC,id DESC`,
+          [hotelId, selectedOffer.provider_id, poolIds, dates[0], dates[dates.length - 1]]
+        );
+        const { rows: supplierReservationRows } = await db.query(
+          `SELECT r.inventory_pool_id,hir.stay_date::text AS stay_date,COALESCE(SUM(hir.quantity),0)::int AS reserved
+             FROM hotel_inventory_reservations hir
+             JOIN hotel_offer_rates r ON r.id=hir.rate_id JOIN hotel_offers o ON o.id=r.offer_id
+            WHERE o.hotel_id=$1 AND o.provider_id=$2 AND r.inventory_pool_id=ANY($3::bigint[])
+              AND hir.stay_date=ANY($4::date[]) AND (hir.status='confirmed' OR (hir.status='held' AND hir.expires_at>NOW()))
+            GROUP BY r.inventory_pool_id,hir.stay_date`,
+          [hotelId, selectedOffer.provider_id, poolIds, dates]
+        );
+        const supplierReserved = new Map(supplierReservationRows.map((row) => [`${row.inventory_pool_id}:${row.stay_date}`, Number(row.reserved || 0)]));
+        for (const line of lines) {
+          if (!line.inventory_pool_id) continue;
+          const allocation = allocationRows.find((row) => Number(row.pool_id) === Number(line.inventory_pool_id)
+            && line.date >= row.date_from && line.date <= row.date_to);
+          if (!allocation) continue;
+          const reserved = supplierReserved.get(`${line.inventory_pool_id}:${line.date}`) || 0;
+          const available = Math.max(0, Number(allocation.allotment) - reserved);
+          line.supplier_allotment = Number(allocation.allotment);
+          line.supplier_available = available;
+          line.available = line.available == null ? available : Math.min(line.available, available);
+          if (line.quantity > available) warnings.push(`supplier_allocation_exceeded:${line.room_type}:${line.date}`);
+        }
       }
     }
 

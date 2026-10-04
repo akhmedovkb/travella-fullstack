@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { reservationLines, physicalAvailability } = require('../utils/hotelInventory');
+const { reservationLines, physicalAvailability, supplierAllocationAvailability } = require('../utils/hotelInventory');
 
 test('deduplicates repeated quote snapshots by rate and stay date', () => {
   const quote = {
@@ -31,4 +31,9 @@ test('calculates shared room inventory with overrides and stop-sale', () => {
   assert.equal(physicalAvailability(6, 3, 2), 1);
   assert.equal(physicalAvailability(6, null, 8), 0);
   assert.equal(physicalAvailability(6, null, 0, true), 0);
+});
+
+test('calculates one shared supplier allocation across its rates', () => {
+  assert.equal(supplierAllocationAvailability(6, 2), 4);
+  assert.equal(supplierAllocationAvailability(6, 9), 0);
 });
