@@ -738,12 +738,13 @@ async function deleteLeadFully(req, res) {
 
     // Клиентский лид не должен удалять поставщика, даже если старое решение
     // по этому лиду было выставлено ошибочно.
-    const provRes = providerLead ? await db.query(
+    const provRes = (providerLead || clientLead) ? await db.query(
       `SELECT id FROM providers
-        WHERE ($1 <> '' AND regexp_replace(phone,'\\D','','g') = $1)
-           OR ($2::text IS NOT NULL AND (telegram_chat_id::text=$2 OR tg_chat_id::text=$2 OR telegram_refused_chat_id::text=$2))
+        WHERE (($1 <> '' AND regexp_replace(phone,'\\D','','g') = $1)
+           OR ($2::text IS NOT NULL AND (telegram_chat_id::text=$2 OR tg_chat_id::text=$2 OR telegram_refused_chat_id::text=$2)))
+          AND ($3::boolean=false OR LOWER(COALESCE(type,''))='client')
         LIMIT 1`,
-      [phoneDigits, chatId == null ? null : String(chatId)]
+      [phoneDigits, chatId == null ? null : String(chatId), clientLead]
     ) : { rowCount: 0, rows: [] };
 
     if (provRes.rowCount) {
