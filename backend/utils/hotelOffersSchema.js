@@ -96,6 +96,33 @@ async function ensureHotelOfferTablesOnce() {
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_inventory_overrides_lookup ON hotel_inventory_overrides(rate_id,stay_date)`);
   await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_room_inventory_pools (
+      id BIGSERIAL PRIMARY KEY,
+      hotel_id INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
+      room_type TEXT NOT NULL,
+      base_inventory INTEGER NOT NULL DEFAULT 0 CHECK (base_inventory >= 0),
+      active BOOLEAN NOT NULL DEFAULT true,
+      created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      UNIQUE (hotel_id, room_type)
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_room_inventory_pools_lookup ON hotel_room_inventory_pools(hotel_id,room_type)`);
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS hotel_room_inventory_overrides (
+      id BIGSERIAL PRIMARY KEY,
+      pool_id BIGINT NOT NULL REFERENCES hotel_room_inventory_pools(id) ON DELETE CASCADE,
+      stay_date DATE NOT NULL,
+      inventory INTEGER CHECK (inventory IS NULL OR inventory >= 0),
+      stop_sell BOOLEAN NOT NULL DEFAULT false,
+      note TEXT,
+      created_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
+      UNIQUE (pool_id, stay_date)
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_room_inventory_overrides_lookup ON hotel_room_inventory_overrides(pool_id,stay_date)`);
+  await db.query(`
     CREATE OR REPLACE FUNCTION sync_hotel_inventory_reservation_status()
     RETURNS trigger AS $$
     BEGIN

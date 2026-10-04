@@ -9,6 +9,11 @@ class HotelInventoryError extends Error {
   }
 }
 
+function physicalAvailability(baseInventory, overrideInventory, used, stopSell = false) {
+  const capacity = overrideInventory == null ? Number(baseInventory) : Number(overrideInventory);
+  return stopSell ? 0 : Math.max(0, capacity - Number(used || 0));
+}
+
 function reservationLines(details, providerId) {
   const quotes = Array.isArray(details?.hotel_quotes) ? details.hotel_quotes : [];
   const unique = new Map();
@@ -43,8 +48,8 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
     await client.query('BEGIN');
     const rateIds = [...new Set(requested.map((item) => item.rateId))];
     const { rows: rates } = await client.query(
-      `SELECT r.id,r.offer_id,r.date_from::text,r.date_to::text,r.allotment,
-              o.provider_id,o.status AS offer_status,o.valid_from::text,o.valid_to::text
+      `SELECT r.id,r.offer_id,r.room_type,r.date_from::text,r.date_to::text,r.allotment,
+              o.hotel_id,o.provider_id,o.status AS offer_status,o.valid_from::text,o.valid_to::text
          FROM hotel_offer_rates r
          JOIN hotel_offers o ON o.id=r.offer_id
         WHERE r.id=ANY($1::int[])
@@ -53,6 +58,17 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
       [rateIds]
     );
     const rateMap = new Map(rates.map((rate) => [Number(rate.id), rate]));
+    const poolKeys = [...new Set(rates.map((rate) => `${rate.hotel_id}:${String(rate.room_type).toLowerCase()}`))];
+    const hotelIds = [...new Set(rates.map((rate) => Number(rate.hotel_id)))];
+    const roomTypes = [...new Set(rates.map((rate) => String(rate.room_type).toLowerCase()))];
+    const { rows: poolRows } = await client.query(
+      `SELECT id,hotel_id,room_type,base_inventory
+         FROM hotel_room_inventory_pools
+        WHERE hotel_id=ANY($1::int[]) AND LOWER(room_type)=ANY($2::text[]) AND active=true
+        ORDER BY id FOR UPDATE`,
+      [hotelIds, roomTypes]
+    );
+    const pools = new Map(poolRows.map((row) => [`${row.hotel_id}:${String(row.room_type).toLowerCase()}`, row]));
     const { rows: overrideRows } = await client.query(
       `SELECT rate_id,stay_date::text AS stay_date,allotment,stop_sell
          FROM hotel_inventory_overrides
@@ -69,6 +85,54 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
       [rateIds, bookingId]
     );
     const occupied = new Map(occupiedRows.map((row) => [`${row.rate_id}:${row.stay_date}`, Number(row.quantity || 0)]));
+    const poolIds = poolRows.map((row) => Number(row.id));
+    const dates = [...new Set(requested.map((item) => item.date))];
+    const poolOverrides = new Map();
+    if (poolIds.length) {
+      const { rows } = await client.query(
+        `SELECT pool_id,stay_date::text AS stay_date,inventory,stop_sell
+           FROM hotel_room_inventory_overrides
+          WHERE pool_id=ANY($1::bigint[]) AND stay_date=ANY($2::date[])`,
+        [poolIds, dates]
+      );
+      for (const row of rows) poolOverrides.set(`${row.pool_id}:${row.stay_date}`, row);
+    }
+    const physicalOccupied = new Map();
+    if (poolKeys.length) {
+      const { rows } = await client.query(
+        `SELECT o.hotel_id,LOWER(r.room_type) AS room_type,hir.stay_date::text AS stay_date,
+                COALESCE(SUM(hir.quantity),0)::int AS quantity
+           FROM hotel_inventory_reservations hir
+           JOIN hotel_offer_rates r ON r.id=hir.rate_id
+           JOIN hotel_offers o ON o.id=r.offer_id
+          WHERE o.hotel_id=ANY($1::int[]) AND LOWER(r.room_type)=ANY($2::text[])
+            AND hir.stay_date=ANY($3::date[]) AND hir.booking_id<>$4
+            AND (hir.status='confirmed' OR (hir.status='held' AND hir.expires_at>NOW()))
+          GROUP BY o.hotel_id,LOWER(r.room_type),hir.stay_date`,
+        [hotelIds, roomTypes, dates, bookingId]
+      );
+      for (const row of rows) physicalOccupied.set(`${row.hotel_id}:${row.room_type}:${row.stay_date}`, Number(row.quantity || 0));
+    }
+    const physicalRequested = new Map();
+    for (const item of requested) {
+      const rate = rateMap.get(item.rateId);
+      if (!rate) continue;
+      const key = `${rate.hotel_id}:${String(rate.room_type).toLowerCase()}:${item.date}`;
+      physicalRequested.set(key, (physicalRequested.get(key) || 0) + item.quantity);
+    }
+    for (const [key, quantity] of physicalRequested) {
+      const [hotelId, roomType, date] = key.split(':');
+      const pool = pools.get(`${hotelId}:${roomType}`);
+      if (!pool) continue;
+      const override = poolOverrides.get(`${pool.id}:${date}`);
+      const used = physicalOccupied.get(key) || 0;
+      const available = physicalAvailability(pool.base_inventory, override?.inventory, used, override?.stop_sell === true);
+      if (quantity > available) {
+        throw new HotelInventoryError(override?.stop_sell === true ? 'hotel_stop_sell' : 'hotel_inventory_exhausted', {
+          hotel_id: Number(hotelId), room_type: pool.room_type, date, requested: quantity, available,
+        });
+      }
+    }
     const reserved = [];
     for (const item of requested) {
       const rate = rateMap.get(item.rateId);
@@ -112,4 +176,4 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
   }
 }
 
-module.exports = { HotelInventoryError, reserveHotelInventory, reservationLines };
+module.exports = { HotelInventoryError, reserveHotelInventory, reservationLines, physicalAvailability };

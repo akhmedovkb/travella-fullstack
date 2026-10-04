@@ -68,6 +68,12 @@ function canEditOffer(req, offer) {
   return isAdmin(req.user) || Number(offer?.provider_id) === Number(req.user?.id);
 }
 
+async function canManageHotelInventory(req, hotelId) {
+  if (isAdmin(req.user)) return true;
+  const { rows } = await db.query(`SELECT provider_id FROM hotels WHERE id=$1 LIMIT 1`, [hotelId]);
+  return Number(rows[0]?.provider_id) === Number(req.user?.id);
+}
+
 function actorRole(req) {
   return isAdmin(req.user) ? 'admin' : (rolesOf(req.user)[0] || 'provider');
 }
@@ -82,6 +88,154 @@ async function addOfferEvent(client, req, offerId, action, fromStatus, toStatus,
 }
 
 router.use(canUseOffers);
+
+router.get('/inventory/rooms', async (req, res, next) => {
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id);
+    if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
+    if (!(await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
+    const { rows } = await db.query(
+      `SELECT id,hotel_id,room_type,base_inventory,active,created_at,updated_at
+         FROM hotel_room_inventory_pools
+        WHERE hotel_id=$1
+        ORDER BY active DESC,room_type,id`,
+      [hotelId]
+    );
+    return res.json({ items: rows });
+  } catch (error) { return next(error); }
+});
+
+router.put('/inventory/rooms', async (req, res, next) => {
+  let client;
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id);
+    if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
+    if (!(await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
+    const items = (Array.isArray(req.body?.items) ? req.body.items : []).map((item) => ({
+      room_type: String(item?.room_type || '').trim(),
+      base_inventory: Math.trunc(Number(item?.base_inventory)),
+      active: item?.active !== false,
+    }));
+    const keys = items.map((item) => item.room_type.toLowerCase());
+    if (!items.length || items.length > 100 || items.some((item) => !item.room_type || item.room_type.length > 120
+      || !Number.isInteger(item.base_inventory) || item.base_inventory < 0) || new Set(keys).size !== keys.length) {
+      return res.status(400).json({ error: 'bad_room_inventory_rows' });
+    }
+    client = await db.connect();
+    await client.query('BEGIN');
+    for (const item of items) {
+      const updated = await client.query(
+        `UPDATE hotel_room_inventory_pools
+            SET room_type=$2,base_inventory=$3,active=$4,updated_at=NOW()
+          WHERE hotel_id=$1 AND LOWER(room_type)=LOWER($2)
+          RETURNING id`,
+        [hotelId, item.room_type, item.base_inventory, item.active]
+      );
+      if (!updated.rowCount) {
+        await client.query(
+          `INSERT INTO hotel_room_inventory_pools (hotel_id,room_type,base_inventory,active) VALUES ($1,$2,$3,$4)`,
+          [hotelId, item.room_type, item.base_inventory, item.active]
+        );
+      }
+    }
+    await client.query(
+      `UPDATE hotel_room_inventory_pools SET active=false,updated_at=NOW()
+        WHERE hotel_id=$1 AND NOT (LOWER(room_type)=ANY($2::text[]))`,
+      [hotelId, keys]
+    );
+    await client.query('COMMIT');
+    const { rows } = await db.query(
+      `SELECT id,hotel_id,room_type,base_inventory,active,created_at,updated_at
+         FROM hotel_room_inventory_pools WHERE hotel_id=$1 ORDER BY active DESC,room_type,id`,
+      [hotelId]
+    );
+    return res.json({ ok: true, items: rows });
+  } catch (error) {
+    if (client) try { await client.query('ROLLBACK'); } catch {}
+    return next(error);
+  } finally { client?.release(); }
+});
+
+router.get('/inventory/rooms/:poolId/calendar', async (req, res, next) => {
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id); const poolId = positiveInt(req.params.poolId);
+    if (!hotelId || !poolId) return res.status(400).json({ error: 'bad_inventory_pool' });
+    if (!(await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
+    const from = isoDate(req.query.from); const to = isoDate(req.query.to);
+    if (!from || !to || from > to) return res.status(400).json({ error: 'bad_dates' });
+    if ((new Date(`${to}T00:00:00Z`) - new Date(`${from}T00:00:00Z`)) / 86400000 > 366) {
+      return res.status(400).json({ error: 'inventory_range_too_large' });
+    }
+    const poolResult = await db.query(
+      `SELECT id,hotel_id,room_type,base_inventory,active FROM hotel_room_inventory_pools WHERE id=$1 AND hotel_id=$2 LIMIT 1`,
+      [poolId, hotelId]
+    );
+    if (!poolResult.rowCount) return res.status(404).json({ error: 'inventory_pool_not_found' });
+    const pool = poolResult.rows[0];
+    const { rows } = await db.query(
+      `SELECT d::date::text AS date,ov.inventory,ov.stop_sell,ov.note,
+              COALESCE(SUM(hir.quantity) FILTER (WHERE hir.status='held' AND hir.expires_at>NOW()),0)::int AS held,
+              COALESCE(SUM(hir.quantity) FILTER (WHERE hir.status='confirmed'),0)::int AS confirmed
+         FROM generate_series($3::date,$4::date,INTERVAL '1 day') d
+         LEFT JOIN hotel_room_inventory_overrides ov ON ov.pool_id=$1 AND ov.stay_date=d::date
+         LEFT JOIN hotel_inventory_reservations hir ON hir.stay_date=d::date
+           AND hir.rate_id IN (
+             SELECT r.id FROM hotel_offer_rates r JOIN hotel_offers o ON o.id=r.offer_id
+              WHERE o.hotel_id=$2 AND LOWER(r.room_type)=LOWER($5)
+           )
+        GROUP BY d,ov.inventory,ov.stop_sell,ov.note ORDER BY d`,
+      [poolId, hotelId, from, to, pool.room_type]
+    );
+    return res.json({ pool, items: rows.map((row) => {
+      const effective = row.inventory == null ? Number(pool.base_inventory) : Number(row.inventory);
+      const used = Number(row.held || 0) + Number(row.confirmed || 0);
+      return { ...row, effective_inventory: effective, available: row.stop_sell ? 0 : Math.max(0, effective - used) };
+    }) });
+  } catch (error) { return next(error); }
+});
+
+router.put('/inventory/rooms/:poolId/calendar', async (req, res, next) => {
+  let client;
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id); const poolId = positiveInt(req.params.poolId);
+    if (!hotelId || !poolId) return res.status(400).json({ error: 'bad_inventory_pool' });
+    if (!(await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
+    const poolResult = await db.query(`SELECT id FROM hotel_room_inventory_pools WHERE id=$1 AND hotel_id=$2 LIMIT 1`, [poolId, hotelId]);
+    if (!poolResult.rowCount) return res.status(404).json({ error: 'inventory_pool_not_found' });
+    const items = (Array.isArray(req.body?.items) ? req.body.items : []).map((item) => ({
+      date: isoDate(item?.date),
+      inventory: item?.inventory === '' || item?.inventory == null ? null : Math.trunc(Number(item.inventory)),
+      stop_sell: item?.stop_sell === true,
+      note: String(item?.note || '').trim().slice(0, 500),
+    }));
+    if (!items.length || items.length > 367 || items.some((item) => !item.date || (item.inventory != null && (!Number.isInteger(item.inventory) || item.inventory < 0)))) {
+      return res.status(400).json({ error: 'bad_inventory_rows' });
+    }
+    client = await db.connect(); await client.query('BEGIN');
+    for (const item of items) {
+      if (item.inventory == null && !item.stop_sell && !item.note) {
+        await client.query(`DELETE FROM hotel_room_inventory_overrides WHERE pool_id=$1 AND stay_date=$2`, [poolId, item.date]);
+      } else {
+        await client.query(
+          `INSERT INTO hotel_room_inventory_overrides (pool_id,stay_date,inventory,stop_sell,note)
+           VALUES ($1,$2,$3,$4,$5)
+           ON CONFLICT (pool_id,stay_date) DO UPDATE SET
+             inventory=EXCLUDED.inventory,stop_sell=EXCLUDED.stop_sell,note=EXCLUDED.note,updated_at=NOW()`,
+          [poolId, item.date, item.inventory, item.stop_sell, item.note || null]
+        );
+      }
+    }
+    await client.query('COMMIT');
+    return res.json({ ok: true, count: items.length });
+  } catch (error) {
+    if (client) try { await client.query('ROLLBACK'); } catch {}
+    return next(error);
+  } finally { client?.release(); }
+});
 
 router.get('/', async (req, res, next) => {
   try {

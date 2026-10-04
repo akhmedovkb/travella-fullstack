@@ -60,6 +60,95 @@ function offerSubmitError(error) {
   return error?.message || "Не удалось отправить предложение на модерацию";
 }
 
+function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage }) {
+  const [pools, setPools] = useState([]);
+  const [activePool, setActivePool] = useState(null);
+  const [calendar, setCalendar] = useState([]);
+  const [from, setFrom] = useState(todayIso());
+  const [to, setTo] = useState(() => plusDaysIso(todayIso(), 30));
+  const [busy, setBusy] = useState(false);
+
+  const loadPools = useCallback(async () => {
+    try {
+      const data = await apiGet(`/api/hotels/${hotelId}/offers/inventory/rooms`, apiRole);
+      setPools((data?.items || []).filter((item) => item.active !== false).map((item) => ({ ...item, base_inventory: Number(item.base_inventory || 0) })));
+    } catch (error) {
+      if (error?.status !== 403) onMessage(error?.message || "Не удалось загрузить номерной фонд");
+    }
+  }, [hotelId, apiRole, onMessage]);
+
+  useEffect(() => { loadPools(); }, [loadPools]);
+
+  function addPool(roomType = "", baseInventory = 0) {
+    const normalized = String(roomType || "").trim();
+    if (normalized && pools.some((item) => item.room_type.toLowerCase() === normalized.toLowerCase())) return;
+    setPools((items) => [...items, { room_type: normalized, base_inventory: Math.max(0, Number(baseInventory) || 0), active: true }]);
+  }
+
+  function updatePool(index, key, value) {
+    setPools((items) => items.map((item, i) => i === index ? { ...item, [key]: value } : item));
+  }
+
+  async function savePools() {
+    if (!pools.length || pools.some((item) => !String(item.room_type || "").trim())) return onMessage("Укажите тип каждого номера");
+    setBusy(true);
+    try {
+      const data = await apiPut(`/api/hotels/${hotelId}/offers/inventory/rooms`, {
+        items: pools.map((item) => ({ room_type: item.room_type.trim(), base_inventory: Number(item.base_inventory), active: true })),
+      }, apiRole);
+      setPools((data?.items || []).filter((item) => item.active !== false));
+      onMessage("Единый номерной фонд сохранён");
+    } catch (error) { onMessage(error?.message || "Не удалось сохранить номерной фонд"); }
+    finally { setBusy(false); }
+  }
+
+  async function openCalendar(pool, nextFrom = from, nextTo = to) {
+    if (!pool?.id) return onMessage("Сначала сохраните номерной фонд");
+    setBusy(true);
+    try {
+      const data = await apiGet(`/api/hotels/${hotelId}/offers/inventory/rooms/${pool.id}/calendar?from=${nextFrom}&to=${nextTo}`, apiRole);
+      setActivePool(data?.pool || pool); setFrom(nextFrom); setTo(nextTo);
+      setCalendar((data?.items || []).map((item) => ({ ...item, inventory: item.inventory ?? "", note: item.note || "" })));
+    } catch (error) { onMessage(error?.message || "Не удалось загрузить календарь фонда"); }
+    finally { setBusy(false); }
+  }
+
+  async function saveCalendar() {
+    if (!activePool) return;
+    setBusy(true);
+    try {
+      await apiPut(`/api/hotels/${hotelId}/offers/inventory/rooms/${activePool.id}/calendar`, {
+        items: calendar.map((item) => ({ date: item.date, inventory: item.inventory, stop_sell: item.stop_sell === true, note: item.note })),
+      }, apiRole);
+      onMessage(`Календарь ${activePool.room_type} сохранён`);
+      await openCalendar(activePool);
+    } catch (error) { onMessage(error?.message || "Не удалось сохранить календарь фонда"); }
+    finally { setBusy(false); }
+  }
+
+  function updateDay(index, key, value) {
+    setCalendar((items) => items.map((item, i) => i === index ? { ...item, [key]: value } : item));
+  }
+
+  const suggestionMap = new Map();
+  suggestedRooms.forEach((item) => {
+    const type = String(item?.room_type || item?.type || item || "").trim();
+    if (type && !suggestionMap.has(type.toLowerCase())) suggestionMap.set(type.toLowerCase(), { type, count: Number(item?.count || item?.base_inventory || 0) });
+  });
+  const availableSuggestions = [...suggestionMap.values()]
+    .filter((suggestion) => !pools.some((item) => item.room_type.toLowerCase() === suggestion.type.toLowerCase()));
+
+  return <section className="border-t border-slate-200 bg-white py-5">
+    <div className="flex flex-wrap items-start justify-between gap-3 px-1">
+      <div><h2 className="text-lg font-black text-slate-950">Единый номерной фонд</h2><p className="text-sm text-slate-500">Физическое количество номеров. Цены, питание и резидентность используют этот общий остаток.</p></div>
+      <div className="flex flex-wrap gap-2"><button type="button" onClick={() => addPool()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black">+ Тип номера</button><button type="button" disabled={busy || !pools.length} onClick={savePools} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40">Сохранить фонд</button></div>
+    </div>
+    {availableSuggestions.length ? <div className="mt-3 flex flex-wrap items-center gap-2 px-1"><span className="text-xs font-bold text-slate-500">Добавить из карточки и тарифов:</span>{availableSuggestions.map((item) => <button key={item.type} type="button" onClick={() => addPool(item.type, item.count)} className="rounded-full border border-slate-200 px-3 py-1 text-xs font-black text-slate-700">+ {item.type}{item.count ? ` · ${item.count}` : ""}</button>)}</div> : null}
+    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[720px]"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-3">Тип номера</th><th className="p-3">Всего номеров</th><th className="p-3">Назначение</th><th className="p-3 text-right">Действия</th></tr></thead><tbody className="divide-y divide-slate-100">{pools.length ? pools.map((pool, index) => <tr key={pool.id || `new-${index}`}><td className="p-3"><input className={inputClass} value={pool.room_type} onChange={(e) => updatePool(index, "room_type", e.target.value)} placeholder="Standard DBL" /></td><td className="p-3"><input type="number" min="0" className={`${inputClass} max-w-40`} value={pool.base_inventory} onChange={(e) => updatePool(index, "base_inventory", e.target.value)} /></td><td className="p-3 text-sm text-slate-600">Общий остаток для всех тарифов и поставщиков</td><td className="p-3"><div className="flex justify-end gap-3">{pool.id ? <button type="button" onClick={() => openCalendar(pool)} className="text-sm font-black text-blue-700">Календарь</button> : null}<button type="button" onClick={() => setPools((items) => items.filter((_, i) => i !== index))} className="text-sm font-black text-rose-600">Убрать</button></div></td></tr>) : <tr><td colSpan={4} className="p-6 text-center text-sm font-semibold text-slate-500">Добавьте DBL, SGL, TRPL и другие типы номеров</td></tr>}</tbody></table></div>
+    {activePool ? <div className="mt-5 border-t border-slate-200 pt-4"><div className="flex flex-wrap items-end justify-between gap-3 px-1"><div><h3 className="font-black text-slate-950">Наличие: {activePool.room_type}</h3><p className="text-sm text-slate-500">Пустое значение наследует базовый фонд {activePool.base_inventory}. Stop-sale закрывает продажи на дату.</p></div><div className="flex flex-wrap items-end gap-2"><Field label="С"><input type="date" className={inputClass} value={from} onChange={(e) => setFrom(e.target.value)} /></Field><Field label="До"><input type="date" className={inputClass} value={to} onChange={(e) => setTo(e.target.value)} /></Field><button type="button" disabled={busy} onClick={() => openCalendar(activePool)} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-black">Показать</button><button type="button" disabled={busy} onClick={saveCalendar} className="h-10 rounded-lg bg-orange-600 px-4 text-sm font-black text-white">Сохранить</button><button type="button" onClick={() => { setActivePool(null); setCalendar([]); }} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-black">Закрыть</button></div></div><div className="mt-3 max-h-[480px] overflow-auto"><table className="w-full min-w-[900px]"><thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Дата</th><th className="p-2">Фонд на дату</th><th className="p-2">Stop-sale</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Комментарий</th></tr></thead><tbody className="divide-y divide-slate-100">{calendar.map((item, index) => <tr key={item.date} className={item.stop_sell ? "bg-rose-50" : item.available <= 2 ? "bg-amber-50" : ""}><td className="p-2 text-sm font-black">{item.date}</td><td className="p-2"><input type="number" min="0" className={`${inputClass} max-w-32`} value={item.inventory} onChange={(e) => updateDay(index, "inventory", e.target.value)} placeholder={String(activePool.base_inventory)} /></td><td className="p-2"><input type="checkbox" checked={item.stop_sell === true} onChange={(e) => updateDay(index, "stop_sell", e.target.checked)} /></td><td className="p-2 font-bold text-amber-700">{item.held || 0}</td><td className="p-2 font-bold text-emerald-700">{item.confirmed || 0}</td><td className="p-2 font-black">{item.stop_sell ? 0 : item.available}</td><td className="p-2"><input className={inputClass} value={item.note} onChange={(e) => updateDay(index, "note", e.target.value)} placeholder="Ремонт, блок, мероприятие..." /></td></tr>)}</tbody></table></div></div> : null}
+  </section>;
+}
+
 export default function AdminHotelOffers({ scope = "admin" }) {
   const { id } = useParams();
   const hotelId = Number(id);
@@ -292,15 +381,22 @@ export default function AdminHotelOffers({ scope = "admin" }) {
           </table>
         </section>
 
+        <RoomInventoryManager
+          hotelId={hotelId}
+          apiRole={apiRole}
+          suggestedRooms={[...(Array.isArray(hotel?.rooms) ? hotel.rooms : []), ...rates.map((rate) => ({ room_type: rate.room_type }))]}
+          onMessage={setMessage}
+        />
+
         {selected ? <section className="border-t border-slate-200 bg-white pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-1"><div><h2 className="text-lg font-black">Тарифы: {selected.provider_name}</h2><p className="text-sm text-slate-500">Одна строка описывает цену за номер и ночь для периода.</p></div><div className="flex gap-2"><button type="button" onClick={() => setRates((rows) => [...rows, { ...emptyRate, date_from: selected.valid_from || "", date_to: selected.valid_to || "" }])} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black">+ Строка</button><button type="button" disabled={saving} onClick={saveRates} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50">Сохранить тарифы</button></div></div>
-          <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[1400px] border-collapse"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Номер</th><th className="p-2">Питание</th><th className="p-2">Резидентность</th><th className="p-2">С</th><th className="p-2">До</th><th className="p-2">Цена</th><th className="p-2">Квота</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Мин. ночей</th><th className="p-2">Возвратный</th><th className="p-2"></th></tr></thead><tbody className="divide-y divide-slate-100">{rates.map((rate, index) => <tr key={rate.id || index}>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1"><div><h2 className="text-lg font-black">Тарифы: {selected.provider_name}</h2><p className="text-sm text-slate-500">Цена за номер и ночь. Лимит поставщика ограничивает его продажи, но не увеличивает общий фонд отеля.</p></div><div className="flex gap-2"><button type="button" onClick={() => setRates((rows) => [...rows, { ...emptyRate, date_from: selected.valid_from || "", date_to: selected.valid_to || "" }])} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black">+ Строка</button><button type="button" disabled={saving} onClick={saveRates} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50">Сохранить тарифы</button></div></div>
+          <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[1500px] border-collapse"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Номер</th><th className="p-2">Питание</th><th className="p-2">Резидентность</th><th className="p-2">С</th><th className="p-2">До</th><th className="p-2">Цена</th><th className="p-2">Лимит поставщика</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Мин. ночей</th><th className="p-2">Возвратный</th><th className="p-2"></th></tr></thead><tbody className="divide-y divide-slate-100">{rates.map((rate, index) => <tr key={rate.id || index}>
             <td className="p-2"><input className={inputClass} value={rate.room_type} onChange={(e) => updateRate(index, "room_type", e.target.value)} placeholder="Standard DBL" /></td>
             <td className="p-2"><select className={inputClass} value={rate.meal_plan} onChange={(e) => updateRate(index, "meal_plan", e.target.value)}>{["RO","BB","HB","FB","AI","UAI"].map((v) => <option key={v}>{v}</option>)}</select></td>
             <td className="p-2"><select className={inputClass} value={rate.residency} onChange={(e) => updateRate(index, "residency", e.target.value)}><option value="all">Все</option><option value="resident">Резидент</option><option value="non_resident">Нерезидент</option></select></td>
             <td className="p-2"><input type="date" className={inputClass} value={rate.date_from} onChange={(e) => updateRate(index, "date_from", e.target.value)} /></td><td className="p-2"><input type="date" className={inputClass} value={rate.date_to} onChange={(e) => updateRate(index, "date_to", e.target.value)} /></td>
             <td className="p-2"><input type="number" min="0" step="0.01" className={inputClass} value={rate.amount} onChange={(e) => updateRate(index, "amount", e.target.value)} /></td><td className="p-2"><input type="number" min="0" className={inputClass} value={rate.allotment} onChange={(e) => updateRate(index, "allotment", e.target.value)} placeholder="∞" /></td><td className="p-2 text-sm font-bold text-amber-700">{rate.held ?? 0}</td><td className="p-2 text-sm font-bold text-emerald-700">{rate.confirmed ?? 0}</td><td className="p-2 text-sm font-black text-slate-900">{rate.available == null ? "∞" : rate.available}</td><td className="p-2"><input type="number" min="1" className={inputClass} value={rate.min_stay} onChange={(e) => updateRate(index, "min_stay", e.target.value)} /></td>
-            <td className="p-2 text-center"><input type="checkbox" checked={rate.refundable !== false} onChange={(e) => updateRate(index, "refundable", e.target.checked)} /></td><td className="p-2"><div className="flex gap-2">{rate.id ? <button type="button" onClick={() => openRateInventory(rate)} className="text-sm font-black text-blue-700">Календарь</button> : null}<button type="button" onClick={() => setRates((rows) => rows.filter((_, i) => i !== index))} className="text-sm font-black text-rose-600">Удалить</button></div></td>
+            <td className="p-2 text-center"><input type="checkbox" checked={rate.refundable !== false} onChange={(e) => updateRate(index, "refundable", e.target.checked)} /></td><td className="p-2"><div className="flex gap-2">{rate.id ? <button type="button" onClick={() => openRateInventory(rate)} className="text-sm font-black text-blue-700">Календарь лимита</button> : null}<button type="button" onClick={() => setRates((rows) => rows.filter((_, i) => i !== index))} className="text-sm font-black text-rose-600">Удалить</button></div></td>
           </tr>)}</tbody></table></div>
           {inventoryRate ? <div className="mt-5 border-t border-slate-200 pt-4"><div className="flex flex-wrap items-end justify-between gap-3 px-1"><div><h3 className="text-base font-black">Календарь: {inventoryRate.room_type} · {inventoryRate.meal_plan}</h3><p className="text-sm text-slate-500">Пустая дневная квота наследует базовое значение тарифа.</p></div><div className="flex flex-wrap items-end gap-2"><Field label="С"><input type="date" className={inputClass} value={inventoryFrom} onChange={(e) => setInventoryFrom(e.target.value)} /></Field><Field label="До"><input type="date" className={inputClass} value={inventoryTo} onChange={(e) => setInventoryTo(e.target.value)} /></Field><button type="button" disabled={saving} onClick={() => openInventory(inventoryRate)} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-black">Показать</button><button type="button" disabled={saving} onClick={saveInventory} className="h-10 rounded-lg bg-orange-600 px-4 text-sm font-black text-white">Сохранить</button><button type="button" onClick={() => { setInventoryRate(null); setInventoryRows([]); }} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-black">Закрыть</button></div></div><div className="mt-3 max-h-[480px] overflow-auto"><table className="w-full min-w-[900px]"><thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Дата</th><th className="p-2">Дневная квота</th><th className="p-2">Стоп</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Комментарий</th></tr></thead><tbody className="divide-y divide-slate-100">{inventoryRows.map((item, index) => <tr key={item.date} className={item.stop_sell ? "bg-rose-50" : ""}><td className="p-2 text-sm font-black">{item.date}</td><td className="p-2"><input type="number" min="0" className={`${inputClass} max-w-32`} value={item.allotment} onChange={(e) => updateInventory(index, "allotment", e.target.value)} placeholder={inventoryRate.allotment == null ? "∞" : String(inventoryRate.allotment)} /></td><td className="p-2"><input type="checkbox" checked={item.stop_sell === true} onChange={(e) => updateInventory(index, "stop_sell", e.target.checked)} /></td><td className="p-2 font-bold text-amber-700">{item.held || 0}</td><td className="p-2 font-bold text-emerald-700">{item.confirmed || 0}</td><td className="p-2 font-black">{item.stop_sell ? 0 : item.available == null ? "∞" : item.available}</td><td className="p-2"><input className={inputClass} value={item.note} onChange={(e) => updateInventory(index, "note", e.target.value)} placeholder="Причина или примечание" /></td></tr>)}</tbody></table></div></div> : null}
           <div className="mt-5 border-t border-slate-200 px-1 pt-4"><h3 className="text-sm font-black text-slate-950">История предложения</h3><div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{events.length ? events.slice(0, 12).map((item) => <div key={item.id} className="border-l-2 border-slate-200 pl-3 text-xs text-slate-600"><div className="font-black text-slate-800">{actionLabels[item.action] || item.action}</div><div>{item.from_status ? `${statusLabel(item.from_status)} → ` : ""}{item.to_status ? statusLabel(item.to_status) : ""}</div>{item.note ? <div className="mt-1 text-rose-600">{item.note}</div> : null}<div className="mt-1 text-slate-400">{new Date(item.created_at).toLocaleString("ru-RU")}</div></div>) : <div className="text-sm text-slate-500">История пока пуста</div>}</div></div>

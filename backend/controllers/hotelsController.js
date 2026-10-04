@@ -256,6 +256,53 @@ async function quoteHotel(req, res) {
         if (line.available != null && line.quantity > line.available) warnings.push(`room_stock_exceeded:${line.room_type}:${line.date}`);
         if (dates.length < Number(line.min_stay || 1)) warnings.push(`min_stay_not_met:${line.room_type}:${line.min_stay}`);
       }
+
+      const requestedTypes = [...new Set(lines.map((line) => String(line.room_type).toLowerCase()))];
+      const { rows: poolRows } = await db.query(
+        `SELECT id,room_type,base_inventory
+           FROM hotel_room_inventory_pools
+          WHERE hotel_id=$1 AND LOWER(room_type)=ANY($2::text[]) AND active=true`,
+        [hotelId, requestedTypes]
+      );
+      const pools = new Map(poolRows.map((row) => [String(row.room_type).toLowerCase(), row]));
+      if (poolRows.length) {
+        const poolIds = poolRows.map((row) => Number(row.id));
+        const { rows: physicalReservationRows } = await db.query(
+          `SELECT LOWER(r.room_type) AS room_type,hir.stay_date::text AS stay_date,
+                  COALESCE(SUM(hir.quantity),0)::int AS reserved
+             FROM hotel_inventory_reservations hir
+             JOIN hotel_offer_rates r ON r.id=hir.rate_id
+             JOIN hotel_offers o ON o.id=r.offer_id
+            WHERE o.hotel_id=$1 AND LOWER(r.room_type)=ANY($2::text[])
+              AND hir.stay_date=ANY($3::date[])
+              AND (hir.status='confirmed' OR (hir.status='held' AND hir.expires_at>NOW()))
+            GROUP BY LOWER(r.room_type),hir.stay_date`,
+          [hotelId, requestedTypes, dates]
+        );
+        const physicalReserved = new Map(physicalReservationRows.map((row) => [`${row.room_type}:${row.stay_date}`, Number(row.reserved || 0)]));
+        const { rows: physicalOverrideRows } = await db.query(
+          `SELECT pool_id,stay_date::text AS stay_date,inventory,stop_sell
+             FROM hotel_room_inventory_overrides
+            WHERE pool_id=ANY($1::bigint[]) AND stay_date=ANY($2::date[])`,
+          [poolIds, dates]
+        );
+        const physicalOverrides = new Map(physicalOverrideRows.map((row) => [`${row.pool_id}:${row.stay_date}`, row]));
+        for (const line of lines) {
+          const roomKey = String(line.room_type).toLowerCase();
+          const pool = pools.get(roomKey);
+          if (!pool) continue;
+          const override = physicalOverrides.get(`${pool.id}:${line.date}`);
+          const capacity = override?.inventory == null ? Number(pool.base_inventory) : Number(override.inventory);
+          const reserved = physicalReserved.get(`${roomKey}:${line.date}`) || 0;
+          const physicalAvailable = override?.stop_sell === true ? 0 : Math.max(0, capacity - reserved);
+          line.physical_inventory = capacity;
+          line.physical_available = physicalAvailable;
+          line.available = line.available == null ? physicalAvailable : Math.min(line.available, physicalAvailable);
+          line.stop_sell = line.stop_sell || override?.stop_sell === true;
+          if (override?.stop_sell === true) warnings.push(`stop_sell:${line.room_type}:${line.date}`);
+          if (line.quantity > physicalAvailable) warnings.push(`room_stock_exceeded:${line.room_type}:${line.date}`);
+        }
+      }
     }
 
     const roomsSubtotal = lines.reduce((sum, line) => sum + line.subtotal, 0);
