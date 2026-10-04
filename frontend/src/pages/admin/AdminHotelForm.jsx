@@ -753,7 +753,7 @@ const inputCls = (season) =>
         tSuccess(t("hotel_saved") || "Отель сохранён");
         const id = created?.id || "";
         if (typeof onSaved === "function") onSaved(id);
-        else navigate(`/admin/hotels/${id}/edit`);
+        else navigate(isAdminLike ? `/admin/hotels/${id}/edit` : `/provider/hotels/${id}/offer`);
       }
     } catch (e) {
       console.error(e);

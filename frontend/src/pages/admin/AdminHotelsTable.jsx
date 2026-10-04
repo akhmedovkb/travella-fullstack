@@ -284,10 +284,10 @@ export default function AdminHotelsTable({
               </button>
             ) : (
               <Link
-                to="/admin/hotels/new"
+                to={providerMode ? "/dashboard/hotels/new" : "/admin/hotels/new"}
                 className="inline-flex items-center justify-center rounded-2xl bg-orange-600 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-orange-700"
               >
-                + Новый отель
+                {providerMode ? "+ Добавить отель" : "+ Новый отель"}
               </Link>
             )}
           </div>

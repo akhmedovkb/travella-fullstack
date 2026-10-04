@@ -717,6 +717,12 @@ async function createHotel(req, res) {
   try {
     const p = req.body || {};
     const now = new Date();
+    const actorId = parseIntSafe(req.user?.id) ?? null;
+    let actorProviderType = '';
+    if (!isAdminLike(req.user) && actorId) {
+      const actorResult = await db.query(`SELECT type FROM providers WHERE id=$1 LIMIT 1`, [actorId]);
+      actorProviderType = String(actorResult.rows[0]?.type || req.user?.type || '').toLowerCase();
+    }
 
     try {
       const support = await tableHasColumns("hotels", [
@@ -746,7 +752,7 @@ async function createHotel(req, res) {
       if (support.provider_id) {
         const provId = isAdminLike(req.user)
           ? (parseIntSafe(p.provider_id) ?? parseIntSafe(req.user?.id) ?? null)
-          : (parseIntSafe(req.user?.id) ?? null);
+          : (actorProviderType === 'hotel' ? actorId : null);
         cols.push("provider_id");
         vals.push(provId);
       }
@@ -757,7 +763,23 @@ async function createHotel(req, res) {
       const sql = `INSERT INTO hotels (${cols.join(",")}) VALUES (${placeholders}) RETURNING id`;
 
       const { rows } = await db.query(sql, vals);
-      return res.json({ id: rows[0].id });
+      const hotelId = rows[0].id;
+      let offerId = null;
+      if (!isAdminLike(req.user) && actorId) {
+        await ensureHotelOfferTables();
+        const supplierType = actorProviderType === 'hotel' ? 'hotel'
+          : ['tour_operator','dmc','agency','supplier'].includes(actorProviderType) ? actorProviderType : 'agency';
+        const offerResult = await db.query(
+          `INSERT INTO hotel_offers (hotel_id,provider_id,supplier_type,is_direct,currency,status,title)
+           VALUES ($1,$2,$3,$4,$5,'draft',$6)
+           ON CONFLICT (hotel_id,provider_id) DO UPDATE SET updated_at=NOW()
+           RETURNING id`,
+          [hotelId, actorId, supplierType, actorProviderType === 'hotel', String(p.currency || 'UZS').toUpperCase(),
+            actorProviderType === 'hotel' ? 'Прямой тариф отеля' : 'Предложение поставщика']
+        );
+        offerId = offerResult.rows[0]?.id || null;
+      }
+      return res.json({ id: hotelId, offer_id: offerId });
     } catch (err) {
       console.warn("[hotels.create] legacy fallback:", err?.message);
       const sqlFallback = `

@@ -236,6 +236,14 @@ export default function App() {
               }
             />
             <Route
+              path="/dashboard/hotels/new"
+              element={
+                <PrivateRoute>
+                  <AdminHotelForm />
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/dashboard/requests"
               element={
                 <PrivateRoute>
