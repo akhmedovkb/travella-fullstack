@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const {
   buildAdminText,
   buildProviderText,
+  resolveHotelProviderTelegram,
 } = require('../utils/hotelOfferModerationNotifications');
 
 const offer = {
@@ -34,4 +35,34 @@ test('builds approval notification without rejection copy', () => {
   const text = buildProviderText(offer, 'approve');
   assert.match(text, /опубликовано/);
   assert.doesNotMatch(text, /Причина/);
+});
+
+test('routes hotel notifications through the main Travella bot', () => {
+  const destination = resolveHotelProviderTelegram({
+    telegram_refused_chat_id: '111',
+    telegram_web_chat_id: '222',
+    telegram_chat_id: '333',
+  }, {
+    TELEGRAM_BOT_TOKEN: 'main-token',
+    TELEGRAM_CLIENT_BOT_TOKEN: 'refused-token',
+  });
+
+  assert.deepEqual(destination, {
+    ok: true,
+    chatId: '222',
+    token: 'main-token',
+  });
+});
+
+test('does not fall back to the refused-products bot for hotel notifications', () => {
+  const destination = resolveHotelProviderTelegram({
+    telegram_refused_chat_id: '111',
+  }, {
+    TELEGRAM_CLIENT_BOT_TOKEN: 'refused-token',
+  });
+
+  assert.deepEqual(destination, {
+    ok: false,
+    reason: 'provider_main_chat_missing',
+  });
 });
