@@ -170,7 +170,7 @@ async function quoteHotel(req, res) {
     if (!requestedRooms.length) warnings.push('room_required');
     if (selectedOffer) {
       const rateResult = await db.query(
-        `SELECT id,room_type,meal_plan,residency,date_from::text,date_to::text,
+        `SELECT id,inventory_pool_id,room_type,meal_plan,residency,date_from::text,date_to::text,
                 amount::numeric,allotment,min_stay,refundable
            FROM hotel_offer_rates
           WHERE offer_id=$1 AND meal_plan=$2
@@ -190,7 +190,7 @@ async function quoteHotel(req, res) {
           const allotment = rate.allotment == null ? null : Math.max(0, Math.trunc(Number(rate.allotment)));
           const unitAmount = quoteNumber(rate.amount, 0);
           lines.push({
-            date, rate_id: rate.id, room_type: requested.type, meal_plan: mealPlan,
+            date, rate_id: rate.id, inventory_pool_id: rate.inventory_pool_id, room_type: requested.type, meal_plan: mealPlan,
             residency: rate.residency, quantity: requested.quantity, unit_amount: unitAmount,
             subtotal: unitAmount * requested.quantity, refundable: rate.refundable !== false,
             min_stay: Number(rate.min_stay || 1), allotment,
@@ -257,29 +257,29 @@ async function quoteHotel(req, res) {
         if (dates.length < Number(line.min_stay || 1)) warnings.push(`min_stay_not_met:${line.room_type}:${line.min_stay}`);
       }
 
-      const requestedTypes = [...new Set(lines.map((line) => String(line.room_type).toLowerCase()))];
-      const { rows: poolRows } = await db.query(
+      const requestedPoolIds = [...new Set(lines.map((line) => Number(line.inventory_pool_id)).filter((id) => id > 0))];
+      const { rows: poolRows } = requestedPoolIds.length ? await db.query(
         `SELECT id,room_type,base_inventory
            FROM hotel_room_inventory_pools
-          WHERE hotel_id=$1 AND LOWER(room_type)=ANY($2::text[]) AND active=true`,
-        [hotelId, requestedTypes]
-      );
-      const pools = new Map(poolRows.map((row) => [String(row.room_type).toLowerCase(), row]));
+          WHERE hotel_id=$1 AND id=ANY($2::bigint[]) AND active=true`,
+        [hotelId, requestedPoolIds]
+      ) : { rows: [] };
+      const pools = new Map(poolRows.map((row) => [Number(row.id), row]));
       if (poolRows.length) {
         const poolIds = poolRows.map((row) => Number(row.id));
         const { rows: physicalReservationRows } = await db.query(
-          `SELECT LOWER(r.room_type) AS room_type,hir.stay_date::text AS stay_date,
+          `SELECT r.inventory_pool_id,hir.stay_date::text AS stay_date,
                   COALESCE(SUM(hir.quantity),0)::int AS reserved
              FROM hotel_inventory_reservations hir
              JOIN hotel_offer_rates r ON r.id=hir.rate_id
              JOIN hotel_offers o ON o.id=r.offer_id
-            WHERE o.hotel_id=$1 AND LOWER(r.room_type)=ANY($2::text[])
+            WHERE o.hotel_id=$1 AND r.inventory_pool_id=ANY($2::bigint[])
               AND hir.stay_date=ANY($3::date[])
               AND (hir.status='confirmed' OR (hir.status='held' AND hir.expires_at>NOW()))
-            GROUP BY LOWER(r.room_type),hir.stay_date`,
-          [hotelId, requestedTypes, dates]
+            GROUP BY r.inventory_pool_id,hir.stay_date`,
+          [hotelId, requestedPoolIds, dates]
         );
-        const physicalReserved = new Map(physicalReservationRows.map((row) => [`${row.room_type}:${row.stay_date}`, Number(row.reserved || 0)]));
+        const physicalReserved = new Map(physicalReservationRows.map((row) => [`${row.inventory_pool_id}:${row.stay_date}`, Number(row.reserved || 0)]));
         const { rows: physicalOverrideRows } = await db.query(
           `SELECT pool_id,stay_date::text AS stay_date,inventory,stop_sell
              FROM hotel_room_inventory_overrides
@@ -288,12 +288,11 @@ async function quoteHotel(req, res) {
         );
         const physicalOverrides = new Map(physicalOverrideRows.map((row) => [`${row.pool_id}:${row.stay_date}`, row]));
         for (const line of lines) {
-          const roomKey = String(line.room_type).toLowerCase();
-          const pool = pools.get(roomKey);
+          const pool = pools.get(Number(line.inventory_pool_id));
           if (!pool) continue;
           const override = physicalOverrides.get(`${pool.id}:${line.date}`);
           const capacity = override?.inventory == null ? Number(pool.base_inventory) : Number(override.inventory);
-          const reserved = physicalReserved.get(`${roomKey}:${line.date}`) || 0;
+          const reserved = physicalReserved.get(`${pool.id}:${line.date}`) || 0;
           const physicalAvailable = override?.stop_sell === true ? 0 : Math.max(0, capacity - reserved);
           line.physical_inventory = capacity;
           line.physical_available = physicalAvailable;

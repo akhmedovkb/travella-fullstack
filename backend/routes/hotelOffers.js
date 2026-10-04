@@ -133,12 +133,20 @@ router.put('/inventory/rooms', async (req, res, next) => {
           RETURNING id`,
         [hotelId, item.room_type, item.base_inventory, item.active]
       );
+      let poolId = updated.rows[0]?.id;
       if (!updated.rowCount) {
-        await client.query(
-          `INSERT INTO hotel_room_inventory_pools (hotel_id,room_type,base_inventory,active) VALUES ($1,$2,$3,$4)`,
+        const inserted = await client.query(
+          `INSERT INTO hotel_room_inventory_pools (hotel_id,room_type,base_inventory,active) VALUES ($1,$2,$3,$4) RETURNING id`,
           [hotelId, item.room_type, item.base_inventory, item.active]
         );
+        poolId = inserted.rows[0].id;
       }
+      await client.query(
+        `UPDATE hotel_offer_rates r SET inventory_pool_id=$3,updated_at=NOW()
+          FROM hotel_offers o
+         WHERE r.offer_id=o.id AND o.hotel_id=$1 AND LOWER(r.room_type)=LOWER($2) AND r.inventory_pool_id IS NULL`,
+        [hotelId, item.room_type, poolId]
+      );
     }
     await client.query(
       `UPDATE hotel_room_inventory_pools SET active=false,updated_at=NOW()
@@ -184,10 +192,10 @@ router.get('/inventory/rooms/:poolId/calendar', async (req, res, next) => {
          LEFT JOIN hotel_inventory_reservations hir ON hir.stay_date=d::date
            AND hir.rate_id IN (
              SELECT r.id FROM hotel_offer_rates r JOIN hotel_offers o ON o.id=r.offer_id
-              WHERE o.hotel_id=$2 AND LOWER(r.room_type)=LOWER($5)
+              WHERE o.hotel_id=$2 AND r.inventory_pool_id=$1
            )
         GROUP BY d,ov.inventory,ov.stop_sell,ov.note ORDER BY d`,
-      [poolId, hotelId, from, to, pool.room_type]
+      [poolId, hotelId, from, to]
     );
     return res.json({ pool, items: rows.map((row) => {
       const effective = row.inventory == null ? Number(pool.base_inventory) : Number(row.inventory);
@@ -374,13 +382,14 @@ router.get('/:offerId/rates', async (req, res, next) => {
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
     if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
     const { rows } = await db.query(
-      `SELECT r.id,r.offer_id,r.room_type,r.meal_plan,r.residency,r.date_from::text,r.date_to::text,
+      `SELECT r.id,r.offer_id,r.inventory_pool_id,COALESCE(p.room_type,r.room_type) AS room_type,r.meal_plan,r.residency,r.date_from::text,r.date_to::text,
               r.amount::numeric,r.allotment,r.min_stay,r.refundable,r.created_at,r.updated_at,
               COALESCE(stock.held,0)::int AS held,
               COALESCE(stock.confirmed,0)::int AS confirmed,
               CASE WHEN r.allotment IS NULL THEN NULL
                    ELSE GREATEST(0,r.allotment-COALESCE(stock.held,0)-COALESCE(stock.confirmed,0))::int END AS available
          FROM hotel_offer_rates r
+         LEFT JOIN hotel_room_inventory_pools p ON p.id=r.inventory_pool_id
          LEFT JOIN LATERAL (
            SELECT COALESCE(SUM(quantity) FILTER (WHERE status='held' AND expires_at>NOW()),0) AS held,
                   COALESCE(SUM(quantity) FILTER (WHERE status='confirmed'),0) AS confirmed
@@ -406,6 +415,7 @@ router.put('/:offerId/rates', async (req, res, next) => {
     if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
     const input = Array.isArray(req.body?.items) ? req.body.items : [];
     const items = input.map((row) => ({
+      inventory_pool_id: positiveInt(row?.inventory_pool_id),
       room_type: String(row?.room_type || '').trim(),
       meal_plan: String(row?.meal_plan || 'BB').toUpperCase(),
       residency: String(row?.residency || 'all').toLowerCase(),
@@ -413,7 +423,13 @@ router.put('/:offerId/rates', async (req, res, next) => {
       amount: Number(row?.amount), allotment: row?.allotment === '' || row?.allotment == null ? null : Math.max(0, Math.trunc(Number(row.allotment))),
       min_stay: Math.max(1, Math.trunc(Number(row?.min_stay || 1))), refundable: row?.refundable !== false,
     }));
-    const invalid = items.some((row) => !row.room_type || !MEAL_PLANS.has(row.meal_plan) || !RESIDENCIES.has(row.residency)
+    const poolResult = await db.query(
+      `SELECT id,room_type FROM hotel_room_inventory_pools WHERE hotel_id=$1 AND active=true`,
+      [hotelId]
+    );
+    const poolMap = new Map(poolResult.rows.map((row) => [Number(row.id), row]));
+    const invalid = items.some((row) => !row.room_type || (poolMap.size > 0 && !poolMap.has(row.inventory_pool_id))
+      || !MEAL_PLANS.has(row.meal_plan) || !RESIDENCIES.has(row.residency)
       || !row.date_from || !row.date_to || row.date_from > row.date_to || !(row.amount > 0));
     if (invalid) return res.status(400).json({ error: 'bad_rate_rows' });
 
@@ -431,9 +447,9 @@ router.put('/:offerId/rates', async (req, res, next) => {
     for (const row of items) {
       await client.query(
         `INSERT INTO hotel_offer_rates
-          (offer_id,room_type,meal_plan,residency,date_from,date_to,amount,allotment,min_stay,refundable)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [offerId,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,row.allotment,row.min_stay,row.refundable]
+          (offer_id,inventory_pool_id,room_type,meal_plan,residency,date_from,date_to,amount,allotment,min_stay,refundable)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [offerId,row.inventory_pool_id,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,row.allotment,row.min_stay,row.refundable]
       );
     }
     await client.query(

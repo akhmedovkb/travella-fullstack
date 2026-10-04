@@ -8,7 +8,7 @@ const emptyOffer = {
 };
 
 const emptyRate = {
-  room_type: "", meal_plan: "BB", residency: "all",
+  inventory_pool_id: "", room_type: "", meal_plan: "BB", residency: "all",
   date_from: "", date_to: "", amount: "", allotment: "", min_stay: 1, refundable: true,
 };
 
@@ -60,7 +60,7 @@ function offerSubmitError(error) {
   return error?.message || "Не удалось отправить предложение на модерацию";
 }
 
-function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage }) {
+function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage, onPoolsChange }) {
   const [pools, setPools] = useState([]);
   const [activePool, setActivePool] = useState(null);
   const [calendar, setCalendar] = useState([]);
@@ -71,11 +71,12 @@ function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage
   const loadPools = useCallback(async () => {
     try {
       const data = await apiGet(`/api/hotels/${hotelId}/offers/inventory/rooms`, apiRole);
-      setPools((data?.items || []).filter((item) => item.active !== false).map((item) => ({ ...item, base_inventory: Number(item.base_inventory || 0) })));
+      const next = (data?.items || []).filter((item) => item.active !== false).map((item) => ({ ...item, base_inventory: Number(item.base_inventory || 0) }));
+      setPools(next); onPoolsChange(next);
     } catch (error) {
       if (error?.status !== 403) onMessage(error?.message || "Не удалось загрузить номерной фонд");
     }
-  }, [hotelId, apiRole, onMessage]);
+  }, [hotelId, apiRole, onMessage, onPoolsChange]);
 
   useEffect(() => { loadPools(); }, [loadPools]);
 
@@ -96,7 +97,8 @@ function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage
       const data = await apiPut(`/api/hotels/${hotelId}/offers/inventory/rooms`, {
         items: pools.map((item) => ({ room_type: item.room_type.trim(), base_inventory: Number(item.base_inventory), active: true })),
       }, apiRole);
-      setPools((data?.items || []).filter((item) => item.active !== false));
+      const next = (data?.items || []).filter((item) => item.active !== false);
+      setPools(next); onPoolsChange(next);
       onMessage("Единый номерной фонд сохранён");
     } catch (error) { onMessage(error?.message || "Не удалось сохранить номерной фонд"); }
     finally { setBusy(false); }
@@ -160,6 +162,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
   const [form, setForm] = useState(emptyOffer);
   const [selectedId, setSelectedId] = useState(null);
   const [rates, setRates] = useState([]);
+  const [roomPools, setRoomPools] = useState([]);
   const [events, setEvents] = useState([]);
   const [inventoryRate, setInventoryRate] = useState(null);
   const [inventoryRows, setInventoryRows] = useState([]);
@@ -215,7 +218,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
         apiGet(`/api/hotels/${hotelId}/offers/${offer.id}/rates`, apiRole),
         apiGet(`/api/hotels/${hotelId}/offers/${offer.id}/events`, apiRole),
       ]);
-      setRates((data?.items || []).map((rate) => ({ ...rate, amount: String(rate.amount ?? ""), allotment: rate.allotment ?? "" })));
+      setRates((data?.items || []).map((rate) => ({ ...rate, inventory_pool_id: rate.inventory_pool_id || "", amount: String(rate.amount ?? ""), allotment: rate.allotment ?? "" })));
       setEvents(eventData?.items || []);
     } catch (error) { setMessage(error?.message || "Не удалось загрузить тарифы"); }
   }
@@ -279,7 +282,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
     setSaving(true); setMessage("");
     try {
       await apiPut(`/api/hotels/${hotelId}/offers/${selected.id}/rates`, { items: rates.map((rate) => ({
-        ...rate, amount: Number(rate.amount), allotment: rate.allotment === "" ? null : Number(rate.allotment), min_stay: Number(rate.min_stay) || 1,
+        ...rate, inventory_pool_id: rate.inventory_pool_id ? Number(rate.inventory_pool_id) : null, amount: Number(rate.amount), allotment: rate.allotment === "" ? null : Number(rate.allotment), min_stay: Number(rate.min_stay) || 1,
       })) }, apiRole);
       setMessage("Тарифы сохранены. Предложение возвращено в черновик: отправьте его на модерацию.");
       await load();
@@ -386,12 +389,14 @@ export default function AdminHotelOffers({ scope = "admin" }) {
           apiRole={apiRole}
           suggestedRooms={[...(Array.isArray(hotel?.rooms) ? hotel.rooms : []), ...rates.map((rate) => ({ room_type: rate.room_type }))]}
           onMessage={setMessage}
+          onPoolsChange={setRoomPools}
         />
 
         {selected ? <section className="border-t border-slate-200 bg-white pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-1"><div><h2 className="text-lg font-black">Тарифы: {selected.provider_name}</h2><p className="text-sm text-slate-500">Цена за номер и ночь. Лимит поставщика ограничивает его продажи, но не увеличивает общий фонд отеля.</p></div><div className="flex gap-2"><button type="button" onClick={() => setRates((rows) => [...rows, { ...emptyRate, date_from: selected.valid_from || "", date_to: selected.valid_to || "" }])} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black">+ Строка</button><button type="button" disabled={saving} onClick={saveRates} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50">Сохранить тарифы</button></div></div>
-          <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[1500px] border-collapse"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Номер</th><th className="p-2">Питание</th><th className="p-2">Резидентность</th><th className="p-2">С</th><th className="p-2">До</th><th className="p-2">Цена</th><th className="p-2">Лимит поставщика</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Мин. ночей</th><th className="p-2">Возвратный</th><th className="p-2"></th></tr></thead><tbody className="divide-y divide-slate-100">{rates.map((rate, index) => <tr key={rate.id || index}>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1"><div><h2 className="text-lg font-black">Тарифы: {selected.provider_name}</h2><p className="text-sm text-slate-500">Категория — продаваемое название. Поле «Списывать из фонда» связывает её с физическим остатком.</p></div><div className="flex gap-2"><button type="button" onClick={() => setRates((rows) => [...rows, { ...emptyRate, inventory_pool_id: roomPools[0]?.id || "", date_from: selected.valid_from || "", date_to: selected.valid_to || "" }])} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black">+ Строка</button><button type="button" disabled={saving} onClick={saveRates} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50">Сохранить тарифы</button></div></div>
+          <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[1650px] border-collapse"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Категория номера</th><th className="p-2">Списывать из фонда</th><th className="p-2">Питание</th><th className="p-2">Резидентность</th><th className="p-2">С</th><th className="p-2">До</th><th className="p-2">Цена</th><th className="p-2">Лимит поставщика</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Мин. ночей</th><th className="p-2">Возвратный</th><th className="p-2"></th></tr></thead><tbody className="divide-y divide-slate-100">{rates.map((rate, index) => <tr key={rate.id || index}>
             <td className="p-2"><input className={inputClass} value={rate.room_type} onChange={(e) => updateRate(index, "room_type", e.target.value)} placeholder="Standard DBL" /></td>
+            <td className="p-2"><select className={inputClass} value={rate.inventory_pool_id || ""} onChange={(e) => updateRate(index, "inventory_pool_id", e.target.value)}><option value="">Выберите фонд</option>{roomPools.map((pool) => <option key={pool.id} value={pool.id}>{pool.room_type} · {pool.base_inventory}</option>)}</select></td>
             <td className="p-2"><select className={inputClass} value={rate.meal_plan} onChange={(e) => updateRate(index, "meal_plan", e.target.value)}>{["RO","BB","HB","FB","AI","UAI"].map((v) => <option key={v}>{v}</option>)}</select></td>
             <td className="p-2"><select className={inputClass} value={rate.residency} onChange={(e) => updateRate(index, "residency", e.target.value)}><option value="all">Все</option><option value="resident">Резидент</option><option value="non_resident">Нерезидент</option></select></td>
             <td className="p-2"><input type="date" className={inputClass} value={rate.date_from} onChange={(e) => updateRate(index, "date_from", e.target.value)} /></td><td className="p-2"><input type="date" className={inputClass} value={rate.date_to} onChange={(e) => updateRate(index, "date_to", e.target.value)} /></td>

@@ -122,6 +122,17 @@ async function ensureHotelOfferTablesOnce() {
     )
   `);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_room_inventory_overrides_lookup ON hotel_room_inventory_overrides(pool_id,stay_date)`);
+  await db.query(`ALTER TABLE hotel_offer_rates ADD COLUMN IF NOT EXISTS inventory_pool_id BIGINT REFERENCES hotel_room_inventory_pools(id) ON DELETE RESTRICT`);
+  await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_offer_rates_pool ON hotel_offer_rates(inventory_pool_id)`);
+  await db.query(`
+    UPDATE hotel_offer_rates r
+       SET inventory_pool_id=p.id
+      FROM hotel_offers o, hotel_room_inventory_pools p
+     WHERE r.offer_id=o.id
+       AND p.hotel_id=o.hotel_id
+       AND LOWER(p.room_type)=LOWER(r.room_type)
+       AND r.inventory_pool_id IS NULL
+  `);
   await db.query(`
     CREATE OR REPLACE FUNCTION sync_hotel_inventory_reservation_status()
     RETURNS trigger AS $$
