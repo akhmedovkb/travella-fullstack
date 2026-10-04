@@ -430,7 +430,10 @@ export default function Header() {
     setDonasMobileOpen(false);
   }, [location]);
 
-  const servicesActive = location.pathname.startsWith("/dashboard/services/") || location.pathname === "/dashboard/calendar";
+  const servicesActive = location.pathname.startsWith("/dashboard/services/")
+    || location.pathname === "/dashboard/calendar"
+    || location.pathname === "/dashboard/hotels"
+    || location.pathname.startsWith("/provider/hotels/");
   const toolsActive = location.pathname.startsWith("/dashboard/passport-parser");
   const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
 
@@ -539,14 +542,12 @@ export default function Header() {
                   {servicesOpen && (
                     <DropdownPanel align="right" width="w-80">
                       <DropdownCaption title={t("nav.services_group", "Управление услугами")} />
-                      {providerType === "hotel" && (
-                        <DropdownItem
-                          to="/dashboard"
-                          label={t("nav.my_hotels", "Мои отели")}
-                          description={t("nav.my_hotels_desc", "Карточки, тарифы, наличие и предложения")}
-                          icon={<IconHotel />}
-                        />
-                      )}
+                      <DropdownItem
+                        to="/dashboard/hotels"
+                        label={t("nav.my_hotels", "Мои отели")}
+                        description={t("nav.my_hotels_desc", "Карточки, тарифы, наличие и предложения")}
+                        icon={<IconHotel />}
+                      />
                       <DropdownItem
                         to="/dashboard/services/marketplace"
                         label={t("nav.services_marketplace_short", "Маркетплейс")}
@@ -762,7 +763,7 @@ export default function Header() {
             {role === "provider" && (
               <RowGroupDark title={t("nav.activity", "Активность")}>
                 <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
-                {providerType === "hotel" && <NavItemMobileDark to="/dashboard" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />}
+                <NavItemMobileDark to="/dashboard/hotels" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />
                 <NavItemMobileDark to="/dashboard/services/marketplace" label={t("nav.services_marketplace_short", "Маркетплейс")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder_short", "Tour Builder")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />

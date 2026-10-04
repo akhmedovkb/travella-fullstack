@@ -228,6 +228,14 @@ export default function App() {
               }
             />
             <Route
+              path="/dashboard/hotels"
+              element={
+                <PrivateRoute>
+                  <AdminHotelsTable scope="provider" />
+                </PrivateRoute>
+              }
+            />
+            <Route
               path="/dashboard/requests"
               element={
                 <PrivateRoute>
