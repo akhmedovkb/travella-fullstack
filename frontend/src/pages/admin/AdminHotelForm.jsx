@@ -138,6 +138,10 @@ async function apiCreateHotel(payload) {
   return httpPost("/api/hotels", payload, "provider");
 }
 
+async function apiAttachHotelOffer(hotelId, payload) {
+  return httpPost(`/api/hotels/${encodeURIComponent(hotelId)}/offers`, payload, "provider");
+}
+
 /* Простые тосты (fallback на alert) */
 function tSuccess(msg) {
   try {
@@ -295,6 +299,7 @@ export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
   const userInfo = useMemo(() => getUserFromToken(), []);
   const isAdminLike = useMemo(() => isAdminLikeUser(userInfo), [userInfo]);
   const isProviderLike = useMemo(() => isProviderLikeUser(userInfo), [userInfo]);
+  const [selectedExistingHotel, setSelectedExistingHotel] = useState(null);
   // проставляем значения из записи отеля
   const fillFromHotel = (h) => {
     setName(h?.name || "");
@@ -577,7 +582,7 @@ const inputCls = (season) =>
     const items = await apiSearchHotels({
       name: inputValue || "",
       city: cityOpt?.label || "",
-      country: countryOpt?.code || "",
+      country: countryOpt?.label || "",
       limit: 50,
     });
     return (items || []).map((x) => {
@@ -585,7 +590,15 @@ const inputCls = (season) =>
       const cityDual = x.city_en && x.city_local
         ? ` (${composeDualLabel(x.city_local, x.city_en)})`
         : x.city ? ` (${x.city})` : "";
-      return { value: title, label: `${title}${cityDual}` };
+      return {
+        value: x.provider === "local" && x.id ? `hotel:${x.id}` : title,
+        label: `${x.provider === "local" ? "В базе · " : ""}${title}${cityDual}`,
+        hotelId: x.provider === "local" ? x.id : null,
+        hotelName: title,
+        city: x.city || x.city_local || "",
+        country: x.country || "",
+        source: x.provider || "external",
+      };
     });
   }, [cityOpt?.label, countryOpt?.code]);
   const loadHotelOptions = useDebouncedLoader(loadHotelOptionsRaw, 400);
@@ -678,6 +691,25 @@ const inputCls = (season) =>
 
   /* ---------- Submit ---------- */
   const submit = async () => {
+    if (isNew && !isAdminLike && selectedExistingHotel?.hotelId) {
+      try {
+        const rawType = String(userInfo?.type || userInfo?.provider_type || "").toLowerCase();
+        const supplierType = rawType === "hotel" ? "hotel"
+          : ["tour_operator", "dmc", "agency", "supplier"].includes(rawType) ? rawType : "agency";
+        await apiAttachHotelOffer(selectedExistingHotel.hotelId, {
+          supplier_type: supplierType,
+          is_direct: false,
+          currency,
+          title: "Предложение поставщика",
+        });
+        tSuccess("Существующий отель добавлен в ваши предложения");
+        navigate(`/provider/hotels/${selectedExistingHotel.hotelId}/offer`);
+      } catch (e) {
+        console.error(e);
+        tError(e?.message || "Не удалось добавить отель в ваши предложения");
+      }
+      return;
+    }
     // Страж: есть цены, но не указано "Кол-во"
     if (invalidRowIds.length > 0) {
       tError("Есть строки с ценами, но без количества. Заполните «Кол-во» или очистите цены.");
@@ -935,11 +967,20 @@ const inputCls = (season) =>
                   noOptionsMessage={ASYNC_I18N.noOptionsMessage}
                   loadingMessage={ASYNC_I18N.loadingMessage}
                   placeholder={t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })}
-                  value={name ? { value: name, label: name } : null}
-                  onChange={(opt) => setName(opt?.value || "")}
-                  onCreateOption={(input) => setName(input)}
+                  value={name ? { value: selectedExistingHotel?.hotelId ? `hotel:${selectedExistingHotel.hotelId}` : name, label: name } : null}
+                  onChange={(opt) => {
+                    if (opt?.hotelId) {
+                      setSelectedExistingHotel(opt);
+                      setName(opt.hotelName || opt.label || "");
+                    } else {
+                      setSelectedExistingHotel(null);
+                      setName(opt?.hotelName || opt?.value || "");
+                    }
+                  }}
+                  onCreateOption={(input) => { setSelectedExistingHotel(null); setName(input); }}
                   isClearable
                 />
+                {selectedExistingHotel?.hotelId ? <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">Найден в базе: #{selectedExistingHotel.hotelId} · {selectedExistingHotel.city || "город не указан"}. При сохранении будет создано ваше предложение без дублирования карточки.</div> : null}
               </div>
 
               <div className="lg:col-span-3">
