@@ -66,6 +66,19 @@ async function getOffer(offerId, hotelId) {
   return rows[0] || null;
 }
 
+async function getHotelTemplateProviderId(hotelId, executor = db) {
+  const { rows } = await executor.query(
+    `SELECT COALESCE(
+        (SELECT provider_id FROM hotels WHERE id=$1),
+        (SELECT o.provider_id FROM hotel_offers o JOIN providers p ON p.id=o.provider_id
+          WHERE o.hotel_id=$1 AND (o.is_direct=true OR o.supplier_type='hotel' OR LOWER(COALESCE(p.type,''))='hotel')
+          ORDER BY o.is_direct DESC,o.id LIMIT 1)
+      ) AS provider_id`,
+    [hotelId]
+  );
+  return positiveInt(rows[0]?.provider_id);
+}
+
 function canEditOffer(req, offer) {
   return isAdmin(req.user) || Number(offer?.provider_id) === Number(req.user?.id);
 }
@@ -523,8 +536,8 @@ router.get('/:offerId/rates', async (req, res, next) => {
     const offer = await getOffer(offerId, hotelId);
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
     if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
-    const ownerResult = await db.query('SELECT provider_id FROM hotels WHERE id=$1', [hotelId]);
-    const isHotelTemplate = Number(ownerResult.rows[0]?.provider_id) === Number(offer.provider_id);
+    const templateProviderId = await getHotelTemplateProviderId(hotelId);
+    const isHotelTemplate = Number(templateProviderId) === Number(offer.provider_id);
     if (!isHotelTemplate) {
       const { rows } = await db.query(
         `SELECT own.id,own.offer_id,source.id AS source_rate_id,source.inventory_pool_id,
@@ -561,9 +574,9 @@ router.get('/:offerId/rates', async (req, res, next) => {
                     COALESCE(SUM(quantity) FILTER (WHERE status='confirmed'),0) AS confirmed
                FROM hotel_inventory_reservations hir WHERE hir.rate_id=own.id
            ) stock ON true
-          WHERE hotel_offer.hotel_id=$1 AND hotel_offer.provider_id=(SELECT provider_id FROM hotels WHERE id=$1)
+          WHERE hotel_offer.hotel_id=$1 AND hotel_offer.provider_id=$4
           ORDER BY source.date_from,source.room_type,source.meal_plan,source.residency,source.id`,
-        [hotelId, offerId, offer.provider_id]
+        [hotelId, offerId, offer.provider_id, templateProviderId]
       );
       return res.json({ offer, items: rows, cascade: true });
     }
@@ -615,8 +628,8 @@ router.put('/:offerId/rates', async (req, res, next) => {
       [hotelId]
     );
     const poolMap = new Map(poolResult.rows.map((row) => [Number(row.id), row]));
-    const ownerResult = await db.query('SELECT provider_id FROM hotels WHERE id=$1', [hotelId]);
-    const isHotelTemplate = Number(ownerResult.rows[0]?.provider_id) === Number(offer.provider_id);
+    const templateProviderId = await getHotelTemplateProviderId(hotelId);
+    const isHotelTemplate = Number(templateProviderId) === Number(offer.provider_id);
 
     if (!isHotelTemplate) {
       const sourceIds = items.map((row) => row.source_rate_id).filter(Boolean);
@@ -626,7 +639,7 @@ router.put('/:offerId/rates', async (req, res, next) => {
            FROM hotel_offer_rates r JOIN hotel_offers o ON o.id=r.offer_id
            LEFT JOIN hotel_room_inventory_pools p ON p.id=r.inventory_pool_id
           WHERE o.hotel_id=$1 AND o.provider_id=$2 AND r.id=ANY($3::bigint[])`,
-        [hotelId, ownerResult.rows[0]?.provider_id, sourceIds.length ? sourceIds : [0]]
+        [hotelId, templateProviderId, sourceIds.length ? sourceIds : [0]]
       );
       const sources = new Map(sourceResult.rows.map((row) => [Number(row.id), row]));
       if (items.some((row) => !row.source_rate_id || !sources.has(row.source_rate_id) || !(row.amount > 0))) {
