@@ -8,6 +8,7 @@ const {
   notifyHotelOfferReviewed,
 } = require('../utils/hotelOfferModerationNotifications');
 const { notifyHotelAllocationChanges } = require('../utils/hotelAllocationNotifications');
+const { notifyHotelOwnerSupplierLinked } = require('../utils/hotelSupplierLinkNotifications');
 
 const SUPPLIER_TYPES = new Set(['hotel', 'tour_operator', 'dmc', 'agency', 'supplier']);
 const MEAL_PLANS = new Set(['RO', 'BB', 'HB', 'FB', 'AI', 'UAI']);
@@ -454,6 +455,11 @@ router.post('/', async (req, res, next) => {
       return res.status(400).json({ error: 'bad_dates' });
     }
 
+    const existingOffer = await db.query(
+      'SELECT id FROM hotel_offers WHERE hotel_id=$1 AND provider_id=$2 LIMIT 1',
+      [hotelId, providerId]
+    );
+
     const { rows } = await db.query(
       `INSERT INTO hotel_offers
          (hotel_id,provider_id,supplier_type,is_direct,currency,status,title,terms,valid_from,valid_to,last_verified_at)
@@ -467,6 +473,10 @@ router.post('/', async (req, res, next) => {
         String(req.body?.title || '').trim() || null, JSON.stringify(req.body?.terms || {}), validFrom, validTo]
     );
     await addOfferEvent(db, req, rows[0].id, 'created', null, rows[0].status, null, { provider_id: providerId });
+    if (!existingOffer.rowCount) {
+      notifyHotelOwnerSupplierLinked({ hotelId, supplierProviderId: providerId })
+        .catch((error) => console.error('[hotel-suppliers] telegram notification failed:', error?.message || error));
+    }
     return res.status(201).json({ item: { ...rows[0], provider_name: provider.name, provider_type: provider.type } });
   } catch (error) { return next(error); }
 });
