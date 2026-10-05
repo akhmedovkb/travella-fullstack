@@ -69,10 +69,10 @@ async function getOffer(offerId, hotelId) {
 async function getHotelTemplateProviderId(hotelId, executor = db) {
   const { rows } = await executor.query(
     `SELECT COALESCE(
-        (SELECT provider_id FROM hotels WHERE id=$1),
         (SELECT o.provider_id FROM hotel_offers o JOIN providers p ON p.id=o.provider_id
           WHERE o.hotel_id=$1 AND (o.is_direct=true OR o.supplier_type='hotel' OR LOWER(COALESCE(p.type,''))='hotel')
-          ORDER BY o.is_direct DESC,o.id LIMIT 1)
+          ORDER BY o.is_direct DESC,o.id LIMIT 1),
+        (SELECT provider_id FROM hotels WHERE id=$1)
       ) AS provider_id`,
     [hotelId]
   );
@@ -89,13 +89,18 @@ async function canManageHotelInventory(req, hotelId) {
   if (!providerId) return false;
   const { rows } = await db.query(
     `SELECT EXISTS (
-       SELECT 1 FROM hotels h
-        WHERE h.id=$1 AND h.provider_id=$2
-       UNION ALL
        SELECT 1 FROM hotel_offers o
         JOIN providers p ON p.id=o.provider_id
         WHERE o.hotel_id=$1 AND o.provider_id=$2
           AND (o.is_direct=true OR o.supplier_type='hotel' OR LOWER(COALESCE(p.type,''))='hotel')
+       UNION ALL
+       SELECT 1 FROM hotels h
+        WHERE h.id=$1 AND h.provider_id=$2
+          AND NOT EXISTS (
+            SELECT 1 FROM hotel_offers owner_offer JOIN providers owner_provider ON owner_provider.id=owner_offer.provider_id
+             WHERE owner_offer.hotel_id=$1
+               AND (owner_offer.is_direct=true OR owner_offer.supplier_type='hotel' OR LOWER(COALESCE(owner_provider.type,''))='hotel')
+          )
      ) AS allowed`,
     [hotelId, providerId]
   );
