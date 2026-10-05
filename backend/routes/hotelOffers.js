@@ -7,6 +7,7 @@ const {
   notifyHotelOfferSubmitted,
   notifyHotelOfferReviewed,
 } = require('../utils/hotelOfferModerationNotifications');
+const { notifyHotelAllocationChanges } = require('../utils/hotelAllocationNotifications');
 
 const SUPPLIER_TYPES = new Set(['hotel', 'tour_operator', 'dmc', 'agency', 'supplier']);
 const MEAL_PLANS = new Set(['RO', 'BB', 'HB', 'FB', 'AI', 'UAI']);
@@ -177,6 +178,13 @@ router.put('/inventory/allocations', async (req, res, next) => {
       }
     }
     client = await db.connect(); await client.query('BEGIN');
+    const allocationSelect = `SELECT a.id,a.provider_id,a.pool_id,a.date_from::text,a.date_to::text,a.allotment,
+        rp.room_type,p.telegram_web_chat_id,p.telegram_chat_id,p.tg_chat_id
+      FROM hotel_supplier_inventory_allocations a
+      JOIN hotel_room_inventory_pools rp ON rp.id=a.pool_id
+      JOIN providers p ON p.id=a.provider_id
+      WHERE a.hotel_id=$1 AND a.active=true ORDER BY a.id`;
+    const beforeRows = (await client.query(allocationSelect, [hotelId])).rows;
     const valid = await client.query(
       `SELECT o.provider_id,p.id AS pool_id
          FROM hotel_offers o CROSS JOIN hotel_room_inventory_pools p
@@ -200,7 +208,11 @@ router.put('/inventory/allocations', async (req, res, next) => {
         [hotelId,item.provider_id,item.pool_id,item.date_from,item.date_to,item.allotment,positiveInt(req.user?.id)]);
       }
     }
+    const afterRows = (await client.query(allocationSelect, [hotelId])).rows;
+    const hotelName = (await client.query('SELECT name FROM hotels WHERE id=$1', [hotelId])).rows[0]?.name || `#${hotelId}`;
     await client.query('COMMIT');
+    notifyHotelAllocationChanges({ hotelId, hotelName, beforeRows, afterRows })
+      .catch((error) => console.error('[hotel-allocations] telegram notification failed:', error?.message || error));
     return res.json({ ok: true, count: items.length });
   } catch (error) {
     if (client) try { await client.query('ROLLBACK'); } catch {}
