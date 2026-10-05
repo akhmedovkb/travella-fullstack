@@ -400,8 +400,9 @@ router.get('/', async (req, res, next) => {
     if (req.query.date && !rateDate) return res.status(400).json({ error: 'bad_date' });
     const params = [hotelId, req.query.status ? String(req.query.status).toLowerCase() : null, rateDate];
     const mineOnly = String(req.query.mine || '') === '1';
+    const manager = isAdmin(req.user) || await canManageHotelInventory(req, hotelId);
     let visibilityFilter = '';
-    if (!isAdmin(req.user)) {
+    if (!manager) {
       params.push(positiveInt(req.user?.id) || 0);
       visibilityFilter = mineOnly ? ` AND o.provider_id=$4` : ` AND (o.status='active' OR o.provider_id=$4)`;
     }
@@ -434,7 +435,7 @@ router.get('/', async (req, res, next) => {
         ORDER BY MIN(r.amount) ASC NULLS LAST, o.is_direct DESC, p.name, o.id`,
       params
     );
-    return res.json({ items: rows });
+    return res.json({ items: rows, can_manage: manager });
   } catch (error) { return next(error); }
 });
 
