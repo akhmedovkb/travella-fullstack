@@ -369,7 +369,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
           </div>
           <div className="flex gap-2">
             <Link to={providerMode ? `/hotels/${hotelId}` : `/admin/hotels/${hotelId}/edit`} className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700">Карточка</Link>
-            <Link to={providerMode ? "/dashboard" : "/admin/hotels"} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-black text-white">{providerMode ? "В кабинет" : "К базе отелей"}</Link>
+            <Link to={providerMode ? "/dashboard/hotels" : "/admin/hotels"} className="rounded-lg bg-slate-950 px-4 py-2 text-sm font-black text-white">{providerMode ? "← Мои отели" : "← К базе отелей"}</Link>
           </div>
         </header>
 
