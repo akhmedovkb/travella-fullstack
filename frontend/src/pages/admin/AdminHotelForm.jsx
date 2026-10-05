@@ -968,10 +968,17 @@ const inputCls = (season) =>
                   loadingMessage={ASYNC_I18N.loadingMessage}
                   placeholder={t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })}
                   value={name ? { value: selectedExistingHotel?.hotelId ? `hotel:${selectedExistingHotel.hotelId}` : name, label: name } : null}
-                  onChange={(opt) => {
+                  onChange={async (opt) => {
                     if (opt?.hotelId) {
                       setSelectedExistingHotel(opt);
                       setName(opt.hotelName || opt.label || "");
+                      try {
+                        const existing = await httpGet(`/api/hotels/${encodeURIComponent(opt.hotelId)}`, { role: "provider" });
+                        fillFromHotel(existing);
+                      } catch (e) {
+                        console.error(e);
+                        tError("Отель найден, но не удалось загрузить данные карточки");
+                      }
                     } else {
                       setSelectedExistingHotel(null);
                       setName(opt?.hotelName || opt?.value || "");

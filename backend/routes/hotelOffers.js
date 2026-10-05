@@ -145,7 +145,13 @@ router.get('/inventory/allocations', async (req, res, next) => {
          ) usage ON true
         WHERE a.hotel_id=$1 AND a.active=true ${filter}
         ORDER BY p.name,rp.room_type,a.date_from,a.id`, params);
-    return res.json({ items: rows, can_manage: manager });
+    const providers = manager ? (await db.query(
+      `SELECT DISTINCT o.provider_id,p.name AS provider_name,p.type AS provider_type,o.supplier_type,o.status
+         FROM hotel_offers o JOIN providers p ON p.id=o.provider_id
+        WHERE o.hotel_id=$1 AND o.status<>'archived'
+        ORDER BY p.name,o.provider_id`, [hotelId]
+    )).rows : [];
+    return res.json({ items: rows, providers, can_manage: manager });
   } catch (error) { return next(error); }
 });
 
