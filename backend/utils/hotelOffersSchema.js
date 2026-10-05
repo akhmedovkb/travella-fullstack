@@ -141,7 +141,10 @@ async function ensureHotelOfferTablesOnce() {
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_supplier_allocations_lookup
     ON hotel_supplier_inventory_allocations(hotel_id,provider_id,pool_id,date_from,date_to) WHERE active=true`);
   await db.query(`ALTER TABLE hotel_offer_rates ADD COLUMN IF NOT EXISTS inventory_pool_id BIGINT REFERENCES hotel_room_inventory_pools(id) ON DELETE RESTRICT`);
+  await db.query(`ALTER TABLE hotel_offer_rates ADD COLUMN IF NOT EXISTS source_rate_id INTEGER REFERENCES hotel_offer_rates(id) ON DELETE CASCADE`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_offer_rates_pool ON hotel_offer_rates(inventory_pool_id)`);
+  await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS ux_hotel_offer_rates_source
+    ON hotel_offer_rates(offer_id,source_rate_id) WHERE source_rate_id IS NOT NULL`);
   await db.query(`
     UPDATE hotel_offer_rates r
        SET inventory_pool_id=p.id

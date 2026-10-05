@@ -523,8 +523,52 @@ router.get('/:offerId/rates', async (req, res, next) => {
     const offer = await getOffer(offerId, hotelId);
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
     if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
+    const ownerResult = await db.query('SELECT provider_id FROM hotels WHERE id=$1', [hotelId]);
+    const isHotelTemplate = Number(ownerResult.rows[0]?.provider_id) === Number(offer.provider_id);
+    if (!isHotelTemplate) {
+      const { rows } = await db.query(
+        `SELECT own.id,own.offer_id,source.id AS source_rate_id,source.inventory_pool_id,
+                COALESCE(pool.room_type,source.room_type) AS room_type,source.meal_plan,source.residency,
+                source.date_from::text,source.date_to::text,own.amount::numeric,NULL::int AS allotment,
+                source.min_stay,source.refundable,own.created_at,own.updated_at,
+                COALESCE(stock.held,0)::int AS held,COALESCE(stock.confirmed,0)::int AS confirmed,
+                allocation.allotment::int AS supplier_allotment,
+                CASE WHEN allocation.allotment IS NULL THEN NULL
+                     ELSE GREATEST(0,allocation.allotment-COALESCE(stock.held,0)-COALESCE(stock.confirmed,0))::int END AS available,
+                true AS inherited
+           FROM hotel_offers hotel_offer
+           JOIN hotel_offer_rates source ON source.offer_id=hotel_offer.id
+           LEFT JOIN LATERAL (
+             SELECT candidate.* FROM hotel_offer_rates candidate
+              WHERE candidate.offer_id=$2 AND (
+                candidate.source_rate_id=source.id OR (
+                  candidate.source_rate_id IS NULL AND candidate.inventory_pool_id=source.inventory_pool_id
+                  AND candidate.meal_plan=source.meal_plan AND candidate.residency=source.residency
+                  AND candidate.date_from=source.date_from AND candidate.date_to=source.date_to
+                )
+              )
+              ORDER BY (candidate.source_rate_id=source.id) DESC LIMIT 1
+           ) own ON true
+           LEFT JOIN hotel_room_inventory_pools pool ON pool.id=source.inventory_pool_id
+           LEFT JOIN LATERAL (
+             SELECT allotment FROM hotel_supplier_inventory_allocations a
+              WHERE a.hotel_id=$1 AND a.provider_id=$3 AND a.pool_id=source.inventory_pool_id AND a.active=true
+                AND a.date_from<=source.date_from AND a.date_to>=source.date_to
+              ORDER BY a.updated_at DESC LIMIT 1
+           ) allocation ON true
+           LEFT JOIN LATERAL (
+             SELECT COALESCE(SUM(quantity) FILTER (WHERE status='held' AND expires_at>NOW()),0) AS held,
+                    COALESCE(SUM(quantity) FILTER (WHERE status='confirmed'),0) AS confirmed
+               FROM hotel_inventory_reservations hir WHERE hir.rate_id=own.id
+           ) stock ON true
+          WHERE hotel_offer.hotel_id=$1 AND hotel_offer.provider_id=(SELECT provider_id FROM hotels WHERE id=$1)
+          ORDER BY source.date_from,source.room_type,source.meal_plan,source.residency,source.id`,
+        [hotelId, offerId, offer.provider_id]
+      );
+      return res.json({ offer, items: rows, cascade: true });
+    }
     const { rows } = await db.query(
-      `SELECT r.id,r.offer_id,r.inventory_pool_id,COALESCE(p.room_type,r.room_type) AS room_type,r.meal_plan,r.residency,r.date_from::text,r.date_to::text,
+      `SELECT r.id,r.offer_id,r.source_rate_id,r.inventory_pool_id,COALESCE(p.room_type,r.room_type) AS room_type,r.meal_plan,r.residency,r.date_from::text,r.date_to::text,
               r.amount::numeric,r.allotment,r.min_stay,r.refundable,r.created_at,r.updated_at,
               COALESCE(stock.held,0)::int AS held,
               COALESCE(stock.confirmed,0)::int AS confirmed,
@@ -541,7 +585,7 @@ router.get('/:offerId/rates', async (req, res, next) => {
         WHERE r.offer_id=$1 ORDER BY r.date_from,r.room_type,r.meal_plan,r.residency,r.id`,
       [offerId]
     );
-    return res.json({ offer, items: rows });
+    return res.json({ offer, items: rows, cascade: false });
   } catch (error) { return next(error); }
 });
 
@@ -557,6 +601,7 @@ router.put('/:offerId/rates', async (req, res, next) => {
     if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
     const input = Array.isArray(req.body?.items) ? req.body.items : [];
     const items = input.map((row) => ({
+      id: positiveInt(row?.id), source_rate_id: positiveInt(row?.source_rate_id),
       inventory_pool_id: positiveInt(row?.inventory_pool_id),
       room_type: String(row?.room_type || '').trim(),
       meal_plan: String(row?.meal_plan || 'BB').toUpperCase(),
@@ -570,6 +615,47 @@ router.put('/:offerId/rates', async (req, res, next) => {
       [hotelId]
     );
     const poolMap = new Map(poolResult.rows.map((row) => [Number(row.id), row]));
+    const ownerResult = await db.query('SELECT provider_id FROM hotels WHERE id=$1', [hotelId]);
+    const isHotelTemplate = Number(ownerResult.rows[0]?.provider_id) === Number(offer.provider_id);
+
+    if (!isHotelTemplate) {
+      const sourceIds = items.map((row) => row.source_rate_id).filter(Boolean);
+      const sourceResult = await db.query(
+        `SELECT r.id,r.inventory_pool_id,COALESCE(p.room_type,r.room_type) AS room_type,r.meal_plan,r.residency,
+                r.date_from::text,r.date_to::text,r.min_stay,r.refundable
+           FROM hotel_offer_rates r JOIN hotel_offers o ON o.id=r.offer_id
+           LEFT JOIN hotel_room_inventory_pools p ON p.id=r.inventory_pool_id
+          WHERE o.hotel_id=$1 AND o.provider_id=$2 AND r.id=ANY($3::bigint[])`,
+        [hotelId, ownerResult.rows[0]?.provider_id, sourceIds.length ? sourceIds : [0]]
+      );
+      const sources = new Map(sourceResult.rows.map((row) => [Number(row.id), row]));
+      if (items.some((row) => !row.source_rate_id || !sources.has(row.source_rate_id) || !(row.amount > 0))) {
+        return res.status(400).json({ error: 'supplier_price_rows_invalid' });
+      }
+      await client.query('BEGIN');
+      const kept = [];
+      for (const row of items) {
+        const source = sources.get(row.source_rate_id);
+        const saved = await client.query(
+          `INSERT INTO hotel_offer_rates
+             (offer_id,source_rate_id,inventory_pool_id,room_type,meal_plan,residency,date_from,date_to,amount,allotment,min_stay,refundable)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,$10,$11)
+           ON CONFLICT (offer_id,source_rate_id) WHERE source_rate_id IS NOT NULL DO UPDATE SET
+             inventory_pool_id=EXCLUDED.inventory_pool_id,room_type=EXCLUDED.room_type,meal_plan=EXCLUDED.meal_plan,
+             residency=EXCLUDED.residency,date_from=EXCLUDED.date_from,date_to=EXCLUDED.date_to,
+             amount=EXCLUDED.amount,allotment=NULL,min_stay=EXCLUDED.min_stay,refundable=EXCLUDED.refundable,updated_at=NOW()
+           RETURNING id`,
+          [offerId,source.id,source.inventory_pool_id,source.room_type,source.meal_plan,source.residency,
+            source.date_from,source.date_to,row.amount,source.min_stay,source.refundable]
+        );
+        kept.push(saved.rows[0].id);
+      }
+      await client.query('DELETE FROM hotel_offer_rates WHERE offer_id=$1 AND NOT (id=ANY($2::int[]))', [offerId, kept.length ? kept : [0]]);
+      await client.query(`UPDATE hotel_offers SET status='draft',rejection_reason=NULL,submitted_at=NULL,updated_at=NOW() WHERE id=$1`, [offerId]);
+      await addOfferEvent(client, req, offerId, 'rates_replaced', offer.status, 'draft', null, { rate_count: items.length, cascade: true });
+      await client.query('COMMIT');
+      return res.json({ ok: true, count: items.length, cascade: true });
+    }
     const invalid = items.some((row) => !row.room_type || (poolMap.size > 0 && !poolMap.has(row.inventory_pool_id))
       || !MEAL_PLANS.has(row.meal_plan) || !RESIDENCIES.has(row.residency)
       || !row.date_from || !row.date_to || row.date_from > row.date_to || !(row.amount > 0));
@@ -584,16 +670,41 @@ router.put('/:offerId/rates', async (req, res, next) => {
     }
 
     await client.query('BEGIN');
-    await client.query(`DELETE FROM hotel_inventory_overrides WHERE offer_id=$1`, [offerId]);
-    await client.query(`DELETE FROM hotel_offer_rates WHERE offer_id=$1`, [offerId]);
+    const keptRateIds = [];
     for (const row of items) {
-      await client.query(
+      if (row.id) {
+        const updated = await client.query(
+          `UPDATE hotel_offer_rates SET inventory_pool_id=$3,room_type=$4,meal_plan=$5,residency=$6,date_from=$7,date_to=$8,
+                  amount=$9,allotment=$10,min_stay=$11,refundable=$12,updated_at=NOW()
+            WHERE id=$1 AND offer_id=$2 AND source_rate_id IS NULL RETURNING id`,
+          [row.id,offerId,row.inventory_pool_id,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,row.allotment,row.min_stay,row.refundable]
+        );
+        if (updated.rowCount) keptRateIds.push(updated.rows[0].id);
+      } else {
+        const inserted = await client.query(
         `INSERT INTO hotel_offer_rates
           (offer_id,inventory_pool_id,room_type,meal_plan,residency,date_from,date_to,amount,allotment,min_stay,refundable)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
         [offerId,row.inventory_pool_id,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,row.allotment,row.min_stay,row.refundable]
-      );
+        );
+        keptRateIds.push(inserted.rows[0].id);
+      }
     }
+    await client.query('DELETE FROM hotel_offer_rates WHERE offer_id=$1 AND source_rate_id IS NULL AND NOT (id=ANY($2::int[]))', [offerId, keptRateIds.length ? keptRateIds : [0]]);
+    await client.query(
+      `UPDATE hotel_offer_rates child SET
+          inventory_pool_id=source.inventory_pool_id,room_type=source.room_type,meal_plan=source.meal_plan,
+          residency=source.residency,date_from=source.date_from,date_to=source.date_to,
+          allotment=NULL,min_stay=source.min_stay,refundable=source.refundable,updated_at=NOW()
+        FROM hotel_offer_rates source
+       WHERE child.source_rate_id=source.id AND source.offer_id=$1`,
+      [offerId]
+    );
+    await client.query(
+      `UPDATE hotel_offers SET status='draft',rejection_reason=NULL,submitted_at=NULL,updated_at=NOW()
+        WHERE id IN (SELECT DISTINCT offer_id FROM hotel_offer_rates WHERE source_rate_id=ANY($1::bigint[]))`,
+      [keptRateIds.length ? keptRateIds : [0]]
+    );
     await client.query(
       `UPDATE hotel_offers SET status='draft',rejection_reason=NULL,submitted_at=NULL,updated_at=NOW() WHERE id=$1`,
       [offerId]
