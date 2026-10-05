@@ -710,14 +710,6 @@ const inputCls = (season) =>
       }
       return;
     }
-    // Страж: есть цены, но не указано "Кол-во"
-    if (invalidRowIds.length > 0) {
-      tError("Есть строки с ценами, но без количества. Заполните «Кол-во» или очистите цены.");
-      // проскроллим к первой проблемной строке
-      const el = document.getElementById(`row-${invalidRowIds[0]}`);
-      if (el?.scrollIntoView) el.scrollIntoView({ behavior: "smooth", block: "center" });
-      return;
-    }
     if (!name.trim())    return tError(t("enter_hotel_name") || "Введите название");
     if (!countryOpt)     return tError(t("select_country") || "Укажите страну");
     if (!address.trim()) return tError(t("enter_address") || "Укажите адрес");
@@ -779,7 +771,7 @@ const inputCls = (season) =>
         await httpPut(`/api/hotels/${encodeURIComponent(hotelId)}`, payload, "provider");
         tSuccess(t("hotel_saved") || "Изменения сохранены");
         if (typeof onSaved === "function") onSaved(hotelId);
-        else navigate(`/admin/hotels/${hotelId}/edit`);
+        else navigate(isAdminLike ? `/admin/hotels/${hotelId}/edit` : `/provider/hotels/${hotelId}/offer`);
       } else {
         const created = await apiCreateHotel(payload);
         tSuccess(t("hotel_saved") || "Отель сохранён");
@@ -795,67 +787,17 @@ const inputCls = (season) =>
 
 
   const [activeTab, setActiveTab] = useState("main");
-  const [pricingSeason, setPricingSeason] = useState("low");
-  const [pricingAudience, setPricingAudience] = useState("resident");
-
-  const SEASON_META = {
-    low: {
-      title: t("low_season", { defaultValue: "Низкий сезон" }),
-      short: t("admin.hotels.season_low", { defaultValue: "Низкий" }),
-      badge: "bg-emerald-50 text-emerald-700 ring-emerald-100",
-      panel: "bg-emerald-50/45 ring-emerald-100",
-    },
-    shoulder: {
-      title: t("shoulder_season", { defaultValue: "Средний сезон" }),
-      short: t("admin.hotels.season_shoulder", { defaultValue: "Средний" }),
-      badge: "bg-amber-50 text-amber-700 ring-amber-100",
-      panel: "bg-amber-50/45 ring-amber-100",
-    },
-    high: {
-      title: t("high_season", { defaultValue: "Высокий сезон" }),
-      short: t("admin.hotels.season_high", { defaultValue: "Высокий" }),
-      badge: "bg-rose-50 text-rose-700 ring-rose-100",
-      panel: "bg-rose-50/45 ring-rose-100",
-    },
-  };
-
-  const AUDIENCE_META = {
-    resident: t("for_residents", { defaultValue: "Для резидентов" }),
-    nonResident: t("for_nonresidents", { defaultValue: "Для нерезидентов" }),
-  };
-
-  const roomStats = useMemo(() => {
-    let filledRows = 0;
-    let pricesCount = 0;
-    let totalRooms = 0;
-    roomRows.forEach((row) => {
-      const count = Number(row.count || 0);
-      if (count > 0) totalRooms += count;
-      if (count > 0 || rowHasAnyPrice(row)) filledRows += 1;
-      SEASONS.forEach((season) => {
-        ["resident", "nonResident"].forEach((audience) => {
-          MEAL_PLANS.forEach((meal) => {
-            if (isFilled(row?.prices?.[season]?.[audience]?.[meal])) pricesCount += 1;
-          });
-        });
-      });
-    });
-    return { filledRows, pricesCount, totalRooms };
-  }, [roomRows]);
-
   const completionItems = [
     { label: t("name", { defaultValue: "Название" }), done: !!name.trim() },
     { label: t("country", { defaultValue: "Страна" }), done: !!countryOpt },
     { label: t("city", { defaultValue: "Город" }), done: !!cityOpt },
     { label: t("address", { defaultValue: "Адрес" }), done: !!address.trim() },
-    { label: t("rooms_and_prices", { defaultValue: "Номерной фонд и цены" }), done: roomStats.filledRows > 0 },
     { label: t("images", { defaultValue: "Изображения" }), done: images.length > 0 },
   ];
   const completedCount = completionItems.filter((x) => x.done).length;
 
   const tabs = [
     { id: "main", label: t("admin.hotels.tab_main", { defaultValue: "Основное" }) },
-    { id: "prices", label: t("admin.hotels.tab_prices", { defaultValue: "Номера и цены" }) },
     { id: "taxes", label: t("admin.hotels.tab_taxes", { defaultValue: "Налоги" }) },
     { id: "amenities", label: t("admin.hotels.tab_amenities", { defaultValue: "Удобства" }) },
     { id: "media", label: t("admin.hotels.tab_media", { defaultValue: "Фото" }) },
@@ -874,11 +816,6 @@ const inputCls = (season) =>
             <span className="inline-flex items-center rounded-full bg-white px-2.5 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
               {completedCount}/{completionItems.length} заполнено
             </span>
-            {roomStats.pricesCount > 0 && (
-              <span className="inline-flex items-center rounded-full bg-orange-50 px-2.5 py-1 text-xs font-bold text-orange-700 ring-1 ring-orange-100">
-                {roomStats.pricesCount} цен
-              </span>
-            )}
           </div>
           <h1 className="mt-3 text-2xl font-black tracking-[-0.03em] text-slate-950">
             {isNew
@@ -888,24 +825,26 @@ const inputCls = (season) =>
           <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">
             {t("admin.hotels.form_hint", {
               defaultValue:
-                "Заполните карточку по шагам. Цены теперь редактируются без горизонтального скролла: выберите сезон и тип гостя.",
+                "Заполните карточку отеля. Номерной фонд, квоты и тарифы настраиваются отдельно после сохранения.",
             })}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
           <Link
-            to="/admin/hotels"
+            to={isAdminLike ? "/admin/hotels" : "/dashboard/hotels"}
             className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm transition hover:bg-slate-50"
           >
             ← {t("back", { defaultValue: "Назад" })}
           </Link>
           {hotelId && (
             <Link
-              to={`/admin/hotels/${encodeURIComponent(hotelId)}/seasons`}
+              to={isAdminLike
+                ? `/admin/hotels/${encodeURIComponent(hotelId)}/offers`
+                : `/provider/hotels/${encodeURIComponent(hotelId)}/offer`}
               className="inline-flex items-center justify-center rounded-xl border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-bold text-orange-700 shadow-sm transition hover:bg-orange-100"
             >
-              {t("admin.hotels.manage_seasons", { defaultValue: "Сезоны" })}
+              Фонд и тарифы
             </Link>
           )}
           <button
@@ -918,7 +857,7 @@ const inputCls = (season) =>
         </div>
       </div>
 
-      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-6">
+      <div className="mb-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
         {completionItems.map((item) => (
           <div
             key={item.label}
@@ -1093,177 +1032,6 @@ const inputCls = (season) =>
           </div>
         )}
 
-        {activeTab === "prices" && (
-          <div className="space-y-5">
-            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-              <div>
-                <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">
-                  {t("rooms_and_prices", { defaultValue: "Номерной фонд и цены" })}
-                </h2>
-                <p className="mt-1 text-sm font-medium text-slate-600">
-                  {t("admin.hotels.prices_hint", {
-                    defaultValue:
-                      "Выберите сезон и тип гостя. Сохраняется та же структура цен, но без широкой таблицы.",
-                  })}
-                </p>
-              </div>
-              <div className="grid grid-cols-3 gap-2 rounded-2xl bg-slate-100 p-1">
-                {SEASONS.map((season) => (
-                  <button
-                    key={season}
-                    type="button"
-                    onClick={() => setPricingSeason(season)}
-                    className={`rounded-xl px-3 py-2 text-xs font-black transition ${
-                      pricingSeason === season
-                        ? "bg-white text-slate-950 shadow-sm"
-                        : "text-slate-500 hover:text-slate-900"
-                    }`}
-                  >
-                    {SEASON_META[season].short}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className={`rounded-2xl p-3 ring-1 ${SEASON_META[pricingSeason].panel}`}>
-              <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${SEASON_META[pricingSeason].badge}`}>
-                    {SEASON_META[pricingSeason].title}
-                  </span>
-                  <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-200">
-                    {AUDIENCE_META[pricingAudience]}
-                  </span>
-                </div>
-                <div className="grid grid-cols-2 gap-1 rounded-xl bg-white p-1 ring-1 ring-slate-200">
-                  {Object.entries(AUDIENCE_META).map(([key, label]) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setPricingAudience(key)}
-                      className={`rounded-lg px-3 py-1.5 text-xs font-black transition ${
-                        pricingAudience === key
-                          ? "bg-slate-950 text-white"
-                          : "text-slate-500 hover:bg-slate-100 hover:text-slate-950"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl border border-slate-200">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50 text-xs uppercase tracking-[0.08em] text-slate-500">
-                  <tr>
-                    <th className="px-3 py-3 text-left">{t("room_category", { defaultValue: "Категория" })}</th>
-                    <th className="w-28 px-3 py-3 text-left">{t("count_short", { defaultValue: "Кол-во" })}</th>
-                    {MEAL_PLANS.map((mp) => (
-                      <th key={mp} className="px-2 py-3 text-left">{mp}</th>
-                    ))}
-                    <th className="w-12 px-3 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {roomRows.map((row) => (
-                    <tr
-                      key={row.id}
-                      id={`row-${row.id}`}
-                      className={invalidRowIds.includes(row.id) ? "bg-red-50/50" : "bg-white"}
-                    >
-                      <td className="px-3 py-3 align-top">
-                        {row.builtin ? (
-                          <div className="font-black text-slate-800">{row.name}</div>
-                        ) : (
-                          <input
-                            className="w-full rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                            value={row.name}
-                            onChange={(e) => updateRow(row.id, { name: e.target.value })}
-                            placeholder={t("room_type_name", { defaultValue: "Название типа" })}
-                          />
-                        )}
-                        {invalidRowIds.includes(row.id) && (
-                          <div className="mt-1 text-xs font-bold text-red-600">
-                            Укажите количество комнат, иначе цены не сохранятся
-                          </div>
-                        )}
-                      </td>
-                      <td className="px-3 py-3 align-top">
-                        <input
-                          type="number"
-                          min={0}
-                          className={`w-24 rounded-xl border px-3 py-2 text-sm outline-none focus:ring-2 ${
-                            invalidRowIds.includes(row.id)
-                              ? "border-red-400 focus:ring-red-100"
-                              : "border-slate-200 focus:border-orange-400 focus:ring-orange-100"
-                          }`}
-                          value={row.count}
-                          onChange={(e) => updateRow(row.id, { count: e.target.value })}
-                        />
-                      </td>
-                      {MEAL_PLANS.map((mp) => (
-                        <td className="px-2 py-3 align-top" key={`${row.id}-${pricingSeason}-${pricingAudience}-${mp}`}>
-                          <input
-                            type="number"
-                            min={0}
-                            step="0.01"
-                            className="w-full min-w-[96px] rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none transition focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
-                            placeholder={currency}
-                            value={row.prices?.[pricingSeason]?.[pricingAudience]?.[mp] ?? ""}
-                            onChange={(e) => updateMealPrice(row.id, pricingSeason, pricingAudience, mp, e.target.value)}
-                          />
-                        </td>
-                      ))}
-                      <td className="px-3 py-3 text-right align-top">
-                        {!row.builtin && (
-                          <button
-                            type="button"
-                            className="rounded-lg px-2 py-1 text-slate-400 transition hover:bg-red-50 hover:text-red-600"
-                            onClick={() => removeRow(row.id)}
-                            title={t("delete", { defaultValue: "Удалить" })}
-                          >
-                            ✕
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
-              <input
-                className={formInputClass}
-                placeholder={t("add_custom_room_type_ph", { defaultValue: "Добавить свой тип номера (например, Deluxe…)" })}
-                value={newTypeName}
-                onChange={(e) => setNewTypeName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomType())}
-              />
-              <button type="button" onClick={addCustomType} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">
-                {t("add_type", { defaultValue: "Добавить тип" })}
-              </button>
-            </div>
-
-            <div className="max-w-sm">
-              <label className={formLabelClass}>
-                {t("extra_bed_cost", { defaultValue: "Стоимость доп. места (за человека/ночь)" })} ({currency})
-              </label>
-              <input
-                type="number"
-                min={0}
-                step="0.01"
-                className={formInputClass}
-                placeholder={currency}
-                value={extraBedPrice}
-                onChange={(e) => setExtraBedPrice(e.target.value)}
-              />
-            </div>
-          </div>
-        )}
-
         {activeTab === "taxes" && (
           <div className="space-y-5">
             <h2 className="text-xl font-black tracking-[-0.02em] text-slate-950">
@@ -1378,13 +1146,20 @@ const inputCls = (season) =>
           {isNew ? "Создание новой карточки отеля" : `Отель #${hotelId}`} · {completedCount}/{completionItems.length} заполнено
         </div>
         <div className="flex gap-2">
-          <button
-            type="button"
-            onClick={() => setActiveTab("prices")}
-            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"
-          >
-            {t("rooms_and_prices", { defaultValue: "Номерной фонд и цены" })}
-          </button>
+          {hotelId ? (
+            <Link
+              to={isAdminLike
+                ? `/admin/hotels/${encodeURIComponent(hotelId)}/offers`
+                : `/provider/hotels/${encodeURIComponent(hotelId)}/offer`}
+              className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+            >
+              Фонд и тарифы
+            </Link>
+          ) : (
+            <span className="hidden text-xs font-bold text-slate-500 sm:inline">
+              Сначала сохраните карточку, затем настройте фонд и тарифы
+            </span>
+          )}
           <button onClick={submit} className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-700">
             {t("save", { defaultValue: "Сохранить" })}
           </button>
