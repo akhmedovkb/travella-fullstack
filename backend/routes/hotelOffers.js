@@ -440,7 +440,7 @@ router.get('/', async (req, res, next) => {
         ORDER BY MIN(r.amount) ASC NULLS LAST, o.is_direct DESC, p.name, o.id`,
       params
     );
-    return res.json({ items: rows, can_manage: manager });
+    return res.json({ items: rows.map((offer) => ({ ...offer, can_edit: canEditOffer(req, offer) })), can_manage: manager });
   } catch (error) { return next(error); }
 });
 
@@ -507,7 +507,8 @@ router.put('/:offerId', async (req, res, next) => {
     const offerId = positiveInt(req.params.offerId);
     const offer = await getOffer(offerId, hotelId);
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
-    if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
+    const canEdit = canEditOffer(req, offer);
+    if (!canEdit && !(await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
 
     const requestedStatus = String(req.body?.status || offer.status).toLowerCase();
     let status = offer.status;
@@ -584,7 +585,7 @@ router.get('/:offerId/rates', async (req, res, next) => {
           ORDER BY source.date_from,source.room_type,source.meal_plan,source.residency,source.id`,
         [hotelId, offerId, offer.provider_id, templateProviderId]
       );
-      return res.json({ offer, items: rows, cascade: true });
+      return res.json({ offer, items: rows, cascade: true, can_edit: canEdit });
     }
     const { rows } = await db.query(
       `SELECT r.id,r.offer_id,r.source_rate_id,r.inventory_pool_id,COALESCE(p.room_type,r.room_type) AS room_type,r.meal_plan,r.residency,r.date_from::text,r.date_to::text,
@@ -604,7 +605,7 @@ router.get('/:offerId/rates', async (req, res, next) => {
         WHERE r.offer_id=$1 ORDER BY r.date_from,r.room_type,r.meal_plan,r.residency,r.id`,
       [offerId]
     );
-    return res.json({ offer, items: rows, cascade: false });
+    return res.json({ offer, items: rows, cascade: false, can_edit: canEdit });
   } catch (error) { return next(error); }
 });
 
@@ -911,7 +912,7 @@ router.get('/:offerId/events', async (req, res, next) => {
     const hotelId = positiveInt(req.params.id); const offerId = positiveInt(req.params.offerId);
     const offer = await getOffer(offerId, hotelId);
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
-    if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
+    if (!canEditOffer(req, offer) && !(await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
     const { rows } = await db.query(`SELECT * FROM hotel_offer_events WHERE offer_id=$1 ORDER BY created_at DESC,id DESC LIMIT 100`, [offerId]);
     return res.json({ items: rows });
   } catch (error) { return next(error); }
