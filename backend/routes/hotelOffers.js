@@ -676,7 +676,11 @@ router.put('/:offerId/rates', async (req, res, next) => {
       await client.query('COMMIT');
       return res.json({ ok: true, count: items.length, cascade: true });
     }
-    const invalid = items.some((row) => !row.room_type || (poolMap.size > 0 && !poolMap.has(row.inventory_pool_id))
+    items.forEach((row) => {
+      const pool = poolMap.get(row.inventory_pool_id);
+      if (pool) row.room_type = String(pool.room_type || '').trim();
+    });
+    const invalid = items.some((row) => !row.room_type || !row.inventory_pool_id || !poolMap.has(row.inventory_pool_id)
       || !MEAL_PLANS.has(row.meal_plan) || !RESIDENCIES.has(row.residency)
       || !row.date_from || !row.date_to || row.date_from > row.date_to || !(row.amount > 0));
     if (invalid) return res.status(400).json({ error: 'bad_rate_rows' });

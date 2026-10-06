@@ -155,6 +155,13 @@ async function ensureHotelOfferTablesOnce() {
        AND r.inventory_pool_id IS NULL
   `);
   await db.query(`
+    UPDATE hotel_offer_rates r
+       SET room_type=p.room_type,updated_at=NOW()
+      FROM hotel_room_inventory_pools p
+     WHERE r.inventory_pool_id=p.id
+       AND r.room_type IS DISTINCT FROM p.room_type
+  `);
+  await db.query(`
     CREATE OR REPLACE FUNCTION sync_hotel_inventory_reservation_status()
     RETURNS trigger AS $$
     BEGIN
