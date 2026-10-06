@@ -542,7 +542,8 @@ router.get('/:offerId/rates', async (req, res, next) => {
     const offerId = positiveInt(req.params.offerId);
     const offer = await getOffer(offerId, hotelId);
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
-    if (!canEditOffer(req, offer)) return res.status(403).json({ error: 'forbidden' });
+    const canEdit = canEditOffer(req, offer);
+    if (!canEdit && !(await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
     const templateProviderId = await getHotelTemplateProviderId(hotelId);
     const isHotelTemplate = Number(templateProviderId) === Number(offer.provider_id);
     if (!isHotelTemplate) {
