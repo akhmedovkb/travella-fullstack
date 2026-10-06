@@ -53,7 +53,7 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
     const rateIds = [...new Set(requested.map((item) => item.rateId))];
     const { rows: rates } = await client.query(
       `SELECT r.id,r.offer_id,r.inventory_pool_id,r.room_type,r.date_from::text,r.date_to::text,r.allotment,
-              o.hotel_id,o.provider_id,o.status AS offer_status,o.valid_from::text,o.valid_to::text
+              o.hotel_id,o.provider_id,o.is_direct,o.status AS offer_status,o.valid_from::text,o.valid_to::text
          FROM hotel_offer_rates r
          JOIN hotel_offers o ON o.id=r.offer_id
         WHERE r.id=ANY($1::int[])
@@ -146,10 +146,12 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
       for (const row of rows) supplierOccupied.set(`${row.inventory_pool_id}:${row.stay_date}`, Number(row.quantity || 0));
     }
     const supplierRequested = new Map();
+    const supplierRequiresAllocation = new Map();
     for (const item of requested) {
       const rate = rateMap.get(item.rateId); if (!rate?.inventory_pool_id) continue;
       const key = `${rate.inventory_pool_id}:${item.date}`;
       supplierRequested.set(key, (supplierRequested.get(key) || 0) + item.quantity);
+      if (rate.is_direct !== true) supplierRequiresAllocation.set(key, true);
     }
     for (const [key, quantity] of supplierRequested) {
       const [poolId, date] = key.split(':');
@@ -157,7 +159,12 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
         `SELECT allotment FROM hotel_supplier_inventory_allocations
           WHERE provider_id=$1 AND pool_id=$2 AND active=true AND $3::date BETWEEN date_from AND date_to
           ORDER BY updated_at DESC,id DESC LIMIT 1`, [providerId,poolId,date]);
-      if (!allocation.rowCount) continue;
+      if (!allocation.rowCount) {
+        if (!supplierRequiresAllocation.get(key)) continue;
+        throw new HotelInventoryError('hotel_supplier_allocation_exhausted', {
+          provider_id: Number(providerId), inventory_pool_id: Number(poolId), date, requested: quantity, available: 0,
+        });
+      }
       const used = supplierOccupied.get(key) || 0; const limit = Number(allocation.rows[0].allotment);
       const available = supplierAllocationAvailability(limit, used);
       if (quantity > available) throw new HotelInventoryError('hotel_supplier_allocation_exhausted', {

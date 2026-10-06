@@ -445,21 +445,21 @@ router.get('/', async (req, res, next) => {
       const offerIds = rows.map((offer) => Number(offer.id));
       const availabilityResult = await db.query(
         `WITH offer_pools AS (
-           SELECT DISTINCT o.id AS offer_id,o.hotel_id,o.provider_id,r.inventory_pool_id
+           SELECT DISTINCT o.id AS offer_id,o.hotel_id,o.provider_id,o.is_direct,r.inventory_pool_id,p.room_type
              FROM hotel_offers o
              JOIN hotel_offer_rates r ON r.offer_id=o.id
+             JOIN hotel_room_inventory_pools p ON p.id=r.inventory_pool_id AND p.active=true
             WHERE o.id=ANY($1::int[]) AND r.inventory_pool_id IS NOT NULL
               AND r.date_from <= $2::date AND r.date_to >= $2::date
-         )
-         SELECT op.offer_id,
-                COALESCE(SUM(
+         ), pool_availability AS (
+           SELECT op.offer_id,op.room_type,
                   LEAST(
                     CASE WHEN COALESCE(day_pool.stop_sell,false) THEN 0
                          ELSE GREATEST(0,COALESCE(day_pool.inventory,pool.base_inventory)-COALESCE(physical_used.quantity,0)) END,
-                    CASE WHEN allocation.allotment IS NULL THEN 2147483647
+                    CASE WHEN allocation.allotment IS NULL AND op.is_direct THEN 2147483647
+                         WHEN allocation.allotment IS NULL THEN 0
                          ELSE GREATEST(0,allocation.allotment-COALESCE(supplier_used.quantity,0)) END
-                  )
-                ),0)::int AS available_rooms
+                  )::int AS available_rooms
            FROM offer_pools op
            JOIN hotel_room_inventory_pools pool ON pool.id=op.inventory_pool_id AND pool.active=true
            LEFT JOIN hotel_room_inventory_overrides day_pool
@@ -490,10 +490,17 @@ router.get('/', async (req, res, next) => {
                 AND used_rate.inventory_pool_id=op.inventory_pool_id AND hir.stay_date=$2::date
                 AND (hir.status='confirmed' OR (hir.status='held' AND hir.expires_at>NOW()))
            ) supplier_used ON true
-          GROUP BY op.offer_id`,
+         )
+         SELECT offer_id,COALESCE(SUM(available_rooms),0)::int AS available_rooms,
+                JSON_AGG(JSON_BUILD_OBJECT('room_type',room_type,'available',available_rooms) ORDER BY room_type) AS availability_by_room
+           FROM pool_availability
+          GROUP BY offer_id`,
         [offerIds, rateDate]
       );
-      availabilityByOffer = new Map(availabilityResult.rows.map((item) => [Number(item.offer_id), Number(item.available_rooms || 0)]));
+      availabilityByOffer = new Map(availabilityResult.rows.map((item) => [Number(item.offer_id), {
+        total: Number(item.available_rooms || 0),
+        rooms: Array.isArray(item.availability_by_room) ? item.availability_by_room : [],
+      }]));
     }
     return res.json({
       items: rows.map((offer) => ({
@@ -501,7 +508,8 @@ router.get('/', async (req, res, next) => {
         can_edit: canEditOffer(req, offer),
         availability_date: rateDate,
         availability_known: rateDate ? availabilityByOffer.has(Number(offer.id)) : false,
-        available_rooms: rateDate && availabilityByOffer.has(Number(offer.id)) ? availabilityByOffer.get(Number(offer.id)) : null,
+        available_rooms: rateDate && availabilityByOffer.has(Number(offer.id)) ? availabilityByOffer.get(Number(offer.id)).total : null,
+        availability_by_room: rateDate && availabilityByOffer.has(Number(offer.id)) ? availabilityByOffer.get(Number(offer.id)).rooms : [],
       })),
       can_manage: manager,
     });

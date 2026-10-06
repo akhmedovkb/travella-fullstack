@@ -621,8 +621,10 @@ function offerAvailabilityRank(offer) {
 
 function offerAvailabilityText(offer) {
   if (offer?.availability_known !== true) return "наличие по запросу";
-  const available = Math.max(0, Number(offer.available_rooms || 0));
-  return available > 0 ? `осталось ${available}` : "нет мест";
+  const rooms = Array.isArray(offer.availability_by_room) ? offer.availability_by_room : [];
+  const availableRooms = rooms.filter((room) => Number(room?.available || 0) > 0);
+  if (!availableRooms.length) return "нет мест";
+  return availableRooms.map((room) => `${room.room_type}: ${Number(room.available)}`).join(" · ");
 }
 
 async function fetchHotelQuote(payload) {

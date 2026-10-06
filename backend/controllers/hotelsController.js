@@ -324,7 +324,14 @@ async function quoteHotel(req, res) {
           if (!line.inventory_pool_id) continue;
           const allocation = allocationRows.find((row) => Number(row.pool_id) === Number(line.inventory_pool_id)
             && line.date >= row.date_from && line.date <= row.date_to);
-          if (!allocation) continue;
+          if (!allocation) {
+            if (selectedOffer.is_direct === true) continue;
+            line.supplier_allotment = 0;
+            line.supplier_available = 0;
+            line.available = 0;
+            warnings.push(`supplier_allocation_exceeded:${line.room_type}:${line.date}`);
+            continue;
+          }
           const reserved = supplierReserved.get(`${line.inventory_pool_id}:${line.date}`) || 0;
           const available = Math.max(0, Number(allocation.allotment) - reserved);
           line.supplier_allotment = Number(allocation.allotment);
