@@ -440,7 +440,71 @@ router.get('/', async (req, res, next) => {
         ORDER BY MIN(r.amount) ASC NULLS LAST, o.is_direct DESC, p.name, o.id`,
       params
     );
-    return res.json({ items: rows.map((offer) => ({ ...offer, can_edit: canEditOffer(req, offer) })), can_manage: manager });
+    let availabilityByOffer = new Map();
+    if (rateDate && rows.length) {
+      const offerIds = rows.map((offer) => Number(offer.id));
+      const availabilityResult = await db.query(
+        `WITH offer_pools AS (
+           SELECT DISTINCT o.id AS offer_id,o.hotel_id,o.provider_id,r.inventory_pool_id
+             FROM hotel_offers o
+             JOIN hotel_offer_rates r ON r.offer_id=o.id
+            WHERE o.id=ANY($1::int[]) AND r.inventory_pool_id IS NOT NULL
+              AND r.date_from <= $2::date AND r.date_to >= $2::date
+         )
+         SELECT op.offer_id,
+                COALESCE(SUM(
+                  LEAST(
+                    CASE WHEN COALESCE(day_pool.stop_sell,false) THEN 0
+                         ELSE GREATEST(0,COALESCE(day_pool.inventory,pool.base_inventory)-COALESCE(physical_used.quantity,0)) END,
+                    CASE WHEN allocation.allotment IS NULL THEN 2147483647
+                         ELSE GREATEST(0,allocation.allotment-COALESCE(supplier_used.quantity,0)) END
+                  )
+                ),0)::int AS available_rooms
+           FROM offer_pools op
+           JOIN hotel_room_inventory_pools pool ON pool.id=op.inventory_pool_id AND pool.active=true
+           LEFT JOIN hotel_room_inventory_overrides day_pool
+             ON day_pool.pool_id=op.inventory_pool_id AND day_pool.stay_date=$2::date
+           LEFT JOIN LATERAL (
+             SELECT COALESCE(SUM(hir.quantity),0)::int AS quantity
+               FROM hotel_inventory_reservations hir
+               JOIN hotel_offer_rates used_rate ON used_rate.id=hir.rate_id
+               JOIN hotel_offers used_offer ON used_offer.id=used_rate.offer_id
+              WHERE used_offer.hotel_id=op.hotel_id AND used_rate.inventory_pool_id=op.inventory_pool_id
+                AND hir.stay_date=$2::date
+                AND (hir.status='confirmed' OR (hir.status='held' AND hir.expires_at>NOW()))
+           ) physical_used ON true
+           LEFT JOIN LATERAL (
+             SELECT a.allotment
+               FROM hotel_supplier_inventory_allocations a
+              WHERE a.hotel_id=op.hotel_id AND a.provider_id=op.provider_id
+                AND a.pool_id=op.inventory_pool_id AND a.active=true
+                AND a.date_from <= $2::date AND a.date_to >= $2::date
+              ORDER BY a.updated_at DESC,a.id DESC LIMIT 1
+           ) allocation ON true
+           LEFT JOIN LATERAL (
+             SELECT COALESCE(SUM(hir.quantity),0)::int AS quantity
+               FROM hotel_inventory_reservations hir
+               JOIN hotel_offer_rates used_rate ON used_rate.id=hir.rate_id
+               JOIN hotel_offers used_offer ON used_offer.id=used_rate.offer_id
+              WHERE used_offer.hotel_id=op.hotel_id AND used_offer.provider_id=op.provider_id
+                AND used_rate.inventory_pool_id=op.inventory_pool_id AND hir.stay_date=$2::date
+                AND (hir.status='confirmed' OR (hir.status='held' AND hir.expires_at>NOW()))
+           ) supplier_used ON true
+          GROUP BY op.offer_id`,
+        [offerIds, rateDate]
+      );
+      availabilityByOffer = new Map(availabilityResult.rows.map((item) => [Number(item.offer_id), Number(item.available_rooms || 0)]));
+    }
+    return res.json({
+      items: rows.map((offer) => ({
+        ...offer,
+        can_edit: canEditOffer(req, offer),
+        availability_date: rateDate,
+        availability_known: rateDate ? availabilityByOffer.has(Number(offer.id)) : false,
+        available_rooms: rateDate && availabilityByOffer.has(Number(offer.id)) ? availabilityByOffer.get(Number(offer.id)) : null,
+      })),
+      can_manage: manager,
+    });
   } catch (error) { return next(error); }
 });
 

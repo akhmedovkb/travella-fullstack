@@ -599,6 +599,9 @@ function pickBestHotelOffer(offers = [], usdRate = 0) {
   };
   return candidates
     .sort((a, b) => {
+      const stockA = offerAvailabilityRank(a);
+      const stockB = offerAvailabilityRank(b);
+      if (stockA !== stockB) return stockA - stockB;
       const availabilityA = a.unlimited_allotment || a.has_allotment ? 0 : 1;
       const availabilityB = b.unlimited_allotment || b.has_allotment ? 0 : 1;
       if (availabilityA !== availabilityB) return availabilityA - availabilityB;
@@ -609,6 +612,17 @@ function pickBestHotelOffer(offers = [], usdRate = 0) {
       }
       return Number(b.is_direct === true) - Number(a.is_direct === true);
     })[0] || null;
+}
+
+function offerAvailabilityRank(offer) {
+  if (offer?.availability_known !== true) return 1;
+  return Number(offer.available_rooms || 0) > 0 ? 0 : 2;
+}
+
+function offerAvailabilityText(offer) {
+  if (offer?.availability_known !== true) return "наличие по запросу";
+  const available = Math.max(0, Number(offer.available_rooms || 0));
+  return available > 0 ? `осталось ${available}` : "нет мест";
 }
 
 async function fetchHotelQuote(payload) {
@@ -2447,6 +2461,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               <option key={offer.id} value={offer.id}>
                                 {offer.is_direct ? "Отель напрямую" : offer.provider_name}
                                 {offer.min_rate ? ` — от ${Number(offer.min_rate).toLocaleString("ru-RU")} ${offer.currency}` : ""}
+                                {` — ${offerAvailabilityText(offer)}`}
                               </option>
                             ))}
                           </select>
@@ -2454,6 +2469,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             <div className="mt-2 flex flex-wrap gap-1.5">
                               {st.hotelOffer.is_direct ? <span className="rounded-full bg-sky-50 px-2 py-1 text-[11px] font-bold text-sky-700 ring-1 ring-sky-200">Прямой тариф</span> : null}
                               {Number(st.hotelOffer.id) === Number(pickBestHotelOffer(st.hotelOffers, usdRate)?.id) ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">Лучшая доступная цена</span> : null}
+                              <span className={`rounded-full px-2 py-1 text-[11px] font-bold ring-1 ${st.hotelOffer.availability_known && Number(st.hotelOffer.available_rooms || 0) <= 0 ? "bg-rose-50 text-rose-700 ring-rose-200" : "bg-emerald-50 text-emerald-700 ring-emerald-200"}`}>{offerAvailabilityText(st.hotelOffer)}</span>
                               {st.hotelOffer.unlimited_allotment ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">Свободная продажа</span> : st.hotelOffer.has_allotment ? <span className="rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-bold text-emerald-700 ring-1 ring-emerald-200">Квота до {st.hotelOffer.max_allotment}</span> : <span className="rounded-full bg-amber-50 px-2 py-1 text-[11px] font-bold text-amber-700 ring-1 ring-amber-200">По запросу</span>}
                               {st.hotelOffer.fully_refundable === true ? <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">Возвратный</span> : st.hotelOffer.fully_refundable === false ? <span className="rounded-full bg-rose-50 px-2 py-1 text-[11px] font-bold text-rose-700 ring-1 ring-rose-200">Невозвратный</span> : null}
                               {Number(st.hotelOffer.min_stay || 1) > 1 ? <span className="rounded-full bg-slate-50 px-2 py-1 text-[11px] font-bold text-slate-600 ring-1 ring-slate-200">Мин. {st.hotelOffer.min_stay} ноч.</span> : null}
