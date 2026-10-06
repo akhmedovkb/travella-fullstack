@@ -542,12 +542,14 @@ export default function Header() {
                   {servicesOpen && (
                     <DropdownPanel align="right" width="w-80">
                       <DropdownCaption title={t("nav.services_group", "Управление услугами")} />
-                      <DropdownItem
-                        to="/dashboard/hotels"
-                        label={t("nav.my_hotels", "Мои отели")}
-                        description={t("nav.my_hotels_desc", "Карточки, тарифы, наличие и предложения")}
-                        icon={<IconHotel />}
-                      />
+                      {!isAdmin && (
+                        <DropdownItem
+                          to="/dashboard/hotels"
+                          label={t("nav.my_hotels", "Мои отели")}
+                          description={t("nav.my_hotels_desc", "Карточки, тарифы, наличие и предложения")}
+                          icon={<IconHotel />}
+                        />
+                      )}
                       <DropdownItem
                         to="/dashboard/services/marketplace"
                         label={t("nav.services_marketplace_short", "Маркетплейс")}
@@ -763,7 +765,7 @@ export default function Header() {
             {role === "provider" && (
               <RowGroupDark title={t("nav.activity", "Активность")}>
                 <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
-                <NavItemMobileDark to="/dashboard/hotels" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />
+                {!isAdmin && <NavItemMobileDark to="/dashboard/hotels" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />}
                 <NavItemMobileDark to="/dashboard/services/marketplace" label={t("nav.services_marketplace_short", "Маркетплейс")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder_short", "Tour Builder")} icon={<IconChecklist />} />
                 <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
