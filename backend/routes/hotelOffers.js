@@ -550,8 +550,8 @@ router.get('/:offerId/rates', async (req, res, next) => {
       const { rows } = await db.query(
         `SELECT own.id,own.offer_id,source.id AS source_rate_id,source.inventory_pool_id,
                 COALESCE(pool.room_type,source.room_type) AS room_type,source.meal_plan,source.residency,
-                source.date_from::text,source.date_to::text,COALESCE(own.amount,source.amount)::numeric AS amount,
-                (own.id IS NULL) AS price_inherited,NULL::int AS allotment,
+                source.date_from::text,source.date_to::text,source.amount::numeric AS hotel_amount,
+                own.amount::numeric AS amount,NULL::int AS allotment,
                 source.min_stay,source.refundable,own.created_at,own.updated_at,
                 COALESCE(stock.held,0)::int AS held,COALESCE(stock.confirmed,0)::int AS confirmed,
                 allocation.allotment::int AS supplier_allotment,
