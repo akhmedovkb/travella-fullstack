@@ -627,7 +627,7 @@ router.put('/:offerId/rates', async (req, res, next) => {
       meal_plan: String(row?.meal_plan || 'BB').toUpperCase(),
       residency: String(row?.residency || 'all').toLowerCase(),
       date_from: isoDate(row?.date_from), date_to: isoDate(row?.date_to),
-      amount: Number(row?.amount), allotment: row?.allotment === '' || row?.allotment == null ? null : Math.max(0, Math.trunc(Number(row.allotment))),
+      amount: Number(row?.amount), allotment: null,
       min_stay: Math.max(1, Math.trunc(Number(row?.min_stay || 1))), refundable: row?.refundable !== false,
     }));
     const poolResult = await db.query(
@@ -701,7 +701,7 @@ router.put('/:offerId/rates', async (req, res, next) => {
           `UPDATE hotel_offer_rates SET inventory_pool_id=$3,room_type=$4,meal_plan=$5,residency=$6,date_from=$7,date_to=$8,
                   amount=$9,allotment=$10,min_stay=$11,refundable=$12,updated_at=NOW()
             WHERE id=$1 AND offer_id=$2 AND source_rate_id IS NULL RETURNING id`,
-          [row.id,offerId,row.inventory_pool_id,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,row.allotment,row.min_stay,row.refundable]
+          [row.id,offerId,row.inventory_pool_id,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,null,row.min_stay,row.refundable]
         );
         if (updated.rowCount) keptRateIds.push(updated.rows[0].id);
       } else {
@@ -709,7 +709,7 @@ router.put('/:offerId/rates', async (req, res, next) => {
         `INSERT INTO hotel_offer_rates
           (offer_id,inventory_pool_id,room_type,meal_plan,residency,date_from,date_to,amount,allotment,min_stay,refundable)
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-        [offerId,row.inventory_pool_id,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,row.allotment,row.min_stay,row.refundable]
+        [offerId,row.inventory_pool_id,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,null,row.min_stay,row.refundable]
         );
         keptRateIds.push(inserted.rows[0].id);
       }
