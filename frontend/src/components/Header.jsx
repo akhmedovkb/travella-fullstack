@@ -183,6 +183,8 @@ function detectProviderType(profile) {
   return normalized;
 }
 
+const TOUR_BUILDER_SERVICE_PROVIDER_TYPES = new Set(["guide", "transport", "agent"]);
+
 function formatHeaderBalance(value, lang = "ru") {
   const amount = Number(value || 0) / 100;
   const locale = lang === "uz" ? "uz-UZ" : lang === "en" ? "en-US" : "ru-RU";
@@ -556,12 +558,14 @@ export default function Header() {
                         description={t("nav.services_marketplace_desc", "Отказные туры, отели, авиабилеты и другие услуги")}
                         icon={<IconChecklist />}
                       />
-                      <DropdownItem
-                        to="/dashboard/services/tourbuilder"
-                        label={t("nav.services_tourbuilder_short", "Tour Builder")}
-                        description={t("nav.services_tourbuilder_desc", "Услуги для конструктора туров")}
-                        icon={<IconChecklist />}
-                      />
+                      {TOUR_BUILDER_SERVICE_PROVIDER_TYPES.has(providerType) && (
+                        <DropdownItem
+                          to="/dashboard/services/tourbuilder"
+                          label={t("nav.services_tourbuilder_short", "Tour Builder")}
+                          description={t("nav.services_tourbuilder_desc", "Услуги для конструктора туров")}
+                          icon={<IconChecklist />}
+                        />
+                      )}
                       <DropdownItem
                         to="/dashboard/calendar"
                         label={t("nav.provider_calendar", "Календарь")}
@@ -767,7 +771,9 @@ export default function Header() {
                 <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
                 {!isAdmin && <NavItemMobileDark to="/dashboard/hotels" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />}
                 <NavItemMobileDark to="/dashboard/services/marketplace" label={t("nav.services_marketplace_short", "Маркетплейс")} icon={<IconChecklist />} />
-                <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder_short", "Tour Builder")} icon={<IconChecklist />} />
+                {TOUR_BUILDER_SERVICE_PROVIDER_TYPES.has(providerType) && (
+                  <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder_short", "Tour Builder")} icon={<IconChecklist />} />
+                )}
                 <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
                 <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
                 <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
