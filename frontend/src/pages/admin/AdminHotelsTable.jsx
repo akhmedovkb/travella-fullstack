@@ -169,10 +169,12 @@ export default function AdminHotelsTable({
   const [error, setError] = useState("");
   const reqIdRef = useRef(0);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async ({ silent = false } = {}) => {
     const myReq = ++reqIdRef.current;
-    setLoading(true);
-    setError("");
+    if (!silent) {
+      setLoading(true);
+      setError("");
+    }
     try {
       const data = await apiHotelReadiness({
         name: qName.trim(), city: qCity.trim(), limit: 200, providerMode,
@@ -191,7 +193,19 @@ export default function AdminHotelsTable({
   }, [load]);
 
   useEffect(() => {
-    const h = () => load();
+    const refresh = () => {
+      if (!document.hidden) load({ silent: true });
+    };
+    const timer = window.setInterval(refresh, 15000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [load]);
+
+  useEffect(() => {
+    const h = () => load({ silent: true });
     window.addEventListener("provider-hotels:reload", h);
     return () => window.removeEventListener("provider-hotels:reload", h);
   }, [load]);

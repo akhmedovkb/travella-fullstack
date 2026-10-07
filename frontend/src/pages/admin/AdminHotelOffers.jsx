@@ -68,6 +68,8 @@ function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage
   const [to, setTo] = useState(() => plusDaysIso(todayIso(), 30));
   const [busy, setBusy] = useState(false);
   const [canManage, setCanManage] = useState(false);
+  const [poolsDirty, setPoolsDirty] = useState(false);
+  const [calendarDirty, setCalendarDirty] = useState(false);
 
   const loadPools = useCallback(async () => {
     try {
@@ -82,13 +84,27 @@ function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage
 
   useEffect(() => { loadPools(); }, [loadPools]);
 
+  useEffect(() => {
+    const refresh = () => {
+      if (!document.hidden && !busy && !poolsDirty) loadPools();
+    };
+    const timer = window.setInterval(refresh, 15000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [busy, loadPools, poolsDirty]);
+
   function addPool(roomType = "", baseInventory = 0) {
     const normalized = String(roomType || "").trim();
     if (normalized && pools.some((item) => item.room_type.toLowerCase() === normalized.toLowerCase())) return;
+    setPoolsDirty(true);
     setPools((items) => [...items, { room_type: normalized, base_inventory: Math.max(0, Number(baseInventory) || 0), active: true }]);
   }
 
   function updatePool(index, key, value) {
+    setPoolsDirty(true);
     setPools((items) => items.map((item, i) => i === index ? { ...item, [key]: value } : item));
   }
 
@@ -101,6 +117,7 @@ function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage
       }, apiRole);
       const next = (data?.items || []).filter((item) => item.active !== false);
       setPools(next); onPoolsChange(next);
+      setPoolsDirty(false);
       onMessage("Единый номерной фонд сохранён");
     } catch (error) { onMessage(error?.message || "Не удалось сохранить номерной фонд"); }
     finally { setBusy(false); }
@@ -113,6 +130,7 @@ function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage
       const data = await apiGet(`/api/hotels/${hotelId}/offers/inventory/rooms/${pool.id}/calendar?from=${nextFrom}&to=${nextTo}`, apiRole);
       setActivePool(data?.pool || pool); setFrom(nextFrom); setTo(nextTo);
       setCalendar((data?.items || []).map((item) => ({ ...item, inventory: item.inventory ?? "", note: item.note || "" })));
+      setCalendarDirty(false);
     } catch (error) { onMessage(error?.message || "Не удалось загрузить календарь фонда"); }
     finally { setBusy(false); }
   }
@@ -125,14 +143,30 @@ function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage
         items: calendar.map((item) => ({ date: item.date, inventory: item.inventory, stop_sell: item.stop_sell === true, note: item.note })),
       }, apiRole);
       onMessage(`Календарь ${activePool.room_type} сохранён`);
+      setCalendarDirty(false);
       await openCalendar(activePool);
     } catch (error) { onMessage(error?.message || "Не удалось сохранить календарь фонда"); }
     finally { setBusy(false); }
   }
 
   function updateDay(index, key, value) {
+    setCalendarDirty(true);
     setCalendar((items) => items.map((item, i) => i === index ? { ...item, [key]: value } : item));
   }
+
+  useEffect(() => {
+    const refresh = () => {
+      if (!document.hidden && activePool?.id && !busy && !calendarDirty) {
+        openCalendar(activePool, from, to);
+      }
+    };
+    const timer = window.setInterval(refresh, 15000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [activePool, busy, calendarDirty, from, to]);
 
   const suggestionMap = new Map();
   suggestedRooms.forEach((item) => {
@@ -149,7 +183,7 @@ function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage
       {canManage ? <div className="flex flex-wrap gap-2"><button type="button" onClick={() => addPool()} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black">+ Тип номера</button><button type="button" disabled={busy || !pools.length} onClick={savePools} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40">Сохранить фонд</button></div> : <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Только просмотр</span>}
     </div>
     {canManage && availableSuggestions.length ? <div className="mt-3 flex flex-wrap items-center gap-2 px-1"><span className="text-xs font-bold text-slate-500">Добавить из карточки и тарифов:</span>{availableSuggestions.map((item) => <button key={item.type} type="button" onClick={() => addPool(item.type, item.count)} className="rounded-full border border-slate-200 px-3 py-1 text-xs font-black text-slate-700">+ {item.type}{item.count ? ` · ${item.count}` : ""}</button>)}</div> : null}
-    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[720px]"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-3">Тип номера</th><th className="p-3">Всего номеров</th><th className="p-3">Назначение</th><th className="p-3 text-right">Действия</th></tr></thead><tbody className="divide-y divide-slate-100">{pools.length ? pools.map((pool, index) => <tr key={pool.id || `new-${index}`}><td className="p-3">{canManage ? <input className={inputClass} value={pool.room_type} onChange={(e) => updatePool(index, "room_type", e.target.value)} placeholder="Standard DBL" /> : <span className="font-black">{pool.room_type}</span>}</td><td className="p-3">{canManage ? <input type="number" min="0" className={`${inputClass} max-w-40`} value={pool.base_inventory} onChange={(e) => updatePool(index, "base_inventory", e.target.value)} /> : <span className="font-black">{pool.base_inventory}</span>}</td><td className="p-3 text-sm text-slate-600">Общий остаток для всех тарифов и поставщиков</td><td className="p-3"><div className="flex justify-end gap-3">{canManage && pool.id ? <button type="button" onClick={() => openCalendar(pool)} className="text-sm font-black text-blue-700">Календарь</button> : null}{canManage ? <button type="button" onClick={() => setPools((items) => items.filter((_, i) => i !== index))} className="text-sm font-black text-rose-600">Убрать</button> : null}</div></td></tr>) : <tr><td colSpan={4} className="p-6 text-center text-sm font-semibold text-slate-500">Номерной фонд пока не заполнен</td></tr>}</tbody></table></div>
+    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[720px]"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-3">Тип номера</th><th className="p-3">Всего номеров</th><th className="p-3">Назначение</th><th className="p-3 text-right">Действия</th></tr></thead><tbody className="divide-y divide-slate-100">{pools.length ? pools.map((pool, index) => <tr key={pool.id || `new-${index}`}><td className="p-3">{canManage ? <input className={inputClass} value={pool.room_type} onChange={(e) => updatePool(index, "room_type", e.target.value)} placeholder="Standard DBL" /> : <span className="font-black">{pool.room_type}</span>}</td><td className="p-3">{canManage ? <input type="number" min="0" className={`${inputClass} max-w-40`} value={pool.base_inventory} onChange={(e) => updatePool(index, "base_inventory", e.target.value)} /> : <span className="font-black">{pool.base_inventory}</span>}</td><td className="p-3 text-sm text-slate-600">Общий остаток для всех тарифов и поставщиков</td><td className="p-3"><div className="flex justify-end gap-3">{canManage && pool.id ? <button type="button" onClick={() => openCalendar(pool)} className="text-sm font-black text-blue-700">Календарь</button> : null}{canManage ? <button type="button" onClick={() => { setPoolsDirty(true); setPools((items) => items.filter((_, i) => i !== index)); }} className="text-sm font-black text-rose-600">Убрать</button> : null}</div></td></tr>) : <tr><td colSpan={4} className="p-6 text-center text-sm font-semibold text-slate-500">Номерной фонд пока не заполнен</td></tr>}</tbody></table></div>
     {activePool ? <div className="mt-5 border-t border-slate-200 pt-4"><div className="flex flex-wrap items-end justify-between gap-3 px-1"><div><h3 className="font-black text-slate-950">Наличие: {activePool.room_type}</h3><p className="text-sm text-slate-500">Пустое значение наследует базовый фонд {activePool.base_inventory}. Stop-sale закрывает продажи на дату.</p></div><div className="flex flex-wrap items-end gap-2"><Field label="С"><input type="date" className={inputClass} value={from} onChange={(e) => setFrom(e.target.value)} /></Field><Field label="До"><input type="date" className={inputClass} value={to} onChange={(e) => setTo(e.target.value)} /></Field><button type="button" disabled={busy} onClick={() => openCalendar(activePool)} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-black">Показать</button><button type="button" disabled={busy} onClick={saveCalendar} className="h-10 rounded-lg bg-orange-600 px-4 text-sm font-black text-white">Сохранить</button><button type="button" onClick={() => { setActivePool(null); setCalendar([]); }} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-black">Закрыть</button></div></div><div className="mt-3 max-h-[480px] overflow-auto"><table className="w-full min-w-[900px]"><thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Дата</th><th className="p-2">Фонд на дату</th><th className="p-2">Stop-sale</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Комментарий</th></tr></thead><tbody className="divide-y divide-slate-100">{calendar.map((item, index) => <tr key={item.date} className={item.stop_sell ? "bg-rose-50" : item.available <= 2 ? "bg-amber-50" : ""}><td className="p-2 text-sm font-black">{item.date}</td><td className="p-2"><input type="number" min="0" className={`${inputClass} max-w-32`} value={item.inventory} onChange={(e) => updateDay(index, "inventory", e.target.value)} placeholder={String(activePool.base_inventory)} /></td><td className="p-2"><input type="checkbox" checked={item.stop_sell === true} onChange={(e) => updateDay(index, "stop_sell", e.target.checked)} /></td><td className="p-2 font-bold text-amber-700">{item.held || 0}</td><td className="p-2 font-bold text-emerald-700">{item.confirmed || 0}</td><td className="p-2 font-black">{item.stop_sell ? 0 : item.available}</td><td className="p-2"><input className={inputClass} value={item.note} onChange={(e) => updateDay(index, "note", e.target.value)} placeholder="Ремонт, блок, мероприятие..." /></td></tr>)}</tbody></table></div></div> : null}
   </section>;
 }
@@ -157,22 +191,34 @@ function RoomInventoryManager({ hotelId, apiRole, suggestedRooms = [], onMessage
 function SupplierAllocationManager({ hotelId, apiRole, offers, pools, onMessage }) {
   const [items, setItems] = useState([]); const [canManage, setCanManage] = useState(false); const [busy, setBusy] = useState(false);
   const [candidateProviders, setCandidateProviders] = useState([]);
+  const [dirty, setDirty] = useState(false);
   const load = useCallback(async () => {
     try { const data = await apiGet(`/api/hotels/${hotelId}/offers/inventory/allocations`, apiRole); setItems(data?.items || []); setCandidateProviders(data?.providers || []); setCanManage(data?.can_manage === true); }
     catch (error) { if (error?.status !== 403) onMessage(error?.message || "Не удалось загрузить квоты поставщиков"); }
   }, [hotelId, apiRole, onMessage]);
   useEffect(() => { load(); }, [load]);
-  function update(index, key, value) { setItems((rows) => rows.map((row, i) => i === index ? { ...row, [key]: value } : row)); }
+  useEffect(() => {
+    const refresh = () => {
+      if (!document.hidden && !busy && !dirty) load();
+    };
+    const timer = window.setInterval(refresh, 15000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [busy, dirty, load]);
+  function update(index, key, value) { setDirty(true); setItems((rows) => rows.map((row, i) => i === index ? { ...row, [key]: value } : row)); }
   async function save() {
     setBusy(true);
-    try { await apiPut(`/api/hotels/${hotelId}/offers/inventory/allocations`, { items: items.map((x) => ({ id: x.id || null, provider_id: Number(x.provider_id), pool_id: Number(x.pool_id), date_from: x.date_from, date_to: x.date_to, allotment: Number(x.allotment) })) }, apiRole); onMessage("Квоты поставщиков сохранены"); await load(); }
+    try { await apiPut(`/api/hotels/${hotelId}/offers/inventory/allocations`, { items: items.map((x) => ({ id: x.id || null, provider_id: Number(x.provider_id), pool_id: Number(x.pool_id), date_from: x.date_from, date_to: x.date_to, allotment: Number(x.allotment) })) }, apiRole); onMessage("Квоты поставщиков сохранены"); setDirty(false); await load(); }
     catch (error) { const code = error?.data?.error || error?.message; onMessage(code === "supplier_allocation_periods_overlap" ? "Периоды квот одного поставщика по одному фонду пересекаются" : (error?.message || "Не удалось сохранить квоты")); }
     finally { setBusy(false); }
   }
   const eligibleOffers = (canManage ? candidateProviders : offers).filter((offer) => offer.provider_id);
   return <section className="border-t border-slate-200 bg-white py-5">
-    <div className="flex flex-wrap items-start justify-between gap-3 px-1"><div><h2 className="text-lg font-black">Квоты поставщиков</h2><p className="text-sm text-slate-500">Один лимит на поставщика и физический фонд. Все его тарифы расходуют этот общий остаток.</p></div>{canManage ? <div className="flex gap-2"><button type="button" disabled={!eligibleOffers.length || !pools.length} onClick={() => setItems((rows) => [...rows, { provider_id: eligibleOffers[0]?.provider_id || "", pool_id: pools[0]?.id || "", date_from: todayIso(), date_to: plusDaysIso(todayIso(), 30), allotment: 0 }])} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black disabled:opacity-40">+ Квота</button><button type="button" disabled={busy} onClick={save} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40">Сохранить квоты</button></div> : <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">Ваша квота</span>}</div>
-    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[1050px]"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-3">Поставщик</th><th className="p-3">Фонд</th><th className="p-3">С</th><th className="p-3">До</th><th className="p-3">Выделено</th><th className="p-3">Резерв</th><th className="p-3">Продано</th><th className="p-3">Остаток</th>{canManage ? <th className="p-3"></th> : null}</tr></thead><tbody className="divide-y divide-slate-100">{items.length ? items.map((row,index) => <tr key={row.id || `new-${index}`}><td className="p-3">{canManage ? <select className={inputClass} value={row.provider_id} onChange={(e) => update(index,"provider_id",e.target.value)}>{eligibleOffers.map((o) => <option key={o.provider_id} value={o.provider_id}>{o.provider_name} · #{o.provider_id}</option>)}</select> : <><div className="font-black">{row.provider_name}</div><div className="text-xs text-slate-500">#{row.provider_id}</div></>}</td><td className="p-3">{canManage ? <select className={inputClass} value={row.pool_id} onChange={(e) => update(index,"pool_id",e.target.value)}>{pools.map((p) => <option key={p.id} value={p.id}>{p.room_type} · {p.base_inventory}</option>)}</select> : <span className="font-black">{row.room_type}</span>}</td><td className="p-3">{canManage ? <input type="date" className={inputClass} value={row.date_from} onChange={(e) => update(index,"date_from",e.target.value)} /> : row.date_from}</td><td className="p-3">{canManage ? <input type="date" className={inputClass} value={row.date_to} onChange={(e) => update(index,"date_to",e.target.value)} /> : row.date_to}</td><td className="p-3">{canManage ? <input type="number" min="0" className={`${inputClass} max-w-28`} value={row.allotment} onChange={(e) => update(index,"allotment",e.target.value)} /> : <span className="font-black">{row.allotment}</span>}</td><td className="p-3 font-bold text-amber-700">{row.held || 0}</td><td className="p-3 font-bold text-emerald-700">{row.confirmed || 0}</td><td className="p-3 font-black">{row.available ?? row.allotment}</td>{canManage ? <td className="p-3"><button type="button" onClick={() => setItems((rows) => rows.filter((_,i) => i !== index))} className="font-black text-rose-600">Удалить</button></td> : null}</tr>) : <tr><td colSpan={canManage ? 9 : 8} className="p-6 text-center text-sm font-semibold text-slate-500">Квоты пока не назначены. Без квоты действуют прежние лимиты тарифа.</td></tr>}</tbody></table></div>
+    <div className="flex flex-wrap items-start justify-between gap-3 px-1"><div><h2 className="text-lg font-black">Квоты поставщиков</h2><p className="text-sm text-slate-500">Один лимит на поставщика и физический фонд. Все его тарифы расходуют этот общий остаток.</p></div>{canManage ? <div className="flex gap-2"><button type="button" disabled={!eligibleOffers.length || !pools.length} onClick={() => { setDirty(true); setItems((rows) => [...rows, { provider_id: eligibleOffers[0]?.provider_id || "", pool_id: pools[0]?.id || "", date_from: todayIso(), date_to: plusDaysIso(todayIso(), 30), allotment: 0 }]); }} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black disabled:opacity-40">+ Квота</button><button type="button" disabled={busy} onClick={save} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-40">Сохранить квоты</button></div> : <span className="rounded-full bg-blue-50 px-3 py-1 text-xs font-black text-blue-700">Ваша квота</span>}</div>
+    <div className="mt-3 overflow-x-auto"><table className="w-full min-w-[1050px]"><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-3">Поставщик</th><th className="p-3">Фонд</th><th className="p-3">С</th><th className="p-3">До</th><th className="p-3">Выделено</th><th className="p-3">Резерв</th><th className="p-3">Продано</th><th className="p-3">Остаток</th>{canManage ? <th className="p-3"></th> : null}</tr></thead><tbody className="divide-y divide-slate-100">{items.length ? items.map((row,index) => <tr key={row.id || `new-${index}`}><td className="p-3">{canManage ? <select className={inputClass} value={row.provider_id} onChange={(e) => update(index,"provider_id",e.target.value)}>{eligibleOffers.map((o) => <option key={o.provider_id} value={o.provider_id}>{o.provider_name} · #{o.provider_id}</option>)}</select> : <><div className="font-black">{row.provider_name}</div><div className="text-xs text-slate-500">#{row.provider_id}</div></>}</td><td className="p-3">{canManage ? <select className={inputClass} value={row.pool_id} onChange={(e) => update(index,"pool_id",e.target.value)}>{pools.map((p) => <option key={p.id} value={p.id}>{p.room_type} · {p.base_inventory}</option>)}</select> : <span className="font-black">{row.room_type}</span>}</td><td className="p-3">{canManage ? <input type="date" className={inputClass} value={row.date_from} onChange={(e) => update(index,"date_from",e.target.value)} /> : row.date_from}</td><td className="p-3">{canManage ? <input type="date" className={inputClass} value={row.date_to} onChange={(e) => update(index,"date_to",e.target.value)} /> : row.date_to}</td><td className="p-3">{canManage ? <input type="number" min="0" className={`${inputClass} max-w-28`} value={row.allotment} onChange={(e) => update(index,"allotment",e.target.value)} /> : <span className="font-black">{row.allotment}</span>}</td><td className="p-3 font-bold text-amber-700">{row.held || 0}</td><td className="p-3 font-bold text-emerald-700">{row.confirmed || 0}</td><td className="p-3 font-black">{row.available ?? row.allotment}</td>{canManage ? <td className="p-3"><button type="button" onClick={() => { setDirty(true); setItems((rows) => rows.filter((_,i) => i !== index)); }} className="font-black text-rose-600">Удалить</button></td> : null}</tr>) : <tr><td colSpan={canManage ? 9 : 8} className="p-6 text-center text-sm font-semibold text-slate-500">Квоты пока не назначены. Без квоты действуют прежние лимиты тарифа.</td></tr>}</tbody></table></div>
   </section>;
 }
 
@@ -199,12 +245,13 @@ export default function AdminHotelOffers({ scope = "admin" }) {
   const [rejectReason, setRejectReason] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [ratesDirty, setRatesDirty] = useState(false);
   const [message, setMessage] = useState("");
   const selected = useMemo(() => offers.find((offer) => Number(offer.id) === Number(selectedId)) || null, [offers, selectedId]);
   const selectedProvider = useMemo(() => providers.find((provider) => Number(provider.id) === Number(form.provider_id)) || null, [providers, form.provider_id]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     try {
       const [hotelData, offersData, providersData] = await Promise.all([
         apiGet(`/api/hotels/${hotelId}${providerMode ? "/brief" : ""}`, apiRole),
@@ -217,10 +264,25 @@ export default function AdminHotelOffers({ scope = "admin" }) {
       setProviders((providerPayload?.items || []).filter((provider) => ['hotel','agent','tour_agent','agency','supplier','tour_operator','dmc'].includes(String(provider.type || '').toLowerCase())));
     } catch (error) {
       setMessage(error?.message || "Не удалось загрузить предложения");
-    } finally { setLoading(false); }
+    } finally { if (!silent) setLoading(false); }
   }, [hotelId, apiRole, providerMode]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const refresh = async () => {
+      if (!document.hidden && !saving) {
+        await load({ silent: true });
+        if (selectedId && !ratesDirty) await openRates({ id: selectedId });
+      }
+    };
+    const timer = window.setInterval(refresh, 15000);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [load, ratesDirty, saving, selectedId]);
 
   async function createOffer(event) {
     event.preventDefault();
@@ -233,7 +295,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
       }, apiRole);
       setForm(emptyOffer);
       setMessage("Предложение сохранено");
-      await load();
+      await load({ silent: true });
     } catch (error) { setMessage(error?.message || "Не удалось сохранить предложение"); }
     finally { setSaving(false); }
   }
@@ -246,6 +308,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
         apiGet(`/api/hotels/${hotelId}/offers/${offer.id}/events`, apiRole),
       ]);
       setRates((data?.items || []).map((rate) => ({ ...rate, inventory_pool_id: rate.inventory_pool_id || "", amount: String(rate.amount ?? "") })));
+      setRatesDirty(false);
       setCascadeRates(data?.cascade === true);
       setRatesEditable(data?.can_edit !== false);
       setEvents(eventData?.items || []);
@@ -260,7 +323,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
         valid_from: offer.valid_from || null, valid_to: offer.valid_to || null,
         ...patch,
       }, apiRole);
-      await load();
+      await load({ silent: true });
     } catch (error) { setMessage(error?.message || "Не удалось обновить предложение"); }
     finally { setSaving(false); }
   }
@@ -271,7 +334,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
     try {
       await apiDelete(`/api/hotels/${hotelId}/offers/${offer.id}`, apiRole);
       if (Number(selectedId) === Number(offer.id)) { setSelectedId(null); setRates([]); }
-      await load();
+      await load({ silent: true });
     } catch (error) { setMessage(error?.message || "Не удалось архивировать предложение"); }
     finally { setSaving(false); }
   }
@@ -281,11 +344,11 @@ export default function AdminHotelOffers({ scope = "admin" }) {
     try {
       const result = await apiPost(`/api/hotels/${hotelId}/offers/${offer.id}/submit`, {}, apiRole);
       setMessage(result?.already_submitted ? "Предложение уже находится на модерации" : "Предложение отправлено на модерацию");
-      await load();
+      await load({ silent: true });
       if (Number(selectedId) === Number(offer.id)) await openRates({ ...offer, status: "pending_review" });
     } catch (error) {
       setMessage(offerSubmitError(error));
-      await load();
+      await load({ silent: true });
     }
     finally { setSaving(false); }
   }
@@ -296,13 +359,14 @@ export default function AdminHotelOffers({ scope = "admin" }) {
       await apiPost(`/api/hotels/${hotelId}/offers/${offer.id}/review`, { decision, reason }, "admin");
       setRejecting(null); setRejectReason("");
       setMessage(decision === "approve" ? "Предложение опубликовано" : "Предложение возвращено поставщику на исправление");
-      await load();
+      await load({ silent: true });
       if (Number(selectedId) === Number(offer.id)) await openRates(offer);
     } catch (error) { setMessage(error?.message || "Не удалось сохранить решение модерации"); }
     finally { setSaving(false); }
   }
 
   function updateRate(index, key, value) {
+    setRatesDirty(true);
     setRates((current) => current.map((rate, i) => i === index ? { ...rate, [key]: value } : rate));
   }
 
@@ -315,7 +379,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
         ...rate, inventory_pool_id: rate.inventory_pool_id ? Number(rate.inventory_pool_id) : null, amount: Number(rate.amount), min_stay: Number(rate.min_stay) || 1,
       })) }, apiRole);
       setMessage("Тарифы сохранены. Предложение возвращено в черновик: отправьте его на модерацию.");
-      await load();
+      await load({ silent: true });
       await openRates(selected);
     } catch (error) { setMessage(error?.message || "Не удалось сохранить тарифы"); }
     finally { setSaving(false); }
@@ -424,15 +488,15 @@ export default function AdminHotelOffers({ scope = "admin" }) {
         <SupplierAllocationManager hotelId={hotelId} apiRole={apiRole} offers={offers} pools={roomPools} onMessage={setMessage} />
 
         {selected ? <section className="border-t border-slate-200 bg-white pt-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 px-1"><div><h2 className="text-lg font-black">{cascadeRates ? "Цены" : "Тариф"}: {selected.provider_name}</h2><p className="text-sm text-slate-500">{cascadeRates ? (ratesEditable ? "Условия заданы отелем и обновляются автоматически. Укажите только свою цену." : "Условия заданы отелем. Цены принадлежат поставщику и доступны вам только для просмотра.") : "Отель задаёт категории, условия проживания и базовые тарифные строки для поставщиков."}</p></div>{ratesEditable ? <div className="flex gap-2">{!cascadeRates ? <button type="button" onClick={() => setRates((rows) => [...rows, { ...emptyRate, inventory_pool_id: roomPools[0]?.id || "", date_from: selected.valid_from || "", date_to: selected.valid_to || "" }])} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black">+ Строка</button> : null}<button type="button" disabled={saving} onClick={saveRates} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{cascadeRates ? "Сохранить цены" : "Сохранить тариф"}</button></div> : <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Только просмотр</span>}</div>
+          <div className="flex flex-wrap items-center justify-between gap-3 px-1"><div><h2 className="text-lg font-black">{cascadeRates ? "Цены" : "Тариф"}: {selected.provider_name}</h2><p className="text-sm text-slate-500">{cascadeRates ? (ratesEditable ? "Условия заданы отелем и обновляются автоматически. Укажите только свою цену." : "Условия заданы отелем. Цены принадлежат поставщику и доступны вам только для просмотра.") : "Отель задаёт категории, условия проживания и базовые тарифные строки для поставщиков."}</p></div>{ratesEditable ? <div className="flex gap-2">{!cascadeRates ? <button type="button" onClick={() => { setRatesDirty(true); setRates((rows) => [...rows, { ...emptyRate, inventory_pool_id: roomPools[0]?.id || "", date_from: selected.valid_from || "", date_to: selected.valid_to || "" }]); }} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-black">+ Строка</button> : null}<button type="button" disabled={saving} onClick={saveRates} className="rounded-lg bg-orange-600 px-4 py-2 text-sm font-black text-white disabled:opacity-50">{cascadeRates ? "Сохранить цены" : "Сохранить тариф"}</button></div> : <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Только просмотр</span>}</div>
           {cascadeRates && !rates.length ? <div className="mt-3 border-l-4 border-amber-400 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">Отель пока не создал тарифные строки. После их добавления категории и условия появятся здесь автоматически.</div> : null}
           <div className="mt-3 overflow-x-auto"><table className={`w-full ${cascadeRates ? "min-w-[1500px]" : "min-w-[1380px]"} border-collapse`}><thead className="bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Категория номера / фонд</th><th className="p-2">Питание</th><th className="p-2">Резидентность</th><th className="p-2">С</th><th className="p-2">До</th>{cascadeRates ? <th className="p-2">Цена отеля</th> : null}<th className="p-2">{cascadeRates ? "Цена поставщика" : "Цена"}</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Мин. ночей</th><th className="p-2">Возвратный</th><th className="p-2"></th></tr></thead><tbody className="divide-y divide-slate-100">{rates.map((rate, index) => <tr key={rate.source_rate_id || rate.id || index}>
-            <td className="p-2">{cascadeRates ? <span className="font-black">{rate.room_type}</span> : <select className={inputClass} value={rate.inventory_pool_id || ""} onChange={(e) => { const pool = roomPools.find((item) => Number(item.id) === Number(e.target.value)); setRates((rows) => rows.map((row, i) => i === index ? { ...row, inventory_pool_id: e.target.value, room_type: pool?.room_type || "" } : row)); }}><option value="">Выберите тип номера</option>{roomPools.map((pool) => <option key={pool.id} value={pool.id}>{pool.room_type} · {pool.base_inventory}</option>)}</select>}</td>
+            <td className="p-2">{cascadeRates ? <span className="font-black">{rate.room_type}</span> : <select className={inputClass} value={rate.inventory_pool_id || ""} onChange={(e) => { const pool = roomPools.find((item) => Number(item.id) === Number(e.target.value)); setRatesDirty(true); setRates((rows) => rows.map((row, i) => i === index ? { ...row, inventory_pool_id: e.target.value, room_type: pool?.room_type || "" } : row)); }}><option value="">Выберите тип номера</option>{roomPools.map((pool) => <option key={pool.id} value={pool.id}>{pool.room_type} · {pool.base_inventory}</option>)}</select>}</td>
             <td className="p-2">{cascadeRates ? <span className="font-bold">{rate.meal_plan}</span> : <select className={inputClass} value={rate.meal_plan} onChange={(e) => updateRate(index, "meal_plan", e.target.value)}>{["RO","BB","HB","FB","AI","UAI"].map((v) => <option key={v}>{v}</option>)}</select>}</td>
             <td className="p-2">{cascadeRates ? <span className="font-bold">{{ all: "Все", resident: "Резидент", non_resident: "Нерезидент" }[rate.residency] || rate.residency}</span> : <select className={inputClass} value={rate.residency} onChange={(e) => updateRate(index, "residency", e.target.value)}><option value="all">Все</option><option value="resident">Резидент</option><option value="non_resident">Нерезидент</option></select>}</td>
             <td className="p-2">{cascadeRates ? rate.date_from : <input type="date" className={inputClass} value={rate.date_from} onChange={(e) => updateRate(index, "date_from", e.target.value)} />}</td><td className="p-2">{cascadeRates ? rate.date_to : <input type="date" className={inputClass} value={rate.date_to} onChange={(e) => updateRate(index, "date_to", e.target.value)} />}</td>
             {cascadeRates ? <td className="p-2"><div className="min-w-32 rounded-lg bg-slate-100 px-3 py-2 font-black text-slate-800">{rate.hotel_amount ?? "—"}</div></td> : null}<td className="p-2"><input type="number" min="0" step="0.01" disabled={!ratesEditable} className={`${inputClass} min-w-32 disabled:bg-slate-100 disabled:text-slate-600`} value={rate.amount} onChange={(e) => updateRate(index, "amount", e.target.value)} placeholder={cascadeRates ? "Цена поставщика" : "Введите цену"} /></td><td className="p-2 text-sm font-bold text-amber-700">{rate.held ?? 0}</td><td className="p-2 text-sm font-bold text-emerald-700">{rate.confirmed ?? 0}</td><td className="p-2 text-sm font-black text-slate-900">{rate.available == null ? "—" : rate.available}</td><td className="p-2">{cascadeRates ? <span className="font-bold">{rate.min_stay}</span> : <input type="number" min="1" disabled={!ratesEditable} className={inputClass} value={rate.min_stay} onChange={(e) => updateRate(index, "min_stay", e.target.value)} />}</td>
-            <td className="p-2 text-center"><input type="checkbox" disabled={cascadeRates} checked={rate.refundable !== false} onChange={(e) => updateRate(index, "refundable", e.target.checked)} /></td><td className="p-2">{!cascadeRates ? <button type="button" onClick={() => setRates((rows) => rows.filter((_, i) => i !== index))} className="text-sm font-black text-rose-600">Удалить</button> : null}</td>
+            <td className="p-2 text-center"><input type="checkbox" disabled={cascadeRates} checked={rate.refundable !== false} onChange={(e) => updateRate(index, "refundable", e.target.checked)} /></td><td className="p-2">{!cascadeRates ? <button type="button" onClick={() => { setRatesDirty(true); setRates((rows) => rows.filter((_, i) => i !== index)); }} className="text-sm font-black text-rose-600">Удалить</button> : null}</td>
           </tr>)}</tbody></table></div>
           {inventoryRate ? <div className="mt-5 border-t border-slate-200 pt-4"><div className="flex flex-wrap items-end justify-between gap-3 px-1"><div><h3 className="text-base font-black">Календарь: {inventoryRate.room_type} · {inventoryRate.meal_plan}</h3><p className="text-sm text-slate-500">Пустая дневная квота наследует базовое значение тарифа.</p></div><div className="flex flex-wrap items-end gap-2"><Field label="С"><input type="date" className={inputClass} value={inventoryFrom} onChange={(e) => setInventoryFrom(e.target.value)} /></Field><Field label="До"><input type="date" className={inputClass} value={inventoryTo} onChange={(e) => setInventoryTo(e.target.value)} /></Field><button type="button" disabled={saving} onClick={() => openInventory(inventoryRate)} className="h-10 rounded-lg border border-slate-300 px-4 text-sm font-black">Показать</button><button type="button" disabled={saving} onClick={saveInventory} className="h-10 rounded-lg bg-orange-600 px-4 text-sm font-black text-white">Сохранить</button><button type="button" onClick={() => { setInventoryRate(null); setInventoryRows([]); }} className="h-10 rounded-lg border border-slate-200 px-4 text-sm font-black">Закрыть</button></div></div><div className="mt-3 max-h-[480px] overflow-auto"><table className="w-full min-w-[900px]"><thead className="sticky top-0 bg-slate-100 text-left text-xs uppercase text-slate-500"><tr><th className="p-2">Дата</th><th className="p-2">Дневная квота</th><th className="p-2">Стоп</th><th className="p-2">Резерв</th><th className="p-2">Продано</th><th className="p-2">Доступно</th><th className="p-2">Комментарий</th></tr></thead><tbody className="divide-y divide-slate-100">{inventoryRows.map((item, index) => <tr key={item.date} className={item.stop_sell ? "bg-rose-50" : ""}><td className="p-2 text-sm font-black">{item.date}</td><td className="p-2"><input type="number" min="0" className={`${inputClass} max-w-32`} value={item.allotment} onChange={(e) => updateInventory(index, "allotment", e.target.value)} placeholder={inventoryRate.allotment == null ? "∞" : String(inventoryRate.allotment)} /></td><td className="p-2"><input type="checkbox" checked={item.stop_sell === true} onChange={(e) => updateInventory(index, "stop_sell", e.target.checked)} /></td><td className="p-2 font-bold text-amber-700">{item.held || 0}</td><td className="p-2 font-bold text-emerald-700">{item.confirmed || 0}</td><td className="p-2 font-black">{item.stop_sell ? 0 : item.available == null ? "∞" : item.available}</td><td className="p-2"><input className={inputClass} value={item.note} onChange={(e) => updateInventory(index, "note", e.target.value)} placeholder="Причина или примечание" /></td></tr>)}</tbody></table></div></div> : null}
           <div className="mt-5 border-t border-slate-200 px-1 pt-4"><h3 className="text-sm font-black text-slate-950">История предложения</h3><div className="mt-2 grid gap-2 md:grid-cols-2 xl:grid-cols-3">{events.length ? events.slice(0, 12).map((item) => <div key={item.id} className="border-l-2 border-slate-200 pl-3 text-xs text-slate-600"><div className="font-black text-slate-800">{actionLabels[item.action] || item.action}</div><div>{item.from_status ? `${statusLabel(item.from_status)} → ` : ""}{item.to_status ? statusLabel(item.to_status) : ""}</div>{item.note ? <div className="mt-1 text-rose-600">{item.note}</div> : null}<div className="mt-1 text-slate-400">{new Date(item.created_at).toLocaleString("ru-RU")}</div></div>) : <div className="text-sm text-slate-500">История пока пуста</div>}</div></div>
