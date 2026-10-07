@@ -300,6 +300,8 @@ export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
   const isAdminLike = useMemo(() => isAdminLikeUser(userInfo), [userInfo]);
   const isProviderLike = useMemo(() => isProviderLikeUser(userInfo), [userInfo]);
   const [selectedExistingHotel, setSelectedExistingHotel] = useState(null);
+  const [existingProviderOffer, setExistingProviderOffer] = useState(null);
+  const [checkingExistingOffer, setCheckingExistingOffer] = useState(false);
   // проставляем значения из записи отеля
   const fillFromHotel = (h) => {
     setName(h?.name || "");
@@ -692,6 +694,10 @@ const inputCls = (season) =>
   /* ---------- Submit ---------- */
   const submit = async () => {
     if (isNew && !isAdminLike && selectedExistingHotel?.hotelId) {
+      if (existingProviderOffer) {
+        tError("Этот отель уже добавлен в раздел «Мои отели»");
+        return;
+      }
       try {
         const rawType = String(userInfo?.type || userInfo?.provider_type || "").toLowerCase();
         const supplierType = rawType === "hotel" ? "hotel"
@@ -706,7 +712,12 @@ const inputCls = (season) =>
         navigate(`/provider/hotels/${selectedExistingHotel.hotelId}/offer`);
       } catch (e) {
         console.error(e);
-        tError(e?.message || "Не удалось добавить отель в ваши предложения");
+        if (e?.status === 409 || e?.message === "hotel_already_added") {
+          setExistingProviderOffer({ id: e?.data?.offer_id || null });
+          tError("Этот отель уже добавлен в раздел «Мои отели»");
+        } else {
+          tError(e?.message || "Не удалось добавить отель в ваши предложения");
+        }
       }
       return;
     }
@@ -850,7 +861,8 @@ const inputCls = (season) =>
           <button
             type="button"
             onClick={submit}
-            className="inline-flex items-center justify-center rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-700"
+            disabled={checkingExistingOffer || !!existingProviderOffer}
+            className="inline-flex items-center justify-center rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
             {t("save", { defaultValue: "Сохранить" })}
           </button>
@@ -910,23 +922,46 @@ const inputCls = (season) =>
                   onChange={async (opt) => {
                     if (opt?.hotelId) {
                       setSelectedExistingHotel(opt);
+                      setExistingProviderOffer(null);
+                      setCheckingExistingOffer(true);
                       setName(opt.hotelName || opt.label || "");
                       try {
-                        const existing = await httpGet(`/api/hotels/${encodeURIComponent(opt.hotelId)}`, { role: "provider" });
+                        const [existing, offers] = await Promise.all([
+                          httpGet(`/api/hotels/${encodeURIComponent(opt.hotelId)}`, { role: "provider" }),
+                          httpGet(`/api/hotels/${encodeURIComponent(opt.hotelId)}/offers`, { params: { mine: "1" }, role: "provider" }),
+                        ]);
                         fillFromHotel(existing);
+                        const providerId = Number(userInfo?.id || userInfo?.provider_id || userInfo?.providerId);
+                        const ownOffer = (Array.isArray(offers?.items) ? offers.items : []).find(
+                          (offer) => Number(offer?.provider_id) === providerId && offer?.status !== "archived"
+                        );
+                        setExistingProviderOffer(ownOffer || null);
                       } catch (e) {
                         console.error(e);
                         tError("Отель найден, но не удалось загрузить данные карточки");
+                      } finally {
+                        setCheckingExistingOffer(false);
                       }
                     } else {
                       setSelectedExistingHotel(null);
+                      setExistingProviderOffer(null);
+                      setCheckingExistingOffer(false);
                       setName(opt?.hotelName || opt?.value || "");
                     }
                   }}
-                  onCreateOption={(input) => { setSelectedExistingHotel(null); setName(input); }}
+                  onCreateOption={(input) => { setSelectedExistingHotel(null); setExistingProviderOffer(null); setName(input); }}
                   isClearable
                 />
-                {selectedExistingHotel?.hotelId ? <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">Найден в базе: #{selectedExistingHotel.hotelId} · {selectedExistingHotel.city || "город не указан"}. При сохранении будет создано ваше предложение без дублирования карточки.</div> : null}
+                {selectedExistingHotel?.hotelId && existingProviderOffer ? (
+                  <div className="mt-2 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm font-bold text-amber-900">
+                    Этот отель уже есть в разделе «Мои отели». Повторное добавление недоступно.{' '}
+                    <Link className="text-blue-700 underline" to={`/provider/hotels/${encodeURIComponent(selectedExistingHotel.hotelId)}/offer`}>Открыть отель</Link>
+                  </div>
+                ) : selectedExistingHotel?.hotelId ? (
+                  <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
+                    {checkingExistingOffer ? "Проверяем, добавлен ли отель…" : `Найден в базе: #${selectedExistingHotel.hotelId} · ${selectedExistingHotel.city || "город не указан"}. При сохранении будет создано ваше предложение без дублирования карточки.`}
+                  </div>
+                ) : null}
               </div>
 
               <div className="lg:col-span-3">
@@ -1160,7 +1195,11 @@ const inputCls = (season) =>
               Сначала сохраните карточку, затем настройте фонд и тарифы
             </span>
           )}
-          <button onClick={submit} className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-700">
+          <button
+            onClick={submit}
+            disabled={checkingExistingOffer || !!existingProviderOffer}
+            className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
             {t("save", { defaultValue: "Сохранить" })}
           </button>
         </div>

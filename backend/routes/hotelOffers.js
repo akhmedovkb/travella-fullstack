@@ -550,24 +550,27 @@ router.post('/', async (req, res, next) => {
       'SELECT id FROM hotel_offers WHERE hotel_id=$1 AND provider_id=$2 LIMIT 1',
       [hotelId, providerId]
     );
+    if (existingOffer.rowCount) {
+      return res.status(409).json({
+        error: 'hotel_already_added',
+        offer_id: existingOffer.rows[0].id,
+        hotel_id: hotelId,
+      });
+    }
 
     const { rows } = await db.query(
       `INSERT INTO hotel_offers
          (hotel_id,provider_id,supplier_type,is_direct,currency,status,title,terms,valid_from,valid_to,last_verified_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,CASE WHEN $6='active' THEN NOW() ELSE NULL END)
-       ON CONFLICT (hotel_id,provider_id) DO UPDATE SET
-         supplier_type=EXCLUDED.supplier_type, is_direct=EXCLUDED.is_direct,
-         currency=EXCLUDED.currency, title=EXCLUDED.title, terms=EXCLUDED.terms,
-         valid_from=EXCLUDED.valid_from, valid_to=EXCLUDED.valid_to, updated_at=NOW()
+       ON CONFLICT (hotel_id,provider_id) DO NOTHING
        RETURNING *`,
       [hotelId, providerId, supplierType, directRequested && providerIsHotel, currency, status,
         String(req.body?.title || '').trim() || null, JSON.stringify(req.body?.terms || {}), validFrom, validTo]
     );
+    if (!rows[0]) return res.status(409).json({ error: 'hotel_already_added', hotel_id: hotelId });
     await addOfferEvent(db, req, rows[0].id, 'created', null, rows[0].status, null, { provider_id: providerId });
-    if (!existingOffer.rowCount) {
-      notifyHotelOwnerSupplierLinked({ hotelId, supplierProviderId: providerId })
-        .catch((error) => console.error('[hotel-suppliers] telegram notification failed:', error?.message || error));
-    }
+    notifyHotelOwnerSupplierLinked({ hotelId, supplierProviderId: providerId })
+      .catch((error) => console.error('[hotel-suppliers] telegram notification failed:', error?.message || error));
     return res.status(201).json({ item: { ...rows[0], provider_name: provider.name, provider_type: provider.type } });
   } catch (error) { return next(error); }
 });
