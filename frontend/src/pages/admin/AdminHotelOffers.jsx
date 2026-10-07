@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
 
 const emptyOffer = {
-  provider_id: "", supplier_type: "supplier", is_direct: false,
+  provider_id: "", supplier_type: "", is_direct: false,
   currency: "USD", status: "draft", title: "", valid_from: "", valid_to: "",
 };
 
@@ -41,6 +41,38 @@ function supplierTypeLabel(type) {
     agency: "Агентство",
     supplier: "Поставщик",
   })[String(type || "").toLowerCase()] || type || "Поставщик";
+}
+
+function providerMatchesSupplierType(providerType, supplierType) {
+  const provider = String(providerType || "").toLowerCase();
+  const supplier = String(supplierType || "").toLowerCase();
+  if (!supplier) return false;
+  if (supplier === "agency") return ["agent", "tour_agent", "agency"].includes(provider);
+  return provider === supplier;
+}
+
+const providerTypesForSupplierType = (supplierType) =>
+  supplierType === "agency" ? ["agent", "tour_agent", "agency"] : [supplierType];
+
+async function loadProvidersByType(supplierType) {
+  if (!supplierType) return [];
+  const loadType = async (providerType) => {
+    const items = [];
+    let cursor = null;
+    do {
+      const params = new URLSearchParams({ type: providerType, limit: "200" });
+      if (cursor?.cursor_created_at && cursor?.cursor_id) {
+        params.set("cursor_created_at", cursor.cursor_created_at);
+        params.set("cursor_id", cursor.cursor_id);
+      }
+      const data = await apiGet(`/api/admin/providers-table?${params.toString()}`, "admin");
+      items.push(...(data?.items || []));
+      cursor = data?.nextCursor || null;
+    } while (cursor && items.length < 2000);
+    return items;
+  };
+  const groups = await Promise.all(providerTypesForSupplierType(supplierType).map(loadType));
+  return groups.flat().sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "ru"));
 }
 
 const actionLabels = {
@@ -229,6 +261,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
   const apiRole = providerMode ? "provider" : "admin";
   const [hotel, setHotel] = useState(null);
   const [providers, setProviders] = useState([]);
+  const [providersLoading, setProvidersLoading] = useState(false);
   const [offers, setOffers] = useState([]);
   const [form, setForm] = useState(emptyOffer);
   const [selectedId, setSelectedId] = useState(null);
@@ -249,25 +282,44 @@ export default function AdminHotelOffers({ scope = "admin" }) {
   const [message, setMessage] = useState("");
   const selected = useMemo(() => offers.find((offer) => Number(offer.id) === Number(selectedId)) || null, [offers, selectedId]);
   const selectedProvider = useMemo(() => providers.find((provider) => Number(provider.id) === Number(form.provider_id)) || null, [providers, form.provider_id]);
+  const availableProviders = useMemo(() => {
+    const connectedIds = new Set(offers.map((offer) => Number(offer.provider_id)));
+    return providers.filter((provider) =>
+      providerMatchesSupplierType(provider.type, form.supplier_type)
+      && !connectedIds.has(Number(provider.id))
+    );
+  }, [providers, offers, form.supplier_type]);
 
   const load = useCallback(async ({ silent = false } = {}) => {
     if (!silent) setLoading(true);
     try {
-      const [hotelData, offersData, providersData] = await Promise.all([
+      const [hotelData, offersData] = await Promise.all([
         apiGet(`/api/hotels/${hotelId}${providerMode ? "/brief" : ""}`, apiRole),
         apiGet(`/api/hotels/${hotelId}/offers${providerMode ? "?mine=1" : ""}`, apiRole),
-        providerMode ? Promise.resolve({ items: [] }) : apiGet(`/api/admin/providers-table?limit=200`, "admin"),
       ]);
       setHotel(hotelData || null);
       setOffers(offersData?.items || []);
-      const providerPayload = providersData?.data?.items ? providersData.data : providersData;
-      setProviders((providerPayload?.items || []).filter((provider) => ['hotel','agent','tour_agent','agency','supplier','tour_operator','dmc'].includes(String(provider.type || '').toLowerCase())));
     } catch (error) {
       setMessage(error?.message || "Не удалось загрузить предложения");
     } finally { if (!silent) setLoading(false); }
   }, [hotelId, apiRole, providerMode]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (providerMode || !form.supplier_type) {
+      setProviders([]);
+      setProvidersLoading(false);
+      return undefined;
+    }
+    let alive = true;
+    setProvidersLoading(true);
+    loadProvidersByType(form.supplier_type)
+      .then((items) => { if (alive) setProviders(items); })
+      .catch((error) => { if (alive) setMessage(error?.message || "Не удалось загрузить поставщиков"); })
+      .finally(() => { if (alive) setProvidersLoading(false); });
+    return () => { alive = false; };
+  }, [form.supplier_type, providerMode]);
 
   useEffect(() => {
     const refresh = async () => {
@@ -286,6 +338,7 @@ export default function AdminHotelOffers({ scope = "admin" }) {
 
   async function createOffer(event) {
     event.preventDefault();
+    if (!form.supplier_type) return setMessage("Выберите тип поставщика");
     if (!form.provider_id) return setMessage("Выберите поставщика");
     setSaving(true); setMessage("");
     try {
@@ -445,12 +498,12 @@ export default function AdminHotelOffers({ scope = "admin" }) {
         {!providerMode ? <section className="border-b border-slate-200 bg-white p-4">
           <h2 className="text-lg font-black text-slate-950">Добавить поставщика</h2>
           <form onSubmit={createOffer} className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-            <Field label="Поставщик"><select className={inputClass} value={form.provider_id} onChange={(e) => { const provider = providers.find((item) => Number(item.id) === Number(e.target.value)); setForm({ ...form, provider_id: e.target.value, supplier_type: provider?.type === "hotel" ? "hotel" : form.supplier_type === "hotel" ? "supplier" : form.supplier_type, is_direct: provider?.type === "hotel" ? form.is_direct : false }); }}><option value="">Выберите</option>{providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · {provider.type || "supplier"} · #{provider.id}</option>)}</select></Field>
-            <Field label="Тип"><select className={inputClass} value={form.supplier_type} onChange={(e) => setForm({ ...form, supplier_type: e.target.value })}><option value="hotel">Отель</option><option value="tour_operator">Туроператор</option><option value="dmc">DMC</option><option value="agency">Агентство</option><option value="supplier">Поставщик</option></select></Field>
+            <Field label="Тип поставщика"><select className={inputClass} value={form.supplier_type} onChange={(e) => setForm({ ...form, supplier_type: e.target.value, provider_id: "", is_direct: false })}><option value="">Сначала выберите тип</option><option value="hotel">Отель</option><option value="tour_operator">Туроператор</option><option value="dmc">DMC</option><option value="agency">Агентство</option><option value="supplier">Поставщик</option></select></Field>
+            <Field label="Поставщик"><select className={inputClass} disabled={!form.supplier_type || providersLoading} value={form.provider_id} onChange={(e) => setForm({ ...form, provider_id: e.target.value, is_direct: form.supplier_type === "hotel" ? form.is_direct : false })}><option value="">{!form.supplier_type ? "Выберите тип поставщика" : providersLoading ? "Загрузка…" : availableProviders.length ? "Выберите поставщика" : "Нет доступных поставщиков"}</option>{availableProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · #{provider.id}</option>)}</select></Field>
             <Field label="Валюта"><select className={inputClass} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}><option>USD</option><option>UZS</option></select></Field>
             <Field label="Действует с"><input type="date" className={inputClass} value={form.valid_from} onChange={(e) => setForm({ ...form, valid_from: e.target.value })} /></Field>
             <Field label="Действует до"><input type="date" className={inputClass} value={form.valid_to} onChange={(e) => setForm({ ...form, valid_to: e.target.value })} /></Field>
-            <div className="flex items-end"><button disabled={saving} className="h-10 w-full rounded-lg bg-orange-600 px-4 text-sm font-black text-white disabled:opacity-50">Добавить</button></div>
+            <div className="flex items-end"><button disabled={saving || providersLoading || !form.supplier_type || !form.provider_id} className="h-10 w-full rounded-lg bg-orange-600 px-4 text-sm font-black text-white disabled:opacity-50">Добавить</button></div>
             <Field label="Название тарифа"><input className={inputClass} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Прямой тариф, FIT 2026..." /></Field>
             <label className="flex h-10 items-center gap-2 self-end text-sm font-bold text-slate-700"><input type="checkbox" disabled={selectedProvider?.type !== "hotel"} checked={form.is_direct} onChange={(e) => setForm({ ...form, is_direct: e.target.checked })} /> Прямой тариф отеля</label>
           </form>
