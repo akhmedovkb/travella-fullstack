@@ -43,9 +43,6 @@ function verifyTelegramAuth(payload) {
   const role = String(payload?.role || "client").trim().toLowerCase();
   const botToken = getTelegramBotToken(role);
 
-  console.log("[tg-web-login] role:", role, "bot token prefix:", String(botToken || "").slice(0, 12));
-  console.log("[tg-web-login] tg user id:", payload?.id, "username:", payload?.username);
-
   if (!hash || !botToken) {
     return { ok: false, error: "telegram_login_not_configured" };
   }
@@ -563,4 +560,5 @@ async function loginWithTelegram(req, res) {
 
 module.exports = {
   loginWithTelegram,
+  verifyTelegramAuth,
 };

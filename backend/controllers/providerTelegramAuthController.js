@@ -244,4 +244,4 @@ async function loginProviderWithTelegram(req, res) {
   }
 }
 
-module.exports = { loginProviderWithTelegram };
+module.exports = { loginProviderWithTelegram, verifyTelegramLogin };
