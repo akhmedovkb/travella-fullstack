@@ -3,6 +3,31 @@ const db = require('../db');
 let hotelOfferTablesReadyPromise = null;
 
 async function ensureHotelOfferTablesOnce() {
+  const schemaProbe = await db.query(`
+    SELECT
+      to_regclass('public.hotel_offers') IS NOT NULL
+      AND to_regclass('public.hotel_offer_rates') IS NOT NULL
+      AND to_regclass('public.hotel_offer_events') IS NOT NULL
+      AND to_regclass('public.hotel_inventory_reservations') IS NOT NULL
+      AND to_regclass('public.hotel_inventory_overrides') IS NOT NULL
+      AND to_regclass('public.hotel_room_inventory_pools') IS NOT NULL
+      AND to_regclass('public.hotel_room_inventory_overrides') IS NOT NULL
+      AND to_regclass('public.hotel_supplier_inventory_allocations') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='hotel_offer_rates' AND column_name='inventory_pool_id'
+      )
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='hotel_offer_rates' AND column_name='source_rate_id'
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_trigger
+         WHERE tgname='trg_sync_hotel_inventory_reservation' AND NOT tgisinternal
+      ) AS ready
+  `);
+  if (schemaProbe.rows?.[0]?.ready === true) return;
+
   await db.query(`
     CREATE TABLE IF NOT EXISTS hotel_offers (
       id SERIAL PRIMARY KEY,

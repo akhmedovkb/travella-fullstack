@@ -1109,6 +1109,29 @@ function ensureInspectionsTable() {
 }
 
 async function ensureInspectionsTableOnce() {
+  const schemaProbe = await db.query(`
+    SELECT
+      to_regclass('public.inspections') IS NOT NULL
+      AND to_regclass('public.hotel_inspection_media') IS NOT NULL
+      AND to_regclass('public.hotel_inspection_audience') IS NOT NULL
+      AND to_regclass('public.hotel_inspection_cons') IS NOT NULL
+      AND to_regclass('public.hotel_inspection_comments') IS NOT NULL
+      AND to_regclass('public.hotel_inspection_reports') IS NOT NULL
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='inspections' AND column_name='edited_at'
+      )
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='hotel_inspection_media' AND column_name='created_at'
+      )
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='hotel_inspection_comments' AND column_name='report_count'
+      ) AS ready
+  `);
+  if (schemaProbe.rows?.[0]?.ready === true) return;
+
   await db.query(`
     CREATE TABLE IF NOT EXISTS inspections (
       id          SERIAL PRIMARY KEY,
