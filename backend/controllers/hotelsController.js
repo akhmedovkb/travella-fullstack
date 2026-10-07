@@ -876,13 +876,14 @@ function roomHasPositiveRate(room) {
 function hotelReadiness(row) {
   const rooms = Array.isArray(row.rooms) ? row.rooms : [];
   const images = Array.isArray(row.images) ? row.images : [];
+  const hasImages = row.has_images === true || images.length > 0;
   const missingProfile = [];
   if (!String(row.name || '').trim()) missingProfile.push('name');
   if (!String(row.city || '').trim()) missingProfile.push('city');
   if (!String(row.country || '').trim()) missingProfile.push('country');
   if (!String(row.address || '').trim()) missingProfile.push('address');
   if (!(Number(row.stars) > 0)) missingProfile.push('stars');
-  if (!images.length) missingProfile.push('images');
+  if (!hasImages) missingProfile.push('images');
 
   const hasRooms = rooms.some((room) => String(room?.type || '').trim() && Number(room?.count) > 0);
   const hasRates = rooms.some(roomHasPositiveRate);
@@ -957,7 +958,11 @@ async function listHotelReadiness(req, res) {
     await ensureHotelSeasonsTable();
     const { rows } = await db.query(
       `SELECT h.id, h.name, COALESCE(h.city,h.location) AS city, h.country, h.address,
-              h.stars, h.provider_id, h.currency, h.rooms, h.images, h.updated_at,
+              h.stars, h.provider_id, h.currency, h.rooms, h.updated_at,
+              CASE
+                WHEN jsonb_typeof(h.images)='array' THEN jsonb_array_length(h.images) > 0
+                ELSE false
+              END AS has_images,
               COALESCE(s.season_count,0)::int AS season_count,
               s.season_from, s.season_to,
               COALESCE(i.approved_count,0)::int AS approved_inspection_count,
