@@ -859,22 +859,7 @@ async function listHotels(req, res) {
   }
 }
 
-function roomHasPositiveRate(room) {
-  const prices = room?.prices;
-  if (!prices || typeof prices !== 'object') return false;
-  const stack = [prices];
-  while (stack.length) {
-    const current = stack.pop();
-    for (const value of Object.values(current || {})) {
-      if (value && typeof value === 'object') stack.push(value);
-      else if (Number.isFinite(Number(value)) && Number(value) > 0) return true;
-    }
-  }
-  return false;
-}
-
 function hotelReadiness(row) {
-  const rooms = Array.isArray(row.rooms) ? row.rooms : [];
   const images = Array.isArray(row.images) ? row.images : [];
   const hasImages = row.has_images === true || images.length > 0;
   const missingProfile = [];
@@ -885,9 +870,6 @@ function hotelReadiness(row) {
   if (!(Number(row.stars) > 0)) missingProfile.push('stars');
   if (!hasImages) missingProfile.push('images');
 
-  const hasRooms = rooms.some((room) => String(room?.type || '').trim() && Number(room?.count) > 0);
-  const hasRates = rooms.some(roomHasPositiveRate);
-  const hasSeasons = Number(row.season_count || 0) > 0;
   const hasActiveOffer = Number(row.active_offer_count || 0) > 0;
   const hasOfferRates = Number(row.active_offer_rate_count || 0) > 0;
   const hasOfferRooms = Number(row.active_offer_room_count || 0) > 0;
@@ -895,18 +877,16 @@ function hotelReadiness(row) {
   const currency = String(row.currency || '').trim().toUpperCase();
   const currencyReady = ['UZS', 'USD'].includes(currency);
   const profileReady = missingProfile.length === 0;
-  const legacyPricingReady = hasRooms && hasRates && hasSeasons && currencyReady;
   const offerPricingReady = hasActiveOffer && hasOfferRates && hasOfferRooms;
-  const pricingReady = legacyPricingReady || offerPricingReady;
+  const pricingReady = offerPricingReady;
   const passportReady = Number(row.approved_inspection_count || 0) > 0;
   const tourBuilderReady = profileReady && pricingReady && (hasOwner || hasActiveOffer);
 
   const issues = [];
   if (!profileReady) issues.push(...missingProfile.map((field) => `profile:${field}`));
   if (!hasOwner && !hasActiveOffer) issues.push('owner_missing');
-  if (!hasRooms && !hasOfferRooms) issues.push('rooms_missing');
-  if (!hasRates && !hasOfferRates) issues.push('rates_missing');
-  if (!hasSeasons && !offerPricingReady) issues.push('seasons_missing');
+  if (!hasOfferRooms) issues.push('rooms_missing');
+  if (!hasOfferRates) issues.push('rates_missing');
   if (!currencyReady && !offerPricingReady) issues.push('currency_invalid');
   if (!passportReady) issues.push('passport_missing');
 
@@ -916,9 +896,8 @@ function hotelReadiness(row) {
     passport_ready: passportReady,
     tour_builder_ready: tourBuilderReady,
     has_owner: hasOwner,
-    has_rooms: hasRooms || hasOfferRooms,
-    has_rates: hasRates || hasOfferRates,
-    has_seasons: hasSeasons,
+    has_rooms: hasOfferRooms,
+    has_rates: hasOfferRates,
     has_active_offer: hasActiveOffer,
     active_offer_count: Number(row.active_offer_count || 0),
     active_offer_rate_count: Number(row.active_offer_rate_count || 0),
@@ -955,16 +934,13 @@ async function listHotelReadiness(req, res) {
   try {
     await ensureInspectionsTable();
     await ensureHotelOfferTables();
-    await ensureHotelSeasonsTable();
     const { rows } = await db.query(
       `SELECT h.id, h.name, COALESCE(h.city,h.location) AS city, h.country, h.address,
-              h.stars, h.provider_id, h.currency, h.rooms, h.updated_at,
+              h.stars, h.provider_id, h.currency, h.updated_at,
               CASE
                 WHEN jsonb_typeof(h.images)='array' THEN jsonb_array_length(h.images) > 0
                 ELSE false
               END AS has_images,
-              COALESCE(s.season_count,0)::int AS season_count,
-              s.season_from, s.season_to,
               COALESCE(i.approved_count,0)::int AS approved_inspection_count,
               COALESCE(i.verified_count,0)::int AS verified_inspection_count,
               COALESCE(o.active_offer_count,0)::int AS active_offer_count,
@@ -974,10 +950,6 @@ async function listHotelReadiness(req, res) {
               ,mine_offer.status AS my_offer_status
               ,mine_offer.is_direct AS my_offer_is_direct
          FROM hotels h
-         LEFT JOIN (
-           SELECT hotel_id, COUNT(*) AS season_count, MIN(start_date) AS season_from, MAX(end_date) AS season_to
-             FROM hotel_seasons GROUP BY hotel_id
-         ) s ON s.hotel_id=h.id
          LEFT JOIN (
            SELECT hotel_id,
                   COUNT(*) FILTER (WHERE moderation_status='approved' AND deleted_at IS NULL) AS approved_count,

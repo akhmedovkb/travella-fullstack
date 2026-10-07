@@ -67,9 +67,6 @@ const normalizeHotel = (h) => ({
   myOfferStatus: h.my_offer_status || "",
   myOfferDirect: h.my_offer_is_direct === true,
   currency: normalizeText(h.currency),
-  seasonCount: Number(h.season_count || 0),
-  seasonFrom: h.season_from || "",
-  seasonTo: h.season_to || "",
   inspectionCount: Number(h.approved_inspection_count || 0),
   verifiedInspectionCount: Number(h.verified_inspection_count || 0),
   readiness: h.readiness || null,
@@ -113,7 +110,6 @@ const issueLabels = {
   owner_missing: "нет владельца",
   rooms_missing: "нет номеров",
   rates_missing: "нет цен",
-  seasons_missing: "нет сезонов",
   currency_invalid: "неверная валюта",
   passport_missing: "нет Hotel Passport",
 };
@@ -228,7 +224,6 @@ export default function AdminHotelsTable({
     if (quickFilter === "without_city") rows = rows.filter((h) => !h.city);
     if (quickFilter === "without_owner") rows = rows.filter((h) => !(Number(h.providerId) > 0));
     if (quickFilter === "without_rates") rows = rows.filter((h) => !h.readiness?.has_rates);
-    if (quickFilter === "without_seasons") rows = rows.filter((h) => !h.readiness?.has_seasons);
     if (quickFilter === "without_passport") rows = rows.filter((h) => !h.readiness?.passport_ready);
     if (quickFilter === "tour_builder") rows = rows.filter((h) => h.readiness?.tour_builder_ready);
 
@@ -284,7 +279,7 @@ export default function AdminHotelsTable({
                 {providerMode ? "Мои отели" : "Отели (админ)"}
               </h1>
               <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-slate-600">
-                Быстрый контроль базы отелей: карточки, города, владельцы и сезонные цены.
+                Быстрый контроль базы отелей: карточки, города, владельцы и тарифные предложения.
               </p>
             </div>
 
@@ -310,7 +305,7 @@ export default function AdminHotelsTable({
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
           <StatCard label="Всего" value={stats.total} hint="загружено в список" />
           <StatCard label="Профиль готов" value={stats.profileReady} hint="карточка заполнена" />
-          <StatCard label="Цены готовы" value={stats.pricingReady} hint="номера, тарифы, сезоны" />
+          <StatCard label="Цены готовы" value={stats.pricingReady} hint="опубликованные тарифы" />
           <StatCard label="Tour Builder" value={stats.tourBuilderReady} hint="можно рассчитывать" />
           <StatCard label="Hotel Passport" value={stats.passportReady} hint="есть публикации" />
           <StatCard label="Без владельца" value={stats.withoutOwner} hint="provider_id пустой" />
@@ -370,7 +365,6 @@ export default function AdminHotelsTable({
               ["needs_check", "Проверить"],
               ["tour_builder", "Готовы для Tour Builder"],
               ["without_rates", "Без цен"],
-              ["without_seasons", "Без сезонов"],
               ["without_passport", "Без Hotel Passport"],
               ["without_city", "Без города"],
               ["without_owner", "Без владельца"],
@@ -497,7 +491,6 @@ export default function AdminHotelsTable({
                                   Карточка
                                 </Link>
                               ) : <Link to={`/hotels/${h.id}`} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50">Карточка</Link>}
-                              {!providerMode ? <Link to={`/admin/hotels/${h.id}/seasons`} className="inline-flex items-center rounded-xl bg-slate-950 px-3 py-2 text-xs font-black text-white transition hover:bg-slate-800">Сезоны</Link> : null}
                               <Link
                                 to={providerMode ? `/provider/hotels/${h.id}/offer` : `/admin/hotels/${h.id}/offers`}
                                 className="inline-flex items-center rounded-xl bg-orange-600 px-3 py-2 text-xs font-black text-white transition hover:bg-orange-700"
