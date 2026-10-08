@@ -2,7 +2,49 @@ const db = require('../db');
 
 let hotelOfferTablesReadyPromise = null;
 
+const BOOKING_STATUSES = [
+  'pending',
+  'quoted',
+  'awaiting_payment',
+  'confirmed',
+  'active',
+  'accepted',
+  'completed',
+  'paid',
+  'rejected',
+  'cancelled',
+  'cancelled_unpaid',
+  'expired',
+];
+
+async function ensureBookingStatusConstraint() {
+  const allowed = BOOKING_STATUSES.map((status) => `'${status}'`).join(',');
+  await db.query(`
+    DO $$
+    DECLARE
+      constraint_definition TEXT;
+    BEGIN
+      SELECT pg_get_constraintdef(oid)
+        INTO constraint_definition
+        FROM pg_constraint
+       WHERE conrelid='public.bookings'::regclass
+         AND conname='bookings_status_chk';
+
+      IF constraint_definition IS NULL
+         OR POSITION('awaiting_payment' IN constraint_definition)=0
+         OR POSITION('cancelled_unpaid' IN constraint_definition)=0 THEN
+        ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_status_chk;
+        ALTER TABLE bookings
+          ADD CONSTRAINT bookings_status_chk
+          CHECK (status IN (${allowed})) NOT VALID;
+      END IF;
+    END
+    $$
+  `);
+}
+
 async function ensureHotelOfferTablesOnce() {
+  await ensureBookingStatusConstraint();
   const schemaProbe = await db.query(`
     SELECT
       to_regclass('public.hotel_offers') IS NOT NULL
