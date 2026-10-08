@@ -23,7 +23,7 @@ const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
 const fmt = (n) => (isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "");
 
 /* =============== Карточка согласования цены (входящие) =============== */
-function PriceAgreementCard({ booking, onSent }) {
+function PriceAgreementCard({ booking, onSent, onReject }) {
   const { t } = useTranslation();
   const [priceRaw, setPriceRaw] = useState("");
   const [currency, setCurrency] = useState("USD");
@@ -32,7 +32,7 @@ function PriceAgreementCard({ booking, onSent }) {
   const [err, setErr] = useState("");
 
   const last = useMemo(() => {
-    if (!isFiniteNum(Number(booking?.provider_price))) return null;
+    if (!isFiniteNum(Number(booking?.provider_price)) || Number(booking.provider_price) <= 0) return null;
     const at = booking?.updated_at ? new Date(booking.updated_at) : null;
     return {
       price: Number(booking.provider_price),
@@ -72,11 +72,16 @@ function PriceAgreementCard({ booking, onSent }) {
   };
 
   return (
-    <div className="mt-4 rounded-xl border bg-white">
-      <div className="flex items-center justify-between border-b px-4 py-3">
-        <div className="font-semibold text-gray-900">{t("bookings.price_agreement", { defaultValue: "Согласование цены" })}</div>
-        <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs text-gray-700">
-          {t("status.pending", { defaultValue: "ожидает" })}
+    <div className="mt-4 border-t border-gray-200 pt-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="font-semibold text-gray-950">{t("bookings.respond_to_request", { defaultValue: "Ответить на заявку" })}</div>
+          <p className="mt-0.5 text-sm text-gray-500">
+            {t("bookings.respond_to_request_help", { defaultValue: "Укажите итоговую цену или отклоните заявку." })}
+          </p>
+        </div>
+        <span className="inline-flex items-center rounded-md bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
+          {t("status.pending", { defaultValue: "Ожидает ответа" })}
         </span>
       </div>
 
@@ -94,7 +99,7 @@ function PriceAgreementCard({ booking, onSent }) {
       )}
 
       <div className="px-4 pb-4 pt-3">
-        <div className="grid gap-3 md:grid-cols-[240px,110px,1fr,170px]">
+        <div className="grid gap-3 md:grid-cols-[220px,110px,minmax(240px,1fr)]">
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">{t("bookings.price", { defaultValue: "Цена" })}</span>
             <div className="flex h-11 items-center rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
@@ -132,15 +137,27 @@ function PriceAgreementCard({ booking, onSent }) {
             />
           </label>
 
-          <div className="flex items-end">
+        </div>
+
+        <div className="mt-3 flex flex-wrap items-center justify-end gap-2">
+          {onReject ? (
             <button
-              onClick={submit}
-              disabled={!canSend}
-              className="h-11 w-full rounded-xl bg-orange-600 px-4 font-semibold text-white transition hover:bg-orange-700 disabled:opacity-60"
+              type="button"
+              onClick={() => onReject(booking)}
+              disabled={busy}
+              className="h-10 rounded-lg border border-rose-200 bg-white px-4 font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
             >
-              {busy ? t("common.sending", { defaultValue: "Отправка…" }) : t("bookings.send_price", { defaultValue: "Отправить цену" })}
+              {t("actions.reject", { defaultValue: "Отклонить заявку" })}
             </button>
-          </div>
+          ) : null}
+          <button
+            type="button"
+            onClick={submit}
+            disabled={!canSend}
+            className="h-10 rounded-lg bg-orange-600 px-5 font-semibold text-white transition hover:bg-orange-700 disabled:opacity-50"
+          >
+            {busy ? t("common.sending", { defaultValue: "Отправка…" }) : t("bookings.send_price", { defaultValue: "Отправить цену" })}
+          </button>
         </div>
 
         {err ? <div className="mt-2 text-sm text-red-600">{err}</div> : null}
@@ -565,6 +582,57 @@ export default function ProviderBookings() {
     return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
   };
 
+  const renderPackageOverview = (group) => {
+    const rows = buildDailyMatrix(group.items);
+    const reference = String(group.group_id || "").split("-")[0].toUpperCase();
+    return (
+      <div className="border-b border-gray-200 bg-gray-50/70 p-4 md:p-5">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="text-xs font-semibold uppercase text-orange-600">Tour Builder</div>
+            <div className="mt-1 flex flex-wrap items-center gap-2">
+              <h2 className="text-lg font-bold text-gray-950">
+                {t("bookings.request", { defaultValue: "Заявка" })} {reference ? `№ ${reference}` : ""}
+              </h2>
+              <span className="rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-200">
+                {group.items.length} {t("bookings.services_count", { defaultValue: "услуг" })}
+              </span>
+            </div>
+          </div>
+          <div className="text-right text-xs text-gray-500">
+            <div>{t("bookings.full_reference", { defaultValue: "Номер пакета" })}</div>
+            <div className="mt-0.5 font-mono">{group.group_id}</div>
+          </div>
+        </div>
+
+        {rows.length ? (
+          <div className="mt-4 grid gap-2 md:grid-cols-2">
+            {rows.map((row) => (
+              <div key={row.date} className="rounded-lg border border-gray-200 bg-white p-3">
+                <div className="flex items-start gap-3">
+                  <span className="rounded-md bg-gray-950 px-2 py-1 text-xs font-bold text-white">{row.label}</span>
+                  <div className="min-w-0">
+                    <div className="font-semibold text-gray-950">{row.city || t("bookings.city_unknown", { defaultValue: "Город не указан" })}</div>
+                    <div className="text-sm text-gray-500">{row.dateLabel || fmtShort(row.date)}</div>
+                    <div className="mt-2 space-y-1 text-sm text-gray-700">
+                      {row.sections.map(([klass, names]) =>
+                        names.length ? (
+                          <div key={klass}>
+                            <span className="font-semibold text-gray-500">{klass}:</span> {names.join(", ")}
+                          </div>
+                        ) : null
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
   const pickField = (obj, keys = []) => {
     for (const k of keys) {
       const v = obj?.[k];
@@ -713,7 +781,7 @@ export default function ProviderBookings() {
                 rejectedByLabel={rejectedByLabel}
                 cancelledByLabel={cancelledByLabel}
                 onAccept={accept}
-                onReject={reject}
+                onReject={isIncoming && String(b.status) === "pending" ? undefined : reject}
                 onCancel={cancelOutgoing}
                 onCancelByProvider={openCancelIncoming}
                 onHoldExpired={load}
@@ -723,7 +791,7 @@ export default function ProviderBookings() {
 
               {/* Входящие: форма согласования цены (прячем после отправки предложения) */}
               {isIncoming && String(b.status) === "pending" && !awaitingRequester && (
-                <PriceAgreementCard booking={b} onSent={load} />
+                <PriceAgreementCard booking={b} onSent={load} onReject={reject} />
               )}
 
               {/* Плашка «ожидание подтверждения» */}
@@ -852,48 +920,14 @@ export default function ProviderBookings() {
     return (
       <div className="space-y-6">
         {tbGroups.map((g) => (
-          <div key={g.group_id} className="rounded-xl border bg-white">
-            <div className="border-b px-4 py-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-700">
-                  {t("bookings.tb_package", { defaultValue: "Пакет" })}{" "}
-                  <span className="font-mono text-gray-900">{g.group_id}</span>
-                </div>
-                <div className="text-xs text-gray-500">
-                  {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
-                </div>
-              </div>
-            </div>
-            {/* Итерарий по дням — под шапкой пакета */}
-            {(() => {
-              const rows = buildDailyMatrix(g.items);
-              if (!rows.length) return null;
-              return (
-                <div className="px-4 pt-3">
-                  <div className="rounded-lg border bg-gray-50 p-3 text-sm">
-                    {rows.map((r) => (
-                      <div key={r.date} className="mb-3 last:mb-0">
-                        <div className="font-semibold">
-                          {r.label} → {r.dateLabel} → {r.city || fmtShort(r.date)}
-                        </div>
-                        {r.sections.map(([klass, names]) =>
-                          names.length ? (
-                            <div key={klass} className="text-gray-700">
-                              <span className="font-medium">{klass}:</span> {names.join(", ")}
-                            </div>
-                          ) : null
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+            {renderPackageOverview(g)}
             <div className="divide-y">
               {g.items.map((b) => (
                 <div key={b.id} className="p-4">
                   <BookingRow
                     booking={b}
+                    embedded
                     viewerRole="client" // исходящие — я заявитель
                     /* не показывать «Подтвердить», пока нет цены от поставщика */
                     needPriceForAccept
@@ -938,58 +972,24 @@ export default function ProviderBookings() {
       <div key={b.id} className="p-4">
         <BookingRow
           booking={b}
+          embedded
           viewerRole="provider"
           needPriceForAccept
           hideClientCancel
           onAccept={accept}
           onHoldExpired={load}
           onPay={payBooking}
-          onReject={reject}
+          onReject={String(b.status) === "pending" ? undefined : reject}
           onCancelByProvider={openCancelIncoming}
         />
-        {String(b.status) === "pending" && <PriceAgreementCard booking={b} onSent={load} />}
+        {String(b.status) === "pending" && <PriceAgreementCard booking={b} onSent={load} onReject={reject} />}
       </div>
     );
     return (
       <div className="space-y-6">
         {incTbGroups.map((g) => (
-          <div key={g.group_id} className="rounded-xl border bg-white">
-            <div className="border-b px-4 py-3">
-              <div className="flex items-center justify-between">
-                <div className="text-sm text-gray-700">
-                  {t("bookings.tb_package", { defaultValue: "Пакет" })}{" "}
-                  <span className="font-mono text-gray-900">{g.group_id}</span>
-                </div>
-                <div className="text-xs text-gray-500">
-                  {t("bookings.count", { defaultValue: "бронирований" })}: {g.items.length}
-                </div>
-              </div>
-            </div>
-            {/* Итерарий по дням — под шапкой пакета */}
-            {(() => {
-              const rows = buildDailyMatrix(g.items);
-              if (!rows.length) return null;
-              return (
-                <div className="px-4 pt-3">
-                  <div className="rounded-lg border bg-gray-50 p-3 text-sm">
-                    {rows.map((r) => (
-                      <div key={r.date} className="mb-3 last:mb-0">
-                        <div className="font-semibold">
-                          {r.label} → {r.dateLabel} → {r.city || fmtShort(r.date)}
-                        </div>
-                        {r.sections.map(([klass, names]) =>
-                          names.length ? (
-                            <div key={klass} className="text-gray-700">
-                              <span className="font-medium">{klass}:</span> {names.join(", ")}
-                            </div>
-                          ) : null
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              );
-            })()}
+          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+            {renderPackageOverview(g)}
             <div className="divide-y">{g.items.map(renderRow)}</div>
           </div>
         ))}
