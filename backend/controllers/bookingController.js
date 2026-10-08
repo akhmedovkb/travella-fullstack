@@ -342,7 +342,7 @@ const createBooking = async (req, res) => {
     const managedHotelPrice = isTourBuilder && tourBuilderKind === "hotel"
       ? quotedHotelPrice(bag, providerId)
       : null;
-    const initialStatus = managedHotelPrice ? "quoted" : "pending";
+    const initialStatus = managedHotelPrice ? "awaiting_payment" : "pending";
 
     const insertCols = ["service_id", "provider_id", "client_id", "date", "status", "client_message", "attachments"];
     const values = [
@@ -364,6 +364,10 @@ const createBooking = async (req, res) => {
     if (managedHotelPrice) {
       insertCols.push("provider_price", "provider_note");
       values.push(managedHotelPrice.amount, "Цена зафиксирована по опубликованному тарифу Tour Builder");
+      if (cols.hold_until) {
+        insertCols.push("hold_until");
+        values.push(new Date(Date.now() + 30 * 60 * 1000));
+      }
     }
     // сохраняем источник и группировку, если колонки есть
     if (cols.source) {
