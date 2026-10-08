@@ -73,16 +73,8 @@ function PriceAgreementCard({ booking, onSent, onReject }) {
 
   return (
     <div className="mt-4 border-t border-gray-200 pt-4">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <div className="font-semibold text-gray-950">{t("bookings.respond_to_request", { defaultValue: "Ответить на заявку" })}</div>
-          <p className="mt-0.5 text-sm text-gray-500">
-            {t("bookings.respond_to_request_help", { defaultValue: "Укажите итоговую цену или отклоните заявку." })}
-          </p>
-        </div>
-        <span className="inline-flex items-center rounded-md bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-700 ring-1 ring-amber-200">
-          {t("status.pending", { defaultValue: "Ожидает ответа" })}
-        </span>
+      <div className="font-semibold text-gray-950">
+        {t("bookings.offer_price", { defaultValue: "Предложить цену" })}
       </div>
 
       {last && (
@@ -103,11 +95,10 @@ function PriceAgreementCard({ booking, onSent, onReject }) {
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">{t("bookings.price", { defaultValue: "Цена" })}</span>
             <div className="flex h-11 items-center rounded-xl border bg-white focus-within:ring-2 focus-within:ring-orange-400">
-              <div className="px-3 text-gray-500">💵</div>
               <input
                 inputMode="decimal"
                 placeholder={t("bookings.price_placeholder", { defaultValue: "Напр. 120" })}
-                className="h-full w-full flex-1 bg-transparent px-0 pr-3 outline-none placeholder:text-gray-400"
+                className="h-full w-full flex-1 bg-transparent px-3 outline-none placeholder:text-gray-400"
                 value={priceRaw}
                 onChange={(e) => setPriceRaw(onlyDigitsDot(e.target.value))}
               />
@@ -127,11 +118,11 @@ function PriceAgreementCard({ booking, onSent, onReject }) {
 
           <label>
             <span className="mb-1 block text-xs font-medium text-gray-500">
-              {t("bookings.comment_optional", { defaultValue: "Комментарий (необязательно)" })}
+              {t("bookings.terms", { defaultValue: "Условия" })}
             </span>
             <input
               className="h-11 w-full rounded-xl border bg-white px-3 outline-none focus:ring-2 focus:ring-orange-400 placeholder:text-gray-400"
-              placeholder={t("bookings.comment_placeholder", { defaultValue: "Например: парковки и ожидание включены" })}
+              placeholder={t("bookings.terms_placeholder", { defaultValue: "Что включено в цену (необязательно)" })}
               value={note}
               onChange={(e) => setNote(e.target.value)}
             />
@@ -156,7 +147,7 @@ function PriceAgreementCard({ booking, onSent, onReject }) {
             disabled={!canSend}
             className="h-10 rounded-lg bg-orange-600 px-5 font-semibold text-white transition hover:bg-orange-700 disabled:opacity-50"
           >
-            {busy ? t("common.sending", { defaultValue: "Отправка…" }) : t("bookings.send_price", { defaultValue: "Отправить цену" })}
+            {busy ? t("common.sending", { defaultValue: "Отправка…" }) : t("bookings.offer_price", { defaultValue: "Предложить цену" })}
           </button>
         </div>
 

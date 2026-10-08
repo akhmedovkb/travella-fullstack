@@ -285,7 +285,10 @@ const profileHref = useMemo(() => {
     (!needPriceForAccept || alreadyQuoted) &&
     !hideAcceptIfQuoted;
 
-  const canReject = viewerRole === "provider" && String(booking?.status) === "pending";
+  const canReject =
+    viewerRole === "provider" &&
+    String(booking?.status) === "pending" &&
+    typeof onReject === "function";
   const canCancel = viewerRole !== "provider" && !hideClientCancel && String(booking?.status) === "pending";
   const isAwaitingPayment = viewerRole !== "provider" && String(booking?.status) === "awaiting_payment";
   const canPay = isAwaitingPayment && String(booking?.currency || "UZS").toUpperCase() === "UZS";
