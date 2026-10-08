@@ -707,7 +707,7 @@ export default function Header() {
                     <DropdownItem to="/admin/inside-requests" label={t("nav.inside_requests", "Inside заявки")} description="Заявки India Inside" icon={<IconChecklist />} />
                     <DropdownItem to="/admin/entry-fees" label={t("nav.entry_fees_admin", "Entry fees")} icon={<IconTicket />} />
                     <DropdownItem to="/admin/hotels" label={t("nav.hotels_admin", "Отели (админ)")} icon={<IconHotel />} />
-                    <DropdownItem to="/admin/operations?tab=hotel_inspections" label="Модерация инспекций отелей" description="Hotel Passport" icon={<IconChecklist />} />
+                    <DropdownItem to="/admin/operations?tab=hotel_inspections" label="Модерация инспекций отелей" description="Проверка и публикация" icon={<IconChecklist />} />
                     <DropdownItem to="/admin/pages" label={t("nav.cms_pages", "Подвал")} icon={<IconDoc />} />
 
                     <button

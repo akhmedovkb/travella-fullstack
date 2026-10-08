@@ -3,6 +3,8 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo } from "../shared/toast";
+import BookingHoldCountdown from "../components/BookingHoldCountdown";
+import { redirectToPaymeGuide } from "../utils/paymeGuide";
 
 /* ========= helpers ========= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -28,6 +30,14 @@ async function confirmBookingByClient(id) {
 }
 async function cancelBookingByClient(id) {
   await axios.post(`${API_BASE}/api/bookings/${id}/cancel`, {}, cfg());
+}
+async function createBookingPayment(id) {
+  const res = await axios.post(`${API_BASE}/api/bookings/${id}/payment-order`, {}, cfg());
+  return res.data;
+}
+async function requestBookingRefund(id, reason) {
+  const res = await axios.post(`${API_BASE}/api/bookings/${id}/refund-request`, { reason }, cfg());
+  return res.data;
 }
 
 /* ========= форматирование ========= */
@@ -74,10 +84,15 @@ const statusKey = (s) => String(s || "").toLowerCase();
 const statusLabel = (s, t) =>
   ({
     pending: t("status.pending", { defaultValue: "ожидает" }),
+    quoted: t("bookings.status.quoted", { defaultValue: "ожидает подтверждения" }),
+    awaiting_payment: t("bookings.status.awaiting_payment", { defaultValue: "ожидает оплаты" }),
     confirmed: t("status.confirmed", { defaultValue: "подтверждено" }),
     active: t("status.active", { defaultValue: "активно" }),
+    paid: t("bookings.status.paid", { defaultValue: "оплачено" }),
     rejected: t("status.rejected", { defaultValue: "отклонено" }),
     cancelled: t("status.cancelled", { defaultValue: "отменено" }),
+    cancelled_unpaid: t("bookings.status.cancelled_unpaid", { defaultValue: "отменено: время оплаты истекло" }),
+    expired: t("bookings.status.expired", { defaultValue: "срок истёк" }),
   }[statusKey(s)] || s);
 
 /* ========= иконки ========= */
@@ -172,10 +187,15 @@ const StatusBadge = ({ status, text: override }) => {
   const s = statusKey(status);
   const map = {
     pending:   { text: t("bookings.status.pending",   { defaultValue: "ожидает" }),     cls: "bg-amber-50 text-amber-700 ring-amber-200" },
+    quoted:    { text: t("bookings.status.quoted", { defaultValue: "ожидает подтверждения" }), cls: "bg-blue-50 text-blue-700 ring-blue-200" },
+    awaiting_payment: { text: t("bookings.status.awaiting_payment", { defaultValue: "ожидает оплаты" }), cls: "bg-violet-50 text-violet-700 ring-violet-200" },
     confirmed: { text: t("bookings.status.confirmed", { defaultValue: "подтверждено" }), cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
     active:    { text: t("bookings.status.active",    { defaultValue: "активно" }),      cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
+    paid:      { text: t("bookings.status.paid", { defaultValue: "оплачено" }), cls: "bg-emerald-50 text-emerald-700 ring-emerald-200" },
     rejected:  { text: t("bookings.status.rejected",  { defaultValue: "отклонено" }),    cls: "bg-rose-50 text-rose-700 ring-rose-200" },
     cancelled: { text: t("bookings.status.cancelled", { defaultValue: "отменено" }),     cls: "bg-gray-100 text-gray-600 ring-gray-200" },
+    cancelled_unpaid: { text: t("bookings.status.cancelled_unpaid", { defaultValue: "отменено: время оплаты истекло" }), cls: "bg-gray-100 text-gray-600 ring-gray-200" },
+    expired:   { text: t("bookings.status.expired", { defaultValue: "срок истёк" }), cls: "bg-gray-100 text-gray-600 ring-gray-200" },
   };
   const { text, cls } =
     map[s] || { text: t(`bookings.status.${s}`, { defaultValue: s }), cls: "bg-gray-100 text-gray-700 ring-gray-200" };
@@ -278,6 +298,45 @@ export default function ClientBookings() {
     return () => window.removeEventListener("client:bookings:refresh", onRefresh);
   }, []);
 
+  useEffect(() => {
+    const bookingId = Number(new URLSearchParams(window.location.search).get("payment_booking"));
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return undefined;
+    let stopped = false;
+    let timer = null;
+    let attempts = 0;
+
+    const check = async () => {
+      try {
+        const { data } = await axios.get(`${API_BASE}/api/bookings/${bookingId}`, cfg());
+        if (stopped) return;
+        const status = String(data?.status || "").toLowerCase();
+        if (["confirmed", "paid", "active"].includes(status)) {
+          tSuccess(t("bookings.payment_confirmed", { defaultValue: "Оплата подтверждена. Бронирование оформлено." }));
+          await load();
+          const url = new URL(window.location.href);
+          url.searchParams.delete("payment_booking");
+          window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+          return;
+        }
+        if (["cancelled_unpaid", "cancelled", "expired"].includes(status)) {
+          tError(t("bookings.payment_not_completed", { defaultValue: "Оплата не завершена, бронь отменена." }));
+          await load();
+          const url = new URL(window.location.href);
+          url.searchParams.delete("payment_booking");
+          window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+          return;
+        }
+      } catch (e) {
+        console.error("booking payment status check failed", e);
+      }
+      attempts += 1;
+      if (!stopped && attempts < 10) timer = window.setTimeout(check, 1500);
+      else if (!stopped) tInfo(t("bookings.payment_processing", { defaultValue: "Платёж ещё обрабатывается. Статус обновится автоматически." }));
+    };
+    check();
+    return () => { stopped = true; if (timer) window.clearTimeout(timer); };
+  }, [t]);
+
   const confirm = async (b) => {
     setActingId(b.id);
     try {
@@ -295,6 +354,23 @@ export default function ClientBookings() {
     }
   };
 
+  const pay = async (b) => {
+    setActingId(b.id);
+    try {
+      const data = await createBookingPayment(b.id);
+      const redirected = redirectToPaymeGuide(data?.pay_url, {
+        purpose: "hotel_booking",
+        amount: data?.amount_sum,
+        orderId: data?.order_id,
+        returnTo: "/client/dashboard?tab=bookings",
+      });
+      if (!redirected) throw new Error("payment_url_missing");
+    } catch (e) {
+      tError(e?.response?.data?.message || t("bookings.payment_error", { defaultValue: "Не удалось создать оплату" }));
+      setActingId(null);
+    }
+  };
+
   const reject = async (b) => {
     setActingId(b.id);
     try {
@@ -307,6 +383,22 @@ export default function ClientBookings() {
         e?.response?.data?.message ||
           t("bookings.reject_error", { defaultValue: "Ошибка отклонения" })
       );
+    } finally {
+      setActingId(null);
+    }
+  };
+
+  const requestRefund = async (b) => {
+    const reason = window.prompt("Укажите причину возврата");
+    if (reason == null) return;
+    if (reason.trim().length < 5) return tError("Укажите причину возврата подробнее");
+    setActingId(b.id);
+    try {
+      await requestBookingRefund(b.id, reason.trim());
+      tSuccess("Запрос возврата отправлен администратору");
+      await load();
+    } catch (e) {
+      tError(e?.response?.data?.message || "Не удалось запросить возврат");
     } finally {
       setActingId(null);
     }
@@ -577,6 +669,16 @@ export default function ClientBookings() {
                         b.service?.title ||
                         t("booking.title", { defaultValue: "Бронирование" })}{" "}
                       · <StatusBadge status={status} text={statusTextOverride || undefined} />
+                      {status === "awaiting_payment" && b.hold_until ? (
+                        <span className="ml-2 inline-flex">
+                          <BookingHoldCountdown holdUntil={b.hold_until} onExpired={load} />
+                        </span>
+                      ) : null}
+                      {String(b.payment_status || "").toLowerCase() === "paid" ? (
+                        <span className="ml-2 inline-flex rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                          {t("bookings.paid_via_payme", { defaultValue: "Оплачено через Payme" })}
+                        </span>
+                      ) : null}
                       {confirmedAt ? (
                         <span className="ml-2 text-gray-500">{confirmedAt}</span>
                       ) : null}
@@ -758,6 +860,53 @@ export default function ClientBookings() {
                   >
                     {t("actions.reject", { defaultValue: "Отклонить" })}
                   </button>
+                </div>
+              )}
+              {status === "awaiting_payment" && String(b.currency || "UZS").toUpperCase() === "UZS" && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => pay(b)}
+                    disabled={actingId === b.id}
+                    className="rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white hover:bg-orange-700 disabled:opacity-60"
+                  >
+                    {t("bookings.pay_now", { defaultValue: "Оплатить" })}
+                  </button>
+                </div>
+              )}
+              {status === "awaiting_payment" && String(b.currency || "UZS").toUpperCase() !== "UZS" && (
+                <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  {t("bookings.online_payment_uzs_only", {
+                    defaultValue: "Онлайн-оплата Payme доступна только для брони в UZS. Свяжитесь с поставщиком для другого способа оплаты.",
+                  })}
+                </div>
+              )}
+              {String(b.payment_status || "").toLowerCase() === "paid" && (
+                <div className="mt-4 flex items-center gap-3">
+                  {String(b.refund_status || "").toLowerCase() === "requested" ? (
+                    <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                      Возврат запрошен, ожидается проверка
+                    </span>
+                  ) : String(b.refund_status || "").toLowerCase() === "processing" ? (
+                    <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+                      Запрос возврата принят в работу
+                    </span>
+                  ) : String(b.refund_status || "").toLowerCase() === "refunded" ? (
+                    <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">
+                      Оплата возвращена через Payme
+                    </span>
+                  ) : (
+                    <div className="flex flex-wrap items-center gap-2">
+                      {String(b.refund_status || "").toLowerCase() === "rejected" ? <span className="text-sm font-semibold text-rose-700">Предыдущий запрос отклонён</span> : null}
+                      <button
+                        type="button"
+                        onClick={() => requestRefund(b)}
+                        disabled={actingId === b.id}
+                        className="rounded-lg border border-rose-200 bg-white px-4 py-2 font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-60"
+                      >
+                        {String(b.refund_status || "").toLowerCase() === "rejected" ? "Отправить повторно" : "Запросить возврат"}
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>

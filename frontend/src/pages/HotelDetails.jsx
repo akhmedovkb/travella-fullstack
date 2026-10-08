@@ -296,7 +296,7 @@ function MyInspectionPanel({ inspection, hotelId }) {
           <div className="inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-1 text-xs font-black shadow-sm ring-1 ring-white/60">{badge.icon} {badge.text}</div>
           <div className="mt-2 text-sm font-black text-slate-950">Ваш обзор этого отеля</div>
           <div className="mt-1 text-xs font-semibold text-slate-600">
-            {statusValue(inspection) === "pending" ? "После проверки админом обзор станет публичным." : statusValue(inspection) === "rejected" ? (inspection.rejection_reason || "Проверьте замечания модератора и отправьте заново.") : "Обзор уже виден в Hotel Passport."}
+            {statusValue(inspection) === "pending" ? "После проверки админом обзор станет публичным." : statusValue(inspection) === "rejected" ? (inspection.rejection_reason || "Проверьте замечания модератора и отправьте заново.") : "Инспекция уже опубликована в карточке отеля."}
           </div>
         </div>
         <Link to={`/hotels/${hotelId}/inspections?edit=${inspection.id}`} className="shrink-0 rounded-2xl bg-slate-900 px-4 py-2 text-sm font-black text-white shadow-sm hover:bg-black">✏️ Редактировать</Link>
@@ -371,7 +371,7 @@ function PassportPanel({ inspections, media, stats, audience, cons }) {
       <section className="rounded-[2rem] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-white p-5 shadow-sm">
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-orange-600">Hotel Passport</div>
+            <div className="text-[11px] font-black uppercase tracking-[0.16em] text-orange-600">Инспекция отеля</div>
             <div className="mt-1 text-sm font-bold text-slate-600">Инспекции и живые обзоры</div>
           </div>
           <div className="shrink-0 rounded-3xl bg-white px-4 py-3 text-center shadow-sm ring-1 ring-orange-100"><div className="text-3xl font-black text-slate-950">{scoreLabel}</div><div className="text-xs font-black text-slate-400">из 5</div></div>
@@ -400,6 +400,11 @@ function StatMini({ label, value }) {
 }
 
 export default function HotelDetails() {
+  const canReview = Boolean(
+    localStorage.getItem("clientToken") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("providerToken")
+  );
   const { t } = useTranslation();
   const { hotelId } = useParams();
   const [hotel, setHotel] = useState(null);
@@ -475,7 +480,7 @@ export default function HotelDetails() {
     <div className="min-h-screen bg-slate-50/70">
       <div className="mx-auto max-w-7xl px-4 py-5 md:px-6 md:py-8">
         <div className="mb-4 flex min-w-0 flex-wrap items-center gap-2 text-sm font-bold text-slate-500">
-          <Link to="/hotels" className="rounded-full bg-white px-3 py-1.5 text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">← Назад</Link><span>/</span><span>Hotel Passport</span><span>/</span><span className="min-w-0 truncate text-slate-900">{hotel.name}</span>
+          <Link to="/hotels" className="rounded-full bg-white px-3 py-1.5 text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50">← Назад</Link><span>/</span><span>Карточка отеля</span><span>/</span><span className="min-w-0 truncate text-slate-900">{hotel.name}</span>
         </div>
 
         <section className="min-w-0 overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-sm">
@@ -487,14 +492,14 @@ export default function HotelDetails() {
             <div className="min-w-0 p-5 md:p-7">
               <div className="flex min-w-0 flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
                 <div className="min-w-0">
-                  <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">Hotel Passport</div>
+                  <div className="inline-flex rounded-full bg-orange-50 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">Карточка отеля</div>
                   <h1 className="mt-3 break-words text-3xl font-black leading-tight tracking-[-0.04em] text-slate-950 md:text-4xl">{hotel.name}</h1>
                   <div className="mt-2 break-words text-sm font-bold text-slate-500">📍 {[hotel.city || hotel.location, hotel.country].filter(Boolean).join(", ") || "Локация не указана"}</div>
-                  <div className="mt-4 flex min-w-0 flex-wrap items-center gap-3"><Stars value={hotel.stars} max={5} /><span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-700">Passport score: {Number.isFinite(stats.score) ? stats.score.toFixed(1) : "—"}/5</span></div>
+                  <div className="mt-4 flex min-w-0 flex-wrap items-center gap-3"><Stars value={hotel.stars} max={5} /><span className="rounded-full bg-slate-100 px-3 py-1 text-sm font-black text-slate-700">Оценка инспекции: {Number.isFinite(stats.score) ? stats.score.toFixed(1) : "—"}/5</span></div>
                 </div>
                 <div className="flex shrink-0 flex-wrap gap-2">
                   <Link to={`/hotels/${hotel.id}/inspections`} className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 shadow-sm transition hover:bg-slate-50">🏨 Инспекции</Link>
-                  {myInspection ? <Link to={`/hotels/${hotel.id}/inspections?edit=${myInspection.id}`} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-black">✏️ Редактировать обзор</Link> : <Link to={`/hotels/${hotel.id}/inspections?new=1`} className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-600">➕ Оставить обзор</Link>}
+                  {canReview && (myInspection ? <Link to={`/hotels/${hotel.id}/inspections?edit=${myInspection.id}`} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-black">✏️ Редактировать обзор</Link> : <Link to={`/hotels/${hotel.id}/inspections?new=1`} className="rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-600">➕ Оставить обзор</Link>)}
                 </div>
               </div>
               <div className="mt-6"><MyInspectionPanel inspection={myInspection} hotelId={hotel.id} /></div>

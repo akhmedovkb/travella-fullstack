@@ -206,7 +206,6 @@ const slugify = (s) =>
     .slice(0, 40);
 
 const numOrNull = (v) => (v === "" || v === null || v === undefined ? null : Number(v));
-const SEASONS = ["low", "shoulder", "high"];
 /* ---------- AsyncSelect i18n + debounce ---------- */
 const makeAsyncSelectI18n = (t) => ({
   noOptionsMessage: ({ inputValue }) =>
@@ -219,25 +218,32 @@ const makeAsyncSelectI18n = (t) => ({
 function useDebouncedLoader(asyncFn, delay = 400) {
   const timerRef = useRef(null);
   const ctrlRef = useRef(null);
+  const resolveRef = useRef(null);
   useEffect(() => () => {
     if (timerRef.current) clearTimeout(timerRef.current);
     if (ctrlRef.current) ctrlRef.current.abort?.();
+    if (resolveRef.current) resolveRef.current([]);
   }, []);
   return useCallback(
     (inputValue) =>
       new Promise((resolve, reject) => {
         const text = (inputValue || "").trim();
+        if (timerRef.current) {
+          clearTimeout(timerRef.current);
+          timerRef.current = null;
+        }
+        if (ctrlRef.current) ctrlRef.current.abort?.();
+        if (resolveRef.current) resolveRef.current([]);
+        resolveRef.current = resolve;
         if (text.length < 2) {
-          if (timerRef.current) clearTimeout(timerRef.current);
-          if (ctrlRef.current) ctrlRef.current.abort?.();
+          resolveRef.current = null;
           resolve([]);
           return;
         }
-        if (timerRef.current) clearTimeout(timerRef.current);
-        if (ctrlRef.current) ctrlRef.current.abort?.();
         const controller = new AbortController();
         ctrlRef.current = controller;
         timerRef.current = setTimeout(async () => {
+          timerRef.current = null;
           try {
             const out = await asyncFn(text, controller.signal);
             resolve(out);
@@ -247,6 +253,8 @@ function useDebouncedLoader(asyncFn, delay = 400) {
               return;
             }
             reject(e);
+          } finally {
+            if (resolveRef.current === resolve) resolveRef.current = null;
           }
         }, delay);
       }),
@@ -273,6 +281,19 @@ const composeDualLabel = (local, en) => {
   if (!local) return en;
   if (!en) return local;
   return local.toLowerCase() === en.toLowerCase() ? local : `${local} / ${en}`;
+};
+
+const transliterateRu = (value) => {
+  const map = {
+    а: "a", б: "b", в: "v", г: "g", д: "d", е: "e", ё: "yo", ж: "zh", з: "z", и: "i", й: "y",
+    к: "k", л: "l", м: "m", н: "n", о: "o", п: "p", р: "r", с: "s", т: "t", у: "u", ф: "f",
+    х: "kh", ц: "ts", ч: "ch", ш: "sh", щ: "shch", ъ: "", ы: "y", ь: "", э: "e", ю: "yu", я: "ya",
+  };
+  return String(value || "").split("").map((char) => {
+    const lower = char.toLowerCase();
+    const converted = Object.prototype.hasOwnProperty.call(map, lower) ? map[lower] : char;
+    return char !== lower && converted ? converted[0].toUpperCase() + converted.slice(1) : converted;
+  }).join("");
 };
 
 /* ——— альфанумерическая очистка для поля «Контакт» ——— */
@@ -302,6 +323,37 @@ export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
   const [selectedExistingHotel, setSelectedExistingHotel] = useState(null);
   const [existingProviderOffer, setExistingProviderOffer] = useState(null);
   const [checkingExistingOffer, setCheckingExistingOffer] = useState(false);
+  const [ownershipConfirmed, setOwnershipConfirmed] = useState(false);
+  const [ownershipClaimNote, setOwnershipClaimNote] = useState("");
+  const tokenProviderType = String(userInfo?.type || userInfo?.provider_type || "").toLowerCase();
+  const [currentProviderType, setCurrentProviderType] = useState(tokenProviderType);
+  const isHotelProvider = !isAdminLike && currentProviderType === "hotel";
+  const [creationAccessChecked, setCreationAccessChecked] = useState(!isNew || isAdminLike);
+  const [canCreateHotel, setCanCreateHotel] = useState(isAdminLike);
+  const [canAttachExistingHotel, setCanAttachExistingHotel] = useState(isAdminLike);
+
+  useEffect(() => {
+    if (!isNew || isAdminLike) return;
+    let alive = true;
+    httpGet("/api/hotels/readiness", { params: { limit: 1, page: 1 }, role: "provider" })
+      .then((data) => {
+        if (!alive) return;
+        const canCreate = data?.permissions?.can_create_hotel === true;
+        const canAttach = data?.permissions?.can_attach_existing_hotel === true;
+        setCanCreateHotel(canCreate);
+        setCanAttachExistingHotel(canAttach);
+        setCurrentProviderType(String(data?.permissions?.provider_type || tokenProviderType).toLowerCase());
+        setCreationAccessChecked(true);
+        if (!canAttach) navigate("/dashboard/hotels", { replace: true });
+      })
+      .catch(() => {
+        if (!alive) return;
+        setCanCreateHotel(false);
+        setCreationAccessChecked(true);
+        navigate("/dashboard/hotels", { replace: true });
+      });
+    return () => { alive = false; };
+  }, [isNew, isAdminLike, navigate, tokenProviderType]);
   // проставляем значения из записи отеля
   const fillFromHotel = (h) => {
     setName(h?.name || "");
@@ -322,9 +374,6 @@ export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
     setTouristResident(taxes?.touristTax?.residentPerNight ?? "");
     setTouristNonResident(taxes?.touristTax?.nonResidentPerNight ?? "");
 
-    const toMealSet = (s = {}) => ({
-      BB: s.BB ?? "", HB: s.HB ?? "", FB: s.FB ?? "", AI: s.AI ?? "", UAI: s.UAI ?? "",
-    });
     const byType = new Map();
     (Array.isArray(h?.rooms) ? h.rooms : []).forEach((r) => {
       const typeName = r?.type || "";
@@ -333,20 +382,6 @@ export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
         name: typeName || "Room",
         builtin: !!DEFAULT_ROOM_TYPES.find(d => d.name === typeName),
         count: String(r?.count ?? ""),
-        prices: {
-          low: {
-            resident: toMealSet(r?.prices?.low?.resident),
-            nonResident: toMealSet(r?.prices?.low?.nonResident),
-          },
-          shoulder: {
-            resident: toMealSet(r?.prices?.shoulder?.resident),
-            nonResident: toMealSet(r?.prices?.shoulder?.nonResident),
-          },
-          high: {
-            resident: toMealSet(r?.prices?.high?.resident),
-            nonResident: toMealSet(r?.prices?.high?.nonResident),
-          },
-        },
       };
       byType.set(row.id, row);
     });
@@ -401,71 +436,16 @@ export default function AdminHotelForm({ hotelIdProp, onSaved } = {}) {
   const [amenities, setAmenities] = useState([]);
   const [services, setServices] = useState([]);
 
-  // Наборы питания: BB, HB, FB, AI, UAI
-  const MEAL_PLANS = ["BB", "HB", "FB", "AI", "UAI"];
-  const makeMealSet = () => ({ BB: "", HB: "", FB: "", AI: "", UAI: "" });
-  
-  // Номера + сезонные цены
+  // Типы номеров и физическое количество. Цены задаются в предложениях.
   const blankRow = (base) => ({
     ...base,
     count: "",
-    prices: {
-      low: { resident: makeMealSet(), nonResident: makeMealSet() },
-      shoulder: { resident: makeMealSet(), nonResident: makeMealSet() },
-      high: { resident: makeMealSet(), nonResident: makeMealSet() },
-    },
   });
 
   const [roomRows, setRoomRows] = useState(
     DEFAULT_ROOM_TYPES.map((r) => blankRow(r))
   );
   const [newTypeName, setNewTypeName] = useState("");
-
-  // --- валидатор строк с ценами ---
-const isFilled = (v) => !(v === "" || v === null || v === undefined);
-
-const rowHasAnyPrice = (row) => {
-  if (!row?.prices) return false;
-  const seasons = ["low", "shoulder", "high"];
-  const persons = ["resident", "nonResident"];
-  for (const season of seasons) {
-    for (const person of persons) {
-      for (const mp of MEAL_PLANS) {
-        if (isFilled(row?.prices?.[season]?.[person]?.[mp])) return true;
-      }
-    }
-  }
-  return false;
-};
-  
-// id строк с ценами, но без указания количества
-const invalidRowIds = useMemo(
-  () =>
-    roomRows
-      .filter((r) => Number(r.count || 0) === 0 && rowHasAnyPrice(r))
-      .map((r) => r.id),
-  [roomRows]
-);
-
-
-  // стили для ячеек по сезону (LR белый, HR бледно-серый)
-const tdCls = (season, extra = "") =>
-  `px-2 py-1 ${
-    season === "high"
-      ? "bg-gray-100"
-      : season === "shoulder"
-      ? "bg-slate-50"
-      : "bg-white"
-  } ${extra}`;
-
-const inputCls = (season) =>
-  `w-28 border rounded px-2 py-1 ${
-    season === "high"
-      ? "bg-gray-100"
-      : season === "shoulder"
-      ? "bg-slate-50"
-      : "bg-white"
-  }`;
 
   // Доп. место
   const [extraBedPrice, setExtraBedPrice] = useState("");
@@ -548,15 +528,15 @@ const inputCls = (season) =>
     const username = import.meta.env.VITE_GEONAMES_USERNAME;
     if (!username) return [];
     try {
+      const typed = String(inputValue || "").trim();
+      const searchName = /[А-Яа-яЁё]/.test(typed) ? transliterateRu(typed) : typed;
       const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
         params: {
           country: countryOpt.code,
           featureClass: "P",
-          name_startsWith: inputValue,
-          q: inputValue,
+          q: searchName,
           maxRows: 20,
           orderby: "population",
-          fuzzy: 0.9,
           style: "FULL",
           lang: geoLang,
           username,
@@ -671,25 +651,6 @@ const inputCls = (season) =>
   const removeRow = (id) => setRoomRows((rows) => rows.filter((r) => r.id !== id));
   const updateRow = (id, patch) =>
     setRoomRows((rows) => rows.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  const updateMealPrice = (id, season, personType, meal, value) =>
-    setRoomRows((rows) =>
-      rows.map((r) => {
-        if (r.id !== id) return r;
-        return {
-          ...r,
-          prices: {
-            ...r.prices,
-            [season]: {
-              ...r.prices[season],
-              [personType]: {
-                ...r.prices[season][personType],
-                [meal]: value,
-              },
-            },
-          },
-        };
-      })
-    );
 
   /* ---------- Submit ---------- */
   const submit = async () => {
@@ -699,7 +660,11 @@ const inputCls = (season) =>
         return;
       }
       try {
-        const rawType = String(userInfo?.type || userInfo?.provider_type || "").toLowerCase();
+        if (isHotelProvider && !ownershipConfirmed) {
+          tError("Подтвердите, что вы представляете этот отель");
+          return;
+        }
+        const rawType = currentProviderType;
         const supplierType = rawType === "hotel" ? "hotel"
           : ["tour_operator", "dmc", "agency", "supplier"].includes(rawType) ? rawType : "agency";
         await apiAttachHotelOffer(selectedExistingHotel.hotelId, {
@@ -707,8 +672,10 @@ const inputCls = (season) =>
           is_direct: false,
           currency,
           title: "Предложение поставщика",
+          ownership_confirmed: isHotelProvider ? ownershipConfirmed : undefined,
+          ownership_claim_note: isHotelProvider ? ownershipClaimNote.trim() : undefined,
         });
-        tSuccess("Существующий отель добавлен в ваши предложения");
+        tSuccess(isHotelProvider ? "Заявка «Это мой отель» отправлена администратору" : "Существующий отель добавлен в ваши предложения");
         navigate(`/provider/hotels/${selectedExistingHotel.hotelId}/offer`);
       } catch (e) {
         console.error(e);
@@ -721,31 +688,18 @@ const inputCls = (season) =>
       }
       return;
     }
+    if (isNew && !isAdminLike && !canCreateHotel) {
+      tError("Выберите существующий отель из базы");
+      return;
+    }
     if (!name.trim())    return tError(t("enter_hotel_name") || "Введите название");
     if (!countryOpt)     return tError(t("select_country") || "Укажите страну");
     if (!address.trim()) return tError(t("enter_address") || "Укажите адрес");
-
-    const normalizeMealSet = (set) =>
-      MEAL_PLANS.reduce((acc, mp) => ({ ...acc, [mp]: numOrNull(set?.[mp]) }), {});
 
     const rooms = roomRows
       .map((r) => ({
         type: r.name,
         count: Number(r.count || 0),
-        prices: {
-          low: {
-            resident: normalizeMealSet(r.prices.low.resident),
-            nonResident: normalizeMealSet(r.prices.low.nonResident),
-          },
-          shoulder: {
-            resident: normalizeMealSet(r.prices.shoulder.resident),
-            nonResident: normalizeMealSet(r.prices.shoulder.nonResident),
-          },
-          high: {
-            resident: normalizeMealSet(r.prices.high.resident),
-            nonResident: normalizeMealSet(r.prices.high.nonResident),
-          },
-        },
       }))
       .filter((x) => x.count > 0);
 
@@ -792,7 +746,12 @@ const inputCls = (season) =>
       }
     } catch (e) {
       console.error(e);
-      tError(t("hotel_save_error") || "Ошибка сохранения отеля");
+      if (e?.status === 409 && e?.data?.error === "hotel_already_exists") {
+        const duplicateId = e?.data?.hotel_id;
+        tError(`Этот отель уже есть в базе${duplicateId ? ` (#${duplicateId})` : ""}. Выберите существующую карточку из поиска.`);
+      } else {
+        tError(t("hotel_save_error") || "Ошибка сохранения отеля");
+      }
     }
   };
 
@@ -818,6 +777,102 @@ const inputCls = (season) =>
   const formLabelClass = "mb-1.5 block text-xs font-black uppercase tracking-[0.08em] text-slate-500";
 
   /* ==================== UI ==================== */
+  if (isNew && !isAdminLike && (!creationAccessChecked || !canAttachExistingHotel)) {
+    return (
+      <div className="mx-auto max-w-3xl p-6 text-center text-sm font-bold text-slate-500">
+        {creationAccessChecked ? "Добавление отелей недоступно для этого аккаунта." : "Проверяем доступ…"}
+      </div>
+    );
+  }
+
+  if (isNew && !isAdminLike && !canCreateHotel) {
+    const selectExistingHotel = async (opt) => {
+      if (!opt?.hotelId) {
+        setSelectedExistingHotel(null);
+        setExistingProviderOffer(null);
+        setName("");
+        return;
+      }
+      setSelectedExistingHotel(opt);
+      setExistingProviderOffer(null);
+      setCheckingExistingOffer(true);
+      setName(opt.hotelName || opt.label || "");
+      try {
+        const [existing, offers] = await Promise.all([
+          httpGet(`/api/hotels/${encodeURIComponent(opt.hotelId)}`, { role: "provider" }),
+          httpGet(`/api/hotels/${encodeURIComponent(opt.hotelId)}/offers`, { params: { mine: "1" }, role: "provider" }),
+        ]);
+        fillFromHotel(existing);
+        const currentProviderId = Number(userInfo?.id || userInfo?.provider_id || userInfo?.providerId);
+        const ownOffer = (Array.isArray(offers?.items) ? offers.items : []).find(
+          (offer) => Number(offer?.provider_id) === currentProviderId && offer?.status !== "archived"
+        );
+        setExistingProviderOffer(ownOffer || null);
+      } catch (e) {
+        console.error(e);
+        tError("Не удалось загрузить карточку выбранного отеля");
+      } finally {
+        setCheckingExistingOffer(false);
+      }
+    };
+
+    return (
+      <div className="mx-auto max-w-4xl rounded-3xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm lg:p-6">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h1 className="text-2xl font-black tracking-[-0.03em] text-slate-950">Добавить отель из базы</h1>
+            <p className="mt-1 text-sm font-medium text-slate-600">Выберите готовую карточку отеля. Её данные доступны только для просмотра.</p>
+          </div>
+          <Link to="/dashboard/hotels" className="inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-bold text-slate-700 shadow-sm">← Назад</Link>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <label className={formLabelClass}>Найти отель</label>
+          <AsyncSelect
+            cacheOptions
+            defaultOptions
+            {...ASYNC_MENU_PORTAL}
+            loadOptions={loadHotelOptions}
+            noOptionsMessage={ASYNC_I18N.noOptionsMessage}
+            loadingMessage={ASYNC_I18N.loadingMessage}
+            placeholder="Введите название или город…"
+            value={selectedExistingHotel ? { ...selectedExistingHotel, label: name || selectedExistingHotel.label } : null}
+            onChange={selectExistingHotel}
+            isClearable
+          />
+        </div>
+
+        {selectedExistingHotel?.hotelId ? (
+          <div className="mt-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <div className="text-xl font-black text-slate-950">{name}</div>
+                <div className="mt-1 text-sm font-semibold text-slate-500">{[cityOpt?.label, countryOpt?.label].filter(Boolean).join(", ") || "Локация не указана"}</div>
+              </div>
+              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-black text-slate-600">Карточка #{selectedExistingHotel.hotelId}</span>
+            </div>
+            <dl className="mt-5 grid gap-3 sm:grid-cols-2">
+              <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs font-black uppercase text-slate-400">Адрес</dt><dd className="mt-1 text-sm font-bold text-slate-800">{address || "—"}</dd></div>
+              <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs font-black uppercase text-slate-400">Категория</dt><dd className="mt-1 text-sm font-bold text-slate-800">{stars ? `${stars}★` : "—"}</dd></div>
+              <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs font-black uppercase text-slate-400">Контакт</dt><dd className="mt-1 text-sm font-bold text-slate-800">{contact || "—"}</dd></div>
+              <div className="rounded-xl bg-slate-50 p-3"><dt className="text-xs font-black uppercase text-slate-400">Валюта</dt><dd className="mt-1 text-sm font-bold text-slate-800">{currency || "—"}</dd></div>
+            </dl>
+            {existingProviderOffer ? (
+              <div className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-bold text-amber-800">Этот отель уже добавлен в «Мои отели».</div>
+            ) : null}
+            <div className="mt-5 flex justify-end">
+              <button type="button" onClick={submit} disabled={checkingExistingOffer || !!existingProviderOffer} className="rounded-xl bg-orange-600 px-5 py-2.5 text-sm font-black text-white shadow-sm disabled:cursor-not-allowed disabled:bg-slate-300">
+                {checkingExistingOffer ? "Проверяем…" : "Добавить к моим отелям"}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="mt-4 rounded-2xl border border-dashed border-slate-300 bg-white p-8 text-center text-sm font-bold text-slate-500">Сначала найдите и выберите отель из общей базы.</div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-7xl rounded-3xl border border-slate-200 bg-slate-50/60 p-4 shadow-sm lg:p-6">
       <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
@@ -830,14 +885,15 @@ const inputCls = (season) =>
           </div>
           <h1 className="mt-3 text-2xl font-black tracking-[-0.03em] text-slate-950">
             {isNew
-              ? t("admin.new_hotel_title", { defaultValue: "Новый отель" })
+              ? (canCreateHotel ? t("admin.new_hotel_title", { defaultValue: "Новый отель" }) : "Добавить отель из базы")
               : t("admin.edit_hotel_title", { defaultValue: "Редактирование отеля" })}
           </h1>
           <p className="mt-1 max-w-3xl text-sm font-medium leading-6 text-slate-600">
-            {t("admin.hotels.form_hint", {
-              defaultValue:
-                "Заполните карточку отеля. Номерной фонд, квоты и тарифы настраиваются отдельно после сохранения.",
-            })}
+            {canCreateHotel
+              ? t("admin.hotels.form_hint", {
+                  defaultValue: "Заполните карточку отеля. Номерной фонд, квоты и тарифы настраиваются отдельно после сохранения.",
+                })
+              : "Найдите существующий отель и добавьте к нему своё тарифное предложение."}
           </p>
         </div>
 
@@ -861,10 +917,12 @@ const inputCls = (season) =>
           <button
             type="button"
             onClick={submit}
-            disabled={checkingExistingOffer || !!existingProviderOffer}
+            disabled={checkingExistingOffer || !!existingProviderOffer || (isHotelProvider && !!selectedExistingHotel?.hotelId && !ownershipConfirmed)}
             className="inline-flex items-center justify-center rounded-xl bg-orange-600 px-4 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {t("save", { defaultValue: "Сохранить" })}
+            {isHotelProvider && selectedExistingHotel?.hotelId
+              ? "Отправить заявку"
+              : (!canCreateHotel && selectedExistingHotel?.hotelId ? "Добавить к моим отелям" : t("save", { defaultValue: "Сохранить" }))}
           </button>
         </div>
       </div>
@@ -917,12 +975,16 @@ const inputCls = (season) =>
                   loadOptions={loadHotelOptions}
                   noOptionsMessage={ASYNC_I18N.noOptionsMessage}
                   loadingMessage={ASYNC_I18N.loadingMessage}
-                  placeholder={t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })}
+                  placeholder={canCreateHotel
+                    ? t("hotel.search_placeholder", { defaultValue: "Найдите отель или введите свой вариант…" })
+                    : "Найдите отель по названию или городу…"}
                   value={name ? { value: selectedExistingHotel?.hotelId ? `hotel:${selectedExistingHotel.hotelId}` : name, label: name } : null}
                   onChange={async (opt) => {
                     if (opt?.hotelId) {
                       setSelectedExistingHotel(opt);
                       setExistingProviderOffer(null);
+                      setOwnershipConfirmed(false);
+                      setOwnershipClaimNote("");
                       setCheckingExistingOffer(true);
                       setName(opt.hotelName || opt.label || "");
                       try {
@@ -945,11 +1007,17 @@ const inputCls = (season) =>
                     } else {
                       setSelectedExistingHotel(null);
                       setExistingProviderOffer(null);
+                      setOwnershipConfirmed(false);
+                      setOwnershipClaimNote("");
                       setCheckingExistingOffer(false);
                       setName(opt?.hotelName || opt?.value || "");
                     }
                   }}
-                  onCreateOption={(input) => { setSelectedExistingHotel(null); setExistingProviderOffer(null); setName(input); }}
+                  isValidNewOption={() => canCreateHotel}
+                  onCreateOption={(input) => {
+                    if (!canCreateHotel) return;
+                    setSelectedExistingHotel(null); setExistingProviderOffer(null); setOwnershipConfirmed(false); setOwnershipClaimNote(""); setName(input);
+                  }}
                   isClearable
                 />
                 {selectedExistingHotel?.hotelId && existingProviderOffer ? (
@@ -958,8 +1026,13 @@ const inputCls = (season) =>
                     <Link className="text-blue-700 underline" to={`/provider/hotels/${encodeURIComponent(selectedExistingHotel.hotelId)}/offer`}>Открыть отель</Link>
                   </div>
                 ) : selectedExistingHotel?.hotelId ? (
-                  <div className="mt-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-bold text-emerald-800">
-                    {checkingExistingOffer ? "Проверяем, добавлен ли отель…" : `Найден в базе: #${selectedExistingHotel.hotelId} · ${selectedExistingHotel.city || "город не указан"}. При сохранении будет создано ваше предложение без дублирования карточки.`}
+                  <div className="mt-2 space-y-3 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900">
+                    <div className="font-bold">{checkingExistingOffer ? "Проверяем, добавлен ли отель…" : `Найден в базе: #${selectedExistingHotel.hotelId} · ${selectedExistingHotel.city || "город не указан"}. Новая карточка создана не будет.`}</div>
+                    {isHotelProvider && !checkingExistingOffer ? <>
+                      <label className="flex items-start gap-2 font-bold"><input type="checkbox" className="mt-1" checked={ownershipConfirmed} onChange={(e) => setOwnershipConfirmed(e.target.checked)} /><span>Подтверждаю, что представляю этот отель и могу подтвердить связь</span></label>
+                      <input className={formInputClass} value={ownershipClaimNote} onChange={(e) => setOwnershipClaimNote(e.target.value)} placeholder="Рабочий телефон, email или комментарий для проверки" maxLength={1000} />
+                      <div className="text-xs font-semibold text-emerald-700">После отправки администратор проверит заявку и назначит владельца карточки.</div>
+                    </> : null}
                   </div>
                 ) : null}
               </div>
@@ -1030,9 +1103,10 @@ const inputCls = (season) =>
 
               <div className="lg:col-span-4">
                 <label className={formLabelClass}>{t("city", { defaultValue: "Город" })}</label>
-                <AsyncSelect
+                <AsyncCreatableSelect
+                  key={`city-${countryOpt?.code || "none"}-${geoLang}`}
                   isDisabled={!countryOpt}
-                  cacheOptions
+                  cacheOptions={false}
                   defaultOptions={cityDefaultOptions}
                   {...ASYNC_MENU_PORTAL}
                   loadOptions={loadCities}
@@ -1041,6 +1115,11 @@ const inputCls = (season) =>
                   placeholder={t("select_city", { defaultValue: "Выберите город" })}
                   value={cityOpt}
                   onChange={(opt) => setCityOpt(opt || null)}
+                  onCreateOption={(input) => {
+                    const city = String(input || "").trim();
+                    if (city) setCityOpt({ value: city, label: city, custom: true });
+                  }}
+                  formatCreateLabel={(input) => `Использовать «${input}»`}
                   isClearable
                 />
                 {!import.meta.env.VITE_GEONAMES_USERNAME && (
@@ -1197,10 +1276,12 @@ const inputCls = (season) =>
           )}
           <button
             onClick={submit}
-            disabled={checkingExistingOffer || !!existingProviderOffer}
+            disabled={checkingExistingOffer || !!existingProviderOffer || (isHotelProvider && !!selectedExistingHotel?.hotelId && !ownershipConfirmed)}
             className="rounded-xl bg-orange-600 px-5 py-2 text-sm font-black text-white shadow-sm transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {t("save", { defaultValue: "Сохранить" })}
+            {isHotelProvider && selectedExistingHotel?.hotelId
+              ? "Отправить заявку"
+              : (!canCreateHotel && selectedExistingHotel?.hotelId ? "Добавить к моим отелям" : t("save", { defaultValue: "Сохранить" }))}
           </button>
         </div>
       </div>

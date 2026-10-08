@@ -19,7 +19,7 @@ Travella is a fullstack operational platform for travella.uz. It combines a publ
 - `backend/controllers/` - main backend business logic.
 - `backend/jobs/` - scheduled jobs for reminders, service cleanup, Payme health, unlock nudges.
 - `backend/telegram/` - large Telegraf bot implementation and Telegram-specific handlers/keyboards.
-- `backend/utils/` - shared helpers for Telegram, Payme events, contact unlocks, Donas finance, Redis locks, seasons, monitoring.
+- `backend/utils/` - shared helpers for Telegram, Payme events, contact unlocks, Donas finance, Redis locks, hotel offers, monitoring.
 - `frontend/src/App.jsx` - main React routing table.
 - `frontend/src/api.js` - shared fetch wrapper, API base resolver, token/header handling.
 - `frontend/src/pages/` - route-level React pages.
@@ -108,7 +108,7 @@ Do not paste real `.env` values into chat or docs.
 ### Hotels
 
 - Frontend: `Hotels.jsx`, `HotelDetails.jsx`, `HotelInspections.jsx`, admin hotel pages/components.
-- Backend: `backend/routes/hotelRoutes.js`, `backend/controllers/hotelsController.js`, `backend/routes/hotelSeasons.js`, `backend/routes/hotelInspectionRoutes.js`.
+- Backend: `backend/routes/hotelRoutes.js`, `backend/controllers/hotelsController.js`, `backend/routes/hotelOffers.js`, `backend/routes/hotelInspectionRoutes.js`.
 
 ### Telegram
 
@@ -179,4 +179,3 @@ These files carry a lot of behavior and should be edited in small, focused patch
 - Start backend locally with scheduler/Telegram disabled if needed.
 - Start frontend locally and test primary flows: marketplace, login, provider dashboard, client dashboard.
 - Review high-risk payment/contact unlock flows before production changes.
-

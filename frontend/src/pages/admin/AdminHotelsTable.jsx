@@ -48,8 +48,8 @@ const isProviderRole = ({ roles, role, type }) =>
   new Set([role, type, ...roles]).has("provider");
 
 /* ====== api helpers ====== */
-async function apiHotelReadiness({ name = "", city = "", limit = 200, providerMode = false } = {}) {
-  const qs = new URLSearchParams({ name, city, limit }).toString();
+async function apiHotelReadiness({ name = "", city = "", filter = "all", sort = "name", dir = "asc", limit = 50, page = 1, providerMode = false } = {}) {
+  const qs = new URLSearchParams({ name, city, filter, sort, dir, limit, page }).toString();
   return apiGet(`/api/hotels/readiness?${qs}`, providerMode ? "provider" : "admin");
 }
 
@@ -66,6 +66,9 @@ const normalizeHotel = (h) => ({
   myOfferId: h.my_offer_id ?? null,
   myOfferStatus: h.my_offer_status || "",
   myOfferDirect: h.my_offer_is_direct === true,
+  pendingOwnershipClaimCount: Number(h.pending_ownership_claim_count || 0),
+  pendingOwnershipClaimProviderId: h.pending_claim_provider_id ?? null,
+  pendingOwnershipClaimProviderName: normalizeText(h.pending_claim_provider_name),
   currency: normalizeText(h.currency),
   inspectionCount: Number(h.approved_inspection_count || 0),
   verifiedInspectionCount: Number(h.verified_inspection_count || 0),
@@ -111,11 +114,14 @@ const issueLabels = {
   rooms_missing: "нет номеров",
   rates_missing: "нет цен",
   currency_invalid: "неверная валюта",
-  passport_missing: "нет Hotel Passport",
+  passport_missing: "нет опубликованной инспекции",
 };
 
-const readinessIssueText = (hotel) =>
-  (hotel.readiness?.issues || []).map((issue) => issueLabels[issue] || issue).join(", ");
+const readinessIssueText = (hotel, { showOwnership = true } = {}) =>
+  (hotel.readiness?.issues || [])
+    .filter((issue) => showOwnership || issue !== "owner_missing")
+    .map((issue) => issueLabels[issue] || issue)
+    .join(", ");
 
 function Badge({ children, tone = "slate" }) {
   const tones = {
@@ -163,6 +169,11 @@ export default function AdminHotelsTable({
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, limit: 50 });
+  const [summary, setSummary] = useState({});
+  const [canCreateHotel, setCanCreateHotel] = useState(!providerMode);
+  const [canAttachExistingHotel, setCanAttachExistingHotel] = useState(!providerMode);
   const reqIdRef = useRef(0);
 
   const load = useCallback(async ({ silent = false } = {}) => {
@@ -173,16 +184,23 @@ export default function AdminHotelsTable({
     }
     try {
       const data = await apiHotelReadiness({
-        name: qName.trim(), city: qCity.trim(), limit: 200, providerMode,
+        name: qName.trim(), city: qCity.trim(), filter: quickFilter, sort: sortBy, dir: sortDir,
+        limit: 50, page, providerMode,
       });
       const rows = data?.items || [];
-      if (reqIdRef.current === myReq) setItems(rows.map(normalizeHotel));
+      if (reqIdRef.current === myReq) {
+        setItems(rows.map(normalizeHotel));
+        setPagination(data?.pagination || { page, pages: 1, total: rows.length, limit: 50 });
+        setSummary(data?.summary || {});
+        setCanCreateHotel(!providerMode || data?.permissions?.can_create_hotel === true);
+        setCanAttachExistingHotel(!providerMode || data?.permissions?.can_attach_existing_hotel === true);
+      }
     } catch (e) {
       if (reqIdRef.current === myReq) setError("Не удалось загрузить список отелей");
     } finally {
       if (reqIdRef.current === myReq) setLoading(false);
     }
-  }, [providerMode, qName, qCity]);
+  }, [providerMode, qName, qCity, quickFilter, sortBy, sortDir, page]);
 
   useEffect(() => {
     load();
@@ -207,44 +225,29 @@ export default function AdminHotelsTable({
   }, [load]);
 
   const stats = useMemo(() => {
-    const cities = new Set(items.map((h) => h.city).filter(Boolean));
-    const withoutCity = items.filter((h) => !h.city).length;
-    const withoutOwner = items.filter((h) => !(Number(h.providerId) > 0)).length;
-    const profileReady = items.filter((h) => h.readiness?.profile_ready).length;
-    const pricingReady = items.filter((h) => h.readiness?.pricing_ready).length;
-    const passportReady = items.filter((h) => h.readiness?.passport_ready).length;
-    const tourBuilderReady = items.filter((h) => h.readiness?.tour_builder_ready).length;
-    return { total: items.length, cities: cities.size, withoutCity, withoutOwner, profileReady, pricingReady, passportReady, tourBuilderReady };
-  }, [items]);
+    return {
+      total: Number(summary.total || 0),
+      withoutCity: Number(summary.without_city || 0),
+      withoutOwner: Number(summary.without_owner || 0),
+      profileReady: Number(summary.profile_ready || 0),
+      pricingReady: Number(summary.pricing_ready || 0),
+      passportReady: Number(summary.passport_ready || 0),
+      tourBuilderReady: Number(summary.tour_builder_ready || 0),
+    };
+  }, [summary]);
 
   const visibleItems = useMemo(() => {
-    let rows = [...items];
-
-    if (quickFilter === "needs_check") rows = rows.filter((h) => !h.readiness?.tour_builder_ready);
-    if (quickFilter === "without_city") rows = rows.filter((h) => !h.city);
-    if (quickFilter === "without_owner") rows = rows.filter((h) => !(Number(h.providerId) > 0));
-    if (quickFilter === "without_rates") rows = rows.filter((h) => !h.readiness?.has_rates);
-    if (quickFilter === "without_passport") rows = rows.filter((h) => !h.readiness?.passport_ready);
-    if (quickFilter === "tour_builder") rows = rows.filter((h) => h.readiness?.tour_builder_ready);
-
-    const dir = sortDir === "desc" ? -1 : 1;
-    rows.sort((a, b) => {
-      const av = sortBy === "id" ? Number(a.id || 0) : normalizeText(a[sortBy]).toLowerCase();
-      const bv = sortBy === "id" ? Number(b.id || 0) : normalizeText(b[sortBy]).toLowerCase();
-      if (av < bv) return -1 * dir;
-      if (av > bv) return 1 * dir;
-      return 0;
-    });
-
-    return rows;
-  }, [items, quickFilter, sortBy, sortDir]);
+    return items;
+  }, [items]);
 
   const onSubmit = (e) => {
     e.preventDefault();
+    setPage(1);
     load();
   };
 
   const changeSort = (key) => {
+    setPage(1);
     if (sortBy === key) {
       setSortDir((d) => (d === "asc" ? "desc" : "asc"));
       return;
@@ -279,36 +282,40 @@ export default function AdminHotelsTable({
                 {providerMode ? "Мои отели" : "Отели (админ)"}
               </h1>
               <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-slate-600">
-                Быстрый контроль базы отелей: карточки, города, владельцы и тарифные предложения.
+                {providerMode
+                  ? "Быстрый контроль карточек, городов и тарифных предложений ваших отелей."
+                  : "Быстрый контроль базы отелей: карточки, города, владельцы и тарифные предложения."}
               </p>
             </div>
 
-            {onNew ? (
+            {(canCreateHotel || canAttachExistingHotel) && onNew ? (
               <button
                 type="button"
                 onClick={onNew}
                 className="inline-flex items-center justify-center rounded-2xl bg-orange-600 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-orange-700"
               >
-                + Новый отель
+                {canCreateHotel ? "+ Новый отель" : "+ Добавить из базы"}
               </button>
-            ) : (
+            ) : (canCreateHotel || canAttachExistingHotel) ? (
               <Link
                 to={providerMode ? "/dashboard/hotels/new" : "/admin/hotels/new"}
                 className="inline-flex items-center justify-center rounded-2xl bg-orange-600 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-orange-700"
               >
-                {providerMode ? "+ Добавить отель" : "+ Новый отель"}
+                {providerMode
+                  ? (canCreateHotel ? "+ Добавить отель" : "+ Добавить из базы")
+                  : "+ Новый отель"}
               </Link>
-            )}
+            ) : null}
           </div>
         </div>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-6">
+        <div className={`grid gap-3 md:grid-cols-2 ${providerMode ? "xl:grid-cols-5" : "xl:grid-cols-6"}`}>
           <StatCard label="Всего" value={stats.total} hint="загружено в список" />
           <StatCard label="Профиль готов" value={stats.profileReady} hint="карточка заполнена" />
           <StatCard label="Цены готовы" value={stats.pricingReady} hint="опубликованные тарифы" />
           <StatCard label="Tour Builder" value={stats.tourBuilderReady} hint="можно рассчитывать" />
-          <StatCard label="Hotel Passport" value={stats.passportReady} hint="есть публикации" />
-          <StatCard label="Без владельца" value={stats.withoutOwner} hint="provider_id пустой" />
+          <StatCard label="Инспекция" value={stats.passportReady} hint="проверка опубликована" />
+          {!providerMode ? <StatCard label="Без владельца" value={stats.withoutOwner} hint="provider_id пустой" /> : null}
         </div>
 
         <div className="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -351,6 +358,7 @@ export default function AdminHotelsTable({
                   setQName("");
                   setQCity("");
                   setQuickFilter("all");
+                  setPage(1);
                 }}
                 className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-bold text-slate-600 transition hover:bg-slate-50"
               >
@@ -365,14 +373,14 @@ export default function AdminHotelsTable({
               ["needs_check", "Проверить"],
               ["tour_builder", "Готовы для Tour Builder"],
               ["without_rates", "Без цен"],
-              ["without_passport", "Без Hotel Passport"],
+              ["without_passport", "Без инспекции"],
               ["without_city", "Без города"],
-              ["without_owner", "Без владельца"],
+              ...(!providerMode ? [["without_owner", "Без владельца"]] : []),
             ].map(([id, label]) => (
               <button
                 key={id}
                 type="button"
-                onClick={() => setQuickFilter(id)}
+                onClick={() => { setQuickFilter(id); setPage(1); }}
                 className={`rounded-full px-3 py-1.5 text-xs font-black ring-1 transition ${
                   quickFilter === id
                     ? "bg-orange-600 text-white ring-orange-600"
@@ -394,7 +402,7 @@ export default function AdminHotelsTable({
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
             <div className="text-sm font-black text-slate-900">
-              Найдено: {visibleItems.length}
+              Найдено: {pagination.total} · на странице {visibleItems.length}
             </div>
             <div className="text-xs font-medium text-slate-500">
               Сортировка: {sortBy} / {sortDir === "asc" ? "A→Z" : "Z→A"}
@@ -409,7 +417,7 @@ export default function AdminHotelsTable({
                   <th className="px-4 py-3"><SortButton id="name">Отель</SortButton></th>
                   <th className="w-[220px] px-4 py-3"><SortButton id="city">Локация</SortButton></th>
                   <th className="w-[110px] px-4 py-3">Звёзды</th>
-                  <th className="w-[140px] px-4 py-3">Владелец</th>
+                  {!providerMode ? <th className="w-[140px] px-4 py-3">Владелец</th> : null}
                   <th className="w-[260px] px-4 py-3">Готовность</th>
                   <th className="w-[260px] px-4 py-3 text-right">Действия</th>
                 </tr>
@@ -417,13 +425,13 @@ export default function AdminHotelsTable({
               <tbody className="divide-y divide-slate-100">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm font-bold text-slate-500">
+                    <td colSpan={providerMode ? 6 : 7} className="px-4 py-10 text-center text-sm font-bold text-slate-500">
                       Загрузка…
                     </td>
                   </tr>
                 ) : visibleItems.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-sm font-bold text-slate-500">
+                    <td colSpan={providerMode ? 6 : 7} className="px-4 py-10 text-center text-sm font-bold text-slate-500">
                       Ничего не найдено
                     </td>
                   </tr>
@@ -446,18 +454,22 @@ export default function AdminHotelsTable({
                         <td className="px-4 py-3 text-sm font-bold text-slate-700">
                           {h.stars ? `${h.stars}★` : <span className="text-slate-400">—</span>}
                         </td>
-                        <td className="px-4 py-3 text-sm font-bold text-slate-700">
-                          {providerMode && h.myOfferId ? (
-                            <div><span className="text-emerald-700">назначен</span><div className="text-[11px] font-medium text-slate-500">{h.myOfferDirect ? "прямой тариф" : h.myOfferStatus || "черновик"}</div></div>
+                        {!providerMode ? <td className="px-4 py-3 text-sm font-bold text-slate-700">
+                          {!providerMode && h.pendingOwnershipClaimCount > 0 ? (
+                            <div><span className="text-blue-700">заявка на владение</span><div className="text-[11px] font-medium text-slate-500">{h.pendingOwnershipClaimProviderName || `#${h.pendingOwnershipClaimProviderId}`}</div></div>
                           ) : Number(h.providerId) > 0 ? h.providerId : <span className="text-amber-600">нет</span>}
-                        </td>
+                        </td> : null}
                         <td className="px-4 py-3">
                           <div className="flex flex-col gap-1.5">
                             <Badge tone={completeness.tone}>{completeness.label}</Badge>
                             <div className="flex flex-wrap gap-1">
                               <Badge tone={h.readiness?.profile_ready ? "emerald" : "rose"}>Профиль</Badge>
                               <Badge tone={h.readiness?.pricing_ready ? "emerald" : "rose"}>Цены</Badge>
-                              <Badge tone={h.readiness?.passport_ready ? "sky" : "slate"}>Passport {h.inspectionCount || 0}</Badge>
+                              <Badge tone={h.readiness?.passport_ready ? "sky" : "slate"}>
+                                {h.readiness?.passport_ready
+                                  ? `Проверен${h.inspectionCount > 1 ? ` · ${h.inspectionCount}` : ""}`
+                                  : "Не проверен"}
+                              </Badge>
                             </div>
                             <div className="h-1.5 w-24 overflow-hidden rounded-full bg-slate-100">
                               <div
@@ -467,7 +479,7 @@ export default function AdminHotelsTable({
                             </div>
                             {!h.readiness?.tour_builder_ready ? (
                               <div className="max-w-[250px] text-[11px] font-semibold leading-4 text-rose-600">
-                                {readinessIssueText(h)}
+                                {readinessIssueText(h, { showOwnership: !providerMode })}
                               </div>
                             ) : null}
                           </div>
@@ -493,9 +505,9 @@ export default function AdminHotelsTable({
                               ) : <Link to={`/hotels/${h.id}`} className="inline-flex items-center rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-black text-slate-700 transition hover:bg-slate-50">Карточка</Link>}
                               <Link
                                 to={providerMode ? `/provider/hotels/${h.id}/offer` : `/admin/hotels/${h.id}/offers`}
-                                className="inline-flex items-center rounded-xl bg-orange-600 px-3 py-2 text-xs font-black text-white transition hover:bg-orange-700"
+                                className={`inline-flex items-center rounded-xl px-3 py-2 text-xs font-black text-white transition ${!providerMode && h.pendingOwnershipClaimCount > 0 ? "bg-blue-700 hover:bg-blue-800" : "bg-orange-600 hover:bg-orange-700"}`}
                               >
-                                {providerMode ? "Мои тарифы" : "Предложения"}
+                                {providerMode ? "Мои тарифы" : h.pendingOwnershipClaimCount > 0 ? "Проверить заявку" : "Предложения"}
                               </Link>
                             </div>
                           ) : (
@@ -509,6 +521,11 @@ export default function AdminHotelsTable({
               </tbody>
             </table>
           </div>
+          {pagination.pages > 1 ? <div className="flex items-center justify-between border-t border-slate-100 px-4 py-3">
+            <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 disabled:opacity-40">Назад</button>
+            <div className="text-sm font-bold text-slate-600">Страница {pagination.page} из {pagination.pages}</div>
+            <button type="button" disabled={loading || page >= pagination.pages} onClick={() => setPage((value) => Math.min(pagination.pages, value + 1))} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 disabled:opacity-40">Далее</button>
+          </div> : null}
         </div>
       </div>
     </div>

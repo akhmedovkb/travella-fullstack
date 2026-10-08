@@ -557,7 +557,7 @@ async function createBooking(payload) {
 // Если новый эндпоинт не принимает (400/404/405), пробуем старый формат запросов.
 const createBookingCompat = createBooking; // временно без фоллбэка
 
-// --- Hotels (каскад по городу + бриф + сезоны) ---
+// --- Hotels (city cascade + hotel brief + supplier offers) ---
 // starsFilter: '' | 1..7
 async function fetchHotelsByCity(city, starsFilter = "") {
   if (!city) return [];
@@ -635,7 +635,6 @@ function hotelQuoteWarningText(warning) {
   const value = String(warning || "");
   if (value === "room_required") return "не выбран номер";
   if (value === "usd_rate_required") return "укажите курс USD";
-  if (value.startsWith("season_missing:")) return `не задан сезон на ${value.split(":")[1] || "дату"}`;
   if (value.startsWith("room_not_found:")) return `тип номера не найден: ${value.slice("room_not_found:".length)}`;
   if (value.startsWith("room_stock_exceeded:")) return `превышено количество номеров: ${value.slice("room_stock_exceeded:".length)}`;
   if (value.startsWith("stop_sell:")) return `продажа закрыта: ${value.slice("stop_sell:".length)}`;
@@ -645,8 +644,8 @@ function hotelQuoteWarningText(warning) {
     return `минимум ${nights || "?"} ноч. для номера ${room || ""}`;
   }
   if (value.startsWith("rate_missing:")) {
-    const [, date, room, meal, season] = value.split(":");
-    return `нет тарифа ${room || "номер"} / ${meal || "питание"} / ${season || "сезон"} на ${date || "дату"}`;
+    const [, date, room, meal] = value.split(":");
+    return `нет тарифа ${room || "номер"} / ${meal || "питание"} на ${date || "дату"}`;
   }
   if (value.startsWith("unsupported_currency:")) return `валюта не поддерживается: ${value.split(":")[1] || ""}`;
   return value || "проверьте тариф отеля";
@@ -1365,7 +1364,7 @@ export default function TourBuilder() {
         if (!st.city) continue;
         loadHotelOptionsForDay(k, st.city);
         if (st.hotel && !matchStars(st.hotel.stars, hotelStars)) {
-          next[k] = { ...st, hotel: null, hotelBrief: null, hotelOffers: [], hotelOffer: null, hotelSeasons: [], hotelRoomsTotal: 0, hotelBreakdown: null };
+          next[k] = { ...st, hotel: null, hotelBrief: null, hotelOffers: [], hotelOffer: null, hotelRoomsTotal: 0, hotelBreakdown: null };
         }
       }
       return next;
@@ -2416,7 +2415,6 @@ const makeTransportLoader = (dateKey) => async (input) => {
                              hotelBrief: null,
                              hotelOffers: [],
                              hotelOffer: null,
-                             hotelSeasons: [],
                              hotelRoomsTotal: 0,
                              hotelLoading: !!hotel
                            }
@@ -2479,7 +2477,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           ) : null}
                         </div>
                       ) : null}
-                      {st.hotel && st.hotelBrief && (
+                      {st.hotel && st.hotelBrief && st.hotelOffer ? (
                         <HotelRoomPicker
                           hotelBrief={st.hotelBrief}
                           offer={st.hotelOffer || null}
@@ -2497,7 +2495,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             setByDay((p) => ({ ...p, [k]: { ...p[k], hotelRoomsTotal: sum } }))
                           }
                         />
-                      )}
+                      ) : st.hotel && st.hotelBrief && !st.hotelLoading ? (
+                        <div className="mt-2 rounded border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                          Нет опубликованного тарифного предложения для выбранной даты.
+                        </div>
+                      ) : null}
            
                     {/* Валюта отображения: итог всегда в UZS; базовую валюту отеля показываем справочно */}
                      <div className="text-xs text-gray-600 mt-1">
@@ -2517,7 +2519,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                     {st.hotelBreakdown?.quoteValid === false ? (
                       <div className="mt-2 rounded border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs font-medium text-amber-800">
-                        Расчёт недоступен: {st.hotelBreakdown.warnings?.map(hotelQuoteWarningText).join("; ") || "проверьте сезоны и тарифы отеля"}.
+                        Расчёт недоступен: {st.hotelBreakdown.warnings?.map(hotelQuoteWarningText).join("; ") || "проверьте тариф и доступность номеров"}.
                       </div>
                     ) : null}
  
@@ -3098,22 +3100,12 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
     setExtraBeds(0);
   }, [hotelBrief?.id, offer?.id, availableMeals]);
 
-  // список типов из брифа
+  // Room categories and meal plans come only from the selected supplier offer.
   const roomTypes = useMemo(() => {
-    const arr = offer
-      ? (Array.isArray(offer.room_types) ? offer.room_types.map((type) => ({ type })) : [])
-      : (Array.isArray(hotelBrief?.rooms) ? hotelBrief.rooms : []);
-    // уникальные имена типов (в брифе они приходят как { type, count, prices:{low/high...} })
+    const arr = Array.isArray(offer?.room_types) ? offer.room_types.map((type) => ({ type })) : [];
     const names = Array.from(new Set(arr.map(r => r.type).filter(Boolean)));
     return names;
-  }, [hotelBrief, offer]);
-
-  // быстрый доступ к объекту по type
-  const mapByType = useMemo(() => {
-    const m = new Map();
-    (hotelBrief?.rooms || []).forEach(r => m.set(r.type, r));
-    return m;
-  }, [hotelBrief]);
+  }, [offer]);
 
   
   // --- универсальные геттеры числовых полей из брифа ---
@@ -3143,14 +3135,14 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
   // immutable quote candidate that will be attached to booking details.
   useEffect(() => {
     const selectedRooms = Object.values(qty).some((n) => Number(n) > 0);
-    if (!hotelBrief?.id || !selectedRooms || !quoteNightDates.length) {
+    if (!hotelBrief?.id || !offer?.id || !selectedRooms || !quoteNightDates.length) {
       onTotalChangeRef.current?.(0);
       onBreakdownRef.current?.({
         rooms: 0, extraBeds: 0, tourismFee: 0, vat: 0,
         vatIncluded: false, nights: quoteNightDates.length, pax: paxCount,
         currency: String(hotelBrief?.currency || "UZS").toUpperCase(),
         quoteValid: false,
-        warnings: [!selectedRooms ? "не выбран номер" : "не выбраны даты"]
+        warnings: [!offer?.id ? "не выбран тариф поставщика" : !selectedRooms ? "не выбран номер" : "не выбраны даты"]
       });
       return undefined;
     }
@@ -3161,7 +3153,7 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
       try {
         const quote = await fetchHotelQuote({
           hotel_id: hotelBrief.id,
-          offer_id: offer?.id || undefined,
+          offer_id: offer.id,
           dates: quoteNightDates,
           residency: residentFlag ? "resident" : "non_resident",
           meal_plan: meal,
@@ -3258,11 +3250,10 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
 
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
         {roomTypes.map((type) => {
-          const max = Number(mapByType.get(type)?.count ?? 0);
-          const upperLimit = offer ? 99 : Math.max(0, max);
+          const upperLimit = 99;
           return (
             <label key={type} className="flex items-center justify-between border rounded px-2 py-1">
-              <span className="text-sm">{type}{max ? ` (≤ ${max})` : ""}</span>
+              <span className="text-sm">{type}</span>
               <input
                 type="number"
                 min={0}
@@ -3279,7 +3270,7 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
         })}
         {!roomTypes.length && (
           <div className="text-xs text-amber-600">
-            Для отеля не найден номерной фонд. Заполните на странице админ-формы отеля.
+            В выбранном предложении нет опубликованных категорий номеров.
           </div>
         )}
       </div>

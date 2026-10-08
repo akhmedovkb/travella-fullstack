@@ -3,8 +3,9 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import BookingRow from "../components/BookingRow";
-import { tSuccess, tError } from "../shared/toast";
+import { tSuccess, tError, tInfo } from "../shared/toast";
 import ConfirmModal from "../components/ConfirmModal";
+import { redirectToPaymeGuide } from "../utils/paymeGuide";
 
 /* ================= helpers ================= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -199,7 +200,60 @@ export default function ProviderBookings() {
     }
   };
 
+  useEffect(() => {
+    const bookingId = Number(new URLSearchParams(window.location.search).get("payment_booking"));
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return undefined;
+    let stopped = false;
+    let timer = null;
+    let attempts = 0;
+    const check = async () => {
+      try {
+        const { data } = await axios.get(`${API_BASE}/api/bookings/${bookingId}`, cfg());
+        if (stopped) return;
+        const status = String(data?.status || "").toLowerCase();
+        if (["confirmed", "paid", "active"].includes(status)) {
+          tSuccess(t("bookings.payment_confirmed", { defaultValue: "Оплата подтверждена. Бронирование оформлено." }));
+          await load();
+          const url = new URL(window.location.href);
+          url.searchParams.delete("payment_booking");
+          window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+          return;
+        }
+        if (["cancelled_unpaid", "cancelled", "expired"].includes(status)) {
+          tError(t("bookings.payment_not_completed", { defaultValue: "Оплата не завершена, бронь отменена." }));
+          await load();
+          const url = new URL(window.location.href);
+          url.searchParams.delete("payment_booking");
+          window.history.replaceState({}, "", `${url.pathname}${url.search}${url.hash}`);
+          return;
+        }
+      } catch (e) {
+        console.error("booking payment status check failed", e);
+      }
+      attempts += 1;
+      if (!stopped && attempts < 10) timer = window.setTimeout(check, 1500);
+      else if (!stopped) tInfo(t("bookings.payment_processing", { defaultValue: "Платёж ещё обрабатывается. Статус обновится автоматически." }));
+    };
+    check();
+    return () => { stopped = true; if (timer) window.clearTimeout(timer); };
+  }, [t]);
+
   const hasQuotedPrice = (b) => isFiniteNum(Number(b?.provider_price)) && Number(b.provider_price) > 0;
+
+  const payBooking = async (b) => {
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/bookings/${b.id}/payment-order`, {}, cfg());
+      const redirected = redirectToPaymeGuide(data?.pay_url, {
+        purpose: "hotel_booking",
+        amount: data?.amount_sum,
+        orderId: data?.order_id,
+        returnTo: "/dashboard/bookings",
+      });
+      if (!redirected) throw new Error("payment_url_missing");
+    } catch (e) {
+      tError(e?.response?.data?.message || t("bookings.payment_error", { defaultValue: "Не удалось создать оплату" }));
+    }
+  };
 
   const accept = async (b) => {
     if (!hasQuotedPrice(b)) {
@@ -293,6 +347,19 @@ export default function ProviderBookings() {
     } finally {
       await load();
       window.dispatchEvent(new Event("provider:counts:refresh"));
+    }
+  };
+
+  const requestRefund = async (b) => {
+    const reason = window.prompt("Укажите причину возврата");
+    if (reason == null) return;
+    if (reason.trim().length < 5) return tError("Укажите причину возврата подробнее");
+    try {
+      await axios.post(`${API_BASE}/api/bookings/${b.id}/refund-request`, { reason: reason.trim() }, cfg());
+      tSuccess("Запрос возврата отправлен администратору");
+      await load();
+    } catch (e) {
+      tError(e?.response?.data?.message || "Не удалось запросить возврат");
     }
   };
   // разрез входящих
@@ -550,9 +617,9 @@ export default function ProviderBookings() {
     return { datesStr, routeStr };
   };
 
-  const isPending = (b) => ["pending", "quoted"].includes(String(b.status));
-  const isConfirmedLike = (b) => ["confirmed", "active"].includes(String(b.status));
-  const isRejectedLike = (b) => ["rejected", "cancelled"].includes(String(b.status));
+  const isPending = (b) => ["pending", "quoted", "awaiting_payment"].includes(String(b.status));
+  const isConfirmedLike = (b) => ["confirmed", "active", "paid"].includes(String(b.status));
+  const isRejectedLike = (b) => ["rejected", "cancelled", "cancelled_unpaid", "expired"].includes(String(b.status));
   const isUpcoming = (b) => Number.isFinite(lastDateTs(b)) && isConfirmedLike(b) && lastDateTs(b) >= todayStart;
 
   // счётчики (для плоских списков — входящие/остальные исходящие)
@@ -649,6 +716,9 @@ export default function ProviderBookings() {
                 onReject={reject}
                 onCancel={cancelOutgoing}
                 onCancelByProvider={openCancelIncoming}
+                onHoldExpired={load}
+                onPay={payBooking}
+                onRefund={!isIncoming ? requestRefund : undefined}
               />
 
               {/* Входящие: форма согласования цены (прячем после отправки предложения) */}
@@ -681,7 +751,7 @@ export default function ProviderBookings() {
                 </div>
               )}             
               {/* Входящие подтверждённые: дать поставщику отменить с причиной */}
-              {isIncoming && String(b.status) === "confirmed" && (
+              {isIncoming && String(b.status) === "confirmed" && String(b.payment_status || "").toLowerCase() !== "paid" && (
                 <div className="mt-3">
                   <button
                     onClick={() => cancelIncomingConfirmed(b)}
@@ -829,6 +899,9 @@ export default function ProviderBookings() {
                     needPriceForAccept
                     hideClientCancel={false}
                     onCancel={cancelOutgoing}
+                    onHoldExpired={load}
+                    onPay={payBooking}
+                    onRefund={requestRefund}
                   />
                   {String(b.status) === "quoted" && (
                     <div className="mt-3 flex flex-wrap gap-2">
@@ -869,6 +942,8 @@ export default function ProviderBookings() {
           needPriceForAccept
           hideClientCancel
           onAccept={accept}
+          onHoldExpired={load}
+          onPay={payBooking}
           onReject={reject}
           onCancelByProvider={openCancelIncoming}
         />

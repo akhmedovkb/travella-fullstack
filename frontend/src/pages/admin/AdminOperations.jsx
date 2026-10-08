@@ -19,7 +19,7 @@ const TABS = [
   {
     id: "hotel_inspections",
     label: "Модерация инспекций отелей",
-    hint: "Проверка pending-инспекций Hotel Passport, фото/видео и причин отклонения.",
+    hint: "Проверка инспекций отелей, фото, видео и причин отклонения.",
   },
   {
     id: "provider_funnel",

@@ -9,6 +9,11 @@ function appendInspectionFilters(qs, filters = {}) {
   if (filters.visit_type || filters.visitType) qs.set("visit_type", filters.visit_type || filters.visitType);
   if (filters.min_score || filters.minScore) qs.set("min_score", String(filters.min_score || filters.minScore));
   if (filters.has_media || filters.hasMedia) qs.set("has_media", "1");
+  if (filters.mine) qs.set("mine", "1");
+  if (filters.q || filters.search) qs.set("q", filters.q || filters.search);
+  if (filters.status) qs.set("status", filters.status);
+  if (filters.page) qs.set("page", String(filters.page));
+  if (filters.limit) qs.set("limit", String(filters.limit));
   return qs;
 }
 
@@ -25,6 +30,7 @@ export async function searchHotels({ name = "", city = "", country = "", page = 
   qs.set("page", String(page));
   qs.set("limit", String(limit));
   qs.set("ext", "0");
+  qs.set("format", "paged");
   return apiGet(`/api/hotels/search?${qs.toString()}`, true);
 }
 

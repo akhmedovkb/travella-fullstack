@@ -4,6 +4,7 @@ const crypto = require("crypto");
 const pool = require("../db");
 const { unlockContactSafe } = require("../utils/contactUnlock");
 const { recordPaymeEvent } = require("../utils/paymeEvents");
+const telegram = require("../utils/telegram");
 
 const PAYME_STATE = {
   CREATED: 1,
@@ -187,6 +188,14 @@ async function ensureSchema(client) {
     ALTER TABLE topup_orders
     ADD COLUMN IF NOT EXISTS support_donation_id BIGINT
   `);
+
+  await client.query(`
+    ALTER TABLE topup_orders
+      ALTER COLUMN client_id DROP NOT NULL,
+      ADD COLUMN IF NOT EXISTS booking_id BIGINT,
+      ADD COLUMN IF NOT EXISTS actor_role TEXT,
+      ADD COLUMN IF NOT EXISTS actor_id BIGINT
+  `);
 }
 
 async function advisoryLock(client, key) {
@@ -221,6 +230,61 @@ function isProviderSupportOrder(order) {
 
 function isUnlockContactOrder(order) {
   return order?.order_type === "unlock_contact";
+}
+
+function isHotelBookingOrder(order) {
+  return order?.order_type === "hotel_booking";
+}
+
+async function isHotelBookingPayable(client, order) {
+  if (!isHotelBookingOrder(order)) return true;
+  if (!order.booking_id) return false;
+  const result = await client.query(
+    `SELECT 1
+       FROM bookings
+      WHERE id=$1
+        AND status='awaiting_payment'
+        AND (hold_until IS NULL OR hold_until > NOW())
+      FOR UPDATE`,
+    [order.booking_id]
+  );
+  return result.rowCount > 0;
+}
+
+async function syncHotelBookingPaid({ client, order }) {
+  if (!isHotelBookingOrder(order) || !order.booking_id) return;
+  const result = await client.query(
+    `UPDATE bookings
+        SET status='confirmed', hold_until=NULL, updated_at=NOW()
+      WHERE id=$1
+        AND status='awaiting_payment'
+        AND (hold_until IS NULL OR hold_until > NOW())
+    RETURNING id`,
+    [order.booking_id]
+  );
+  if (!result.rowCount) {
+    const current = await client.query(`SELECT status FROM bookings WHERE id=$1`, [order.booking_id]);
+    if (current.rows[0]?.status !== 'confirmed') throw new Error("ORDER_EXPIRED");
+  }
+}
+
+async function syncHotelBookingCanceled({ client, order, refunded = false }) {
+  if (!isHotelBookingOrder(order) || !order.booking_id) return;
+  await client.query(`
+    ALTER TABLE bookings
+      ADD COLUMN IF NOT EXISTS refund_status TEXT,
+      ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ
+  `);
+  await client.query(
+    `UPDATE bookings
+        SET status=CASE WHEN $2::boolean THEN 'cancelled' ELSE 'cancelled_unpaid' END,
+            refund_status=CASE WHEN $2::boolean THEN 'refunded' ELSE refund_status END,
+            refunded_at=CASE WHEN $2::boolean THEN COALESCE(refunded_at,NOW()) ELSE refunded_at END,
+            hold_until=NULL,
+            updated_at=NOW()
+      WHERE id=$1 AND status IN ('awaiting_payment','confirmed')`,
+    [order.booking_id, refunded]
+  );
 }
 
 async function syncProviderSupportPaid({
@@ -626,7 +690,8 @@ async function performTransaction({
   if (
     !alreadyPerformed &&
     !isProviderSupportOrder(order) &&
-    !isUnlockContactOrder(order)
+    !isUnlockContactOrder(order) &&
+    !isHotelBookingOrder(order)
   ) {
     if (!order.client_id) {
       throw new Error("CLIENT_ID_REQUIRED_FOR_TOPUP");
@@ -665,6 +730,8 @@ async function performTransaction({
     order,
     transactionId: transaction.payme_id,
   });
+
+  await syncHotelBookingPaid({ client, order });
 
   const { rows } = await client.query(
     `
@@ -717,7 +784,7 @@ async function cancelTransaction({
   if (transaction.state === PAYME_STATE.COMPLETED) {
     nextState = PAYME_STATE.CANCELED_AFTER_COMPLETE;
 
-    if (order?.client_id && !isProviderSupportOrder(order)) {
+    if (order?.client_id && !isProviderSupportOrder(order) && !isHotelBookingOrder(order)) {
       await debitRefund({
         client,
         clientId: order.client_id,
@@ -768,6 +835,12 @@ async function cancelTransaction({
         refunded: false,
       });
     }
+
+    await syncHotelBookingCanceled({
+      client,
+      order,
+      refunded: transaction.state === PAYME_STATE.COMPLETED,
+    });
   }
 
   const { rows } = await client.query(
@@ -893,6 +966,12 @@ async function CheckPerformTransaction(req, res, id, params) {
       );
     }
 
+    if (!(await isHotelBookingPayable(client, order))) {
+      await markOrderExpired(client, order.id);
+      await client.query("COMMIT");
+      return res.json(error(id, PAYME_ERROR.CANNOT_PERFORM, "Booking is no longer payable"));
+    }
+
     if (!["created", "pending"].includes(order.status)) {
       await client.query("ROLLBACK");
 
@@ -1002,6 +1081,12 @@ async function CreateTransaction(req, res, id, params) {
           "Order expired"
         )
       );
+    }
+
+    if (!(await isHotelBookingPayable(client, order))) {
+      await markOrderExpired(client, order.id);
+      await client.query("COMMIT");
+      return res.json(error(id, PAYME_ERROR.CANNOT_PERFORM, "Booking is no longer payable"));
     }
 
     if (!["created", "pending"].includes(order.status)) {
@@ -1122,6 +1207,7 @@ async function PerformTransaction(req, res, id, params) {
       );
     }
 
+    const wasCompleted = Number(tx.state) === PAYME_STATE.COMPLETED;
     const performed = await performTransaction({
       client,
       transaction: tx,
@@ -1129,6 +1215,10 @@ async function PerformTransaction(req, res, id, params) {
     });
 
     await client.query("COMMIT");
+
+    if (!wasCompleted && isHotelBookingOrder(order) && order.booking_id) {
+      telegram.notifyConfirmed({ booking: { id: order.booking_id } }).catch(() => {});
+    }
 
     return res.json(
       success(id, paymeResultTransaction(performed))
@@ -1205,6 +1295,7 @@ async function CancelTransaction(req, res, id, params) {
       ? await getTopupOrder(client, tx.order_id)
       : null;
 
+    const wasCanceled = [PAYME_STATE.CANCELED, PAYME_STATE.CANCELED_AFTER_COMPLETE].includes(Number(tx.state));
     const canceled = await cancelTransaction({
       client,
       transaction: tx,
@@ -1213,6 +1304,16 @@ async function CancelTransaction(req, res, id, params) {
     });
 
     await client.query("COMMIT");
+
+    if (!wasCanceled && isHotelBookingOrder(order) && order.booking_id) {
+      const notification = Number(tx.state) === PAYME_STATE.COMPLETED
+        ? telegram.notifyBookingRefunded?.({ booking: { id: order.booking_id } })
+        : Promise.allSettled([
+            telegram.notifyCancelled({ booking: { id: order.booking_id } }),
+            telegram.notifyCancelledByRequester({ booking: { id: order.booking_id } }),
+          ]);
+      Promise.resolve(notification).catch(() => {});
+    }
 
     return res.json(
       success(id, paymeResultTransaction(canceled))
@@ -1396,4 +1497,9 @@ module.exports = {
   CancelTransaction,
   CheckTransaction,
   GetStatement,
+  isHotelBookingOrder,
+  isHotelBookingPayable,
+  syncHotelBookingPaid,
+  syncHotelBookingCanceled,
+  cancelTransaction,
 };

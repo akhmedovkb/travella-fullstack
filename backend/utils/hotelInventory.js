@@ -37,7 +37,7 @@ function reservationLines(details, providerId) {
   return [...unique.values()].sort((a, b) => a.rateId - b.rateId || a.date.localeCompare(b.date));
 }
 
-async function reserveHotelInventory({ bookingId, providerId, details, holdMinutes = 30 }) {
+async function reserveHotelInventory({ bookingId, providerId, details, holdMinutes = 30, client: transactionClient = null }) {
   const requested = reservationLines(details, providerId);
   const hasManagedQuote = (Array.isArray(details?.hotel_quotes) ? details.hotel_quotes : [])
     .some((quote) => Number(quote?.offer?.provider_id) === Number(providerId) && Number(quote?.offer?.id) > 0);
@@ -46,10 +46,11 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
     return { count: 0, items: [] };
   }
   if (requested.some((item) => item.quantity > 100)) throw new HotelInventoryError('hotel_inventory_quantity_invalid');
-  await ensureHotelOfferTables();
-  const client = await db.connect();
+  const ownsTransaction = !transactionClient;
+  if (ownsTransaction) await ensureHotelOfferTables();
+  const client = transactionClient || await db.connect();
   try {
-    await client.query('BEGIN');
+    if (ownsTransaction) await client.query('BEGIN');
     const rateIds = [...new Set(requested.map((item) => item.rateId))];
     const { rows: rates } = await client.query(
       `SELECT r.id,r.offer_id,r.inventory_pool_id,r.room_type,r.date_from::text,r.date_to::text,r.allotment,
@@ -204,13 +205,13 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
       reserved.push({ rate_id: item.rateId, date: item.date, quantity: item.quantity,
         available_after: allotment == null ? null : Math.max(0, allotment - used - item.quantity) });
     }
-    await client.query('COMMIT');
+    if (ownsTransaction) await client.query('COMMIT');
     return { count: reserved.length, items: reserved };
   } catch (error) {
-    await client.query('ROLLBACK');
+    if (ownsTransaction) await client.query('ROLLBACK');
     throw error;
   } finally {
-    client.release();
+    if (ownsTransaction) client.release();
   }
 }
 

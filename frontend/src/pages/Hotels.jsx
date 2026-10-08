@@ -89,6 +89,9 @@ export default function HotelsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [showResults, setShowResults] = useState(true);
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, limit: 12 });
+  const [submittedSearch, setSubmittedSearch] = useState({ name: "", city: "" });
 
   const limit = 12;
 
@@ -108,8 +111,8 @@ export default function HotelsPage() {
       return norm;
     } catch {
       try {
-        const rows = await searchHotels({ page: 1, limit: 50 });
-        const norm = rows.map(normalizeHotel);
+        const data = await searchHotels({ page: 1, limit: 50 });
+        const norm = (Array.isArray(data) ? data : data?.items || []).map(normalizeHotel);
         if (type === "top") return sortByRatingDesc(norm).slice(0, limit);
         if (type === "popular") return sortByViewsDesc(norm).slice(0, limit);
         if (type === "worst") return sortByRatingAsc(norm).slice(0, limit);
@@ -120,16 +123,23 @@ export default function HotelsPage() {
     }
   }, [sortByRatingAsc, sortByRatingDesc, sortByViewsDesc, sortByNewestFirst]);
 
-  const loadSearch = useCallback(async () => {
+  const loadSearch = useCallback(async (targetPage = page) => {
     try {
-      const rows = await searchHotels({ name: name || "", city: city || "", page: 1, limit: 50 });
-      return rows.map(normalizeHotel);
+      const data = await searchHotels({
+        name: submittedSearch.name,
+        city: submittedSearch.city,
+        page: targetPage,
+        limit,
+      });
+      setPagination(data?.pagination || { page: targetPage, pages: 1, total: data?.items?.length || 0, limit });
+      return (Array.isArray(data) ? data : data?.items || []).map(normalizeHotel);
     } catch {
+      setPagination({ page: targetPage, pages: 1, total: 0, limit });
       return [];
     }
-  }, [name, city]);
+  }, [page, submittedSearch, limit]);
 
-  const run = useCallback(async (kind) => {
+  const run = useCallback(async (kind, targetPage = page) => {
     setLoading(true);
     setError("");
     try {
@@ -138,7 +148,7 @@ export default function HotelsPage() {
       else if (kind === "popular") rows = await loadRanked("popular");
       else if (kind === "new") rows = await loadRanked("new");
       else if (kind === "worst") rows = await loadRanked("worst");
-      else rows = await loadSearch();
+      else rows = await loadSearch(targetPage);
       setItems(rows);
     } catch (e) {
       if (e?.name !== "CanceledError" && e?.code !== "ERR_CANCELED") {
@@ -148,12 +158,12 @@ export default function HotelsPage() {
     } finally {
       setLoading(false);
     }
-  }, [loadRanked, loadSearch, t]);
+  }, [loadRanked, loadSearch, page, t]);
 
   useEffect(() => {
     setShowResults(true);
-    void run(tab || "popular");
-  }, [tab, run]);
+    void run(tab || "popular", page);
+  }, [tab, page, run]);
 
   const TabBtn = ({ value, children }) => (
     <button
@@ -172,9 +182,11 @@ export default function HotelsPage() {
 
   const onFind = async (e) => {
     e.preventDefault();
+    const nextSearch = { name: name.trim(), city: city.trim() };
+    setSubmittedSearch(nextSearch);
+    setPage(1);
     setTab("search");
     setShowResults(true);
-    await run("search");
   };
 
   const rows = useMemo(() => items, [items]);
@@ -192,7 +204,7 @@ export default function HotelsPage() {
                 {t("hotels.title", { defaultValue: "Отели" })}
               </h1>
               <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-slate-500">
-                {t("hotels.subtitle", { defaultValue: "Ищите отели, открывайте карточки и смотрите Hotel Passport с реальными инспекциями." })}
+                {t("hotels.subtitle", { defaultValue: "Ищите отели, открывайте карточки и смотрите результаты реальных инспекций." })}
               </p>
             </div>
 
@@ -207,7 +219,13 @@ export default function HotelsPage() {
                   to="/hotels/inspections"
                   className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-black text-amber-800 transition hover:bg-amber-100"
                 >
-                  🏨 {t("hotels.passport", { defaultValue: "Hotel Passport" })}
+                  🏨 {t("hotels.passport", { defaultValue: "Инспекции отелей" })}
+                </Link>
+                <Link
+                  to="/hotels/inspections?mine=1"
+                  className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-black text-slate-700 transition hover:bg-slate-50"
+                >
+                  Мои инспекции
                 </Link>
               </div>
             )}
@@ -251,8 +269,17 @@ export default function HotelsPage() {
                 {t("common.loading", { defaultValue: "Загрузка…" })}
               </div>
             ) : rows.length ? (
-              <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-                {rows.map((h) => <HotelResultCard key={h.id} hotel={h} t={t} />)}
+              <div>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                  {rows.map((h) => <HotelResultCard key={h.id} hotel={h} t={t} />)}
+                </div>
+                {tab === "search" && pagination.pages > 1 ? (
+                  <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-200 bg-white p-3 shadow-sm">
+                    <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 disabled:opacity-40">Назад</button>
+                    <div className="text-sm font-bold text-slate-600">Страница {pagination.page} из {pagination.pages} · всего {pagination.total}</div>
+                    <button type="button" disabled={loading || page >= pagination.pages} onClick={() => setPage((value) => Math.min(pagination.pages, value + 1))} className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 disabled:opacity-40">Далее</button>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="rounded-3xl border border-dashed border-slate-300 bg-white p-8 text-center shadow-sm">

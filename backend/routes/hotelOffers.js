@@ -9,6 +9,7 @@ const {
 } = require('../utils/hotelOfferModerationNotifications');
 const { notifyHotelAllocationChanges } = require('../utils/hotelAllocationNotifications');
 const { notifyHotelOwnerSupplierLinked } = require('../utils/hotelSupplierLinkNotifications');
+const { notifyHotelOwnershipReviewed, notifyHotelOwnershipSubmitted } = require('../utils/hotelOwnershipNotifications');
 
 const SUPPLIER_TYPES = new Set(['hotel', 'tour_operator', 'dmc', 'agency', 'supplier']);
 const MEAL_PLANS = new Set(['RO', 'BB', 'HB', 'FB', 'AI', 'UAI']);
@@ -71,6 +72,7 @@ async function getHotelTemplateProviderId(hotelId, executor = db) {
     `SELECT COALESCE(
         (SELECT o.provider_id FROM hotel_offers o JOIN providers p ON p.id=o.provider_id
           WHERE o.hotel_id=$1 AND (o.is_direct=true OR o.supplier_type='hotel' OR LOWER(COALESCE(p.type,''))='hotel')
+            AND COALESCE(o.ownership_claim_status,'approved')='approved'
           ORDER BY o.is_direct DESC,o.id LIMIT 1),
         (SELECT provider_id FROM hotels WHERE id=$1)
       ) AS provider_id`,
@@ -80,7 +82,11 @@ async function getHotelTemplateProviderId(hotelId, executor = db) {
 }
 
 function canEditOffer(req, offer) {
-  return isAdmin(req.user) || Number(offer?.provider_id) === Number(req.user?.id);
+  if (isAdmin(req.user)) return true;
+  if (Number(offer?.provider_id) !== Number(req.user?.id)) return false;
+  const isHotelOffer = String(offer?.supplier_type || '').toLowerCase() === 'hotel'
+    || String(offer?.provider_type || '').toLowerCase() === 'hotel';
+  return !isHotelOffer || String(offer?.ownership_claim_status || 'approved') === 'approved';
 }
 
 async function canManageHotelInventory(req, hotelId) {
@@ -93,6 +99,7 @@ async function canManageHotelInventory(req, hotelId) {
         JOIN providers p ON p.id=o.provider_id
         WHERE o.hotel_id=$1 AND o.provider_id=$2
           AND (o.is_direct=true OR o.supplier_type='hotel' OR LOWER(COALESCE(p.type,''))='hotel')
+          AND COALESCE(o.ownership_claim_status,'approved')='approved'
        UNION ALL
        SELECT 1 FROM hotels h
         WHERE h.id=$1 AND h.provider_id=$2
@@ -416,6 +423,9 @@ router.get('/', async (req, res, next) => {
               o.supplier_type, o.is_direct, o.currency, o.status, o.title, o.terms,
               o.valid_from::text, o.valid_to::text, o.last_verified_at, o.created_at, o.updated_at,
               o.rejection_reason, o.submitted_at, o.reviewed_at, o.reviewed_by,
+              o.ownership_claim_status, o.ownership_claim_note,
+              o.ownership_claim_submitted_at, o.ownership_claim_reviewed_at,
+              o.ownership_claim_reviewed_by, o.ownership_claim_rejection_reason,
               (o.valid_to IS NOT NULL AND o.valid_to < CURRENT_DATE) AS is_expired,
               CASE WHEN o.valid_to IS NULL THEN NULL ELSE (o.valid_to - CURRENT_DATE)::int END AS days_until_expiry,
               COUNT(r.id)::int AS rate_count, MIN(r.amount)::numeric AS min_rate,
@@ -529,9 +539,7 @@ router.post('/', async (req, res, next) => {
     const provider = providerResult.rows[0];
     const providerType = String(provider.type || '').toLowerCase();
     if (!OFFER_PROVIDER_TYPES.has(providerType)) return res.status(400).json({ error: 'invalid_offer_provider_type' });
-    const directRequested = req.body?.is_direct === true || req.body?.isDirect === true;
     const providerIsHotel = providerType === 'hotel';
-    if (directRequested && !providerIsHotel) return res.status(400).json({ error: 'direct_offer_requires_hotel_provider' });
 
     const supplierTypeRaw = String(req.body?.supplier_type || provider.type || 'supplier').toLowerCase();
     const supplierType = providerIsHotel ? 'hotel' : (SUPPLIER_TYPES.has(supplierTypeRaw) ? supplierTypeRaw : 'supplier');
@@ -540,6 +548,12 @@ router.post('/', async (req, res, next) => {
     // A new offer starts as a draft. Activation is a separate reviewed action
     // after at least one valid rate has been saved.
     const status = 'draft';
+    const isOwnershipClaim = !isAdmin(req.user) && providerIsHotel;
+    const ownershipClaimNote = String(req.body?.ownership_claim_note || '').trim();
+    const ownershipConfirmed = req.body?.ownership_confirmed === true;
+    if (isOwnershipClaim && !ownershipConfirmed) {
+      return res.status(400).json({ error: 'ownership_confirmation_required' });
+    }
     const validFrom = req.body?.valid_from ? isoDate(req.body.valid_from) : null;
     const validTo = req.body?.valid_to ? isoDate(req.body.valid_to) : null;
     if ((req.body?.valid_from && !validFrom) || (req.body?.valid_to && !validTo) || (validFrom && validTo && validFrom > validTo)) {
@@ -560,18 +574,123 @@ router.post('/', async (req, res, next) => {
 
     const { rows } = await db.query(
       `INSERT INTO hotel_offers
-         (hotel_id,provider_id,supplier_type,is_direct,currency,status,title,terms,valid_from,valid_to,last_verified_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,CASE WHEN $6='active' THEN NOW() ELSE NULL END)
+         (hotel_id,provider_id,supplier_type,is_direct,currency,status,title,terms,valid_from,valid_to,last_verified_at,
+          ownership_claim_status,ownership_claim_note,ownership_claim_submitted_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8::jsonb,$9,$10,CASE WHEN $6='active' THEN NOW() ELSE NULL END,
+          $11,$12,CASE WHEN $11='pending' THEN NOW() ELSE NULL END)
        ON CONFLICT (hotel_id,provider_id) DO NOTHING
        RETURNING *`,
-      [hotelId, providerId, supplierType, directRequested && providerIsHotel, currency, status,
-        String(req.body?.title || '').trim() || null, JSON.stringify(req.body?.terms || {}), validFrom, validTo]
+      [hotelId, providerId, supplierType, providerIsHotel, currency, status,
+        String(req.body?.title || '').trim() || null, JSON.stringify(req.body?.terms || {}), validFrom, validTo,
+        isOwnershipClaim ? 'pending' : (providerIsHotel ? 'approved' : null), ownershipClaimNote || null]
     );
     if (!rows[0]) return res.status(409).json({ error: 'hotel_already_added', hotel_id: hotelId });
     await addOfferEvent(db, req, rows[0].id, 'created', null, rows[0].status, null, { provider_id: providerId });
-    notifyHotelOwnerSupplierLinked({ hotelId, supplierProviderId: providerId })
-      .catch((error) => console.error('[hotel-suppliers] telegram notification failed:', error?.message || error));
+    if (isOwnershipClaim) {
+      notifyHotelOwnershipSubmitted({ hotelId, providerId, note: ownershipClaimNote })
+        .catch((error) => console.error('[hotel-ownership] admin Telegram notification failed:', error?.message || error));
+    } else {
+      notifyHotelOwnerSupplierLinked({ hotelId, supplierProviderId: providerId })
+        .catch((error) => console.error('[hotel-suppliers] telegram notification failed:', error?.message || error));
+    }
     return res.status(201).json({ item: { ...rows[0], provider_name: provider.name, provider_type: provider.type } });
+  } catch (error) { return next(error); }
+});
+
+router.post('/:offerId/ownership-review', async (req, res, next) => {
+  let client;
+  try {
+    await ensureHotelOfferTables();
+    if (!isAdmin(req.user)) return res.status(403).json({ error: 'admin_required' });
+    const hotelId = positiveInt(req.params.id);
+    const offerId = positiveInt(req.params.offerId);
+    const decision = String(req.body?.decision || '').toLowerCase();
+    const reason = String(req.body?.reason || '').trim();
+    if (!['approve', 'reject'].includes(decision)) return res.status(400).json({ error: 'bad_decision' });
+    if (decision === 'reject' && !reason) return res.status(400).json({ error: 'rejection_reason_required' });
+
+    client = await db.connect();
+    await client.query('BEGIN');
+    const locked = await client.query(
+      `SELECT o.*,p.type AS provider_type FROM hotel_offers o JOIN providers p ON p.id=o.provider_id
+        WHERE o.id=$1 AND o.hotel_id=$2 FOR UPDATE OF o`,
+      [offerId, hotelId]
+    );
+    const offer = locked.rows[0];
+    if (!offer) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'offer_not_found' }); }
+    if (String(offer.ownership_claim_status || '') !== 'pending') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'ownership_claim_not_pending' });
+    }
+
+    if (decision === 'approve') {
+      const hotel = await client.query(`SELECT provider_id FROM hotels WHERE id=$1 FOR UPDATE`, [hotelId]);
+      const currentOwner = positiveInt(hotel.rows[0]?.provider_id);
+      if (currentOwner && currentOwner !== Number(offer.provider_id)) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({ error: 'hotel_already_has_another_owner', owner_provider_id: currentOwner });
+      }
+      await client.query(`UPDATE hotels SET provider_id=$2,updated_at=NOW() WHERE id=$1`, [hotelId, offer.provider_id]);
+    }
+    const nextClaimStatus = decision === 'approve' ? 'approved' : 'rejected';
+    const updated = await client.query(
+      `UPDATE hotel_offers SET ownership_claim_status=$2,ownership_claim_reviewed_at=NOW(),
+              ownership_claim_reviewed_by=$3,ownership_claim_rejection_reason=$4,updated_at=NOW()
+        WHERE id=$1 RETURNING *`,
+      [offerId, nextClaimStatus, positiveInt(req.user?.id), decision === 'reject' ? reason.slice(0, 2000) : null]
+    );
+    await addOfferEvent(client, req, offerId, decision === 'approve' ? 'ownership_approved' : 'ownership_rejected',
+      'pending', nextClaimStatus, reason || null);
+    await client.query('COMMIT');
+    notifyHotelOwnershipReviewed({
+      hotelId,
+      providerId: offer.provider_id,
+      decision,
+      reason,
+    }).then((result) => {
+      if (!result?.ok) console.warn('[hotel-ownership] provider Telegram notification skipped', {
+        hotelId,
+        providerId: offer.provider_id,
+        reason: result?.reason || result?.error,
+      });
+    }).catch((error) => console.error('[hotel-ownership] provider Telegram notification failed:', error?.message || error));
+    return res.json({ item: updated.rows[0] });
+  } catch (error) {
+    if (client) try { await client.query('ROLLBACK'); } catch {}
+    return next(error);
+  } finally { client?.release(); }
+});
+
+router.post('/:offerId/ownership-submit', async (req, res, next) => {
+  try {
+    await ensureHotelOfferTables();
+    const hotelId = positiveInt(req.params.id);
+    const offerId = positiveInt(req.params.offerId);
+    const offer = await getOffer(offerId, hotelId);
+    if (!offer) return res.status(404).json({ error: 'offer_not_found' });
+    if (Number(offer.provider_id) !== Number(req.user?.id)) return res.status(403).json({ error: 'forbidden' });
+    if (String(offer.supplier_type || '').toLowerCase() !== 'hotel' && String(offer.provider_type || '').toLowerCase() !== 'hotel') {
+      return res.status(400).json({ error: 'ownership_claim_requires_hotel_provider' });
+    }
+    if (!['rejected'].includes(String(offer.ownership_claim_status || ''))) {
+      return res.status(409).json({ error: 'ownership_claim_not_resubmittable' });
+    }
+    const note = String(req.body?.note || offer.ownership_claim_note || '').trim();
+    const { rows } = await db.query(
+      `UPDATE hotel_offers SET ownership_claim_status='pending',ownership_claim_note=$2,
+              ownership_claim_submitted_at=NOW(),ownership_claim_reviewed_at=NULL,
+              ownership_claim_reviewed_by=NULL,ownership_claim_rejection_reason=NULL,updated_at=NOW()
+        WHERE id=$1 RETURNING *`,
+      [offerId, note || null]
+    );
+    await addOfferEvent(db, req, offerId, 'ownership_resubmitted', 'rejected', 'pending', null, { note });
+    notifyHotelOwnershipSubmitted({
+      hotelId,
+      providerId: offer.provider_id,
+      note,
+      resubmitted: true,
+    }).catch((error) => console.error('[hotel-ownership] admin Telegram notification failed:', error?.message || error));
+    return res.json({ item: rows[0] });
   } catch (error) { return next(error); }
 });
 
@@ -618,7 +737,7 @@ router.get('/:offerId/rates', async (req, res, next) => {
     const offer = await getOffer(offerId, hotelId);
     if (!offer) return res.status(404).json({ error: 'offer_not_found' });
     const canEdit = canEditOffer(req, offer);
-    if (!canEdit && !(await canManageHotelInventory(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
+    if (!canEdit && !(await hasHotelOfferAccess(req, hotelId))) return res.status(403).json({ error: 'forbidden' });
     const templateProviderId = await getHotelTemplateProviderId(hotelId);
     const isHotelTemplate = Number(templateProviderId) === Number(offer.provider_id);
     if (!isHotelTemplate) {

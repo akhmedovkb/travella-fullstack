@@ -22,11 +22,39 @@ async function ensureHotelOfferTablesOnce() {
          WHERE table_schema='public' AND table_name='hotel_offer_rates' AND column_name='source_rate_id'
       )
       AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='hotel_offers' AND column_name='ownership_claim_status'
+      )
+      AND EXISTS (
         SELECT 1 FROM pg_trigger
-         WHERE tgname='trg_sync_hotel_inventory_reservation' AND NOT tgisinternal
+         WHERE tgname='trg_sync_hotel_inventory_reservation'
+           AND NOT tgisinternal
+           AND pg_get_triggerdef(oid) ILIKE '%hold_until%'
+      )
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='bookings' AND column_name='hold_until'
+      )
+      AND EXISTS (
+        SELECT 1 FROM pg_proc
+         WHERE proname='sync_hotel_inventory_reservation_status'
+           AND pg_get_functiondef(oid) ILIKE '%NEW.status IN (%pending%quoted%awaiting_payment%'
       ) AS ready
   `);
-  if (schemaProbe.rows?.[0]?.ready === true) return;
+  if (schemaProbe.rows?.[0]?.ready === true) {
+    await db.query(`
+      UPDATE hotel_offers o
+         SET is_direct=(LOWER(COALESCE(p.type,''))='hotel'),
+             supplier_type=CASE WHEN LOWER(COALESCE(p.type,''))='hotel' THEN 'hotel' ELSE o.supplier_type END
+        FROM providers p
+       WHERE p.id=o.provider_id
+         AND (o.is_direct IS DISTINCT FROM (LOWER(COALESCE(p.type,''))='hotel')
+              OR (LOWER(COALESCE(p.type,''))='hotel' AND o.supplier_type IS DISTINCT FROM 'hotel'))
+    `);
+    return;
+  }
+
+  await db.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS hold_until TIMESTAMPTZ`);
 
   await db.query(`
     CREATE TABLE IF NOT EXISTS hotel_offers (
@@ -74,6 +102,28 @@ async function ensureHotelOfferTablesOnce() {
   await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS submitted_at TIMESTAMP WITHOUT TIME ZONE`);
   await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMP WITHOUT TIME ZONE`);
   await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS reviewed_by BIGINT`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS ownership_claim_status TEXT`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS ownership_claim_note TEXT`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS ownership_claim_submitted_at TIMESTAMP WITHOUT TIME ZONE`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS ownership_claim_reviewed_at TIMESTAMP WITHOUT TIME ZONE`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS ownership_claim_reviewed_by BIGINT`);
+  await db.query(`ALTER TABLE hotel_offers ADD COLUMN IF NOT EXISTS ownership_claim_rejection_reason TEXT`);
+  await db.query(`
+    UPDATE hotel_offers o
+       SET ownership_claim_status='approved',
+           ownership_claim_reviewed_at=COALESCE(o.ownership_claim_reviewed_at,o.updated_at)
+      FROM providers p
+     WHERE p.id=o.provider_id
+       AND (o.supplier_type='hotel' OR LOWER(COALESCE(p.type,''))='hotel')
+       AND o.ownership_claim_status IS NULL
+  `);
+  await db.query(`
+    UPDATE hotel_offers o
+       SET is_direct=(LOWER(COALESCE(p.type,''))='hotel'),
+           supplier_type=CASE WHEN LOWER(COALESCE(p.type,''))='hotel' THEN 'hotel' ELSE o.supplier_type END
+      FROM providers p
+     WHERE p.id=o.provider_id
+  `);
   await db.query(`
     CREATE TABLE IF NOT EXISTS hotel_offer_events (
       id BIGSERIAL PRIMARY KEY,
@@ -191,10 +241,60 @@ async function ensureHotelOfferTablesOnce() {
     RETURNS trigger AS $$
     BEGIN
       IF NEW.status IN ('confirmed','completed','paid') THEN
+        -- Confirmations and new holds take the same rate locks. This prevents an
+        -- expired hold from being confirmed while another booking consumes it.
+        PERFORM rate.id
+          FROM hotel_offer_rates rate
+         WHERE rate.id IN (
+           SELECT reservation.rate_id
+             FROM hotel_inventory_reservations reservation
+            WHERE reservation.booking_id=NEW.id
+         )
+         ORDER BY rate.id
+         FOR UPDATE;
+
+        IF EXISTS (
+          SELECT 1
+            FROM hotel_inventory_reservations reservation
+           WHERE reservation.booking_id=NEW.id
+             AND (
+               reservation.status='released'
+               OR (reservation.status='held' AND reservation.expires_at<=NOW())
+             )
+        ) THEN
+          RAISE EXCEPTION USING
+            ERRCODE='P0001',
+            MESSAGE='hotel_inventory_hold_expired';
+        END IF;
+
         UPDATE hotel_inventory_reservations
            SET status='confirmed',expires_at=NULL,updated_at=NOW()
          WHERE booking_id=NEW.id AND status <> 'released';
-      ELSIF NEW.status='awaiting_payment' THEN
+      ELSIF NEW.status IN ('pending','quoted','awaiting_payment') THEN
+        PERFORM rate.id
+          FROM hotel_offer_rates rate
+         WHERE rate.id IN (
+           SELECT reservation.rate_id
+             FROM hotel_inventory_reservations reservation
+            WHERE reservation.booking_id=NEW.id
+         )
+         ORDER BY rate.id
+         FOR UPDATE;
+
+        IF EXISTS (
+          SELECT 1
+            FROM hotel_inventory_reservations reservation
+           WHERE reservation.booking_id=NEW.id
+             AND (
+               reservation.status='released'
+               OR (reservation.status='held' AND reservation.expires_at<=NOW())
+             )
+        ) THEN
+          RAISE EXCEPTION USING
+            ERRCODE='P0001',
+            MESSAGE='hotel_inventory_hold_expired';
+        END IF;
+
         UPDATE hotel_inventory_reservations
            SET status='held',
                expires_at=COALESCE(NULLIF(to_jsonb(NEW)->>'hold_until','')::timestamp, NOW()+INTERVAL '30 minutes'),
@@ -209,16 +309,34 @@ async function ensureHotelOfferTablesOnce() {
     END;
     $$ LANGUAGE plpgsql
   `);
+  await db.query(`DROP TRIGGER IF EXISTS trg_sync_hotel_inventory_reservation ON bookings`);
   await db.query(`
-    DO $$
-    BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_trigger WHERE tgname='trg_sync_hotel_inventory_reservation') THEN
-        CREATE TRIGGER trg_sync_hotel_inventory_reservation
-        AFTER UPDATE OF status ON bookings
-        FOR EACH ROW WHEN (OLD.status IS DISTINCT FROM NEW.status)
-        EXECUTE FUNCTION sync_hotel_inventory_reservation_status();
-      END IF;
-    END $$
+    CREATE TRIGGER trg_sync_hotel_inventory_reservation
+    AFTER UPDATE OF status, hold_until ON bookings
+    FOR EACH ROW WHEN (
+      OLD.status IS DISTINCT FROM NEW.status
+      OR OLD.hold_until IS DISTINCT FROM NEW.hold_until
+    )
+    EXECUTE FUNCTION sync_hotel_inventory_reservation_status()
+  `);
+  // Reconcile rows created before the booking-status trigger existed. These
+  // updates are idempotent and only touch reservations whose status disagrees
+  // with the authoritative booking lifecycle.
+  await db.query(`
+    UPDATE hotel_inventory_reservations reservation
+       SET status='confirmed',expires_at=NULL,updated_at=NOW()
+      FROM bookings booking
+     WHERE booking.id=reservation.booking_id
+       AND booking.status IN ('confirmed','completed','paid')
+       AND reservation.status IS DISTINCT FROM 'confirmed'
+  `);
+  await db.query(`
+    UPDATE hotel_inventory_reservations reservation
+       SET status='released',expires_at=NULL,updated_at=NOW()
+      FROM bookings booking
+     WHERE booking.id=reservation.booking_id
+       AND booking.status IN ('rejected','cancelled','cancelled_unpaid','expired')
+       AND reservation.status IS DISTINCT FROM 'released'
   `);
 }
 

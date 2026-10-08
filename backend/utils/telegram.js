@@ -806,6 +806,39 @@ async function notifyCancelledByRequester({ booking }) {
   }
 }
 
+async function notifyBookingRefunded({ booking }) {
+  try {
+    const a = await getBookingActors(booking);
+    if (!a) return;
+
+    const base = [
+      `<b>💳 Возврат по брони №${a.id} выполнен</b>`,
+      a.serviceTitle ? `🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>` : null,
+      `📅 Даты: <b>${fmtDates(a.dates)}</b>`,
+    ].filter(Boolean);
+    const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
+
+    const requesterChatId = a.agent?.chatId || a.client?.chatId;
+    if (requesterChatId) {
+      await tgSend(
+        requesterChatId,
+        [...base, "", "Средства возвращены через Payme.", `🔗 Открыть: ${a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings")}`].join("\n"),
+        {},
+        tokenOverride
+      );
+    }
+
+    if (a.provider?.chatId) {
+      await tgSend(
+        a.provider.chatId,
+        [...base, "", "Платёж возвращён заявителю, номерной фонд освобождён.", `🔗 Открыть: ${urlProvider("bookings")}`].join("\n")
+      );
+    }
+  } catch (e) {
+    console.error("[tg] notifyBookingRefunded failed:", e?.response?.data || e?.message || e);
+  }
+}
+
 /* ================== REQUESTS ================== */
 async function notifyReqNew({ request_id }) {
   try {
@@ -1319,6 +1352,7 @@ module.exports = {
   notifyRejected,
   notifyCancelled,
   notifyCancelledByRequester,
+  notifyBookingRefunded,
 
   // REQUESTS:
   notifyReqNew,
