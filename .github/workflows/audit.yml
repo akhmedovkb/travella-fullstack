@@ -19,7 +19,7 @@ jobs:
         if: hashFiles(format('{0}/package-lock.json', matrix.dir)) != ''
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: npm
           cache-dependency-path: ${{ matrix.dir }}/package-lock.json
 
@@ -28,7 +28,7 @@ jobs:
         if: hashFiles(format('{0}/package-lock.json', matrix.dir)) == ''
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       - name: Install & Audit (${{ matrix.dir }})
         working-directory: ${{ matrix.dir }}

@@ -11,7 +11,7 @@ import {
 } from "../utils/donasFinance";
 
 // Export helpers
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import html2canvas from "html2canvas";
 import jsPDF from "jspdf";
@@ -167,8 +167,13 @@ export default function DonasFinanceModel() {
   }
 
   // Export Excel
-  function exportExcel() {
-    const wb = XLSX.utils.book_new();
+  async function exportExcel() {
+    const wb = new ExcelJS.Workbook();
+    const addSheet = (name, rows) => {
+      const sheet = wb.addWorksheet(name);
+      sheet.addRows(rows);
+      return sheet;
+    };
 
     // Inputs
     const inputsRows = [
@@ -185,7 +190,7 @@ export default function DonasFinanceModel() {
       ["Seasonality enabled", applySeasonality ? "YES" : "NO"],
       ["Seasonality (Jan..Dec)", seasonality.join(", ")],
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(inputsRows), "Inputs");
+    addSheet("Inputs", inputsRows);
 
     // P&L (monthly)
     const pnlRows = [
@@ -196,14 +201,14 @@ export default function DonasFinanceModel() {
       ["OPEX", inputs.opex],
       ["EBITDA", monthly.ebitda],
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(pnlRows), "P&L");
+    addSheet("P&L", pnlRows);
 
     // Loan schedule
     const loanRows = [
       ["Month", "Begin", "Payment", "Interest", "Principal", "End"],
       ...amort.rows.map((x) => [x.month, x.beginBalance, x.payment, x.interest, x.principal, x.endBalance]),
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(loanRows), "Loan");
+    addSheet("Loan", loanRows);
 
     // 36M model
     const mRows = [
@@ -219,7 +224,7 @@ export default function DonasFinanceModel() {
         m.dscr ?? "",
       ]),
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(mRows), "36M");
+    addSheet("36M", mRows);
 
     // DSCR summary
     const dscrRows = [
@@ -229,10 +234,15 @@ export default function DonasFinanceModel() {
       ["Monthly payment (PMT)", model.pmt],
       ["Break-even orders/day", breakEven ?? ""],
     ];
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(dscrRows), "DSCR");
+    addSheet("DSCR", dscrRows);
 
-    const out = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-    saveAs(new Blob([out], { type: "application/octet-stream" }), "Dona_s_Dosas_Financial_Model.xlsx");
+    const out = await wb.xlsx.writeBuffer();
+    saveAs(
+      new Blob([out], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      "Dona_s_Dosas_Financial_Model.xlsx"
+    );
   }
 
   // Export PDF (captures report area)

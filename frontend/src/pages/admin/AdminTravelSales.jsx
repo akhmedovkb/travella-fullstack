@@ -1,7 +1,7 @@
 // frontend/src/pages/admin/AdminTravelSales.jsx
 
 import React, { useEffect, useMemo, useState } from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
 import { tError, tSuccess } from "../../shared/toast";
@@ -393,12 +393,23 @@ function EmptyRow({ loading, colSpan }) {
   );
 }
 
-function exportToExcel(filename, rows) {
-  const ws = XLSX.utils.json_to_sheet(rows);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, "Report");
-  const buffer = XLSX.write(wb, { bookType: "xlsx", type: "array" });
-  saveAs(new Blob([buffer], { type: "application/octet-stream" }), filename);
+async function exportToExcel(filename, rows) {
+  if (!rows.length) return;
+  const workbook = new ExcelJS.Workbook();
+  const worksheet = workbook.addWorksheet("Report");
+  worksheet.columns = Object.keys(rows[0]).map((header) => ({
+    header,
+    key: header,
+    width: Math.max(14, header.length + 2),
+  }));
+  worksheet.addRows(rows);
+  const buffer = await workbook.xlsx.writeBuffer();
+  saveAs(
+    new Blob([buffer], {
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    }),
+    filename
+  );
 }
 
 function sortByName(list) {
