@@ -166,7 +166,7 @@ export default function ProviderBookings() {
   
   // под-вкладки только для исходящих
   const [outSubTab, setOutSubTab] = useState("tb"); // tb | rest
-  const [filter, setFilter] = useState("all"); // all | pending | confirmed | upcoming | rejected
+  const [filter, setFilter] = useState("all"); // all | pending | quoted | payment | confirmed | rejected
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -420,20 +420,6 @@ export default function ProviderBookings() {
       ? (inSubTab === "rest" ? incomingRest : incomingTB)
       : (outSubTab === "rest" ? outgoingRest : outgoingTB);
 
-  // helpers для дат
-  const todayStart = useMemo(() => {
-    const d = new Date();
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
-  }, []);
-  const lastDateTs = (b) => {
-  const arr = Array.isArray(b?.dates) ? b.dates : [];
-  const ts = arr
-    .map((d) => new Date(`${d}T00:00:00`).getTime())
-    .filter(Number.isFinite);
-  return ts.length ? Math.max(...ts) : NaN;
-};
-
   /* ===== helpers для отображения маршрута пакета (даты + города) ===== */
   const firstDateTs = (b) => {
     const arr = Array.isArray(b?.dates) ? b.dates : [];
@@ -676,18 +662,20 @@ export default function ProviderBookings() {
     return { datesStr, routeStr };
   };
 
-  const isPending = (b) => ["pending", "quoted", "awaiting_payment"].includes(String(b.status));
-  const isConfirmedLike = (b) => ["confirmed", "active", "paid"].includes(String(b.status));
+  const isPending = (b) => String(b.status) === "pending";
+  const isQuoted = (b) => String(b.status) === "quoted";
+  const isAwaitingPaymentStatus = (b) => String(b.status) === "awaiting_payment";
+  const isConfirmedLike = (b) => ["confirmed", "active", "paid", "completed"].includes(String(b.status));
   const isRejectedLike = (b) => ["rejected", "cancelled", "cancelled_unpaid", "expired"].includes(String(b.status));
-  const isUpcoming = (b) => Number.isFinite(lastDateTs(b)) && isConfirmedLike(b) && lastDateTs(b) >= todayStart;
 
-  // счётчики (для плоских списков — входящие/остальные исходящие)
+  // Счётчики статусов для выбранного направления и источника.
   const counts = useMemo(() => {
-    const c = { all: baseList.length, pending: 0, confirmed: 0, upcoming: 0, rejected: 0 };
+    const c = { all: baseList.length, pending: 0, quoted: 0, payment: 0, confirmed: 0, rejected: 0 };
     for (const b of baseList) {
       if (isPending(b)) c.pending++;
+      if (isQuoted(b)) c.quoted++;
+      if (isAwaitingPaymentStatus(b)) c.payment++;
       if (isConfirmedLike(b)) c.confirmed++;
-      if (isUpcoming(b)) c.upcoming++;
       if (isRejectedLike(b)) c.rejected++;
     }
     return c;
@@ -698,10 +686,12 @@ export default function ProviderBookings() {
     switch (filter) {
       case "pending":
         return baseList.filter(isPending);
+      case "quoted":
+        return baseList.filter(isQuoted);
+      case "payment":
+        return baseList.filter(isAwaitingPaymentStatus);
       case "confirmed":
         return baseList.filter(isConfirmedLike);
-      case "upcoming":
-        return baseList.filter(isUpcoming);
       case "rejected":
         return baseList.filter(isRejectedLike);
       case "all":
@@ -735,6 +725,19 @@ export default function ProviderBookings() {
     });
     groups.sort((a, b) => b.firstTs - a.firstTs); // новые сверху
     return { groups, singles };
+  }, [filtered, tab]);
+
+  const groupedIncoming = useMemo(() => {
+    if (tab !== "incoming") return [];
+    const map = new Map();
+    for (const b of filtered) {
+      if (!b?.group_id) continue;
+      if (!map.has(b.group_id)) map.set(b.group_id, []);
+      map.get(b.group_id).push(b);
+    }
+    return Array.from(map.entries())
+      .map(([group_id, items]) => ({ group_id, items: items.sort((a, b) => (a.id > b.id ? -1 : 1)) }))
+      .sort((a, b) => (a.items[0]?.id > b.items[0]?.id ? -1 : 1));
   }, [filtered, tab]);
 
   // контент для «остальных исходящих» или для «входящих» (плоский список)
@@ -906,11 +909,11 @@ export default function ProviderBookings() {
   // контент для «Пакеты TourBuilder»
   const tbPackagesContent = useMemo(() => {
     if (loading) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    if (!tbGroups.length)
+    if (!groupedOutgoing.groups.length)
       return <div className="text-gray-500">{t("bookings.tb_empty", { defaultValue: "Пакетов TourBuilder пока нет." })}</div>;
     return (
       <div className="space-y-6">
-        {tbGroups.map((g) => (
+        {groupedOutgoing.groups.map((g) => (
           <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
             {renderPackageOverview(g)}
             <div className="divide-y">
@@ -952,11 +955,11 @@ export default function ProviderBookings() {
         ))}
       </div>
     );
-  }, [tbGroups, loading, t]);
+  }, [groupedOutgoing, loading, t]);
   // контент для «Пакеты TourBuilder» во ВХОДЯЩИХ
   const tbIncomingContent = useMemo(() => {
     if (loading) return <div className="text-gray-500">{t("common.loading", { defaultValue: "Загрузка..." })}</div>;
-    if (!incTbGroups.length)
+    if (!groupedIncoming.length)
       return <div className="text-gray-500">{t("bookings.tb_empty", { defaultValue: "Пакетов TourBuilder пока нет." })}</div>;
     // используем тот же renderRow (он реагирует на tab === "incoming")
     const renderRow = (b) => (
@@ -978,7 +981,7 @@ export default function ProviderBookings() {
     );
     return (
       <div className="space-y-6">
-        {incTbGroups.map((g) => (
+        {groupedIncoming.map((g) => (
           <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
             {renderPackageOverview(g)}
             <div className="divide-y">{g.items.map(renderRow)}</div>
@@ -986,7 +989,7 @@ export default function ProviderBookings() {
         ))}
       </div>
     );
-  }, [incTbGroups, loading, t]);
+  }, [groupedIncoming, loading, t]);
 
   const incomingAttention = useMemo(
     () => incoming.filter((b) => String(b?.status || "").toLowerCase() === "pending").length,
@@ -1054,7 +1057,7 @@ export default function ProviderBookings() {
               type="button"
               role="tab"
               aria-selected={active}
-              onClick={() => setTab(item.key)}
+              onClick={() => { setTab(item.key); setFilter("all"); }}
               className={`min-h-[92px] rounded-lg border px-4 py-3 text-left transition ${
                 active
                   ? "border-gray-950 bg-gray-950 text-white shadow-sm"
@@ -1086,28 +1089,27 @@ export default function ProviderBookings() {
         </span>
         <button
           type="button"
-          onClick={() => setActiveSubTab("tb")}
+          onClick={() => { setActiveSubTab("tb"); setFilter("all"); }}
           className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSubTab === "tb" ? "bg-orange-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
         >
           Tour Builder <span className="ml-1 opacity-75">{tourBuilderCount}</span>
         </button>
         <button
           type="button"
-          onClick={() => setActiveSubTab("rest")}
+          onClick={() => { setActiveSubTab("rest"); setFilter("all"); }}
           className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSubTab === "rest" ? "bg-orange-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
         >
           {t("bookings.other", { defaultValue: "Другие бронирования" })} <span className="ml-1 opacity-75">{otherCount}</span>
         </button>
       </div>
 
-      {/* Фильтры статуса — только для плоских списков (входящие/остальные и исходящие/остальные) */}
-      {((tab === "incoming" && inSubTab === "rest") || (tab === "outgoing" && outSubTab === "rest")) && (
       <div className="mb-4 flex flex-wrap items-center gap-2">
         {[
           { key: "all", label: t("filter.all", { defaultValue: "Все" }), count: counts.all },
-          { key: "pending", label: t("filter.pending", { defaultValue: "Ожидают" }), count: counts.pending },
+          { key: "pending", label: t("filter.pending", { defaultValue: "Ожидает" }), count: counts.pending },
+          { key: "quoted", label: t("filter.quoted", { defaultValue: "Цена предложена" }), count: counts.quoted },
+          { key: "payment", label: t("filter.awaiting_payment", { defaultValue: "Ожидает оплату" }), count: counts.payment },
           { key: "confirmed", label: t("filter.confirmed", { defaultValue: "Подтверждено" }), count: counts.confirmed },
-          { key: "upcoming", label: t("filter.upcoming", { defaultValue: "Предстоящие" }), count: counts.upcoming },
           { key: "rejected", label: t("filter.rejected", { defaultValue: "Отклонено" }), count: counts.rejected },
         ].map(({ key, label, count }) => (
           <button
@@ -1122,7 +1124,6 @@ export default function ProviderBookings() {
           </button>
         ))}
       </div>
-     )}
       {/* Содержимое */}
       {tab === "outgoing" && outSubTab === "tb"
         ? tbPackagesContent

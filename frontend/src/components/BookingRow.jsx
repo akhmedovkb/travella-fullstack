@@ -315,7 +315,7 @@ const profileHref = useMemo(() => {
             Tour Builder
           </span>
         )}
-        {booking.status ? (
+        {booking.status && booking.source !== "tour_builder" ? (
           <StatusPill
             status={booking.status}
             text={statusText ?? t(`status.${booking.status}`, { defaultValue: booking.status })}
