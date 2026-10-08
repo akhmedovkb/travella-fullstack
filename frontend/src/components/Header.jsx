@@ -435,7 +435,6 @@ export default function Header() {
   const servicesActive = location.pathname.startsWith("/dashboard/services/")
     || location.pathname === "/dashboard/calendar"
     || location.pathname === "/dashboard/hotels"
-    || location.pathname === "/dashboard/bookings"
     || location.pathname.startsWith("/provider/hotels/");
   const toolsActive = location.pathname.startsWith("/dashboard/passport-parser");
   const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
@@ -554,12 +553,6 @@ export default function Header() {
                         />
                       )}
                       <DropdownItem
-                        to="/dashboard/bookings"
-                        label={t("nav.bookings", "Брони")}
-                        description={`${t("nav.bookings_desc", "Входящие и исходящие, включая Tour Builder")} · ${loading ? "…" : bookingsBadge}`}
-                        icon={<IconBookings />}
-                      />
-                      <DropdownItem
                         to="/dashboard/services/marketplace"
                         label={t("nav.services_marketplace_short", "Маркетплейс")}
                         description={t("nav.services_marketplace_desc", "Отказные туры, отели, авиабилеты и другие услуги")}
@@ -622,6 +615,16 @@ export default function Header() {
                         icon={<IconHeart />}
                       />
                   
+                      <DropdownItem
+                        to="/dashboard/bookings"
+                        label={t(
+                          "nav.bookings",
+                          "Брони"
+                        )}
+                        description={`${loading ? "…" : bookingsBadge} бронирований`}
+                        icon={<IconBookings />}
+                      />
+
                       <DropdownItem
                         to="/dashboard/finance"
                         label={`${t("nav.provider_finance", "📈 Спрос и клиенты")}${demandNewCount > 0 ? ` · ${demandNewCount}` : ""}`}
