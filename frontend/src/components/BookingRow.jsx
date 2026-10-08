@@ -306,15 +306,10 @@ const profileHref = useMemo(() => {
 
   return (
     <div className={embedded ? "bg-transparent" : "rounded-lg border border-gray-200 bg-white p-4"}>
-      {/* Верхняя строка: #id · услуга · статус · (НОВОЕ) дата создания */}
+      {/* Верхняя строка: #id · услуга · статус · дата создания */}
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-gray-700">
         <span className="text-gray-500">#{booking.id}</span>
         {booking.service_title ? <span className="text-gray-700">· {booking.service_title}</span> : null}
-        {booking.source === 'tour_builder' && (
-          <span className="inline-flex items-center rounded-full bg-violet-50 px-2.5 py-0.5 text-xs text-violet-700 ring-1 ring-violet-200">
-            Tour Builder
-          </span>
-        )}
         {booking.status && booking.source !== "tour_builder" ? (
           <StatusPill
             status={booking.status}
