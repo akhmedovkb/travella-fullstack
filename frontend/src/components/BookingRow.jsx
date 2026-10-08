@@ -303,6 +303,10 @@ const profileHref = useMemo(() => {
   };
 
   const dates = Array.isArray(booking?.dates) ? booking.dates : [];
+  const attachments = useMemo(
+    () => toFiles(booking?.attachments).map(resolveFile).filter((file) => file.url && file.name),
+    [booking?.attachments]
+  );
 
   return (
     <div className={embedded ? "bg-transparent" : "rounded-lg border border-gray-200 bg-white p-4"}>
@@ -420,27 +424,9 @@ const profileHref = useMemo(() => {
       </div>
 
       {/* вложения (если есть), без заголовка */}
-        {toFiles(booking.attachments).length ? (
+        {attachments.length ? (
           <div className="mt-3 flex flex-wrap gap-2">
-            {toFiles(booking.attachments).map((raw, i) => {
-              const { url, name } = resolveFile(raw);
-              if (!url) {
-                // raw может быть строкой или объектом — достаём подпись безопасно
-                const fallback =
-                  name ||
-                  (typeof raw === "string"
-                    ? raw
-                    : String(raw?.url || raw?.src || raw?.href || "file"));
-                return (
-                  <span
-                    key={i}
-                    className="rounded border bg-gray-50 px-2 py-1 text-sm"
-                    title={fallback}
-                  >
-                    {fallback}
-                  </span>
-                );
-              }
+            {attachments.map(({ url, name }, i) => {
               return isImg(url) ? (
                 <a
                   key={i}
