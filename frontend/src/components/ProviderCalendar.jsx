@@ -7,6 +7,8 @@ import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 import { enUS, ru, uz } from "date-fns/locale";
 
+const CALENDAR_PROVIDER_TYPES = new Set(["guide", "transport"]);
+
 /** YYYY-MM-DD из строки/объекта/Date */
 const toYMD = (val) => {
   if (!val) return "";
@@ -50,6 +52,9 @@ const ProviderCalendar = ({ token }) => {
 
   // тип провайдера: guide / transport / ...
   const [providerType, setProviderType] = useState("");
+  const [profileResolved, setProfileResolved] = useState(false);
+  const [calendarLoading, setCalendarLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   // для tooltip
   const [hoveredYmd, setHoveredYmd] = useState(null);
@@ -62,6 +67,8 @@ const ProviderCalendar = ({ token }) => {
     return { headers: { Authorization: `Bearer ${stored}` } };
   }, [token]);
 
+  const calendarEnabled = CALENDAR_PROVIDER_TYPES.has(String(providerType || "").toLowerCase());
+
   // профиль провайдера (тип)
   useEffect(() => {
     let cancel = false;
@@ -73,12 +80,16 @@ const ProviderCalendar = ({ token }) => {
         );
         if (!cancel) setProviderType(data?.type || "");
       } catch { /* ignore */ }
+      finally {
+        if (!cancel) setProfileResolved(true);
+      }
     })();
     return () => { cancel = true; };
   }, [cfg]);
 
   // загрузка календаря
   useEffect(() => {
+    if (!profileResolved || !calendarEnabled) return undefined;
     let cancelled = false;
 
     const normalizeDetailsList = (arr) => {
@@ -114,6 +125,7 @@ const ProviderCalendar = ({ token }) => {
     };
 
     const load = async () => {
+      setCalendarLoading(true);
       try {
         const { data } = await axios.get(
           `${import.meta.env.VITE_API_BASE_URL}/api/providers/calendar`,
@@ -177,12 +189,14 @@ const ProviderCalendar = ({ token }) => {
             toast.error(t("calendar.load_error") || "Не удалось загрузить календарь");
           }
         }
+      } finally {
+        if (!cancelled) setCalendarLoading(false);
       }
     };
 
     load();
     return () => { cancelled = true; };
-  }, [cfg, t]);
+  }, [calendarEnabled, cfg, profileResolved, t]);
 
   // преобразования дат
   const manualAsDates = useMemo(() => manual.map(ymdToLocalDate).filter(Boolean), [manual]);
@@ -232,6 +246,7 @@ const ProviderCalendar = ({ token }) => {
 
   const handleSave = async () => {
     const final = Array.from(new Set(manual)).sort();
+    setSaving(true);
     try {
       const { data } = await axios.post(
         `${import.meta.env.VITE_API_BASE_URL}/api/providers/blocked-dates`,
@@ -243,6 +258,8 @@ const ProviderCalendar = ({ token }) => {
     } catch (e) {
       console.error("Ошибка сохранения занятых дат", e);
       toast.error(t("calendar.save_error") || "Ошибка сохранения дат");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -254,6 +271,14 @@ const ProviderCalendar = ({ token }) => {
     const tp = (providerType || "").toLowerCase();
     return tp === "guide" || tp === "transport";
   }, [providerType]);
+
+  const hasChanges = useMemo(() => {
+    const current = [...new Set(manual)].sort().join(",");
+    const saved = [...new Set(manualInitial)].sort().join(",");
+    return current !== saved;
+  }, [manual, manualInitial]);
+
+  const typeLabel = String(providerType || "").toLowerCase() === "guide" ? "Гид" : "Транспорт";
 
   // Кастомный контент ячейки дня с tooltip
     const DayCell = (dayProps) => {
@@ -335,31 +360,50 @@ const ProviderCalendar = ({ token }) => {
     );
   };
 
-  return (
-    <div className="bg-white p-4 rounded-lg shadow-md mt-6">
-      {/* Шапка + легенда */}
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-lg font-semibold text-gray-800">
-          {t("calendar.title_public", { defaultValue: "Bandlik kalendari" })}
-        </h3>
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-700">
-          <span>
-            <span className="inline-block w-3 h-3 bg-gray-300 rounded-sm align-middle mr-2" />
-            {t("calendar.busy", { defaultValue: "занято" })}
-          </span>
-          <span>
-            <span className="inline-block w-3 h-3 bg-sky-500 rounded-sm align-middle mr-2" />
-            {t("calendar.manual_blocked", { defaultValue: "Заблокировано мною" })}
-          </span>
-          <span>
-            <span className="inline-block w-3 h-3 bg-orange-500 rounded-sm align-middle mr-2" />
-            {t("calendar.selected", { defaultValue: "выбрано (не сохранено)" })}
-          </span>
-        </div>
+  if (!profileResolved) {
+    return <div className="mx-auto mt-6 max-w-6xl px-4 py-16 text-center text-sm font-semibold text-slate-500">Загружаем календарь...</div>;
+  }
+
+  if (!calendarEnabled) {
+    return (
+      <div className="mx-auto mt-6 max-w-4xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
+        <div className="text-xs font-black uppercase text-orange-600">Календарь занятости</div>
+        <h1 className="mt-3 text-2xl font-black text-slate-950">Этот раздел доступен гидам и транспортникам</h1>
+        <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
+          Отели управляют остатками и stop-sale внутри «Мои отели», а турагенты работают с созданными бронированиями в разделе «Активность».
+        </p>
       </div>
+    );
+  }
+
+  return (
+    <main className="mx-auto mt-6 max-w-6xl px-3 pb-10 sm:px-5">
+      <section className="overflow-visible border border-slate-200 bg-white shadow-sm">
+        <header className="border-b border-slate-200 px-5 py-5 sm:px-7">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <div className="text-xs font-black uppercase text-orange-600">{typeLabel} · доступность</div>
+              <h1 className="mt-1 text-2xl font-black text-slate-950">Календарь занятости</h1>
+              <p className="mt-1 text-sm text-slate-600">Отметьте дни, когда вы не принимаете новые заказы. Дни с бронями изменять нельзя.</p>
+            </div>
+            <div className="grid grid-cols-3 gap-px overflow-hidden border border-slate-200 bg-slate-200 text-center">
+              <div className="bg-white px-4 py-2"><div className="text-xl font-black text-slate-950">{booked.length}</div><div className="text-xs font-bold text-slate-500">по броням</div></div>
+              <div className="bg-white px-4 py-2"><div className="text-xl font-black text-sky-600">{manualSavedYmd.length}</div><div className="text-xs font-bold text-slate-500">закрыто вами</div></div>
+              <div className="bg-white px-4 py-2"><div className="text-xl font-black text-orange-600">{manualNewYmd.length}</div><div className="text-xs font-bold text-slate-500">новых</div></div>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 px-5 py-3 text-xs font-bold text-slate-600 sm:px-7">
+          <span className="flex items-center gap-2"><span className="h-3 w-3 bg-slate-300" /> Бронь</span>
+          <span className="flex items-center gap-2"><span className="h-3 w-3 bg-sky-500" /> Закрыто вами</span>
+          <span className="flex items-center gap-2"><span className="h-3 w-3 bg-orange-500" /> Не сохранено</span>
+          <span className="ml-auto text-slate-400">Нажмите дату, чтобы закрыть или открыть её</span>
+        </div>
 
       {/* overflow-visible + сброс hover */}
-      <div className="relative overflow-visible" onMouseLeave={() => setHoveredYmd(null)}>
+      <div className="relative overflow-visible px-3 py-5 sm:px-7" onMouseLeave={() => setHoveredYmd(null)}>
+        {calendarLoading ? <div className="py-20 text-center text-sm font-semibold text-slate-500">Загружаем занятость...</div> : (
         <DayPicker
             locale={dpLocale}
             weekStartsOn={weekStartsOn}
@@ -385,15 +429,20 @@ const ProviderCalendar = ({ token }) => {
             }}
             components={{ DayContent: DayCell }}
             /* Растянуть календарь и зафиксировать сетку таблицы */
-            className="rdp w-full !m-0"
+            className="rdp w-full !m-0 text-slate-900"
             classNames={{
               months: "w-full",
               month: "w-full",
               table: "w-full table-fixed",
-              head_row: "grid grid-cols-7",
-              row: "grid grid-cols-7",
-              cell: "overflow-visible relative h-10",
-              day: "rdp-day overflow-visible relative w-full h-10 flex items-center justify-center rounded-full",
+              caption: "relative mb-5 flex h-10 items-center justify-center",
+              caption_label: "text-lg font-black capitalize text-slate-950",
+              nav: "absolute right-0 top-0 flex gap-2",
+              nav_button: "h-9 w-9 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
+              head_row: "grid grid-cols-7 border-b border-slate-100",
+              head_cell: "py-3 text-center text-xs font-black uppercase text-slate-400",
+              row: "grid grid-cols-7 border-b border-slate-100 last:border-b-0",
+              cell: "overflow-visible relative h-16 border-r border-slate-100 last:border-r-0 sm:h-20",
+              day: "rdp-day overflow-visible relative h-full w-full flex items-center justify-center text-sm font-bold transition hover:bg-orange-50",
             }}
             styles={{
               months: { width: "100%" },
@@ -409,16 +458,25 @@ const ProviderCalendar = ({ token }) => {
               }
             }}
           />
+        )}
 
       </div>
 
-      <button
-        onClick={handleSave}
-        className="mt-4 px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
-      >
-        {t("calendar.save_blocked_dates") || "Сохранить занятые даты"}
-      </button>
-    </div>
+        <footer className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+          <div className={`text-sm font-bold ${hasChanges ? "text-orange-700" : "text-slate-500"}`}>
+            {hasChanges ? `Есть несохранённые изменения: ${manualNewYmd.length || "изменён список дат"}` : "Все изменения сохранены"}
+          </div>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={!hasChanges || saving}
+            className="h-11 bg-orange-600 px-6 text-sm font-black text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+          >
+            {saving ? "Сохраняем..." : (t("calendar.save_blocked_dates") || "Сохранить занятые даты")}
+          </button>
+        </footer>
+      </section>
+    </main>
   );
 };
 

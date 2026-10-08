@@ -184,6 +184,7 @@ function detectProviderType(profile) {
 }
 
 const TOUR_BUILDER_SERVICE_PROVIDER_TYPES = new Set(["guide", "transport", "agent"]);
+const CALENDAR_PROVIDER_TYPES = new Set(["guide", "transport"]);
 
 function formatHeaderBalance(value, lang = "ru") {
   const amount = Number(value || 0) / 100;
@@ -566,12 +567,14 @@ export default function Header() {
                           icon={<IconChecklist />}
                         />
                       )}
-                      <DropdownItem
-                        to="/dashboard/calendar"
-                        label={t("nav.provider_calendar", "Календарь")}
-                        description={t("nav.provider_calendar_desc", "Занятость, блокировки и бронирования")}
-                        icon={<IconBookings />}
-                      />
+                      {CALENDAR_PROVIDER_TYPES.has(providerType) && (
+                        <DropdownItem
+                          to="/dashboard/calendar"
+                          label={t("nav.provider_calendar", "Календарь")}
+                          description={t("nav.provider_calendar_desc", "Занятость, блокировки и бронирования")}
+                          icon={<IconBookings />}
+                        />
+                      )}
                     </DropdownPanel>
                   )}
                 </div>
@@ -774,7 +777,9 @@ export default function Header() {
                 {TOUR_BUILDER_SERVICE_PROVIDER_TYPES.has(providerType) && (
                   <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder_short", "Tour Builder")} icon={<IconChecklist />} />
                 )}
-                <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
+                {CALENDAR_PROVIDER_TYPES.has(providerType) && (
+                  <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
+                )}
                 <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
                 <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
                 <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings", "Брони")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
