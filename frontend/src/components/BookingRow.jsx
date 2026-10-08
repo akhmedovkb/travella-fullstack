@@ -346,68 +346,81 @@ const profileHref = useMemo(() => {
         ) : null}
       </div>
 
-      {/* Контактная строка */}
-      <div className="flex items-start gap-3">
-        <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200">
-          {avatarUrl ? (
-            <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-sm font-semibold">
-              {initials(counterpart.title || booking.client_name || booking.provider_name || "U")}
+      <div className="grid gap-x-6 gap-y-4 border-t border-gray-100 pt-3 sm:grid-cols-2 xl:grid-cols-[1.35fr,1fr,0.8fr,1.5fr]">
+        <div className="min-w-0">
+          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+            {t("bookings.provider", { defaultValue: "Поставщик" })}
+          </div>
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200">
+              {avatarUrl ? (
+                <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
+              ) : (
+                <div className="flex h-full w-full items-center justify-center text-sm font-semibold">
+                  {initials(counterpart.title || booking.client_name || booking.provider_name || "U")}
+                </div>
+              )}
             </div>
-          )}
+            <div className="min-w-0">
+              {profileHref ? (
+                <Link to={profileHref} className="block truncate font-semibold hover:underline">
+                  {counterpart.title}
+                </Link>
+              ) : (
+                <div className="truncate font-semibold">{counterpart.title}</div>
+              )}
+              {counterpart.extra ? (
+                <span className="mt-1 inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 ring-1 ring-indigo-200">
+                  {counterpart.extra}
+                </span>
+              ) : null}
+            </div>
+          </div>
         </div>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            {profileHref ? (
-              <Link to={profileHref} className="truncate font-semibold hover:underline">
-                {counterpart.title}
-              </Link>
-            ) : (
-              <div className="truncate font-semibold">{counterpart.title}</div>
-            )}
-            {counterpart.extra ? (
-              <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 ring-1 ring-indigo-200">
-                {counterpart.extra}
-              </span>
-            ) : null}
+        <div className="min-w-0">
+          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+            {t("bookings.contacts", { defaultValue: "Контакты" })}
           </div>
-
-          <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-gray-600">
+          <div className="space-y-1 text-sm text-gray-700">
             {counterpart.phone ? (
-              <a className="hover:underline" href={`tel:${counterpart.phone}`}>📞 {counterpart.phone}</a>
+              <a className="block truncate hover:underline" href={`tel:${counterpart.phone}`}>{counterpart.phone}</a>
             ) : null}
             {counterpart.telegram ? (
-                counterpart.telegram.href ? (
-                  <a className="hover:underline" href={counterpart.telegram.href} target="_blank" rel="noreferrer">
-                    <TelegramIcon /> {counterpart.telegram.label}
-                  </a>
-                ) : (
-                  <span><TelegramIcon /> {counterpart.telegram.label}</span>
-                )
-              ) : null}
+              counterpart.telegram.href ? (
+                <a className="block truncate hover:underline" href={counterpart.telegram.href} target="_blank" rel="noreferrer">
+                  <TelegramIcon /> {counterpart.telegram.label}
+                </a>
+              ) : (
+                <span className="block truncate"><TelegramIcon /> {counterpart.telegram.label}</span>
+              )
+            ) : null}
+            {!counterpart.phone && !counterpart.telegram ? <span className="text-gray-400">—</span> : null}
           </div>
+        </div>
 
-          {/* даты */}
-          {dates.length ? (
-            <div className="mt-2 flex items-center gap-2 text-sm text-gray-700">
-              <span>📅</span>
-              <span className="whitespace-pre-wrap break-words">
-                {dates.map((d) =>
-                  new Date(d).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
-                ).join(", ")}
-              </span>
-            </div>
-          ) : null}
+        <div className="min-w-0">
+          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+            {t("bookings.service_date", { defaultValue: "Дата услуги" })}
+          </div>
+          <div className="text-sm text-gray-700">
+            {dates.length
+              ? dates.map((d) => new Date(d).toLocaleDateString(undefined, {
+                  day: "2-digit",
+                  month: "short",
+                  year: "numeric",
+                })).join(", ")
+              : "—"}
+          </div>
+        </div>
 
-          {/* комментарий клиента */}
-          {booking.client_message ? (
-            <div className="mt-2 text-sm text-gray-700">
-              <div className="text-gray-500">{t("bookings.client_comment", { defaultValue: "Комментарий:" })}</div>
-              <div>{booking.client_message}</div>
-            </div>
-          ) : null}
+        <div className="min-w-0">
+          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+            {t("bookings.request_details", { defaultValue: "Детали заявки" })}
+          </div>
+          <div className="whitespace-pre-wrap break-words text-sm text-gray-700">
+            {booking.client_message || "—"}
+          </div>
         </div>
       </div>
 
