@@ -747,7 +747,7 @@ async function createHotel(req, res) {
       await ensureHotelOfferTables();
     }
 
-    client = await db.connect();
+    client = await pool.connect();
     await client.query('BEGIN');
     const identityName = normalizeHotelIdentityPart(requestedHotel.name, { stripRating: true });
     const identityPlace = normalizeHotelIdentityPart(requestedHotel.city || requestedHotel.address);
