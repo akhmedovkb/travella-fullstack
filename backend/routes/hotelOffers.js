@@ -410,13 +410,20 @@ router.get('/', async (req, res, next) => {
     if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
     const rateDate = req.query.date ? isoDate(req.query.date) : null;
     if (req.query.date && !rateDate) return res.status(400).json({ error: 'bad_date' });
-    const params = [hotelId, req.query.status ? String(req.query.status).toLowerCase() : null, rateDate];
+    const residencyParam = String(req.query.residency || '').toLowerCase();
+    const residency = residencyParam === 'resident'
+      ? 'resident'
+      : ['nonresident', 'non_resident'].includes(residencyParam)
+        ? 'non_resident'
+        : null;
+    if (req.query.residency && !residency) return res.status(400).json({ error: 'bad_residency' });
+    const params = [hotelId, req.query.status ? String(req.query.status).toLowerCase() : null, rateDate, residency];
     const mineOnly = String(req.query.mine || '') === '1';
     const manager = isAdmin(req.user) || await canManageHotelInventory(req, hotelId);
     let visibilityFilter = '';
     if (!manager) {
       params.push(positiveInt(req.user?.id) || 0);
-      visibilityFilter = mineOnly ? ` AND o.provider_id=$4` : ` AND (o.status='active' OR o.provider_id=$4)`;
+      visibilityFilter = mineOnly ? ` AND o.provider_id=$5` : ` AND (o.status='active' OR o.provider_id=$5)`;
     }
     const { rows } = await db.query(
       `SELECT o.id, o.hotel_id, o.provider_id, p.name AS provider_name, p.type AS provider_type,
@@ -441,12 +448,14 @@ router.get('/', async (req, res, next) => {
          JOIN providers p ON p.id=o.provider_id
          LEFT JOIN hotel_offer_rates r ON r.offer_id=o.id
           AND ($3::date IS NULL OR (r.date_from <= $3::date AND r.date_to >= $3::date))
+          AND ($4::text IS NULL OR r.residency IN ($4,'all'))
         WHERE o.hotel_id=$1 AND o.status <> 'archived'
           AND ($2::text IS NULL OR o.status=$2)
           AND ($3::date IS NULL OR (o.valid_from IS NULL OR o.valid_from <= $3::date))
           AND ($3::date IS NULL OR (o.valid_to IS NULL OR o.valid_to >= $3::date))
           ${visibilityFilter}
         GROUP BY o.id, p.name, p.type
+        HAVING ($4::text IS NULL OR COUNT(r.id) > 0)
         ORDER BY MIN(r.amount) ASC NULLS LAST, o.is_direct DESC, p.name, o.id`,
       params
     );
@@ -461,6 +470,7 @@ router.get('/', async (req, res, next) => {
              JOIN hotel_room_inventory_pools p ON p.id=r.inventory_pool_id AND p.active=true
             WHERE o.id=ANY($1::int[]) AND r.inventory_pool_id IS NOT NULL
               AND r.date_from <= $2::date AND r.date_to >= $2::date
+              AND ($3::text IS NULL OR r.residency IN ($3,'all'))
          ), pool_availability AS (
            SELECT op.offer_id,op.room_type,
                   LEAST(
@@ -505,7 +515,7 @@ router.get('/', async (req, res, next) => {
                 JSON_AGG(JSON_BUILD_OBJECT('room_type',room_type,'available',available_rooms) ORDER BY room_type) AS availability_by_room
            FROM pool_availability
           GROUP BY offer_id`,
-        [offerIds, rateDate]
+        [offerIds, rateDate, residency]
       );
       availabilityByOffer = new Map(availabilityResult.rows.map((item) => [Number(item.offer_id), {
         total: Number(item.available_rooms || 0),

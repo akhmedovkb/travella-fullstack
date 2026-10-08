@@ -584,8 +584,8 @@ async function fetchHotelBrief(hotelId) {
   return await fetchJSON(`/api/hotels/${hotelId}/brief`);
 }
 
-async function fetchHotelOffers(hotelId, date) {
-  const data = await fetchJSON(`/api/hotels/${hotelId}/offers`, { status: "active", date });
+async function fetchHotelOffers(hotelId, date, residency) {
+  const data = await fetchJSON(`/api/hotels/${hotelId}/offers`, { status: "active", date, residency });
   return Array.isArray(data?.items) ? data.items : [];
 }
 
@@ -1110,6 +1110,44 @@ export default function TourBuilder() {
       return copy;
     });
   }, [days]);
+
+  useEffect(() => {
+    const selectedHotels = Object.entries(byDay)
+      .filter(([, state]) => state?.hotel?.id)
+      .map(([date, state]) => ({ date, hotelId: state.hotel.id }));
+    if (!selectedHotels.length) return undefined;
+
+    let cancelled = false;
+    Promise.all(selectedHotels.map(async ({ date, hotelId }) => ({
+      date,
+      hotelId,
+      offers: await fetchHotelOffers(
+        hotelId,
+        date,
+        residentType === "res" ? "resident" : "non_resident"
+      ).catch(() => []),
+    }))).then((results) => {
+      if (cancelled) return;
+      setByDay((previous) => {
+        const next = { ...previous };
+        for (const { date, hotelId, offers } of results) {
+          const current = next[date];
+          if (!current || Number(current.hotel?.id) !== Number(hotelId)) continue;
+          const sameOffer = offers.find((offer) => Number(offer.id) === Number(current.hotelOffer?.id));
+          next[date] = {
+            ...current,
+            hotelOffers: offers,
+            hotelOffer: sameOffer || pickBestHotelOffer(offers, usdRate),
+            hotelRoomsTotal: 0,
+            hotelBreakdown: null,
+          };
+        }
+        return next;
+      });
+    });
+
+    return () => { cancelled = true; };
+  }, [residentType]);
 
     /* ----- cache услуг провайдеров, чтобы не бить API каждый раз ----- */
   const [servicesCache, setServicesCache] = useState({});     // {providerId: Service[]}
@@ -2429,7 +2467,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
                          try {
                            const [brief, offers] = await Promise.all([
                              fetchHotelBrief(hotel.id),
-                             fetchHotelOffers(hotel.id, k).catch(() => []),
+                             fetchHotelOffers(
+                               hotel.id,
+                               k,
+                               residentType === "res" ? "resident" : "non_resident"
+                             ).catch(() => []),
                            ]);
                            setByDay((p) => ({
                              ...p,
