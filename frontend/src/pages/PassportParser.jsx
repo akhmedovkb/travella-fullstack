@@ -1,7 +1,8 @@
 //frontend/src/pages/PassportParser.jsx
   
 import { useMemo, useState } from "react";
-import * as XLSX from "xlsx";
+import ExcelJS from "exceljs";
+import { saveAs } from "file-saver";
 
 const API_BASE =
   import.meta.env.VITE_API_BASE_URL ||
@@ -65,7 +66,7 @@ export default function PassportParser() {
     }
   };
 
-  const handleDownloadExcel = () => {
+  const handleDownloadExcel = async () => {
     const rows = results
       .filter((item) => item.success && item.row)
       .map((item) => ({
@@ -90,10 +91,21 @@ export default function PassportParser() {
       return;
     }
 
-    const worksheet = XLSX.utils.json_to_sheet(rows);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Passports");
-    XLSX.writeFile(workbook, "passports_result.xlsx");
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Passports");
+    worksheet.columns = Object.keys(rows[0]).map((header) => ({
+      header,
+      key: header,
+      width: Math.max(14, header.length + 2),
+    }));
+    worksheet.addRows(rows);
+    const buffer = await workbook.xlsx.writeBuffer();
+    saveAs(
+      new Blob([buffer], {
+        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      }),
+      "passports_result.xlsx"
+    );
   };
 
   return (

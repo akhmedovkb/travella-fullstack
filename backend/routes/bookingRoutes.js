@@ -24,11 +24,24 @@ const {
   // NEW for payment window
   getBooking,
   markPaid,
+  createPaymentOrder,
+  requestBookingRefund,
+  downloadBookingInvoice,
+  downloadBookingVoucher,
+  downloadBookingRoomingList,
+  downloadBookingItinerary,
 } = require("../controllers/bookingController");
 
 function requireProvider(req, res, next) {
   if (req.user?.role !== "provider") {
     return res.status(403).json({ message: "Только для провайдера" });
+  }
+  next();
+}
+
+function requireClient(req, res, next) {
+  if (String(req.user?.role || "").toLowerCase() !== "client") {
+    return res.status(403).json({ message: "Только для клиента" });
   }
   next();
 }
@@ -39,7 +52,7 @@ router.post("/", authenticateToken, createBooking);
 // Списки
 router.get("/provider", authenticateToken, requireProvider, getProviderBookings);                 // входящие (мои услуги)
 router.get("/provider/outgoing", authenticateToken, requireProvider, getProviderOutgoingBookings); // исходящие (я бронирую как провайдер)
-router.get("/my", authenticateToken, getMyBookings);                                              // мои как клиента
+router.get("/my", authenticateToken, requireClient, getMyBookings);                               // мои как клиента
 
 // Пакет по group_id (для клиента или провайдера, имеющего отношение к пакету)
 // ВАЖНО: ставим ДО маршрута '/:id', чтобы он не перехватывал 'group'
@@ -56,10 +69,12 @@ router.post("/:id(\\d+)/quote", authenticateToken, requireProvider, providerQuot
 router.post("/:id(\\d+)/cancel-by-provider", authenticateToken, requireProvider, cancelBookingByProvider);
 
 // Действия клиента
-router.post("/:id(\\d+)/cancel", authenticateToken, cancelBooking);
-router.post("/:id(\\d+)/confirm", authenticateToken, confirmBooking);
+router.post("/:id(\\d+)/cancel", authenticateToken, requireClient, cancelBooking);
+router.post("/:id(\\d+)/confirm", authenticateToken, requireClient, confirmBooking);
 // Оплата брони (маркёр после успешного платежа)
 router.post("/:id(\\d+)/pay", authenticateToken, markPaid);
+router.post("/:id(\\d+)/payment-order", authenticateToken, createPaymentOrder);
+router.post("/:id(\\d+)/refund-request", authenticateToken, requestBookingRefund);
 
 // Действия провайдера-заказчика по исходящим
 router.post("/:id(\\d+)/confirm-by-requester", authenticateToken, requireProvider, confirmBookingByRequester);
@@ -69,5 +84,9 @@ router.post("/:id(\\d+)/cancel-by-requester", authenticateToken, requireProvider
 router.post("/:id(\\d+)/check-availability", authenticateToken, requireProvider, checkAvailability);
 router.post("/:id(\\d+)/place-hold", authenticateToken, requireProvider, placeHold);
 router.get("/:id(\\d+)/docs", authenticateToken, getBookingDocs);
+router.get("/:id(\\d+)/docs/invoice.pdf", authenticateToken, downloadBookingInvoice);
+router.get("/:id(\\d+)/docs/voucher.pdf", authenticateToken, downloadBookingVoucher);
+router.get("/:id(\\d+)/docs/rooming-list.xlsx", authenticateToken, downloadBookingRoomingList);
+router.get("/:id(\\d+)/docs/itinerary.pdf", authenticateToken, downloadBookingItinerary);
 
 module.exports = router;

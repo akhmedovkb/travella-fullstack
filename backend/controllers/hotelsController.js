@@ -6,29 +6,8 @@ const crypto = require("crypto");
 const { Pool } = require("pg");
 const { uploadBufferToR2, getR2ObjectStream } = require("../utils/r2Upload");
 const { ensureHotelOfferTables } = require('../utils/hotelOffersSchema');
-
-let hotelSeasonsReadyPromise = null;
-
-function ensureHotelSeasonsTable() {
-  if (!hotelSeasonsReadyPromise) {
-    hotelSeasonsReadyPromise = db.query(`
-      CREATE TABLE IF NOT EXISTS hotel_seasons (
-        id SERIAL PRIMARY KEY,
-        hotel_id INTEGER NOT NULL REFERENCES hotels(id) ON DELETE CASCADE,
-        label TEXT NOT NULL,
-        start_date DATE NOT NULL,
-        end_date DATE NOT NULL,
-        created_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-        updated_at TIMESTAMP WITHOUT TIME ZONE DEFAULT NOW(),
-        CHECK (start_date <= end_date)
-      )
-    `).catch((error) => {
-      hotelSeasonsReadyPromise = null;
-      throw error;
-    });
-  }
-  return hotelSeasonsReadyPromise;
-}
+const { notifyInspectionSubmitted, notifyInspectionReviewed } = require('../utils/hotelInspectionNotifications');
+const { areLikelySameHotel, normalizeHotelIdentityPart } = require('../utils/hotelIdentity');
 
 // /api/hotels/:id/brief
 async function getHotelBrief(req, res) {
@@ -41,7 +20,7 @@ async function getHotelBrief(req, res) {
   const { rows } = await db.query(q, [id]);
   if (!rows.length) return res.status(404).json({ error: "Not found" });
   const h = rows[0];
-  // rooms уже содержит prices.low / prices.high / resident/nonResident / BB/HB/FB/AI/UAI
+  // rooms is retained for room-category suggestions only. Pricing comes from hotel offer rates.
   res.json({
     id: h.id,
     name: h.name,
@@ -64,6 +43,11 @@ async function listHotelsByCity(req, res) {
   const stars = Number(req.query.stars);
   const params = [city];
   let where = `LOWER(city) = LOWER($1)`;
+  where += ` AND NOT EXISTS (
+    SELECT 1 FROM hotel_offers pending_owner
+     WHERE pending_owner.hotel_id=hotels.id
+       AND pending_owner.ownership_claim_status IN ('pending','rejected')
+  )`;
 
   if (Number.isFinite(stars)) {
     params.push(stars);
@@ -106,6 +90,7 @@ async function quoteHotel(req, res) {
   const hotelId = parseIntSafe(req.body?.hotel_id ?? req.body?.hotelId);
   const offerId = parseIntSafe(req.body?.offer_id ?? req.body?.offerId);
   if (!hotelId) return res.status(400).json({ error: 'bad_hotel_id' });
+  if (!offerId) return res.status(400).json({ error: 'offer_required' });
 
   const dates = [...new Set((Array.isArray(req.body?.dates) ? req.body.dates : [])
     .map(normalizeQuoteDate)
@@ -136,9 +121,7 @@ async function quoteHotel(req, res) {
     if (!hotelResult.rowCount) return res.status(404).json({ error: 'hotel_not_found' });
 
     await ensureHotelOfferTables();
-    let selectedOffer = null;
-    if (offerId) {
-      const offerResult = await db.query(
+    const offerResult = await db.query(
         `SELECT o.*, p.name AS provider_name, p.type AS provider_type
            FROM hotel_offers o
            JOIN providers p ON p.id=o.provider_id
@@ -148,27 +131,15 @@ async function quoteHotel(req, res) {
           LIMIT 1`,
         [offerId, hotelId, dates[0], dates[dates.length - 1]]
       );
-      if (!offerResult.rowCount) return res.status(404).json({ error: 'active_offer_not_found' });
-      selectedOffer = offerResult.rows[0];
-    }
-
-    await ensureHotelSeasonsTable();
-    const seasonResult = await db.query(
-      `SELECT id, label, start_date::text AS start_date, end_date::text AS end_date, updated_at
-         FROM hotel_seasons
-        WHERE hotel_id=$1 AND start_date <= $3::date AND end_date >= $2::date
-        ORDER BY start_date, id`,
-      [hotelId, dates[0], dates[dates.length - 1]]
-    );
+    if (!offerResult.rowCount) return res.status(404).json({ error: 'active_offer_not_found' });
+    const selectedOffer = offerResult.rows[0];
 
     const hotel = hotelResult.rows[0];
-    const roomRows = Array.isArray(hotel.rooms) ? hotel.rooms : [];
-    const roomMap = new Map(roomRows.map((room) => [String(room?.type || '').trim(), room]));
     const warnings = [];
     const lines = [];
 
     if (!requestedRooms.length) warnings.push('room_required');
-    if (selectedOffer) {
+    {
       const rateResult = await db.query(
         `SELECT id,inventory_pool_id,room_type,meal_plan,residency,date_from::text,date_to::text,
                 amount::numeric,allotment,min_stay,refundable
@@ -195,33 +166,6 @@ async function quoteHotel(req, res) {
             subtotal: unitAmount * requested.quantity, refundable: rate.refundable !== false,
             min_stay: Number(rate.min_stay || 1), allotment,
           });
-        }
-      }
-    } else {
-      for (const requested of requestedRooms) {
-        const room = roomMap.get(requested.type);
-        if (!room) warnings.push(`room_not_found:${requested.type}`);
-        const stock = Math.max(0, Math.trunc(quoteNumber(room?.count, 0)));
-        if (stock && requested.quantity > stock) warnings.push(`room_stock_exceeded:${requested.type}`);
-      }
-      for (const date of dates) {
-        const season = seasonResult.rows.find((row) => date >= row.start_date && date <= row.end_date);
-        const label = String(season?.label || '').toLowerCase();
-        if (!['low', 'shoulder', 'high'].includes(label)) {
-          warnings.push(`season_missing:${date}`);
-          continue;
-        }
-        for (const requested of requestedRooms) {
-          const room = roomMap.get(requested.type);
-          if (!room) continue;
-          const unitAmount = quoteNumber(room?.prices?.[label]?.[personKey]?.[mealPlan], 0);
-          if (unitAmount <= 0) {
-            warnings.push(`rate_missing:${date}:${requested.type}:${mealPlan}:${label}`);
-            continue;
-          }
-          lines.push({ date, season: label, season_id: season.id, room_type: requested.type,
-            meal_plan: mealPlan, residency: personKey, quantity: requested.quantity,
-            unit_amount: unitAmount, subtotal: unitAmount * requested.quantity });
         }
       }
     }
@@ -370,7 +314,6 @@ async function quoteHotel(req, res) {
       hotel_id: hotel.id,
       hotel_updated_at: hotel.updated_at,
       offer: selectedOffer ? [selectedOffer.id, selectedOffer.provider_id, selectedOffer.updated_at] : null,
-      seasons: seasonResult.rows.map((row) => [row.id, row.label, row.start_date, row.end_date, row.updated_at]),
       dates,
       rooms: requestedRooms,
       meal_plan: mealPlan,
@@ -392,7 +335,7 @@ async function quoteHotel(req, res) {
         provider_name: selectedOffer.provider_name, supplier_type: selectedOffer.supplier_type,
         is_direct: selectedOffer.is_direct === true,
       } : null,
-      rate_source: selectedOffer ? 'hotel_offer_rates' : 'hotels.rooms_json',
+      rate_source: 'hotel_offer_rates',
       currency,
       nights,
       dates,
@@ -498,8 +441,8 @@ const first = (...vals) => {
 function parseIntSafe(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
 
 // какие колонки реально есть
-async function tableHasColumns(table, cols = []) {
-  const q = await db.query(
+async function tableHasColumns(table, cols = [], queryable = db) {
+  const q = await queryable.query(
     `SELECT column_name
        FROM information_schema.columns
       WHERE table_name = $1
@@ -530,6 +473,23 @@ async function assertCanTouchHotel(req, hotelId) {
   }
 }
 
+async function findDuplicateHotel(requestedHotel, excludeHotelId = null, queryable = db) {
+  const params = [];
+  let where = '';
+  if (Number.isInteger(Number(excludeHotelId)) && Number(excludeHotelId) > 0) {
+    params.push(Number(excludeHotelId));
+    where = 'WHERE id <> $1';
+  }
+  const { rows } = await queryable.query(
+    `SELECT id, name, city, country, address, location
+       FROM hotels
+       ${where}
+      ORDER BY id ASC`,
+    params
+  );
+  return rows.find((hotel) => areLikelySameHotel(requestedHotel, hotel)) || null;
+}
+
 /* ────────────────────────────────────────────────────────────────────────────
  * SEARCH (с опцией внешних подсказок)
  * GET /api/hotels/search?name=&city=&country=&limit=&lang=&ext=0
@@ -540,6 +500,17 @@ async function searchHotels(req, res) {
   const city    = first(req.query.city,    req.query.location, req.query.loc, req.query.town);
   const country = first(req.query.country, req.query.countryCode, req.query.cc);
   const limit   = Math.min(50, Math.max(1, parseInt(first(req.query.limit, req.query.l) || "50", 10)));
+  const page    = Math.max(1, parseInt(first(req.query.page, req.query.p) || "1", 10));
+  const offset  = (page - 1) * limit;
+  const paged   = String(req.query.format || "").toLowerCase() === "paged";
+  const sendItems = async (items, total = items.length) => {
+    const attached = await attachMyInspectionToHotels(req, items);
+    if (!paged) return res.json(attached);
+    return res.json({
+      items: attached,
+      pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
+    });
+  };
   const langHdr = (req.headers["accept-language"] || "").slice(0, 2).toLowerCase();
   const langReq = (first(req.query.lang) || langHdr);
   const lang    = ["ru","uz","en"].includes(langReq) ? langReq : "en";
@@ -552,18 +523,32 @@ async function searchHotels(req, res) {
   // если пусто — покажем локальные записи
   if ((name || "").length < 2 && (city || "").length < 2) {
     try {
+      const countResult = await db.query(
+        `SELECT COUNT(*)::int AS total
+           FROM hotels h
+          WHERE NOT EXISTS (
+            SELECT 1 FROM hotel_offers pending_owner
+             WHERE pending_owner.hotel_id=h.id
+               AND pending_owner.ownership_claim_status IN ('pending','rejected')
+          )`
+      );
       const { rows } = await db.query(
         `SELECT id, name, COALESCE(city, location) AS city, country
-           FROM hotels
+           FROM hotels h
+          WHERE NOT EXISTS (
+            SELECT 1 FROM hotel_offers pending_owner
+             WHERE pending_owner.hotel_id=h.id
+               AND pending_owner.ownership_claim_status IN ('pending','rejected')
+          )
           ORDER BY name
-          LIMIT $1`,
-        [limit]
+          LIMIT $1 OFFSET $2`,
+        [limit, offset]
       );
       const items = (rows || []).map(r => ({
         id: r.id, name: r.name, city: r.city || null, country: r.country || null,
         label: r.name, city_local: r.city || null, city_en: r.city || null, provider: "local",
       }));
-      return res.json(await attachMyInspectionToHotels(req, items));
+      return sendItems(items, Number(countResult.rows[0]?.total || 0));
     } catch {
       return res.json([]);
     }
@@ -571,7 +556,11 @@ async function searchHotels(req, res) {
 
   try {
     // 1) локально
-    let idx = 1; const where = []; const params = [];
+    let idx = 1; const where = [`NOT EXISTS (
+      SELECT 1 FROM hotel_offers pending_owner
+       WHERE pending_owner.hotel_id=hotels.id
+         AND pending_owner.ownership_claim_status IN ('pending','rejected')
+    )`]; const params = [];
     if ((name || "").length >= 2) {
       where.push(`(name ILIKE $${idx} OR COALESCE(city,location,'') ILIKE $${idx})`);
       params.push(`%${name}%`); idx++;
@@ -585,13 +574,17 @@ async function searchHotels(req, res) {
       params.push(`%${country}%`); idx++;
     }
 
+    const countSql = `SELECT COUNT(*)::int AS total FROM hotels ${where.length ? "WHERE " + where.join(" AND ") : ""}`;
+    const countResult = await db.query(countSql, params);
+    const total = Number(countResult.rows[0]?.total || 0);
+
     const ownSql = `
       SELECT id, name, COALESCE(city, location) AS city, country
         FROM hotels
        ${where.length ? "WHERE " + where.join(" AND ") : ""}
        ORDER BY name
-       LIMIT $${idx}`;
-    params.push(limit);
+       LIMIT $${idx} OFFSET $${idx + 1}`;
+    params.push(limit, offset);
 
     const ownRows = await db.query(ownSql, params);
     const own = (ownRows.rows || []).map(r => ({
@@ -647,7 +640,7 @@ async function searchHotels(req, res) {
       seen.add(k);
       deduped.push(x);
     }
-    return res.json(await attachMyInspectionToHotels(req, deduped.slice(0, limit)));
+    return sendItems(deduped.slice(0, limit), useExternal ? deduped.length : total);
   } catch (e) {
     console.error("hotels.search error", e);
     return res.status(500).json([]);
@@ -706,6 +699,11 @@ async function listRankedHotels(req, res) {
              ${createdExpr} AS created_at,
              ${selectScore} AS score
         FROM hotels
+       WHERE NOT EXISTS (
+         SELECT 1 FROM hotel_offers pending_owner
+          WHERE pending_owner.hotel_id=hotels.id
+            AND pending_owner.ownership_claim_status IN ('pending','rejected')
+       )
        ORDER BY ${orderBy}
        LIMIT $1
     `;
@@ -721,6 +719,7 @@ async function listRankedHotels(req, res) {
  * CREATE
  * ──────────────────────────────────────────────────────────────────────────── */
 async function createHotel(req, res) {
+  let client = null;
   try {
     const p = req.body || {};
     const now = new Date();
@@ -730,12 +729,51 @@ async function createHotel(req, res) {
       const actorResult = await db.query(`SELECT type FROM providers WHERE id=$1 LIMIT 1`, [actorId]);
       actorProviderType = String(actorResult.rows[0]?.type || req.user?.type || '').toLowerCase();
     }
+    if (!isAdminLike(req.user) && actorProviderType !== 'hotel') {
+      return res.status(403).json({ error: 'hotel_provider_required' });
+    }
 
-    try {
+    const requestedHotel = {
+      name: String(p.name || '').trim(),
+      city: String(p.city || '').trim(),
+      country: String(p.country || '').trim(),
+      address: String(p.address || '').trim(),
+    };
+    if (!requestedHotel.name) {
+      return res.status(400).json({ error: 'hotel_name_required' });
+    }
+
+    if (!isAdminLike(req.user) && actorId) {
+      await ensureHotelOfferTables();
+    }
+
+    client = await db.connect();
+    await client.query('BEGIN');
+    const identityName = normalizeHotelIdentityPart(requestedHotel.name, { stripRating: true });
+    const identityPlace = normalizeHotelIdentityPart(requestedHotel.city || requestedHotel.address);
+    await client.query(
+      `SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))`,
+      [identityName, identityPlace]
+    );
+
+    // Recheck while holding the identity lock. This prevents concurrent requests
+    // for the same hotel from both passing the duplicate check.
+    const duplicate = await findDuplicateHotel(requestedHotel, null, client);
+    if (duplicate) {
+      await client.query('ROLLBACK');
+      client.release();
+      client = null;
+      return res.status(409).json({
+        error: 'hotel_already_exists',
+        hotel_id: duplicate.id,
+        hotel: duplicate,
+      });
+    }
+
       const support = await tableHasColumns("hotels", [
         "address","currency","rooms","extra_bed_price","taxes",
         "amenities","services","images","stars","contact","country","city","location","provider_id"
-      ]);
+      ], client);
 
       const cols = ["name"];
       const vals = [(p.name || "").trim()];
@@ -754,12 +792,11 @@ async function createHotel(req, res) {
       if (support.images)          { cols.push("images");           vals.push(JSON.stringify(p.images || [])); }
       if (support.stars)           { cols.push("stars");            vals.push(p.stars ?? null); }
       if (support.contact)         { cols.push("contact");          vals.push(p.contact ?? null); }
-      // смена владельца — только для админа (если колонка есть)
-      // владелец: текущий провайдер, а админ может явно задать p.provider_id
+      // Новая карточка поставщика получает владельца только после проверки администратором.
       if (support.provider_id) {
         const provId = isAdminLike(req.user)
           ? (parseIntSafe(p.provider_id) ?? parseIntSafe(req.user?.id) ?? null)
-          : (actorProviderType === 'hotel' ? actorId : null);
+          : null;
         cols.push("provider_id");
         vals.push(provId);
       }
@@ -769,35 +806,46 @@ async function createHotel(req, res) {
       const placeholders = cols.map((_, i) => `$${i + 1}`).join(",");
       const sql = `INSERT INTO hotels (${cols.join(",")}) VALUES (${placeholders}) RETURNING id`;
 
-      const { rows } = await db.query(sql, vals);
+      const { rows } = await client.query(sql, vals);
       const hotelId = rows[0].id;
       let offerId = null;
       if (!isAdminLike(req.user) && actorId) {
-        await ensureHotelOfferTables();
         const supplierType = actorProviderType === 'hotel' ? 'hotel'
           : ['tour_operator','dmc','agency','supplier'].includes(actorProviderType) ? actorProviderType : 'agency';
-        const offerResult = await db.query(
-          `INSERT INTO hotel_offers (hotel_id,provider_id,supplier_type,is_direct,currency,status,title)
-           VALUES ($1,$2,$3,$4,$5,'draft',$6)
+        const offerResult = await client.query(
+          `INSERT INTO hotel_offers
+             (hotel_id,provider_id,supplier_type,is_direct,currency,status,title,
+              ownership_claim_status,ownership_claim_note,ownership_claim_submitted_at)
+           VALUES ($1,$2,$3,$4,$5,'draft',$6,'pending',$7,NOW())
            ON CONFLICT (hotel_id,provider_id) DO UPDATE SET updated_at=NOW()
            RETURNING id`,
           [hotelId, actorId, supplierType, actorProviderType === 'hotel', String(p.currency || 'UZS').toUpperCase(),
-            actorProviderType === 'hotel' ? 'Прямой тариф отеля' : 'Предложение поставщика']
+            actorProviderType === 'hotel' ? 'Прямой тариф отеля' : 'Предложение поставщика',
+            'Новая карточка создана поставщиком-отелем']
         );
         offerId = offerResult.rows[0]?.id || null;
       }
+      await client.query('COMMIT');
+      client.release();
+      client = null;
+
+      if (!isAdminLike(req.user) && actorId && actorProviderType === 'hotel') {
+        const { notifyHotelCreatedByProvider } = require('../utils/hotelCreationNotifications');
+        notifyHotelCreatedByProvider({ hotelId, providerId: actorId })
+          .then((result) => {
+            if (!result?.ok) console.warn('[hotels.create] admin Telegram notification skipped', {
+              hotelId,
+              reason: result?.reason || result?.error,
+            });
+          })
+          .catch((error) => console.error('[hotels.create] admin Telegram notification failed:', error?.message || error));
+      }
       return res.json({ id: hotelId, offer_id: offerId });
-    } catch (err) {
-      console.warn("[hotels.create] legacy fallback:", err?.message);
-      const sqlFallback = `
-        INSERT INTO hotels (name, location, created_at)
-        VALUES ($1, $2, $3) RETURNING id
-      `;
-      const paramsFallback = [(p.name || "").trim(), p.city || p.address || null, new Date()];
-      const { rows } = await db.query(sqlFallback, paramsFallback);
-      return res.json({ id: rows[0].id, _fallback: true });
-    }
   } catch (e) {
+    if (client) {
+      try { await client.query('ROLLBACK'); } catch {}
+      client.release();
+    }
     console.error("hotels.create error:", e);
     return res.status(500).json({ error: "create_failed" });
   }
@@ -908,30 +956,38 @@ function hotelReadiness(row) {
 
 // GET /api/hotels/readiness - operational view for hotel owners and admins.
 async function listHotelReadiness(req, res) {
-  const limit = Math.min(500, Math.max(1, parseInt(req.query.limit || '200', 10)));
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || '50', 10)));
+  const page = Math.max(1, parseInt(req.query.page || '1', 10));
+  const offset = (page - 1) * limit;
   const name = String(req.query.name || req.query.q || '').trim();
   const city = String(req.query.city || '').trim();
+  const quickFilter = String(req.query.filter || 'all').trim().toLowerCase();
+  const sortBy = ['id', 'name', 'city'].includes(String(req.query.sort || '').toLowerCase())
+    ? String(req.query.sort).toLowerCase()
+    : 'name';
+  const sortDir = String(req.query.dir || '').toLowerCase() === 'desc' ? -1 : 1;
   const params = [];
   const where = [];
-
-  if (!isAdminLike(req.user)) {
-    params.push(Number(req.user?.id) || 0);
-    where.push(`(h.provider_id = $${params.length} OR EXISTS (
-      SELECT 1 FROM hotel_offers mine
-       WHERE mine.hotel_id=h.id AND mine.provider_id=$${params.length} AND mine.status <> 'archived'
-    ))`);
-  }
-  if (name) {
-    params.push(`%${name}%`);
-    where.push(`h.name ILIKE $${params.length}`);
-  }
-  if (city) {
-    params.push(`%${city}%`);
-    where.push(`COALESCE(h.city,h.location,'') ILIKE $${params.length}`);
-  }
-  params.push(limit);
+  let viewerProviderType = null;
 
   try {
+    if (!isAdminLike(req.user)) {
+      const viewerResult = await db.query(`SELECT type FROM providers WHERE id=$1 LIMIT 1`, [Number(req.user?.id) || 0]);
+      viewerProviderType = String(viewerResult.rows[0]?.type || '').toLowerCase() || null;
+      params.push(Number(req.user?.id) || 0);
+      where.push(`(h.provider_id = $${params.length} OR EXISTS (
+        SELECT 1 FROM hotel_offers mine
+         WHERE mine.hotel_id=h.id AND mine.provider_id=$${params.length} AND mine.status <> 'archived'
+      ))`);
+    }
+    if (name) {
+      params.push(`%${name}%`);
+      where.push(`h.name ILIKE $${params.length}`);
+    }
+    if (city) {
+      params.push(`%${city}%`);
+      where.push(`COALESCE(h.city,h.location,'') ILIKE $${params.length}`);
+    }
     await ensureInspectionsTable();
     await ensureHotelOfferTables();
     const { rows } = await db.query(
@@ -949,6 +1005,9 @@ async function listHotelReadiness(req, res) {
               ,mine_offer.id AS my_offer_id
               ,mine_offer.status AS my_offer_status
               ,mine_offer.is_direct AS my_offer_is_direct
+              ,COALESCE(claim.pending_claim_count,0)::int AS pending_ownership_claim_count
+              ,claim.pending_claim_provider_id
+              ,claim.pending_claim_provider_name
          FROM hotels h
          LEFT JOIN (
            SELECT hotel_id,
@@ -972,22 +1031,57 @@ async function listHotelReadiness(req, res) {
            ON mine_offer.hotel_id=h.id
           AND mine_offer.provider_id=${!isAdminLike(req.user) ? '$1' : 'h.provider_id'}
           AND mine_offer.status <> 'archived'
+         LEFT JOIN LATERAL (
+           SELECT COUNT(*)::int AS pending_claim_count,
+                  MIN(pending_offer.provider_id) AS pending_claim_provider_id,
+                  MIN(pending_provider.name) AS pending_claim_provider_name
+             FROM hotel_offers pending_offer
+             JOIN providers pending_provider ON pending_provider.id=pending_offer.provider_id
+            WHERE pending_offer.hotel_id=h.id AND pending_offer.ownership_claim_status='pending'
+         ) claim ON true
         ${where.length ? `WHERE ${where.join(' AND ')}` : ''}
-        ORDER BY h.name ASC, h.id ASC
-        LIMIT $${params.length}`,
+        ORDER BY h.name ASC, h.id ASC`,
       params
     );
-    const items = rows.map((row) => ({ ...row, readiness: hotelReadiness(row) }));
-    const summary = items.reduce((acc, item) => {
+    const allItems = rows.map((row) => ({ ...row, readiness: hotelReadiness(row) }));
+    const summary = allItems.reduce((acc, item) => {
       acc.total += 1;
       if (item.readiness.profile_ready) acc.profile_ready += 1;
       if (item.readiness.pricing_ready) acc.pricing_ready += 1;
       if (item.readiness.passport_ready) acc.passport_ready += 1;
       if (item.readiness.tour_builder_ready) acc.tour_builder_ready += 1;
       if (!item.readiness.has_owner) acc.without_owner += 1;
+      if (!String(item.city || '').trim()) acc.without_city += 1;
       return acc;
-    }, { total: 0, profile_ready: 0, pricing_ready: 0, passport_ready: 0, tour_builder_ready: 0, without_owner: 0 });
-    return res.json({ items, summary });
+    }, { total: 0, profile_ready: 0, pricing_ready: 0, passport_ready: 0, tour_builder_ready: 0, without_owner: 0, without_city: 0 });
+
+    let filteredItems = allItems;
+    if (quickFilter === 'needs_check') filteredItems = allItems.filter((item) => !item.readiness.tour_builder_ready);
+    if (quickFilter === 'without_city') filteredItems = allItems.filter((item) => !String(item.city || '').trim());
+    if (quickFilter === 'without_owner') filteredItems = allItems.filter((item) => !item.readiness.has_owner);
+    if (quickFilter === 'without_rates') filteredItems = allItems.filter((item) => !item.readiness.has_rates);
+    if (quickFilter === 'without_passport') filteredItems = allItems.filter((item) => !item.readiness.passport_ready);
+    if (quickFilter === 'tour_builder') filteredItems = allItems.filter((item) => item.readiness.tour_builder_ready);
+
+    filteredItems.sort((left, right) => {
+      const leftValue = sortBy === 'id' ? Number(left.id || 0) : String(left[sortBy] || '').toLocaleLowerCase();
+      const rightValue = sortBy === 'id' ? Number(right.id || 0) : String(right[sortBy] || '').toLocaleLowerCase();
+      if (leftValue < rightValue) return -1 * sortDir;
+      if (leftValue > rightValue) return 1 * sortDir;
+      return (Number(left.id || 0) - Number(right.id || 0)) * sortDir;
+    });
+    const total = filteredItems.length;
+    const items = filteredItems.slice(offset, offset + limit);
+    return res.json({
+      items,
+      summary,
+      permissions: {
+        can_create_hotel: isAdminLike(req.user) || viewerProviderType === 'hotel',
+        can_attach_existing_hotel: isAdminLike(req.user) || Boolean(viewerProviderType),
+        provider_type: viewerProviderType,
+      },
+      pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) },
+    });
   } catch (error) {
     console.error('listHotelReadiness error', error);
     return res.status(500).json({ error: 'hotel_readiness_failed' });
@@ -1005,6 +1099,28 @@ async function updateHotel(req, res) {
     await assertCanTouchHotel(req, id);
     const p = req.body || {};
     const now = new Date();
+
+    const currentResult = await db.query(
+      `SELECT id,name,city,country,address,location FROM hotels WHERE id=$1 LIMIT 1`,
+      [id]
+    );
+    if (!currentResult.rowCount) return res.status(404).json({ error: 'not_found' });
+    const current = currentResult.rows[0];
+    const requestedHotel = {
+      name: String(p.name ?? current.name ?? '').trim(),
+      city: String(p.city ?? current.city ?? current.location ?? '').trim(),
+      country: String(p.country ?? current.country ?? '').trim(),
+      address: String(p.address ?? current.address ?? '').trim(),
+    };
+    if (!requestedHotel.name) return res.status(400).json({ error: 'hotel_name_required' });
+    const duplicate = await findDuplicateHotel(requestedHotel, id);
+    if (duplicate) {
+      return res.status(409).json({
+        error: 'hotel_already_exists',
+        hotel_id: duplicate.id,
+        hotel: duplicate,
+      });
+    }
 
     try {
       const support = await tableHasColumns("hotels", [
@@ -1046,17 +1162,7 @@ async function updateHotel(req, res) {
       if (!q.rows.length) return res.status(404).json({ error: "not_found" });
       return res.json({ id });
     } catch (err) {
-      console.warn("[hotels.update] legacy fallback:", err?.message);
-      const sqlFallback = `
-        UPDATE hotels
-           SET name=$1, location=$2, updated_at=$3
-         WHERE id=$4
-         RETURNING id
-      `;
-      const paramsFallback = [(p.name || "").trim(), p.city || p.address || null, now, id];
-      const { rows } = await db.query(sqlFallback, paramsFallback);
-      if (!rows.length) return res.status(404).json({ error: "not_found" });
-      return res.json({ id, _fallback: true });
+      throw err;
     }
   } catch (e) {
     if (e && e.status === 403) return res.status(403).json({ error: "forbidden" });
@@ -1421,19 +1527,26 @@ async function insertHotelInspectionRelations(client, inspectionId, { audienceKe
 
 function getActorFromReq(req) {
   const u = req.user || {};
-  const role = (u.role || u.type || "").toString().toLowerCase();
+  const roles = [u.role, u.type, ...(Array.isArray(u.roles) ? u.roles : [])]
+    .filter(Boolean)
+    .map((value) => String(value).toLowerCase());
+  const role = roles[0] || "";
+  const providerLike = roles.some((value) => [
+    "provider", "hotel", "tour_agent", "agent", "agency", "supplier", "tour_operator", "dmc",
+  ].includes(value));
+  const clientLike = roles.some((value) => ["client", "user"].includes(value));
 
   const providerId =
     parseIntSafe(u.provider_id) ??
     parseIntSafe(u.providerId) ??
     parseIntSafe(u.company_id) ??
     parseIntSafe(u.companyId) ??
-    (role === "provider" ? parseIntSafe(u.id) : null);
+    (providerLike ? parseIntSafe(u.id) : null);
 
   const clientId =
     parseIntSafe(u.client_id) ??
     parseIntSafe(u.clientId) ??
-    (role === "client" ? parseIntSafe(u.id) : null);
+    (clientLike && !providerLike ? parseIntSafe(u.id) : null);
 
   let actorType = null;
   let actorId = null;
@@ -1712,6 +1825,31 @@ async function listAllHotelInspections(req, res) {
     let idx = 0;
     const where = [];
 
+    const search = String(req.query.q || req.query.search || "").trim();
+    if (search) {
+      params.push(`%${search}%`);
+      where.push(`(
+        COALESCE(h.name,'') ILIKE $${++idx}
+        OR COALESCE(h.city,h.location,'') ILIKE $${idx}
+        OR COALESCE(i.author_name,'') ILIKE $${idx}
+        OR COALESCE(i.title,'') ILIKE $${idx}
+        OR COALESCE(i.review,'') ILIKE $${idx}
+      )`);
+    }
+
+    const status = String(req.query.status || "").trim().toLowerCase();
+    if (["pending", "approved", "published", "rejected", "hidden", "deleted", "draft"].includes(status)) {
+      params.push(status === "published" ? "approved" : status);
+      where.push(`COALESCE(i.moderation_status, i.status, 'approved') = $${++idx}`);
+    }
+
+    const mineOnly = ["1", "true"].includes(String(req.query.mine || "").toLowerCase());
+    if (mineOnly) {
+      if (!actorId || !["provider", "client"].includes(actorType)) return res.status(401).json({ error: "auth_required", items: [] });
+      params.push(actorId);
+      where.push(actorType === "provider" ? `i.author_provider_id = $${++idx}` : `i.author_client_id = $${++idx}`);
+    }
+
     const city = String(req.query.city || "").trim();
     if (city) {
       params.push(`%${city}%`);
@@ -1754,6 +1892,10 @@ async function listAllHotelInspections(req, res) {
 
     params.push(fp);
     const fpIdx = ++idx;
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || "24", 10)));
+    params.push(limit); const limitIdx = ++idx;
+    params.push((page - 1) * limit); const offsetIdx = ++idx;
 
     const sql = `
       SELECT
@@ -1765,7 +1907,7 @@ async function listAllHotelInspections(req, res) {
         i.deleted_at, i.hidden_at, COALESCE(i.report_count,0) AS report_count,
         i.review, i.pros, i.cons, i.features,
         i.media, i.scores, i.amenities, i.nearby,
-        i.likes, i.created_at,
+        i.likes, i.created_at, COUNT(*) OVER()::int AS total_count,
         COALESCE(media.media_items, '[]'::jsonb) AS section_media,
         COALESCE(aud.audience_keys, '[]'::jsonb) AS audience_keys,
         COALESCE(cns.con_keys, '[]'::jsonb) AS con_keys,
@@ -1816,7 +1958,7 @@ async function listAllHotelInspections(req, res) {
        )
       WHERE ${[...where, getInspectionVisibilitySql({ admin: isAdminLike(req.user || {}), actorIdIdx, actorTypeIdx })].join(" AND ")}
       ORDER BY ${order}
-      LIMIT 200
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
 
     const { rows } = await db.query(sql, params);
@@ -1834,7 +1976,36 @@ async function listAllHotelInspections(req, res) {
       can_moderate: isAdminLike(req.user || {}),
     }));
 
-    return res.json({ items });
+    const total = Number(rows[0]?.total_count || 0);
+    let summary = null;
+    if (isAdminLike(req.user || {})) {
+      const summaryParams = [];
+      const summaryWhere = [];
+      if (search) {
+        summaryParams.push(`%${search}%`);
+        summaryWhere.push(`(
+          COALESCE(h.name,'') ILIKE $1
+          OR COALESCE(h.city,h.location,'') ILIKE $1
+          OR COALESCE(i.author_name,'') ILIKE $1
+          OR COALESCE(i.title,'') ILIKE $1
+          OR COALESCE(i.review,'') ILIKE $1
+        )`);
+      }
+      const summaryResult = await db.query(
+        `SELECT
+           COUNT(*)::int AS all,
+           COUNT(*) FILTER (WHERE COALESCE(i.moderation_status,i.status,'approved')='pending')::int AS pending,
+           COUNT(*) FILTER (WHERE COALESCE(i.moderation_status,i.status,'approved')='approved')::int AS approved,
+           COUNT(*) FILTER (WHERE COALESCE(i.moderation_status,i.status,'approved')='rejected')::int AS rejected,
+           COUNT(*) FILTER (WHERE COALESCE(i.moderation_status,i.status,'approved')='hidden')::int AS hidden
+         FROM inspections i
+         LEFT JOIN hotels h ON h.id=i.hotel_id
+         ${summaryWhere.length ? `WHERE ${summaryWhere.join(" AND ")}` : ""}`,
+        summaryParams
+      );
+      summary = summaryResult.rows[0] || null;
+    }
+    return res.json({ items, summary, pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) } });
   } catch (e) {
     console.error("listAllHotelInspections error", e);
     return res.status(500).json({ items: [] });
@@ -1863,6 +2034,13 @@ async function listHotelInspections(req, res) {
     const params = [hotelId];
     let idx = 1;
     const where = [`i.hotel_id = $1`];
+
+    const mineOnly = ["1", "true"].includes(String(req.query.mine || "").toLowerCase());
+    if (mineOnly) {
+      if (!actorId || !["provider", "client"].includes(actorType)) return res.status(401).json({ error: "auth_required", items: [] });
+      params.push(actorId);
+      where.push(actorType === "provider" ? `i.author_provider_id = $${++idx}` : `i.author_client_id = $${++idx}`);
+    }
 
     const month = clampInt(req.query.month || req.query.travel_month, 1, 12);
     if (month) {
@@ -1906,6 +2084,10 @@ async function listHotelInspections(req, res) {
     params.push(actorId);      const actorIdIdx   = ++idx;
     params.push(actorType);    const actorTypeIdx = ++idx;
     params.push(fp);           const fpIdx        = ++idx;
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.min(100, Math.max(1, parseInt(req.query.limit || "24", 10)));
+    params.push(limit);        const limitIdx      = ++idx;
+    params.push((page - 1) * limit); const offsetIdx = ++idx;
 
     const sql = `
       SELECT
@@ -1916,7 +2098,7 @@ async function listHotelInspections(req, res) {
         i.deleted_at, i.hidden_at, COALESCE(i.report_count,0) AS report_count,
         i.review, i.pros, i.cons, i.features,
         i.media, i.scores, i.amenities, i.nearby,
-        i.likes, i.created_at,
+        i.likes, i.created_at, COUNT(*) OVER()::int AS total_count,
         COALESCE(media.media_items, '[]'::jsonb) AS section_media,
         COALESCE(aud.audience_keys, '[]'::jsonb) AS audience_keys,
         COALESCE(cns.con_keys, '[]'::jsonb) AS con_keys,
@@ -1966,7 +2148,7 @@ async function listHotelInspections(req, res) {
        )
       WHERE ${[...where, getInspectionVisibilitySql({ admin: isAdminLike(req.user || {}), actorIdIdx, actorTypeIdx })].join(" AND ")}
       ORDER BY ${myOrder}${baseOrder}
-      LIMIT 200
+      LIMIT $${limitIdx} OFFSET $${offsetIdx}
     `;
 
     const { rows } = await db.query(sql, params);
@@ -1984,7 +2166,8 @@ async function listHotelInspections(req, res) {
       can_moderate: isAdminLike(req.user || {}),
     }));
 
-    res.json({ items });
+    const total = Number(rows[0]?.total_count || 0);
+    res.json({ items, pagination: { page, limit, total, pages: Math.max(1, Math.ceil(total / limit)) } });
   } catch (e) {
     console.error("listHotelInspections error", e);
     res.status(500).json({ items: [] });
@@ -2003,31 +2186,16 @@ async function createHotelInspection(req, res) {
     const u = req.user || {};
     const role = (u.role || u.type || "").toString().toLowerCase();
 
-    const providerIdFromToken =
-      parseIntSafe(u.provider_id) ??
-      parseIntSafe(u.providerId) ??
-      parseIntSafe(u.company_id) ??
-      parseIntSafe(u.companyId) ??
-      (role === "provider" ? parseIntSafe(u.id) : null);
-
-    const clientIdFromToken =
-      parseIntSafe(u.client_id) ??
-      parseIntSafe(u.clientId) ??
-      (role === "client" ? parseIntSafe(u.id) : null);
-
-    const authorProviderId =
-      parseIntSafe(p.author_provider_id) ??
-      parseIntSafe(p.provider_id) ??
-      parseIntSafe(p.providerId) ??
-      providerIdFromToken ??
-      null;
-
-    const authorClientId =
-      parseIntSafe(p.author_client_id) ??
-      parseIntSafe(p.client_id) ??
-      parseIntSafe(p.clientId) ??
-      clientIdFromToken ??
-      null;
+    const actor = getActorFromReq(req);
+    const admin = isAdminLike(u);
+    // Non-admin authors always come from the authenticated token. IDs supplied
+    // by the browser must never allow creating an inspection for another user.
+    const authorProviderId = admin
+      ? (parseIntSafe(p.author_provider_id) ?? parseIntSafe(p.provider_id) ?? parseIntSafe(p.providerId) ?? null)
+      : (actor.actorType === "provider" ? actor.actorId : null);
+    const authorClientId = admin
+      ? (parseIntSafe(p.author_client_id) ?? parseIntSafe(p.client_id) ?? parseIntSafe(p.clientId) ?? null)
+      : (actor.actorType === "client" ? actor.actorId : null);
 
     const authorType = authorProviderId ? "provider" : (authorClientId ? "client" : (role || "user"));
 
@@ -2158,6 +2326,10 @@ async function createHotelInspection(req, res) {
       await client.query("COMMIT");
 
       await ensureHotelsAggregates(hotelId);
+
+      notifyInspectionSubmitted(inspectionId).catch((error) => {
+        console.error('inspection submit notification failed:', error?.message || error);
+      });
 
       return res.status(201).json({ id: inspectionId, media: mediaRows, status: 'pending', moderation_status: 'pending' });
     } catch (txErr) {
@@ -2365,6 +2537,11 @@ async function updateHotelInspection(req, res) {
       await insertHotelInspectionRelations(client, inspectionId, { audienceKeys, conKeys, mediaRows });
       await client.query("COMMIT");
       await ensureHotelsAggregates(rows[0].hotel_id);
+      if (!admin) {
+        notifyInspectionSubmitted(inspectionId, { resubmitted: true }).catch((error) => {
+          console.error('inspection resubmit notification failed:', error?.message || error);
+        });
+      }
       return res.json({ item: rows[0], appended_media: mediaRows.length });
     } catch (txErr) {
       await client.query("ROLLBACK");
@@ -2432,6 +2609,11 @@ async function moderateHotelInspection(req, res) {
       [inspectionId, next, reason, verifiedProvided, verified]
     );
     await ensureHotelsAggregates(row.hotel_id);
+    if (['approved', 'rejected'].includes(next)) {
+      notifyInspectionReviewed(inspectionId, next, reason || '').catch((error) => {
+        console.error('inspection review notification failed:', error?.message || error);
+      });
+    }
     return res.json({ item: rows[0] });
   } catch (e) {
     console.error("moderateHotelInspection error", e);
@@ -2581,7 +2763,6 @@ if (process.env.NODE_ENV !== "test") {
     const startedAt = Date.now();
     const results = await Promise.allSettled([
       ensureHotelOfferTables(),
-      ensureHotelSeasonsTable(),
       ensureInspectionsTable(),
     ]);
     const failed = results.filter((result) => result.status === "rejected");

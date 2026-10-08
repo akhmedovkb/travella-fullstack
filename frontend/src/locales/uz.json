@@ -85,6 +85,16 @@
     "nudge_later": "Keyinroq"
   },
   "bookings": {
+    "payment_hold_hint": "To‘lov yakunlanguncha xona band holda turadi",
+    "payment_hold_left": "To‘lov uchun: {{time}}",
+    "payment_hold_expired": "To‘lov vaqti tugadi",
+    "pay_now": "To‘lash",
+    "payment_error": "To‘lovni yaratib bo‘lmadi",
+    "payment_confirmed": "To‘lov tasdiqlandi. Bron rasmiylashtirildi.",
+    "payment_not_completed": "To‘lov yakunlanmadi, bron bekor qilindi.",
+    "payment_processing": "To‘lov hali qayta ishlanmoqda. Holat avtomatik yangilanadi.",
+    "online_payment_uzs_only": "Payme orqali onlayn to‘lov faqat UZS bronlari uchun mavjud. Boshqa to‘lov usuli uchun ta’minotchi bilan bog‘laning.",
+    "paid_via_payme": "Payme orqali to‘langan",
     "provider_cancel_reason": "Bekor qilish sababini ko‘rsating",
     "waiting_for_requester": "Taklif yuborildi. Mijoz tasdig‘i kutilmoqda.",
     "empty": "Hozircha bronlar yo‘q.",
@@ -100,10 +110,15 @@
     },
     "status": {
       "pending": "kutilmoqda",
+      "quoted": "tasdiqlash kutilmoqda",
+      "awaiting_payment": "to‘lov kutilmoqda",
       "confirmed": "tasdiqlangan",
       "active": "faol",
+      "paid": "to‘langan",
       "rejected": "rad etilgan",
-      "cancelled": "bekor qilingan"
+      "cancelled": "bekor qilingan",
+      "cancelled_unpaid": "bekor qilindi: to‘lov muddati tugadi",
+      "expired": "muddati tugagan"
     },
     "status_by": {
       "rejected": {
@@ -1165,7 +1180,7 @@
     "hotel_short": "Mehmonxona",
     "pick_hotel": "Mehmonxonani tanlang",
     "no_hotels": "Variantlar yo‘q",
-    "loading_hotel": "Fond va mavsumlarni yuklayapmiz…",
+    "loading_hotel": "Takliflar va mavjudlik yuklanmoqda…",
     "entry_fees": "Kirish chiptalari (obyektlar)",
     "entry_ph": "Obyekt nomini kirita boshlang…",
     "pick_sites": "Obyektlarni tanlang",
@@ -1291,8 +1306,6 @@
   "room_category": "Xona toifasi",
   "count_short": "Soni",
   "price_per_night": "Narx/kecha",
-  "low_season": "Past mavsum",
-  "high_season": "Yuqori mavsum",
   "for_residents": "Rezidentlar uchun",
   "for_nonresidents": "Nerezidentlar uchun",
   "taxes_fees": "Soliqlar va yig‘imlar",
@@ -2475,7 +2488,7 @@
     "my_review": "Bu mehmonxona bo‘yicha sharhingiz",
     "pending_help": "Admin tekshirganidan keyin sharh ommaga ko‘rinadi.",
     "rejected_help": "Moderator izohlarini tekshirib, qayta yuboring.",
-    "published_help": "Sharh Hotel Passport’da allaqachon ko‘rinadi.",
+    "published_help": "Inspeksiya mehmonxona kartasida e’lon qilingan.",
     "approved_inspections": "tasdiqlangan",
     "by_reviews": "sharhlar bo‘yicha",
     "media": "foto/video",

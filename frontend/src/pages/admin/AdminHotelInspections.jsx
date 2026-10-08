@@ -1,5 +1,5 @@
 // frontend/src/pages/admin/AdminHotelInspections.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { apiGet } from "../../api";
 import { moderateInspection } from "../../api/hotels";
@@ -134,14 +134,23 @@ export default function AdminHotelInspections({ embedded = false }) {
   const [loading, setLoading] = useState(true);
   const [status, setStatus] = useState("pending");
   const [q, setQ] = useState("");
+  const [appliedQ, setAppliedQ] = useState("");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, limit: 20 });
+  const [summary, setSummary] = useState({ pending: 0, approved: 0, rejected: 0, hidden: 0, all: 0 });
   const [rejecting, setRejecting] = useState(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  async function load() {
+  async function load(targetPage = page) {
     setLoading(true);
     try {
-      const data = await apiGet("/api/hotels/inspections?sort=new", "admin");
+      const qs = new URLSearchParams({ sort: "new", page: String(targetPage), limit: "20" });
+      if (status !== "all") qs.set("status", status);
+      if (appliedQ) qs.set("q", appliedQ);
+      const data = await apiGet(`/api/hotels/inspections?${qs.toString()}`, "admin");
       setItems(Array.isArray(data?.items) ? data.items : []);
+      setPagination(data?.pagination || { page: targetPage, pages: 1, total: data?.items?.length || 0, limit: 20 });
+      if (data?.summary) setSummary(data.summary);
     } catch (e) {
       tError(e?.message || "Не удалось загрузить инспекции");
       setItems([]);
@@ -150,28 +159,7 @@ export default function AdminHotelInspections({ embedded = false }) {
     }
   }
 
-  useEffect(() => { load(); }, []);
-
-  const stats = useMemo(() => {
-    const base = { pending: 0, approved: 0, rejected: 0, hidden: 0, all: items.length };
-    for (const item of items) {
-      const s = String(item.status || item.moderation_status || "approved").toLowerCase();
-      if (Object.prototype.hasOwnProperty.call(base, s)) base[s] += 1;
-    }
-    return base;
-  }, [items]);
-
-  const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return items.filter((item) => {
-      const s = String(item.status || item.moderation_status || "approved").toLowerCase();
-      if (status !== "all" && s !== status) return false;
-      if (!needle) return true;
-      return [item.title, item.review, item.hotel_name, item.author_name, item.hotel_city]
-        .filter(Boolean)
-        .some((x) => String(x).toLowerCase().includes(needle));
-    });
-  }, [items, q, status]);
+  useEffect(() => { load(page); }, [page, status, appliedQ]);
 
   async function setModeration(item, nextStatus, reason = "") {
     const cleanReason = String(reason || "").trim();
@@ -207,22 +195,22 @@ export default function AdminHotelInspections({ embedded = false }) {
       <section className="overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
         <div className="bg-[linear-gradient(135deg,#07111f,#7c2d12)] p-5 text-white md:p-7">
           <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-100 ring-1 ring-white/10">
-            Travella Hotel Passport
+            Инспекции отелей
           </div>
           <h1 className="mt-3 text-3xl font-black tracking-[-0.04em]">Модерация инспекций отелей</h1>
           <p className="mt-2 max-w-3xl text-sm font-semibold leading-6 text-white/75">
-            Проверка pending-инспекций, доказательств визита, фото/видео и качества контента перед публикацией в Hotel Passport.
+            Проверка заявок, доказательств визита, фото, видео и качества материалов перед публикацией.
           </p>
           <div className="mt-5 grid gap-2 md:grid-cols-5">
-            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{stats.pending}</div><div className="text-[11px] font-black text-white/65">на модерации</div></div>
-            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{stats.approved}</div><div className="text-[11px] font-black text-white/65">опубликовано</div></div>
-            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{stats.rejected}</div><div className="text-[11px] font-black text-white/65">отклонено</div></div>
-            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{stats.hidden}</div><div className="text-[11px] font-black text-white/65">скрыто</div></div>
-            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{stats.all}</div><div className="text-[11px] font-black text-white/65">всего</div></div>
+            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{summary.pending}</div><div className="text-[11px] font-black text-white/65">на модерации</div></div>
+            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{summary.approved}</div><div className="text-[11px] font-black text-white/65">опубликовано</div></div>
+            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{summary.rejected}</div><div className="text-[11px] font-black text-white/65">отклонено</div></div>
+            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{summary.hidden}</div><div className="text-[11px] font-black text-white/65">скрыто</div></div>
+            <div className="rounded-2xl bg-white/10 p-3 ring-1 ring-white/10"><div className="text-2xl font-black">{summary.all}</div><div className="text-[11px] font-black text-white/65">всего</div></div>
           </div>
         </div>
         <div className="grid gap-3 p-4 md:grid-cols-[220px_1fr_auto]">
-          <select value={status} onChange={(e) => setStatus(e.target.value)} className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-orange-300">
+          <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-orange-300">
             <option value="pending">На модерации</option>
             <option value="approved">Опубликовано</option>
             <option value="rejected">Отклонено</option>
@@ -230,15 +218,15 @@ export default function AdminHotelInspections({ embedded = false }) {
             <option value="all">Все</option>
           </select>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Поиск по отелю, автору, городу, тексту" className="rounded-2xl border border-slate-200 px-3 py-2 text-sm font-bold outline-none focus:border-orange-300" />
-          <button onClick={load} className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-black text-white">Обновить</button>
+          <button onClick={() => { setAppliedQ(q.trim()); setPage(1); }} className="rounded-2xl bg-slate-950 px-4 py-2 text-sm font-black text-white">Найти</button>
         </div>
       </section>
 
       {loading ? (
         <div className="rounded-[28px] bg-white p-8 text-center font-bold text-slate-500 shadow-sm">Загрузка…</div>
-      ) : filtered.length ? (
+      ) : items.length ? (
         <div className="grid gap-4">
-          {filtered.map((item) => {
+          {items.map((item) => {
             const media = getInspectionMedia(item);
             const currentStatus = item.status || item.moderation_status;
             return (
@@ -280,10 +268,17 @@ export default function AdminHotelInspections({ embedded = false }) {
           <div className="mt-1 text-sm font-semibold text-slate-500">Смените статус или обновите список.</div>
         </div>
       )}
+      {!loading && pagination.pages > 1 ? (
+        <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+          <button type="button" disabled={page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 disabled:opacity-40">Назад</button>
+          <div className="text-sm font-bold text-slate-600">Страница {pagination.page} из {pagination.pages} · найдено {pagination.total}</div>
+          <button type="button" disabled={page >= pagination.pages} onClick={() => setPage((value) => Math.min(pagination.pages, value + 1))} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black text-slate-700 disabled:opacity-40">Далее</button>
+        </div>
+      ) : null}
       {rejecting ? (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/55 p-4">
           <div className="w-full max-w-xl rounded-[28px] bg-white p-5 shadow-2xl ring-1 ring-slate-200">
-            <div className="text-xs font-black uppercase tracking-[0.16em] text-red-600">Hotel Passport moderation</div>
+            <div className="text-xs font-black uppercase tracking-[0.16em] text-red-600">Модерация инспекции</div>
             <h3 className="mt-2 text-2xl font-black tracking-[-0.04em] text-slate-950">Отклонить инспекцию #{rejecting.id}</h3>
             <p className="mt-2 text-sm font-semibold leading-6 text-slate-500">
               Причина будет показана автору обзора в карточке отеля. Напишите конкретно, что нужно исправить: фото, даты, текст, доказательства или качество обзора.

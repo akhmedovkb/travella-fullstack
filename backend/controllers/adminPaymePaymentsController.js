@@ -1,6 +1,7 @@
 // backend/controllers/adminPaymePaymentsController.js
 
 const pool = require("../db");
+const telegram = require("../utils/telegram");
 const {
   ensureRecoveryColumns,
   expireOldPaymeOrders,
@@ -73,16 +74,40 @@ function buildWebPaymeUnion() {
       'web_payme'::text AS source,
       COALESCE(NULLIF(o.order_type, ''), NULLIF(o.purpose, ''), 'payme')::text AS payment_type,
       CASE
+        WHEN NULLIF(to_jsonb(o)->>'actor_role', '') IS NOT NULL
+          THEN NULLIF(to_jsonb(o)->>'actor_role', '')
         WHEN o.provider_id IS NOT NULL THEN 'provider'
         WHEN o.client_id IS NOT NULL THEN 'client'
         ELSE 'unknown'
       END::text AS actor_role,
-      o.client_id::bigint AS client_id,
-      o.provider_id::bigint AS provider_id,
-      COALESCE(c.name, p.name, '—')::text AS actor_name,
-      COALESCE(c.phone, p.phone, '—')::text AS actor_phone,
+      CASE WHEN COALESCE(NULLIF(to_jsonb(o)->>'actor_role', ''),
+                         CASE WHEN o.provider_id IS NOT NULL THEN 'provider' ELSE 'client' END) = 'client'
+        THEN COALESCE(NULLIF(to_jsonb(o)->>'actor_id', '')::bigint, o.client_id)
+      END::bigint AS client_id,
+      COALESCE(
+        o.provider_id,
+        CASE WHEN COALESCE(NULLIF(to_jsonb(o)->>'actor_role', ''), 'provider') <> 'client'
+          THEN NULLIF(to_jsonb(o)->>'actor_id', '')::bigint
+        END
+      )::bigint AS provider_id,
+      CASE WHEN to_jsonb(o)->>'actor_role' = 'client'
+        THEN COALESCE(c.name, '—') ELSE COALESCE(p.name, c.name, '—')
+      END::text AS actor_name,
+      CASE WHEN to_jsonb(o)->>'actor_role' = 'client'
+        THEN COALESCE(c.phone, '—') ELSE COALESCE(p.phone, c.phone, '—')
+      END::text AS actor_phone,
       o.service_id::bigint AS service_id,
       s.title::text AS service_title,
+      NULLIF(to_jsonb(o)->>'booking_id', '')::bigint AS booking_id,
+      hb.status::text AS booking_status,
+      NULLIF(to_jsonb(hb)->>'refund_status', '')::text AS booking_refund_status,
+      hb.provider_price::numeric AS booking_amount,
+      hb.currency::text AS booking_currency,
+      hp.name::text AS booking_provider_name,
+      ARRAY_TO_STRING(ARRAY(
+        SELECT bd.date::text FROM booking_dates bd
+         WHERE bd.booking_id = hb.id ORDER BY bd.date
+      ), ', ')::text AS booking_dates,
       (pt.amount_tiyin / 100.0)::numeric AS amount,
       pt.amount_tiyin::bigint AS amount_tiyin,
       ${paymeStateSql("pt.state")} AS state,
@@ -107,14 +132,22 @@ function buildWebPaymeUnion() {
         'purpose', o.purpose,
         'order_status', o.status,
         'payme_state', pt.state,
+        'booking_id', NULLIF(to_jsonb(o)->>'booking_id', '')::bigint,
         'support_donation_id', o.support_donation_id,
         'expires_at', o.expires_at
       ) AS meta
     FROM payme_transactions pt
     LEFT JOIN topup_orders o ON o.id = pt.order_id
     LEFT JOIN clients c ON c.id = o.client_id
-    LEFT JOIN providers p ON p.id = o.provider_id
+    LEFT JOIN providers p ON p.id = COALESCE(
+      o.provider_id,
+      CASE WHEN COALESCE(NULLIF(to_jsonb(o)->>'actor_role', ''), 'provider') <> 'client'
+        THEN NULLIF(to_jsonb(o)->>'actor_id', '')::bigint
+      END
+    )
     LEFT JOIN services s ON s.id = o.service_id
+    LEFT JOIN bookings hb ON hb.id = NULLIF(to_jsonb(o)->>'booking_id', '')::bigint
+    LEFT JOIN providers hp ON hp.id = hb.provider_id
   `;
 }
 
@@ -125,16 +158,40 @@ function buildOrdersWithoutTxUnion() {
       'web_payme'::text AS source,
       COALESCE(NULLIF(o.order_type, ''), NULLIF(o.purpose, ''), 'order')::text AS payment_type,
       CASE
+        WHEN NULLIF(to_jsonb(o)->>'actor_role', '') IS NOT NULL
+          THEN NULLIF(to_jsonb(o)->>'actor_role', '')
         WHEN o.provider_id IS NOT NULL THEN 'provider'
         WHEN o.client_id IS NOT NULL THEN 'client'
         ELSE 'unknown'
       END::text AS actor_role,
-      o.client_id::bigint AS client_id,
-      o.provider_id::bigint AS provider_id,
-      COALESCE(c.name, p.name, '—')::text AS actor_name,
-      COALESCE(c.phone, p.phone, '—')::text AS actor_phone,
+      CASE WHEN COALESCE(NULLIF(to_jsonb(o)->>'actor_role', ''),
+                         CASE WHEN o.provider_id IS NOT NULL THEN 'provider' ELSE 'client' END) = 'client'
+        THEN COALESCE(NULLIF(to_jsonb(o)->>'actor_id', '')::bigint, o.client_id)
+      END::bigint AS client_id,
+      COALESCE(
+        o.provider_id,
+        CASE WHEN COALESCE(NULLIF(to_jsonb(o)->>'actor_role', ''), 'provider') <> 'client'
+          THEN NULLIF(to_jsonb(o)->>'actor_id', '')::bigint
+        END
+      )::bigint AS provider_id,
+      CASE WHEN to_jsonb(o)->>'actor_role' = 'client'
+        THEN COALESCE(c.name, '—') ELSE COALESCE(p.name, c.name, '—')
+      END::text AS actor_name,
+      CASE WHEN to_jsonb(o)->>'actor_role' = 'client'
+        THEN COALESCE(c.phone, '—') ELSE COALESCE(p.phone, c.phone, '—')
+      END::text AS actor_phone,
       o.service_id::bigint AS service_id,
       s.title::text AS service_title,
+      NULLIF(to_jsonb(o)->>'booking_id', '')::bigint AS booking_id,
+      hb.status::text AS booking_status,
+      NULLIF(to_jsonb(hb)->>'refund_status', '')::text AS booking_refund_status,
+      hb.provider_price::numeric AS booking_amount,
+      hb.currency::text AS booking_currency,
+      hp.name::text AS booking_provider_name,
+      ARRAY_TO_STRING(ARRAY(
+        SELECT bd.date::text FROM booking_dates bd
+         WHERE bd.booking_id = hb.id ORDER BY bd.date
+      ), ', ')::text AS booking_dates,
       (COALESCE(o.amount_tiyin, o.amount, 0) / 100.0)::numeric AS amount,
       COALESCE(o.amount_tiyin, o.amount, 0)::bigint AS amount_tiyin,
       ${orderStateSql("o.status")} AS state,
@@ -153,14 +210,22 @@ function buildOrdersWithoutTxUnion() {
         'table', 'topup_orders',
         'provider', o.provider,
         'purpose', o.purpose,
+        'booking_id', NULLIF(to_jsonb(o)->>'booking_id', '')::bigint,
         'support_donation_id', o.support_donation_id,
         'expires_at', o.expires_at,
         'pay_url', o.pay_url
       ) AS meta
     FROM topup_orders o
     LEFT JOIN clients c ON c.id = o.client_id
-    LEFT JOIN providers p ON p.id = o.provider_id
+    LEFT JOIN providers p ON p.id = COALESCE(
+      o.provider_id,
+      CASE WHEN COALESCE(NULLIF(to_jsonb(o)->>'actor_role', ''), 'provider') <> 'client'
+        THEN NULLIF(to_jsonb(o)->>'actor_id', '')::bigint
+      END
+    )
     LEFT JOIN services s ON s.id = o.service_id
+    LEFT JOIN bookings hb ON hb.id = NULLIF(to_jsonb(o)->>'booking_id', '')::bigint
+    LEFT JOIN providers hp ON hp.id = hb.provider_id
     WHERE NOT EXISTS (
       SELECT 1 FROM payme_transactions pt WHERE pt.order_id = o.id
     )
@@ -183,6 +248,13 @@ function buildTelegramPaymentsUnion() {
       COALESCE(c.phone, '—')::text AS actor_phone,
       tp.service_id::bigint AS service_id,
       s.title::text AS service_title,
+      NULL::bigint AS booking_id,
+      NULL::text AS booking_status,
+      NULL::text AS booking_refund_status,
+      NULL::numeric AS booking_amount,
+      NULL::text AS booking_currency,
+      NULL::text AS booking_provider_name,
+      NULL::text AS booking_dates,
       COALESCE(tp.amount_sum, tp.amount_minor / 100.0)::numeric AS amount,
       COALESCE(tp.amount_minor, tp.amount_sum * 100, 0)::bigint AS amount_tiyin,
       CASE
@@ -228,6 +300,13 @@ function buildSupportDonationOnlyUnion() {
       COALESCE(p.phone, '—')::text AS actor_phone,
       d.service_id::bigint AS service_id,
       s.title::text AS service_title,
+      NULL::bigint AS booking_id,
+      NULL::text AS booking_status,
+      NULL::text AS booking_refund_status,
+      NULL::numeric AS booking_amount,
+      NULL::text AS booking_currency,
+      NULL::text AS booking_provider_name,
+      NULL::text AS booking_dates,
       (d.amount_tiyin / 100.0)::numeric AS amount,
       d.amount_tiyin::bigint AS amount_tiyin,
       ${orderStateSql("d.status")} AS state,
@@ -300,6 +379,7 @@ async function adminPaymePayments(req, res) {
         OR COALESCE(provider_payment_charge_id, '') ILIKE $${idx}
         OR CAST(COALESCE(client_id, 0) AS TEXT) ILIKE $${idx}
         OR CAST(COALESCE(provider_id, 0) AS TEXT) ILIKE $${idx}
+        OR CAST(COALESCE(booking_id, 0) AS TEXT) ILIKE $${idx}
         OR CAST(COALESCE(order_id, 0) AS TEXT) ILIKE $${idx}
       )`);
       args.push(`%${q}%`);
@@ -417,8 +497,83 @@ async function sendPaymePaymentReminders(req, res) {
   }
 }
 
+async function reviewHotelRefund(req, res) {
+  const bookingId = Number(req.params.bookingId);
+  const action = String(req.body?.action || "").trim().toLowerCase();
+  const comment = String(req.body?.comment || "").trim().slice(0, 1000);
+  if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Invalid booking id" });
+  if (!['processing', 'rejected'].includes(action)) return res.status(400).json({ message: "Недопустимое действие" });
+  if (action === 'rejected' && comment.length < 5) return res.status(400).json({ message: "Укажите причину отказа" });
+
+  const db = await pool.connect();
+  try {
+    await db.query('BEGIN');
+    await db.query(`
+      ALTER TABLE bookings
+        ADD COLUMN IF NOT EXISTS refund_status TEXT,
+        ADD COLUMN IF NOT EXISTS refund_reviewed_at TIMESTAMPTZ,
+        ADD COLUMN IF NOT EXISTS refund_reviewed_by BIGINT,
+        ADD COLUMN IF NOT EXISTS refund_admin_comment TEXT
+    `);
+    await db.query(`
+      CREATE TABLE IF NOT EXISTS booking_refund_events (
+        id BIGSERIAL PRIMARY KEY,
+        booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+        status TEXT NOT NULL,
+        comment TEXT,
+        admin_id BIGINT,
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+      )
+    `);
+    const updated = await db.query(
+      `UPDATE bookings
+          SET refund_status=$2,
+              refund_reviewed_at=NOW(),
+              refund_reviewed_by=$3,
+              refund_admin_comment=$4,
+              updated_at=NOW()
+        WHERE id=$1 AND refund_status='requested'
+        RETURNING id,client_id,provider_id,
+                  NULLIF(to_jsonb(bookings)->>'requester_provider_id','')::bigint AS requester_provider_id`,
+      [bookingId, action, Number(req.user?.id) || null, comment || null]
+    );
+    if (!updated.rowCount) {
+      await db.query('ROLLBACK');
+      return res.status(409).json({ message: "Заявка уже обработана или не найдена" });
+    }
+    await db.query(
+      `INSERT INTO booking_refund_events (booking_id,status,comment,admin_id) VALUES ($1,$2,$3,$4)`,
+      [bookingId, action, comment || null, Number(req.user?.id) || null]
+    );
+    await db.query('COMMIT');
+
+    const booking = updated.rows[0];
+    let chatId = null;
+    if (booking.requester_provider_id) {
+      const q = await pool.query(`SELECT COALESCE(telegram_web_chat_id,telegram_chat_id) AS chat_id FROM providers WHERE id=$1`, [booking.requester_provider_id]);
+      chatId = q.rows[0]?.chat_id || null;
+    } else if (booking.client_id) {
+      const q = await pool.query(`SELECT telegram_chat_id AS chat_id FROM clients WHERE id=$1`, [booking.client_id]);
+      chatId = q.rows[0]?.chat_id || null;
+    }
+    if (chatId) {
+      const statusText = action === 'processing' ? 'принят в работу' : 'отклонён';
+      const safeComment = comment.replace(/[<>&]/g, (ch) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;' }[ch]));
+      telegram.tgSend(chatId, `↩️ Запрос возврата по брони <b>#${bookingId}</b> ${statusText}.${safeComment ? `\nКомментарий: ${safeComment}` : ''}`).catch(() => {});
+    }
+    return res.json({ ok: true, booking_id: bookingId, refund_status: action });
+  } catch (e) {
+    try { await db.query('ROLLBACK'); } catch {}
+    console.error('[reviewHotelRefund] error:', e);
+    return res.status(500).json({ message: "Не удалось обработать возврат" });
+  } finally {
+    db.release();
+  }
+}
+
 module.exports = {
   adminPaymePayments,
   expireOldPaymePayments,
   sendPaymePaymentReminders,
+  reviewHotelRefund,
 };

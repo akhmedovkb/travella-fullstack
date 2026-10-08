@@ -1889,11 +1889,48 @@ const getCalendarPublic = async (req, res) => {
 };
 
 // ---------- Stats ----------
-const getProviderStats = async (_req, res) => {
+const getProviderStats = async (req, res) => {
   try {
-    res.json({ new: 0, booked: 0 });
-  } catch {
-    res.json({ new: 0, booked: 0 });
+    const providerId = Number(req.user?.id);
+    if (!Number.isInteger(providerId) || providerId <= 0) {
+      return res.status(401).json({ message: "Требуется авторизация поставщика" });
+    }
+    const result = await pool.query(
+      `SELECT
+         COUNT(*) FILTER (
+           WHERE b.provider_id=$1
+              OR NULLIF(to_jsonb(b)->>'requester_provider_id','')::bigint=$1
+         )::int AS bookings_total,
+         COUNT(*) FILTER (
+           WHERE (b.provider_id=$1 AND b.status='pending')
+              OR (NULLIF(to_jsonb(b)->>'requester_provider_id','')::bigint=$1
+                  AND b.status IN ('quoted','awaiting_payment'))
+         )::int AS pending,
+         COUNT(*) FILTER (
+           WHERE (b.provider_id=$1
+              OR NULLIF(to_jsonb(b)->>'requester_provider_id','')::bigint=$1)
+             AND b.status IN ('confirmed','active','paid')
+         )::int AS booked,
+         COUNT(*) FILTER (
+           WHERE (b.provider_id=$1
+              OR NULLIF(to_jsonb(b)->>'requester_provider_id','')::bigint=$1)
+             AND b.status IN ('cancelled','cancelled_unpaid','rejected','expired')
+         )::int AS cancelled
+       FROM bookings b`,
+      [providerId]
+    );
+    const stats = result.rows[0] || {};
+    return res.json({
+      new: Number(stats.pending || 0),
+      pending: Number(stats.pending || 0),
+      awaiting: Number(stats.pending || 0),
+      booked: Number(stats.booked || 0),
+      bookings_total: Number(stats.bookings_total || 0),
+      cancelled: Number(stats.cancelled || 0),
+    });
+  } catch (error) {
+    console.error("getProviderStats error:", error);
+    return res.status(500).json({ message: "Ошибка сервера" });
   }
 };
 

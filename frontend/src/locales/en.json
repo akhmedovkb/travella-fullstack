@@ -85,6 +85,16 @@
     "nudge_later": "Later"
   },
   "bookings": {
+    "payment_hold_hint": "The room is held until payment is completed",
+    "payment_hold_left": "Time to pay: {{time}}",
+    "payment_hold_expired": "Payment time expired",
+    "pay_now": "Pay now",
+    "payment_error": "Could not create payment",
+    "payment_confirmed": "Payment confirmed. Your booking is complete.",
+    "payment_not_completed": "Payment was not completed and the booking was cancelled.",
+    "payment_processing": "The payment is still processing. The status will update automatically.",
+    "online_payment_uzs_only": "Payme online payment is available only for bookings in UZS. Contact the provider for another payment method.",
+    "paid_via_payme": "Paid via Payme",
     "provider_cancel_reason": "Specify cancellation reason",
     "waiting_for_requester": "Offer sent. Waiting for client confirmation.",
     "empty": "No bookings yet.",
@@ -100,10 +110,15 @@
     },
     "status": {
       "pending": "pending",
+      "quoted": "awaiting confirmation",
+      "awaiting_payment": "awaiting payment",
       "confirmed": "confirmed",
       "active": "active",
+      "paid": "paid",
       "rejected": "rejected",
-      "cancelled": "cancelled"
+      "cancelled": "cancelled",
+      "cancelled_unpaid": "cancelled: payment time expired",
+      "expired": "expired"
     },
     "status_by": {
       "rejected": {
@@ -1166,7 +1181,7 @@
     "hotel_short": "Hotel",
     "pick_hotel": "Select a hotel",
     "no_hotels": "No options",
-    "loading_hotel": "Loading room stock and seasons…",
+    "loading_hotel": "Loading supplier offers and availability…",
     "entry_fees": "Entry fees (sites)",
     "entry_ph": "Start typing a site…",
     "pick_sites": "Select sites",
@@ -1292,8 +1307,6 @@
   "room_category": "Room category",
   "count_short": "Qty",
   "price_per_night": "Price/night",
-  "low_season": "Low season",
-  "high_season": "High season",
   "for_residents": "For residents",
   "for_nonresidents": "For non-residents",
   "taxes_fees": "Taxes and fees",
@@ -2476,7 +2489,7 @@
     "my_review": "Your review of this hotel",
     "pending_help": "After admin review, it will become public.",
     "rejected_help": "Check the moderator notes and submit again.",
-    "published_help": "The review is already visible in Hotel Passport.",
+    "published_help": "The inspection is published on the hotel page.",
     "approved_inspections": "approved",
     "by_reviews": "by reviews",
     "media": "photo/video",

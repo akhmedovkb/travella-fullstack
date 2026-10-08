@@ -3,7 +3,7 @@ import { Link, useParams } from "react-router-dom";
 import { apiDelete, apiGet, apiPost, apiPut } from "../../api";
 
 const emptyOffer = {
-  provider_id: "", supplier_type: "", is_direct: false,
+  provider_id: "", supplier_type: "",
   currency: "USD", status: "draft", title: "", valid_from: "", valid_to: "",
 };
 
@@ -79,7 +79,13 @@ const actionLabels = {
   created: "Предложение создано", rates_replaced: "Тарифы сохранены", submitted: "Отправлено на модерацию",
   approved: "Опубликовано", rejected: "Отклонено", status_changed: "Статус изменён", archived: "Архивировано",
   inventory_updated: "Календарь квот обновлён",
+  ownership_approved: "Владение подтверждено", ownership_rejected: "Заявка на владение отклонена",
+  ownership_resubmitted: "Заявка на владение отправлена повторно",
 };
+
+function ownershipLabel(status) {
+  return ({ pending: "Заявка на владение", approved: "Владелец подтверждён", rejected: "Владение отклонено" })[status] || "";
+}
 
 function offerSubmitError(error) {
   const code = error?.code || error?.data?.error || error?.message;
@@ -281,7 +287,6 @@ export default function AdminHotelOffers({ scope = "admin" }) {
   const [ratesDirty, setRatesDirty] = useState(false);
   const [message, setMessage] = useState("");
   const selected = useMemo(() => offers.find((offer) => Number(offer.id) === Number(selectedId)) || null, [offers, selectedId]);
-  const selectedProvider = useMemo(() => providers.find((provider) => Number(provider.id) === Number(form.provider_id)) || null, [providers, form.provider_id]);
   const availableProviders = useMemo(() => {
     const connectedIds = new Set(offers.map((offer) => Number(offer.provider_id)));
     return providers.filter((provider) =>
@@ -418,6 +423,30 @@ export default function AdminHotelOffers({ scope = "admin" }) {
     finally { setSaving(false); }
   }
 
+  async function reviewOwnership(offer, decision) {
+    const reason = decision === "reject" ? window.prompt("Причина отклонения заявки") : "";
+    if (decision === "reject" && !String(reason || "").trim()) return;
+    setSaving(true); setMessage("");
+    try {
+      await apiPost(`/api/hotels/${hotelId}/offers/${offer.id}/ownership-review`, { decision, reason }, "admin");
+      setMessage(decision === "approve" ? "Владелец отеля назначен" : "Заявка на владение отклонена");
+      await load({ silent: true });
+    } catch (error) { setMessage(error?.message || "Не удалось обработать заявку на владение"); }
+    finally { setSaving(false); }
+  }
+
+  async function resubmitOwnership(offer) {
+    const note = window.prompt("Контакт или комментарий для повторной проверки", offer.ownership_claim_note || "");
+    if (note === null) return;
+    setSaving(true); setMessage("");
+    try {
+      await apiPost(`/api/hotels/${hotelId}/offers/${offer.id}/ownership-submit`, { note }, apiRole);
+      setMessage("Заявка на владение отправлена повторно");
+      await load({ silent: true });
+    } catch (error) { setMessage(error?.message || "Не удалось повторно отправить заявку"); }
+    finally { setSaving(false); }
+  }
+
   function updateRate(index, key, value) {
     setRatesDirty(true);
     setRates((current) => current.map((rate, i) => i === index ? { ...rate, [key]: value } : rate));
@@ -494,18 +523,20 @@ export default function AdminHotelOffers({ scope = "admin" }) {
         </header>
 
         {message ? <div className="border-l-4 border-orange-500 bg-orange-50 px-4 py-3 text-sm font-bold text-orange-800">{message}</div> : null}
+        {!providerMode && offers.some((offer) => offer.ownership_claim_status === "pending") ? <div className="border-l-4 border-blue-600 bg-blue-50 px-4 py-3 text-sm text-blue-900"><div className="font-black">Требуется решение по владельцу отеля</div><div className="mt-1 font-medium">Проверьте данные поставщика в таблице ниже и нажмите «Подтвердить владельца» либо «Отклонить заявку».</div></div> : null}
+        {providerMode && offers.some((offer) => offer.ownership_claim_status === "pending") ? <div className="border-l-4 border-blue-500 bg-blue-50 px-4 py-3 text-sm font-bold text-blue-800">Заявка «Это мой отель» проверяется администратором. После подтверждения откроются номерной фонд и тарифы.</div> : null}
+        {providerMode && offers.some((offer) => offer.ownership_claim_status === "rejected") ? <div className="border-l-4 border-rose-500 bg-rose-50 px-4 py-3 text-sm font-bold text-rose-800">Заявка на владение отклонена. Причина указана в строке предложения; обратитесь к администратору или подайте заявку повторно после исправления данных.</div> : null}
 
         {!providerMode ? <section className="border-b border-slate-200 bg-white p-4">
           <h2 className="text-lg font-black text-slate-950">Добавить поставщика</h2>
           <form onSubmit={createOffer} className="mt-3 grid gap-3 md:grid-cols-2 xl:grid-cols-6">
-            <Field label="Тип поставщика"><select className={inputClass} value={form.supplier_type} onChange={(e) => setForm({ ...form, supplier_type: e.target.value, provider_id: "", is_direct: false })}><option value="">Сначала выберите тип</option><option value="hotel">Отель</option><option value="agency">Агентство</option></select></Field>
-            <Field label="Поставщик"><select className={inputClass} disabled={!form.supplier_type || providersLoading} value={form.provider_id} onChange={(e) => setForm({ ...form, provider_id: e.target.value, is_direct: form.supplier_type === "hotel" ? form.is_direct : false })}><option value="">{!form.supplier_type ? "Выберите тип поставщика" : providersLoading ? "Загрузка…" : availableProviders.length ? "Выберите поставщика" : "Нет доступных поставщиков"}</option>{availableProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · #{provider.id}</option>)}</select></Field>
+            <Field label="Тип поставщика"><select className={inputClass} value={form.supplier_type} onChange={(e) => setForm({ ...form, supplier_type: e.target.value, provider_id: "" })}><option value="">Сначала выберите тип</option><option value="hotel">Отель</option><option value="agency">Агентство</option></select></Field>
+            <Field label="Поставщик"><select className={inputClass} disabled={!form.supplier_type || providersLoading} value={form.provider_id} onChange={(e) => setForm({ ...form, provider_id: e.target.value })}><option value="">{!form.supplier_type ? "Выберите тип поставщика" : providersLoading ? "Загрузка…" : availableProviders.length ? "Выберите поставщика" : "Нет доступных поставщиков"}</option>{availableProviders.map((provider) => <option key={provider.id} value={provider.id}>{provider.name} · #{provider.id}</option>)}</select></Field>
             <Field label="Валюта"><select className={inputClass} value={form.currency} onChange={(e) => setForm({ ...form, currency: e.target.value })}><option>USD</option><option>UZS</option></select></Field>
             <Field label="Действует с"><input type="date" className={inputClass} value={form.valid_from} onChange={(e) => setForm({ ...form, valid_from: e.target.value })} /></Field>
             <Field label="Действует до"><input type="date" className={inputClass} value={form.valid_to} onChange={(e) => setForm({ ...form, valid_to: e.target.value })} /></Field>
             <div className="flex items-end"><button disabled={saving || providersLoading || !form.supplier_type || !form.provider_id} className="h-10 w-full rounded-lg bg-orange-600 px-4 text-sm font-black text-white disabled:opacity-50">Добавить</button></div>
             <Field label="Название тарифа"><input className={inputClass} value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="Прямой тариф, FIT 2026..." /></Field>
-            <label className="flex h-10 items-center gap-2 self-end text-sm font-bold text-slate-700"><input type="checkbox" disabled={selectedProvider?.type !== "hotel"} checked={form.is_direct} onChange={(e) => setForm({ ...form, is_direct: e.target.checked })} /> Прямой тариф отеля</label>
           </form>
         </section> : null}
 
@@ -519,12 +550,15 @@ export default function AdminHotelOffers({ scope = "admin" }) {
                     {offer.status === "pending_review" ? <div className="mb-1 text-[10px] font-black uppercase tracking-[0.12em] text-blue-600">Отправитель заявки</div> : null}
                     <Link to={`/profile/provider/${offer.provider_id}`} className="font-black text-slate-950 underline-offset-2 hover:text-orange-600 hover:underline">{offer.provider_name}</Link>
                     <div className="text-xs text-slate-500">ID #{offer.provider_id} {offer.is_direct ? "· прямой тариф" : ""}</div>
+                    {offer.ownership_claim_status ? <div className={`mt-1 text-xs font-black ${offer.ownership_claim_status === "approved" ? "text-emerald-700" : offer.ownership_claim_status === "rejected" ? "text-rose-600" : "text-blue-700"}`}>{ownershipLabel(offer.ownership_claim_status)}</div> : null}
+                    {offer.ownership_claim_note ? <div className="mt-1 max-w-72 text-xs text-slate-600">Связь: {offer.ownership_claim_note}</div> : null}
+                    {offer.ownership_claim_rejection_reason ? <div className="mt-1 max-w-72 text-xs font-semibold text-rose-600">{offer.ownership_claim_rejection_reason}</div> : null}
                   </td>
                   <td className="px-4 py-3 text-sm font-bold text-slate-700">{supplierTypeLabel(offer.supplier_type)}</td>
                   <td className="px-4 py-3 text-sm text-slate-600"><div>{offer.rate_from || offer.valid_from || "—"} → {offer.rate_to || offer.valid_to || "—"}</div>{offer.is_expired ? <div className="mt-1 text-xs font-black text-rose-600">Срок истёк</div> : offer.days_until_expiry != null && offer.days_until_expiry <= 7 ? <div className="mt-1 text-xs font-black text-amber-600">Истекает через {offer.days_until_expiry} дн.</div> : null}</td>
                   <td className="px-4 py-3"><div className="font-black">{offer.rate_count || 0}</div><div className="text-xs text-slate-500">{offer.min_rate ? `от ${offer.min_rate} ${offer.currency}` : "цены не заполнены"}</div></td>
                   <td className="px-4 py-3"><span className={`inline-flex rounded-full px-3 py-1 text-xs font-black ring-1 ${statusTone(offer.status)}`}>{statusLabel(offer.status)}</span>{offer.rejection_reason ? <div className="mt-2 max-w-56 text-xs font-semibold text-rose-600">{offer.rejection_reason}</div> : null}</td>
-                  <td className="px-4 py-3"><div className="flex flex-wrap justify-end gap-2"><button type="button" onClick={() => openRates(offer)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">{String(offer.supplier_type).toLowerCase() === "hotel" ? "Тариф" : "Цены"}</button>{offer.can_edit !== false && ['draft','rejected','paused'].includes(offer.status) && !offer.is_expired ? <button type="button" disabled={saving || !offer.rate_count} onClick={() => submitOffer(offer)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-40">На модерацию</button> : null}{!providerMode && offer.status === 'pending_review' ? <><button type="button" disabled={saving} onClick={() => reviewOffer(offer, 'approve')} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white">Опубликовать</button><button type="button" disabled={saving} onClick={() => { setRejecting(offer); setRejectReason(""); }} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">Отклонить</button></> : null}{offer.can_edit !== false && offer.status === 'active' ? <button type="button" disabled={saving} onClick={() => updateOffer(offer, { status: 'paused' })} className="rounded-lg border border-amber-200 px-3 py-2 text-xs font-black text-amber-700">Приостановить</button> : null}{!providerMode ? <button type="button" onClick={() => archiveOffer(offer)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black text-slate-500">Архив</button> : null}</div></td>
+                  <td className="px-4 py-3"><div className="flex flex-wrap justify-end gap-2">{!providerMode && offer.ownership_claim_status === 'pending' ? <><button type="button" disabled={saving} onClick={() => reviewOwnership(offer, 'approve')} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white">Подтвердить владельца</button><button type="button" disabled={saving} onClick={() => reviewOwnership(offer, 'reject')} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">Отклонить заявку</button></> : null}{providerMode && offer.ownership_claim_status === 'rejected' ? <button type="button" disabled={saving} onClick={() => resubmitOwnership(offer)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-black text-blue-700">Отправить повторно</button> : null}{!providerMode || !['pending','rejected'].includes(offer.ownership_claim_status) ? <button type="button" onClick={() => openRates(offer)} className="rounded-lg bg-slate-950 px-3 py-2 text-xs font-black text-white">{String(offer.supplier_type).toLowerCase() === "hotel" ? "Тариф" : "Цены"}</button> : null}{offer.can_edit !== false && ['draft','rejected','paused'].includes(offer.status) && !offer.is_expired ? <button type="button" disabled={saving || !offer.rate_count} onClick={() => submitOffer(offer)} className="rounded-lg border border-blue-200 px-3 py-2 text-xs font-black text-blue-700 disabled:opacity-40">На модерацию</button> : null}{!providerMode && offer.status === 'pending_review' ? <><button type="button" disabled={saving} onClick={() => reviewOffer(offer, 'approve')} className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-black text-white">Опубликовать</button><button type="button" disabled={saving} onClick={() => { setRejecting(offer); setRejectReason(""); }} className="rounded-lg border border-rose-200 px-3 py-2 text-xs font-black text-rose-600">Отклонить</button></> : null}{offer.can_edit !== false && offer.status === 'active' ? <button type="button" disabled={saving} onClick={() => updateOffer(offer, { status: 'paused' })} className="rounded-lg border border-amber-200 px-3 py-2 text-xs font-black text-amber-700">Приостановить</button> : null}{!providerMode ? <button type="button" onClick={() => archiveOffer(offer)} className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-black text-slate-500">Архив</button> : null}</div></td>
                 </tr>
               )) : <tr><td colSpan={6} className="p-8 text-center font-bold text-slate-500">У отеля пока нет предложений поставщиков</td></tr>}
             </tbody>

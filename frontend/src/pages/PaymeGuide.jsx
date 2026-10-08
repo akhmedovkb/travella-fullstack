@@ -14,6 +14,7 @@ function purposeText(purpose) {
   if (key === "unlock_contact") return "Открытие контактов поставщика";
   if (key === "provider_support") return "Поддержка проекта";
   if (key === "balance_topup") return "Пополнение баланса";
+  if (key === "hotel_booking") return "Оплата бронирования отеля";
   return "Оплата через Payme";
 }
 
@@ -35,6 +36,7 @@ export default function PaymeGuide() {
   const amount = formatAmount(params.get("amount"));
   const orderId = String(params.get("order_id") || "").trim();
   const serviceId = String(params.get("service_id") || "").trim();
+  const returnTo = String(params.get("return_to") || "").trim();
 
   const safePayUrl = useMemo(() => {
     return isProbablyPaymeUrl(payUrl) ? payUrl : "";
@@ -112,7 +114,7 @@ export default function PaymeGuide() {
 
           <div className="flex flex-col gap-3 sm:flex-row">
             <Link
-              to={serviceId ? `/marketplace?opened=${encodeURIComponent(serviceId)}` : "/"}
+              to={returnTo.startsWith("/") ? returnTo : serviceId ? `/marketplace?opened=${encodeURIComponent(serviceId)}` : "/"}
               className="inline-flex w-full items-center justify-center rounded-2xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 transition hover:bg-slate-50"
             >
               Назад

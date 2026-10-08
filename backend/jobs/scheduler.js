@@ -6,6 +6,7 @@ const { cleanupExpiredServicesJob } = require("./cleanupExpiredServicesJob");
 const { runUnlockNudge } = require("./unlockNudgeJob");
 const { runAbandonedPaymeReminderJob } = require("./abandonedPaymeReminderJob");
 const { runRefusedFixFollowupJob } = require("./refusedFixFollowupJob");
+const { runExpireHotelBookingHoldsJob } = require("./expireHotelBookingHoldsJob");
 
 const TZ = "Asia/Tashkent";
 const ASK_HOURS = new Set([10, 14, 18]);
@@ -153,6 +154,17 @@ async function runRefusedFixFollowupJobSafe() {
   }
 }
 
+async function runExpireHotelBookingHoldsJobSafe() {
+  try {
+    const result = await runExpireHotelBookingHoldsJob();
+    if (result.expired || result.notification_failures) {
+      console.log('[scheduler] expireHotelBookingHoldsJob finished', result);
+    }
+  } catch (err) {
+    console.error('[scheduler] expireHotelBookingHoldsJob failed', err);
+  }
+}
+
 function startJobsScheduler() {
   if (
     String(process.env.DISABLE_REMINDER_SCHEDULER || "").trim() === "1" ||
@@ -216,6 +228,15 @@ function startJobsScheduler() {
     "17 * * * *",
     async () => {
       await runRefusedFixFollowupJobSafe();
+    },
+    { timezone: TZ }
+  );
+
+  // Release unpaid hotel inventory without waiting for somebody to reopen the booking.
+  cron.schedule(
+    "*/5 * * * *",
+    async () => {
+      await runExpireHotelBookingHoldsJobSafe();
     },
     { timezone: TZ }
   );

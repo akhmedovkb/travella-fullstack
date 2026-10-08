@@ -496,17 +496,24 @@ async function getProviderBookings(req, res) {
          b.created_at,
          b.currency,
          b.tb_meta,
-         s.title        AS service_title,
-         c.name         AS client_name,
+         COALESCE(
+           s.title,
+           b.attachments::jsonb #>> '{hotel_quotes,0,hotel,name}',
+           b.tb_meta->>'hotelName',
+           b.tb_meta->>'title',
+           'Бронирование'
+         ) AS service_title,
+         COALESCE(c.name, rp.name) AS client_name,
          c.telegram_chat_id AS client_chat_id,
-         COALESCE(b.tb_meta->>'startDate', b.date::text) AS start_date,
-         (b.tb_meta->>'endDate') AS end_date,
+         COALESCE(b.tb_meta->>'startDate', b.attachments::jsonb->>'startDate', b.date::text) AS start_date,
+         COALESCE(b.tb_meta->>'endDate', b.attachments::jsonb->>'endDate') AS end_date,
          (b.tb_meta->>'adults')::int    AS persons_adults,
          (b.tb_meta->>'children')::int  AS persons_children,
          (b.tb_meta->>'infants')::int   AS persons_infants
        FROM bookings b
-       JOIN services s ON s.id = b.service_id
-       JOIN clients  c ON c.id = b.client_id
+       LEFT JOIN services s ON s.id = b.service_id
+       LEFT JOIN clients  c ON c.id = b.client_id
+       LEFT JOIN providers rp ON rp.id = b.requester_provider_id
       WHERE b.provider_id = $1
         AND b.status = $2
       ORDER BY b.created_at DESC
@@ -537,11 +544,11 @@ async function confirmBooking(req, res) {
          b.status,
          b.date,
          b.tb_meta,
-         s.title AS service_title,
+         COALESCE(s.title, b.attachments::jsonb #>> '{hotel_quotes,0,hotel,name}', b.tb_meta->>'hotelName', b.tb_meta->>'title', 'Бронирование') AS service_title,
          c.telegram_chat_id AS client_chat_id
        FROM bookings b
-       JOIN services s ON s.id = b.service_id
-        JOIN clients  c ON c.id = b.client_id
+       LEFT JOIN services s ON s.id = b.service_id
+       LEFT JOIN clients  c ON c.id = b.client_id
        WHERE b.id = $1
         AND b.provider_id = $2
       LIMIT 1`,
@@ -560,18 +567,25 @@ async function confirmBooking(req, res) {
       return res.status(400).json({ error: "Booking is not pending" });
     }
 
-    await pool.query(
+    const confirmed = await pool.query(
       `UPDATE bookings
-          SET status = 'confirmed', updated_at = NOW()
-        WHERE id = $1`,
-      [bookingId]
+          SET status = 'awaiting_payment',
+              hold_until = NOW() + INTERVAL '30 minutes',
+              updated_at = NOW()
+        WHERE id = $1 AND provider_id = $2 AND status = 'pending'
+      RETURNING id`,
+      [bookingId, providerId]
     );
+    if (!confirmed.rowCount) {
+      return res.status(409).json({ error: "Booking status changed" });
+    }
 
     if (row.client_chat_id) {
       const text =
-        `✅ <b>Ваша бронь подтверждена!</b>\n\n` +
+        `✅ <b>Бронь принята поставщиком</b>\n\n` +
         `Тур: <b>${row.service_title}</b>\n` +
-        `Дата: ${row.date}\n`;
+        `Дата: ${row.date}\n` +
+        `Оплатите бронь в течение 30 минут.`;
 
       tgSend(row.client_chat_id, text);
     }
@@ -594,11 +608,11 @@ async function rejectBooking(req, res) {
       `SELECT
          b.id,
          b.status,
-         s.title AS service_title,
+         COALESCE(s.title, b.attachments::jsonb #>> '{hotel_quotes,0,hotel,name}', b.tb_meta->>'hotelName', b.tb_meta->>'title', 'Бронирование') AS service_title,
          c.telegram_chat_id AS client_chat_id
        FROM bookings b
-       JOIN services s ON s.id = b.service_id
-        JOIN clients  c ON c.id = b.client_id
+       LEFT JOIN services s ON s.id = b.service_id
+       LEFT JOIN clients  c ON c.id = b.client_id
        WHERE b.id = $1
         AND b.provider_id = $2
       LIMIT 1`,
@@ -617,12 +631,16 @@ async function rejectBooking(req, res) {
       return res.status(400).json({ error: "Booking is not pending" });
     }
 
-    await pool.query(
+    const rejected = await pool.query(
       `UPDATE bookings
           SET status = 'rejected', updated_at = NOW()
-        WHERE id = $1`,
-      [bookingId]
+        WHERE id = $1 AND provider_id = $2 AND status = 'pending'
+      RETURNING id`,
+      [bookingId, providerId]
     );
+    if (!rejected.rowCount) {
+      return res.status(409).json({ error: "Booking status changed" });
+    }
 
     if (row.client_chat_id) {
       const text =

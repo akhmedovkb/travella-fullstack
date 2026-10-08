@@ -3,6 +3,7 @@
 import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
+import BookingHoldCountdown from "./BookingHoldCountdown";
 
 /* ================= helpers ================= */
 
@@ -82,10 +83,14 @@ const StatusPill = ({ status, text, className = "" }) => {
   const map = {
     pending:   "bg-amber-50  text-amber-700  ring-amber-200",
     quoted:    "bg-blue-50   text-blue-700   ring-blue-200",
+    awaiting_payment: "bg-violet-50 text-violet-700 ring-violet-200",
     confirmed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
     active:    "bg-emerald-50 text-emerald-700 ring-emerald-200",
+    paid:      "bg-emerald-50 text-emerald-700 ring-emerald-200",
     rejected:  "bg-rose-50   text-rose-700   ring-rose-200",
     cancelled: "bg-rose-50   text-rose-700   ring-rose-200",
+    cancelled_unpaid: "bg-gray-100 text-gray-700 ring-gray-200",
+    expired:   "bg-gray-100 text-gray-700 ring-gray-200",
   };
   const cls = map[statusKey(status)] || "bg-gray-100 text-gray-700 ring-gray-200";
   return (
@@ -133,6 +138,27 @@ const initials = (name) =>
 
 const isImg = (u) => /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(String(u || ""));
 
+async function downloadBookingDocument(bookingId, kind) {
+  const token = localStorage.getItem("clientToken") || localStorage.getItem("providerToken") || localStorage.getItem("token");
+  const base = String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
+  const isRoomingList = kind === "rooming-list";
+  const extension = isRoomingList ? "xlsx" : "pdf";
+  const response = await fetch(`${base}/api/bookings/${bookingId}/docs/${kind}.${extension}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data?.message || "Не удалось сформировать документ");
+  }
+  const blob = await response.blob();
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = `booking-${bookingId}-${kind}.${extension}`;
+  link.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 /* ================= component ================= */
 export default function BookingRow({
   booking,
@@ -143,6 +169,9 @@ export default function BookingRow({
   onAccept,
   onReject,
   onCancel,
+  onHoldExpired,
+  onPay,
+  onRefund,
 }) {
   const { t } = useTranslation();
 
@@ -204,7 +233,7 @@ const statusText = React.useMemo(() => {
  }
   
   // Базовые статусы
-  return t(`bookings.status.${s}`);                  // pending/confirmed/active
+  return t(`bookings.status.${s}`, { defaultValue: s });
 }, [booking?.status, viewerRole, t]);
 
 
@@ -257,6 +286,17 @@ const profileHref = useMemo(() => {
 
   const canReject = viewerRole === "provider" && String(booking?.status) === "pending";
   const canCancel = viewerRole !== "provider" && !hideClientCancel && String(booking?.status) === "pending";
+  const isAwaitingPayment = viewerRole !== "provider" && String(booking?.status) === "awaiting_payment";
+  const canPay = isAwaitingPayment && String(booking?.currency || "UZS").toUpperCase() === "UZS";
+  const paymentCurrencyUnsupported = isAwaitingPayment && !canPay;
+  const isPaidByRequester = viewerRole !== "provider" && String(booking.payment_status || "").toLowerCase() === "paid";
+  const refundStatus = String(booking.refund_status || "").toLowerCase();
+  const [documentError, setDocumentError] = React.useState("");
+  const getDocument = async (kind) => {
+    setDocumentError("");
+    try { await downloadBookingDocument(booking.id, kind); }
+    catch (error) { setDocumentError(error?.message || "Не удалось сформировать документ"); }
+  };
 
   const dates = Array.isArray(booking?.dates) ? booking.dates : [];
 
@@ -276,6 +316,14 @@ const profileHref = useMemo(() => {
             status={booking.status}
             text={statusText ?? t(`status.${booking.status}`, { defaultValue: booking.status })}
           />
+        ) : null}
+        {statusKey(booking.status) === "awaiting_payment" && booking.hold_until ? (
+          <BookingHoldCountdown holdUntil={booking.hold_until} onExpired={onHoldExpired} />
+        ) : null}
+        {String(booking.payment_status || "").toLowerCase() === "paid" ? (
+          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+            {t("bookings.paid_via_payme", { defaultValue: "Оплачено через Payme" })}
+          </span>
         ) : null}
 
         {/* добавлено: дата создания */}
@@ -409,8 +457,16 @@ const profileHref = useMemo(() => {
 
 
       {/* действия */}
-      {(canAccept || canReject || canCancel) ? (
+      {(canAccept || canReject || canCancel || canPay) ? (
         <div className="mt-3 flex flex-wrap gap-2">
+          {canPay ? (
+            <button
+              onClick={() => onPay?.(booking)}
+              className="rounded-lg bg-orange-600 px-4 py-2 font-semibold text-white hover:bg-orange-700"
+            >
+              {t("bookings.pay_now", { defaultValue: "Оплатить" })}
+            </button>
+          ) : null}
           {canAccept ? (
             <button
               onClick={() => onAccept?.(booking)}
@@ -437,6 +493,35 @@ const profileHref = useMemo(() => {
               {t("actions.cancel", { defaultValue: "Отмена" })}
             </button>
           ) : null}
+        </div>
+      ) : null}
+      {paymentCurrencyUnsupported ? (
+        <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800">
+          {t("bookings.online_payment_uzs_only", {
+            defaultValue: "Онлайн-оплата Payme доступна только для брони в UZS. Свяжитесь с поставщиком для другого способа оплаты.",
+          })}
+        </div>
+      ) : null}
+      {isPaidByRequester ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {refundStatus === "requested" ? <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">Возврат запрошен, ожидается проверка</span> : null}
+          {refundStatus === "processing" ? <span className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">Запрос возврата принят в работу</span> : null}
+          {refundStatus === "refunded" ? <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-800">Оплата возвращена через Payme</span> : null}
+          {refundStatus === "rejected" ? <span className="text-sm font-semibold text-rose-700">Предыдущий запрос отклонён</span> : null}
+          {(!refundStatus || refundStatus === "rejected") && onRefund ? (
+            <button type="button" onClick={() => onRefund(booking)} className="rounded-lg border border-rose-200 bg-white px-4 py-2 font-semibold text-rose-700 hover:bg-rose-50">
+              {refundStatus === "rejected" ? "Отправить повторно" : "Запросить возврат"}
+            </button>
+          ) : null}
+        </div>
+      ) : null}
+      {String(booking.payment_status || "").toLowerCase() === "paid" ? (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <button type="button" onClick={() => getDocument("invoice")} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Инвойс PDF</button>
+          <button type="button" onClick={() => getDocument("voucher")} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Ваучер PDF</button>
+          <button type="button" onClick={() => getDocument("rooming-list")} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Rooming list XLSX</button>
+          <button type="button" onClick={() => getDocument("itinerary")} className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50">Itinerary PDF</button>
+          {documentError ? <span className="text-sm text-rose-700">{documentError}</span> : null}
         </div>
       ) : null}
     </div>

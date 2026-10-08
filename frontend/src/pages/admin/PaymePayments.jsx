@@ -47,6 +47,7 @@ function typeLabel(v) {
   if (s === "unlock_contact") return "Unlock contact";
   if (s === "balance_topup" || s === "client_topup" || s === "contact_topup") return "Balance topup";
   if (s === "provider_support") return "Support donation";
+  if (s === "hotel_booking") return "Бронирование отеля";
   return s || "—";
 }
 
@@ -61,6 +62,11 @@ function fmtTs(x) {
 
 function money(x) {
   return `${Math.round(Number(x || 0)).toLocaleString("ru-RU")} сум`;
+}
+
+function bookingMoney(amount, currency) {
+  if (amount == null || amount === "") return "—";
+  return `${Number(amount).toLocaleString("ru-RU", { maximumFractionDigits: 2 })} ${currency || "UZS"}`;
 }
 
 function shortId(x, max = 18) {
@@ -92,6 +98,7 @@ export default function PaymePayments() {
   const [rows, setRows] = useState([]);
   const [totals, setTotals] = useState({});
   const [loading, setLoading] = useState(false);
+  const [refundBusyId, setRefundBusyId] = useState(null);
 
   const [q, setQ] = useState(initialQ);
   const [state, setState] = useState(initialState);
@@ -203,6 +210,25 @@ Support sent: ${data?.support_sent || 0}`
     }
   }
 
+  async function reviewRefund(row, action) {
+    let comment = "";
+    if (action === "rejected") {
+      comment = window.prompt("Укажите причину отказа в возврате") || "";
+      if (comment.trim().length < 5) return tError("Укажите причину отказа подробнее");
+    } else if (!window.confirm(`Принять возврат по брони #${row.booking_id} в работу?`)) {
+      return;
+    }
+    setRefundBusyId(row.booking_id);
+    try {
+      await apiPost(`/api/admin/payme/payments/bookings/${row.booking_id}/refund-review`, { action, comment }, "admin");
+      await load();
+    } catch (e) {
+      tError(e?.message || "Не удалось обработать запрос возврата");
+    } finally {
+      setRefundBusyId(null);
+    }
+  }
+
   return (
     <div className="p-4 space-y-4">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -216,7 +242,7 @@ Support sent: ${data?.support_sent || 0}`
         <div className="flex flex-col gap-2 md:flex-row md:items-center">
           <input
             className="border rounded px-3 py-2 w-full md:w-80"
-            placeholder="Search: client / provider / phone / service / payme_id..."
+            placeholder="Поиск: клиент / поставщик / телефон / бронь / payme_id..."
             value={q}
             onChange={(e) => setQ(e.target.value)}
           />
@@ -241,6 +267,7 @@ Support sent: ${data?.support_sent || 0}`
             <option value="unlock">Unlock</option>
             <option value="topup">Topup</option>
             <option value="support">Support</option>
+            <option value="hotel_booking">Бронирование отеля</option>
             <option value="provider_support">Provider support</option>
             <option value="unlock_contact">Unlock contact</option>
             <option value="balance_topup">Balance topup</option>
@@ -374,7 +401,40 @@ Support sent: ${data?.support_sent || 0}`
                     <td className="px-3 py-2 whitespace-nowrap">{r.actor_phone || "—"}</td>
 
                     <td className="px-3 py-2 min-w-64">
-                      <div className="font-medium">{r.service_title || "—"}</div>
+                      <div className="font-medium">
+                        {r.payment_type === "hotel_booking" ? "Оплата проживания" : r.service_title || "—"}
+                      </div>
+                      {r.booking_id ? (
+                        <div className="mt-1 space-y-0.5 text-xs">
+                          <div className="font-semibold text-orange-700">Бронь #{r.booking_id}</div>
+                          <div className="text-slate-600">{r.booking_provider_name || "Поставщик не указан"}</div>
+                          <div className="text-slate-500">{r.booking_dates || "Даты не указаны"}</div>
+                          <div className="text-slate-500">
+                            {bookingMoney(r.booking_amount, r.booking_currency)} · {r.booking_status || "без статуса"}
+                          </div>
+                          {r.booking_refund_status === "requested" ? (
+                            <div className="space-y-1">
+                              <div className="font-semibold text-rose-700">Запрошен возврат</div>
+                              <div className="flex flex-wrap gap-1">
+                                <button type="button" disabled={refundBusyId === r.booking_id} onClick={() => reviewRefund(r, "processing")} className="rounded bg-slate-900 px-2 py-1 font-semibold text-white disabled:opacity-50">В работу</button>
+                                <button type="button" disabled={refundBusyId === r.booking_id} onClick={() => reviewRefund(r, "rejected")} className="rounded border border-rose-200 px-2 py-1 font-semibold text-rose-700 disabled:opacity-50">Отклонить</button>
+                              </div>
+                            </div>
+                          ) : null}
+                          {r.booking_refund_status === "processing" ? <div className="font-semibold text-amber-700">Возврат в работе</div> : null}
+                          {r.booking_refund_status === "rejected" ? <div className="font-semibold text-slate-600">Возврат отклонён</div> : null}
+                          {r.booking_refund_status === "refunded" ? <div className="font-semibold text-emerald-700">Возвращено через Payme</div> : null}
+                          {r.payme_id ? (
+                            <button
+                              type="button"
+                              className="font-semibold text-blue-600 hover:underline"
+                              onClick={() => window.open(`/admin/payme-health?payme_id=${encodeURIComponent(r.payme_id)}`, "_blank")}
+                            >
+                              Диагностика платежа
+                            </button>
+                          ) : null}
+                        </div>
+                      ) : null}
                       {r.service_id ? <div className="text-xs text-slate-400">service #{r.service_id}</div> : null}
                     </td>
 

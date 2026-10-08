@@ -1,0 +1,12 @@
+.git
+.tmp
+tmp
+logs
+uploads
+node_modules
+coverage
+.nyc_output
+*.log
+.env
+.env.*
+!.env.example

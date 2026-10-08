@@ -4,112 +4,89 @@ import React from "react";
 import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import { ToastMount } from "./shared/toast";
 
-import Register from "./pages/Register";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
 import PrivateRoute from "./pages/PrivateRoute";
-import Marketplace from "./pages/Marketplace";
-import Community from "./pages/Community";
-import ProviderFavorites from "./pages/ProviderFavorites";
-import ProviderProfile from "./pages/ProviderProfile";          // публичный профиль провайдера
-import ProviderProfileCabinet from "./components/ProviderProfile"; // кабинет провайдера (/dashboard/profile)
-import ClientProfile from "./pages/ClientProfile";
-import AdminModeration from "./pages/AdminModeration";
-import HotelDetails from "./pages/HotelDetails";
-import HotelInspections from "./pages/HotelInspections";
-import AdminHotelsTable from "./pages/admin/AdminHotelsTable";
-import AdminProviders from "./pages/admin/AdminProviders";
-import AdminHotelSeasons from "./pages/admin/AdminHotelSeasons";
-import AdminHotelOffers from "./pages/admin/AdminHotelOffers";
-import AdminHotelInspections from "./pages/admin/AdminHotelInspections";
-import AdminLeads from "./pages/admin/Leads";
-import AdminRefusedActual from "./pages/admin/AdminRefusedActual";
-import IndiaInside from "./pages/landing/IndiaInside";
 import LeadModal from "./components/LeadModal";
-import AdminBroadcast from "./pages/admin/AdminBroadcast";
-import DonasInvestor from "./pages/admin/DonasInvestor";
-import DonasMenuItems from "./pages/admin/DonasMenuItems";
-import DonasIngredients from "./pages/admin/DonasIngredients";
-import DonasMenuBuilder from "./pages/admin/DonasMenuBuilder";
-import DonasDosasFinanceLayout from "./pages/admin/DonasDosasFinanceLayout";
-import DonasDosasFinanceOverview from "./pages/admin/DonasDosasFinanceOverview";
-import DonasDosasFinanceMonths from "./pages/admin/DonasDosasFinanceMonths";
-import DonasOpex from "./pages/admin/DonasOpex";
-import DonasCapex from "./pages/admin/DonasCapex";
-import DonasDosasCogsTab from "./pages/admin/DonasDosasCogsTab";
-import DonasDosasProfitTab from "./pages/admin/DonasDosasProfitTab";
-import DonasDosasMenuLayout from "./pages/admin/DonasDosasMenuLayout";
-import DonasDosasFinanceSales from "./pages/admin/DonasDosasFinanceSales";
-import DonasDosasMonthlySalesMargin from "./pages/admin/DonasDosasMonthlySalesMargin";
-import DonasDosasInventory from "./pages/admin/DonasDosasInventory";
-import AdminPaymeHealth from "./pages/admin/AdminPaymeHealth";
-import PaymeLab from "./pages/admin/PaymeLab";
-import AdminBilling from "./pages/admin/AdminBilling";
-import AdminFinance from "./pages/admin/AdminFinance";
-import AdminOperations from "./pages/admin/AdminOperations";
-import AdminAiPlatform from "./pages/admin/AdminAiPlatform";
-import AdminProviderSupport from "./pages/admin/AdminProviderSupport";
-import AdminServiceAudit from "./pages/admin/AdminServiceAudit";
-import AdminProviderFunnel from "./pages/admin/AdminProviderFunnel";
-import PassportParser from "./pages/PassportParser";
-import SupportSuccess from "./pages/SupportSuccess";
-import SupportProject from "./pages/SupportProject";
-import PaymeGuide from "./pages/PaymeGuide";
 import { installActivityTracker } from "./utils/activityTracker";
-
-// Клиентские
-import ClientRegister from "./pages/ClientRegister";
-import ClientLogin from "./pages/ClientLogin";
-import ClientDashboard from "./pages/ClientDashboard";
-import ClientBalance from "./pages/ClientBalance";
-
-// Провайдерские новые страницы
-import ProviderRequests from "./pages/ProviderRequests";
-import ProviderBookings from "./pages/ProviderBookings";
-import ProviderFinance from "./pages/ProviderFinance";
-import ProviderSocialPosts from "./pages/ProviderSocialPosts";
-
-// 🔹 Новые провайдерские страницы «услуг» + календарь
-import ProviderServicesTourBuilder from "./pages/ProviderServicesTourBuilder";
-import DashboardServices from "./pages/DashboardServices";
-import ProviderCalendar from "./components/ProviderCalendar";
-
 import Header from "./components/Header";
-// CMS (подвал)
 import Footer from "./components/Footer";
-import CmsPage from "./pages/CmsPage";
-import CmsEditor from "./pages/admin/CmsEditor";
 
-// Отели
-import Hotels from "./pages/Hotels";
-import AdminHotelForm from "./pages/admin/AdminHotelForm";
-
-// Конструктор шаблонов
-import TemplateCreator from "./pages/TemplateCreator";
-
-// TourBuilder - Тур конструктор
-import TourBuilder from "./pages/TourBuilder";
-
-// Entry fees form
-import AdminEntryFees from "./pages/AdminEntryFees";
-
-// Landing
-import IndiaLayout from "./pages/landing/IndiaLayout";
-import LandingHome from "./pages/landing/Home";
-import Ayurveda from "./pages/landing/Ayurveda";
-import Checkup from "./pages/landing/Checkup";
-import Treatment from "./pages/landing/Treatment";
-import B2B from "./pages/landing/B2B";
-import Clinics from "./pages/landing/Clinics";
-import Contacts from "./pages/landing/Contacts";
-
-// IndiaInside
-import AdminInsideRequests from "./pages/admin/AdminInsideRequests";
-// balance клиентов бота отказных туров
-
-import AdminContactBalance from "./pages/admin/AdminContactBalance";
-
-// donasdosas (legacy публичный путь /donas-dosas/finance теперь будет алиасом)
+const lazy = (loader) => React.lazy(loader);
+const Register = lazy(() => import("./pages/Register"));
+const Login = lazy(() => import("./pages/Login"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Marketplace = lazy(() => import("./pages/Marketplace"));
+const Community = lazy(() => import("./pages/Community"));
+const ProviderFavorites = lazy(() => import("./pages/ProviderFavorites"));
+const ProviderProfile = lazy(() => import("./pages/ProviderProfile"));
+const ProviderProfileCabinet = lazy(() => import("./components/ProviderProfile"));
+const ClientProfile = lazy(() => import("./pages/ClientProfile"));
+const AdminModeration = lazy(() => import("./pages/AdminModeration"));
+const HotelDetails = lazy(() => import("./pages/HotelDetails"));
+const HotelInspections = lazy(() => import("./pages/HotelInspections"));
+const AdminHotelsTable = lazy(() => import("./pages/admin/AdminHotelsTable"));
+const AdminProviders = lazy(() => import("./pages/admin/AdminProviders"));
+const AdminHotelOffers = lazy(() => import("./pages/admin/AdminHotelOffers"));
+const AdminHotelInspections = lazy(() => import("./pages/admin/AdminHotelInspections"));
+const AdminLeads = lazy(() => import("./pages/admin/Leads"));
+const AdminRefusedActual = lazy(() => import("./pages/admin/AdminRefusedActual"));
+const IndiaInside = lazy(() => import("./pages/landing/IndiaInside"));
+const AdminBroadcast = lazy(() => import("./pages/admin/AdminBroadcast"));
+const DonasInvestor = lazy(() => import("./pages/admin/DonasInvestor"));
+const DonasMenuItems = lazy(() => import("./pages/admin/DonasMenuItems"));
+const DonasIngredients = lazy(() => import("./pages/admin/DonasIngredients"));
+const DonasMenuBuilder = lazy(() => import("./pages/admin/DonasMenuBuilder"));
+const DonasDosasFinanceLayout = lazy(() => import("./pages/admin/DonasDosasFinanceLayout"));
+const DonasDosasFinanceOverview = lazy(() => import("./pages/admin/DonasDosasFinanceOverview"));
+const DonasDosasFinanceMonths = lazy(() => import("./pages/admin/DonasDosasFinanceMonths"));
+const DonasOpex = lazy(() => import("./pages/admin/DonasOpex"));
+const DonasCapex = lazy(() => import("./pages/admin/DonasCapex"));
+const DonasDosasCogsTab = lazy(() => import("./pages/admin/DonasDosasCogsTab"));
+const DonasDosasProfitTab = lazy(() => import("./pages/admin/DonasDosasProfitTab"));
+const DonasDosasMenuLayout = lazy(() => import("./pages/admin/DonasDosasMenuLayout"));
+const DonasDosasFinanceSales = lazy(() => import("./pages/admin/DonasDosasFinanceSales"));
+const DonasDosasMonthlySalesMargin = lazy(() => import("./pages/admin/DonasDosasMonthlySalesMargin"));
+const DonasDosasInventory = lazy(() => import("./pages/admin/DonasDosasInventory"));
+const AdminPaymeHealth = lazy(() => import("./pages/admin/AdminPaymeHealth"));
+const PaymeLab = lazy(() => import("./pages/admin/PaymeLab"));
+const AdminBilling = lazy(() => import("./pages/admin/AdminBilling"));
+const AdminFinance = lazy(() => import("./pages/admin/AdminFinance"));
+const AdminOperations = lazy(() => import("./pages/admin/AdminOperations"));
+const AdminAiPlatform = lazy(() => import("./pages/admin/AdminAiPlatform"));
+const AdminProviderSupport = lazy(() => import("./pages/admin/AdminProviderSupport"));
+const AdminServiceAudit = lazy(() => import("./pages/admin/AdminServiceAudit"));
+const AdminProviderFunnel = lazy(() => import("./pages/admin/AdminProviderFunnel"));
+const PassportParser = lazy(() => import("./pages/PassportParser"));
+const SupportSuccess = lazy(() => import("./pages/SupportSuccess"));
+const SupportProject = lazy(() => import("./pages/SupportProject"));
+const PaymeGuide = lazy(() => import("./pages/PaymeGuide"));
+const ClientRegister = lazy(() => import("./pages/ClientRegister"));
+const ClientLogin = lazy(() => import("./pages/ClientLogin"));
+const ClientDashboard = lazy(() => import("./pages/ClientDashboard"));
+const ClientBalance = lazy(() => import("./pages/ClientBalance"));
+const ProviderRequests = lazy(() => import("./pages/ProviderRequests"));
+const ProviderBookings = lazy(() => import("./pages/ProviderBookings"));
+const ProviderFinance = lazy(() => import("./pages/ProviderFinance"));
+const ProviderSocialPosts = lazy(() => import("./pages/ProviderSocialPosts"));
+const ProviderServicesTourBuilder = lazy(() => import("./pages/ProviderServicesTourBuilder"));
+const DashboardServices = lazy(() => import("./pages/DashboardServices"));
+const ProviderCalendar = lazy(() => import("./components/ProviderCalendar"));
+const CmsPage = lazy(() => import("./pages/CmsPage"));
+const CmsEditor = lazy(() => import("./pages/admin/CmsEditor"));
+const Hotels = lazy(() => import("./pages/Hotels"));
+const AdminHotelForm = lazy(() => import("./pages/admin/AdminHotelForm"));
+const TemplateCreator = lazy(() => import("./pages/TemplateCreator"));
+const TourBuilder = lazy(() => import("./pages/TourBuilder"));
+const AdminEntryFees = lazy(() => import("./pages/AdminEntryFees"));
+const IndiaLayout = lazy(() => import("./pages/landing/IndiaLayout"));
+const LandingHome = lazy(() => import("./pages/landing/Home"));
+const Ayurveda = lazy(() => import("./pages/landing/Ayurveda"));
+const Checkup = lazy(() => import("./pages/landing/Checkup"));
+const Treatment = lazy(() => import("./pages/landing/Treatment"));
+const B2B = lazy(() => import("./pages/landing/B2B"));
+const Clinics = lazy(() => import("./pages/landing/Clinics"));
+const Contacts = lazy(() => import("./pages/landing/Contacts"));
+const AdminInsideRequests = lazy(() => import("./pages/admin/AdminInsideRequests"));
+const AdminContactBalance = lazy(() => import("./pages/admin/AdminContactBalance"));
 
 function ClientPrivateRoute({ children }) {
   const token = localStorage.getItem("clientToken");
@@ -164,6 +141,7 @@ export default function App() {
       <div className="min-h-screen bg-gray-100 flex flex-col">
         <Header />
         <main className="flex-1 p-4">
+          <React.Suspense fallback={<div className="py-12 text-center text-sm text-gray-500">Загрузка...</div>}>
           <Routes>
             {/* --- Главная: сразу MARKETPLACE --- */}
             <Route path="/" element={<Marketplace />} />
@@ -543,16 +521,6 @@ export default function App() {
               }
             />
             <Route
-              path="/admin/hotels/:id/seasons"
-              element={
-                <PrivateRoute>
-                  <AdminRoute>
-                    <AdminHotelSeasons />
-                  </AdminRoute>
-                </PrivateRoute>
-              }
-            />
-            <Route
               path="/admin/hotels/:id/offers"
               element={
                 <PrivateRoute>
@@ -689,6 +657,7 @@ export default function App() {
             <Route path="*" element={<Navigate to="/" replace />} />
 
           </Routes>
+          </React.Suspense>
         </main>
         <Footer />
       </div>

@@ -165,10 +165,11 @@ app.use("/api/providers", providerRoutes);
 const hotelRoutes = require("./routes/hotelRoutes");
 app.use("/api/hotels", hotelRoutes);
 
-const hotels = require("./controllers/hotelsController");
-// app.get("/api/hotels/:id/inspections", hotels.listHotelInspections);
-// app.post("/api/hotels/:id/inspections", hotels.createHotelInspection);
-// app.post("/api/inspections/:id/like", hotels.likeInspection);
+// Compatibility for clients that still use /api/inspections/*.
+// Both URL families delegate to the same controller and inspections tables.
+const hotelInspectionRoutes = require("./routes/hotelInspectionRoutes");
+app.use("/api/inspections", hotelInspectionRoutes);
+app.use("/api/hotel-inspections", hotelInspectionRoutes);
 
 const marketplaceRoutes = require("./routes/marketplaceRoutes");
 app.use("/api/marketplace", marketplaceRoutes);
@@ -216,10 +217,6 @@ app.use("/api/wishlist", wishlistRoutes);
 // Reviews (отзывы)
 const reviewRoutes = require("./routes/reviewRoutes");
 app.use("/api/reviews", reviewRoutes);
-
-// Лайки инспекций отелей
-const hotelInspectionRoutes = require("./routes/hotelInspectionRoutes");
-app.use("/api/hotel-inspections", hotelInspectionRoutes);
 
 // Telegram webhook-роуты (СТАРЫЙ бот по токену TELEGRAM_BOT_TOKEN)
 const telegramRoutes = require("./routes/telegramRoutes");
@@ -961,9 +958,6 @@ app.use(providerServices);
 const adminBroadcastRoutes = require("./routes/adminBroadcastRoutes");
 app.use("/api/admin/broadcast", adminBroadcastRoutes);
 
-/** ===================== HotelsSeasons ===================== */
-const hotelSeasonsRouter = require("./routes/hotelSeasons");
-app.use("/api/hotels/:id/seasons", hotelSeasonsRouter);
 const hotelOffersRouter = require("./routes/hotelOffers");
 app.use("/api/hotels/:id/offers", hotelOffersRouter);
 

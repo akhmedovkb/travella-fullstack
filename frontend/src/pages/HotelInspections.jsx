@@ -662,7 +662,7 @@ function InspectionCard({ item, onLiked, onEdit, onDeleted, onModerated, onRepor
               ❤️ Полезно · {Number(item.likes || 0)}
             </button>
             <button type="button" onClick={() => onReported(item)} className="rounded-2xl bg-amber-50 px-4 py-2 text-sm font-black text-amber-700 ring-1 ring-amber-100 hover:bg-amber-100">⚠️ Пожаловаться</button>
-            {canManage && <button type="button" onClick={() => onEdit(item)} className="rounded-2xl bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 ring-1 ring-blue-100 hover:bg-blue-100">✏️ Редактировать</button>}
+            {canManage && <button type="button" onClick={() => onEdit(item)} className="rounded-2xl bg-blue-50 px-4 py-2 text-sm font-black text-blue-700 ring-1 ring-blue-100 hover:bg-blue-100">{String(item?.moderation_status || item?.status || "").toLowerCase() === "rejected" ? "Исправить и отправить повторно" : "Редактировать"}</button>}
             {canManage && <button type="button" onClick={() => onDeleted(item)} className="rounded-2xl bg-red-50 px-4 py-2 text-sm font-black text-red-700 ring-1 ring-red-100 hover:bg-red-100">🗑 Скрыть</button>}
             {canModerate && <button type="button" onClick={() => onModerated(item, "approved")} className="rounded-2xl bg-emerald-50 px-4 py-2 text-sm font-black text-emerald-700 ring-1 ring-emerald-100 hover:bg-emerald-100">✅ Одобрить</button>}
             {canModerate && <button type="button" onClick={() => onModerated(item, "rejected")} className="rounded-2xl bg-slate-50 px-4 py-2 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-100">⛔ Отклонить</button>}
@@ -697,8 +697,8 @@ function PassportSummary({ hotel, items = [] }) {
     <div className="rounded-[28px] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
-          <div className="inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">Hotel Passport</div>
-          <h1 className="mt-3 text-2xl font-black tracking-[-0.04em] text-slate-950">{hotel?.name || "Лента Hotel Passport"}</h1>
+          <div className="inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">Инспекция отеля</div>
+          <h1 className="mt-3 text-2xl font-black tracking-[-0.04em] text-slate-950">{hotel?.name || "Инспекции отелей"}</h1>
           <p className="mt-1 text-sm font-semibold text-slate-500">{hotel ? [hotel.city || hotel.location, hotel.country].filter(Boolean).join(", ") : "Живые обзоры отелей от поставщиков и клиентов Travella"}</p>
         </div>
         <div className="grid grid-cols-3 gap-2 text-center">
@@ -782,6 +782,7 @@ function EditInspectionPanel({ item, onClose, onSaved }) {
   const [mediaMeta, setMediaMeta] = useState([]);
   const [activeMediaSection, setActiveMediaSection] = useState("room");
   const [saving, setSaving] = useState(false);
+  const rejected = String(item?.moderation_status || item?.status || "").toLowerCase() === "rejected";
 
   const existingMediaCount = existingMedia.length;
   const newFilesCount = files.length;
@@ -896,6 +897,12 @@ function EditInspectionPanel({ item, onClose, onSaved }) {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+        {rejected ? (
+          <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-900">
+            <div className="font-black">Инспекция отклонена</div>
+            <div className="mt-1 font-semibold">{item?.rejection_reason || "Исправьте замечания модератора и отправьте инспекцию повторно."}</div>
+          </div>
+        ) : null}
         <div className="grid gap-5">
           <section className="rounded-3xl border border-slate-100 bg-slate-50/60 p-4">
             <div className="mb-3 text-xs font-black uppercase tracking-[0.16em] text-slate-400">Основной текст</div>
@@ -1037,7 +1044,7 @@ function EditInspectionPanel({ item, onClose, onSaved }) {
         <div className="shrink-0 border-t border-slate-100 bg-white/95 p-4 md:p-5">
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <button type="button" onClick={onClose} className="rounded-2xl bg-slate-100 px-5 py-3 text-sm font-black text-slate-700 hover:bg-slate-200">Отмена</button>
-            <button type="button" onClick={save} disabled={saving} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-orange-600 disabled:opacity-50">{saving ? "Сохраняем…" : "Сохранить и отправить на модерацию"}</button>
+            <button type="button" onClick={save} disabled={saving} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-sm hover:bg-orange-600 disabled:opacity-50">{saving ? "Сохраняем…" : rejected ? "Исправил — отправить повторно" : "Сохранить и отправить на модерацию"}</button>
           </div>
         </div>
       </div>
@@ -1046,6 +1053,11 @@ function EditInspectionPanel({ item, onClose, onSaved }) {
 }
 
 function AddInspectionWizard({ hotel, hotelId, onCreated }) {
+  const canReview = Boolean(
+    localStorage.getItem("clientToken") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("providerToken")
+  );
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(1);
@@ -1172,7 +1184,7 @@ function AddInspectionWizard({ hotel, hotelId, onCreated }) {
     }
   }
 
-  if (!hotelId) return null;
+  if (!hotelId || !canReview) return null;
 
   return (
     <div className="rounded-[28px] border border-slate-200 bg-white p-4 shadow-sm">
@@ -1357,7 +1369,15 @@ export default function HotelInspections() {
   const [filters, setFilters] = useState(() => parseFilterFromSearch(searchParams));
   const [reloadKey, setReloadKey] = useState(0);
   const [editingItem, setEditingItem] = useState(null);
+  const [mineOnly, setMineOnly] = useState(() => searchParams.get("mine") === "1");
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, pages: 1, total: 0, limit: 24 });
   const hotelMode = Boolean(hotelId);
+  const canReview = Boolean(
+    localStorage.getItem("clientToken") ||
+    localStorage.getItem("token") ||
+    localStorage.getItem("providerToken")
+  );
 
   useEffect(() => {
     const next = new URLSearchParams();
@@ -1365,8 +1385,9 @@ export default function HotelInspections() {
       if (value === "" || value === false || value == null) return;
       next.set(key, value === true ? "1" : String(value));
     });
+    if (mineOnly) next.set("mine", "1");
     setSearchParams(next, { replace: true });
-  }, [filters, setSearchParams]);
+  }, [filters, mineOnly, setSearchParams]);
 
   useEffect(() => {
     let alive = true;
@@ -1385,8 +1406,10 @@ export default function HotelInspections() {
   async function load() {
     setLoading(true);
     try {
-      const data = hotelMode ? await listInspections(hotelId, filters) : await listAllInspections(filters);
+      const queryFilters = { ...filters, mine: mineOnly, page, limit: 24 };
+      const data = hotelMode ? await listInspections(hotelId, queryFilters) : await listAllInspections(queryFilters);
       setItems(arr(data?.items));
+      setPagination(data?.pagination || { page, pages: 1, total: arr(data?.items).length, limit: 24 });
     } catch {
       setItems([]);
     } finally {
@@ -1397,7 +1420,7 @@ export default function HotelInspections() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [hotelId, filters.sort, filters.city, filters.month, filters.audience, filters.visit_type, filters.min_score, filters.has_media, reloadKey]);
+  }, [hotelId, filters.sort, filters.city, filters.month, filters.audience, filters.visit_type, filters.min_score, filters.has_media, mineOnly, page, reloadKey]);
 
   useEffect(() => {
     const editId = Number(searchParams.get("edit") || 0);
@@ -1455,6 +1478,10 @@ export default function HotelInspections() {
           <Link to="/hotels" className="rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">← Отели</Link>
           {hotelId ? <Link to={`/hotels/${hotelId}`} className="rounded-2xl bg-white px-4 py-2 text-sm font-black text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50">Карточка отеля</Link> : null}
         </div>
+        {canReview ? <div className="inline-flex rounded-2xl bg-slate-100 p-1">
+          <button type="button" onClick={() => { setMineOnly(false); setPage(1); }} className={`rounded-xl px-4 py-2 text-sm font-black ${!mineOnly ? "bg-white text-slate-950 shadow-sm" : "text-slate-500"}`}>Все инспекции</button>
+          <button type="button" onClick={() => { setMineOnly(true); setPage(1); }} className={`rounded-xl px-4 py-2 text-sm font-black ${mineOnly ? "bg-slate-950 text-white shadow-sm" : "text-slate-500"}`}>Мои инспекции</button>
+        </div> : null}
       </div>
 
       {editingItem && <EditInspectionPanel item={editingItem} onClose={() => setEditingItem(null)} onSaved={() => setReloadKey((v) => v + 1)} />}
@@ -1477,6 +1504,11 @@ export default function HotelInspections() {
           <div className="mt-1 text-sm font-semibold text-slate-500">Снимите фильтры или добавьте первый живой обзор по этому отелю.</div>
         </div>
       )}
+      {pagination.pages > 1 ? <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-white p-3">
+        <button type="button" disabled={loading || page <= 1} onClick={() => setPage((value) => Math.max(1, value - 1))} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black disabled:opacity-40">Назад</button>
+        <div className="text-sm font-bold text-slate-600">Страница {pagination.page} из {pagination.pages} · всего {pagination.total}</div>
+        <button type="button" disabled={loading || page >= pagination.pages} onClick={() => setPage((value) => Math.min(pagination.pages, value + 1))} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-black disabled:opacity-40">Далее</button>
+      </div> : null}
     </div>
   );
 }
