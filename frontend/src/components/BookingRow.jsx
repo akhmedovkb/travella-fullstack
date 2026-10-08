@@ -172,6 +172,7 @@ export default function BookingRow({
   onHoldExpired,
   onPay,
   onRefund,
+  embedded = false,
 }) {
   const { t } = useTranslation();
 
@@ -301,7 +302,7 @@ const profileHref = useMemo(() => {
   const dates = Array.isArray(booking?.dates) ? booking.dates : [];
 
   return (
-    <div className="rounded-xl border bg-white p-3 md:p-4">
+    <div className={embedded ? "bg-transparent" : "rounded-lg border border-gray-200 bg-white p-4"}>
       {/* Верхняя строка: #id · услуга · статус · (НОВОЕ) дата создания */}
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-gray-700">
         <span className="text-gray-500">#{booking.id}</span>
