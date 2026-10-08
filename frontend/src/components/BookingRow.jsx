@@ -136,6 +136,30 @@ const initials = (name) =>
     .map((w) => w[0]?.toUpperCase())
     .join("");
 
+const tourBuilderDetails = (booking) => {
+  const details = booking?.details && typeof booking.details === "object"
+    ? booking.details
+    : booking?.attachments && typeof booking.attachments === "object"
+      ? booking.attachments
+      : {};
+  const message = String(booking?.client_message || "");
+  const legacy = message.match(/^\[TourBuilder\]\s*([^•]+)\s*•\s*PAX\s*(\d+)\s*•\s*([^•]+)$/i);
+  const kind = String(details.tb_kind || details.type || legacy?.[1] || "").trim().toLowerCase();
+  const adults = Number(details.pax_adult);
+  const children = Number(details.pax_child);
+  const structuredGuests = Number.isFinite(adults) || Number.isFinite(children)
+    ? (Number.isFinite(adults) ? adults : 0) + (Number.isFinite(children) ? children : 0)
+    : null;
+  const guests = structuredGuests ?? (legacy?.[2] ? Number(legacy[2]) : null);
+  const residency = String(details.resident_type || legacy?.[3] || "").trim().toLowerCase();
+  const kindLabel = kind === "hotel" ? "Гостиница" : kind === "guide" ? "Гид" : kind === "transport" ? "Транспорт" : kind === "entry" ? "Входные билеты" : "";
+  const parts = [kindLabel];
+  if (Number.isFinite(guests)) parts.push(`Гостей: ${guests}`);
+  if (residency === "nrs") parts.push("Тариф: для нерезидентов");
+  if (residency === "res") parts.push("Тариф: для резидентов");
+  return { kind, text: parts.filter(Boolean).join(" · ") || message || "—" };
+};
+
 const isImg = (u) => /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(String(u || ""));
 
 async function downloadBookingDocument(bookingId, kind) {
@@ -303,6 +327,9 @@ const profileHref = useMemo(() => {
   };
 
   const dates = Array.isArray(booking?.dates) ? booking.dates : [];
+  const tbDetails = useMemo(() => tourBuilderDetails(booking), [booking]);
+  const isIncoming = viewerRole === "provider";
+  const isHotelBooking = tbDetails.kind === "hotel";
   const attachments = useMemo(
     () => toFiles(booking?.attachments).map(resolveFile).filter((file) => file.url && file.name),
     [booking?.attachments]
@@ -348,7 +375,9 @@ const profileHref = useMemo(() => {
       <div className="grid gap-x-6 gap-y-4 border-t border-gray-100 pt-3 sm:grid-cols-2 xl:grid-cols-[1.35fr,1fr,0.8fr,1.5fr]">
         <div className="min-w-0">
           <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
-            {t("bookings.provider", { defaultValue: "Поставщик" })}
+            {isIncoming
+              ? t("bookings.customer", { defaultValue: "Заказчик" })
+              : t("bookings.provider", { defaultValue: "Поставщик" })}
           </div>
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200">
@@ -379,7 +408,9 @@ const profileHref = useMemo(() => {
 
         <div className="min-w-0">
           <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
-            {t("bookings.contacts", { defaultValue: "Контакты" })}
+            {isIncoming
+              ? t("bookings.customer_contacts", { defaultValue: "Контакты заказчика" })
+              : t("bookings.provider_contacts", { defaultValue: "Контакты поставщика" })}
           </div>
           <div className="space-y-1 text-sm text-gray-700">
             {counterpart.phone ? (
@@ -400,7 +431,9 @@ const profileHref = useMemo(() => {
 
         <div className="min-w-0">
           <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
-            {t("bookings.service_date", { defaultValue: "Дата услуги" })}
+            {isHotelBooking
+              ? t("bookings.stay_date", { defaultValue: "Дата проживания" })
+              : t("bookings.service_date", { defaultValue: "Дата услуги" })}
           </div>
           <div className="text-sm text-gray-700">
             {dates.length
@@ -415,10 +448,12 @@ const profileHref = useMemo(() => {
 
         <div className="min-w-0">
           <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
-            {t("bookings.request_details", { defaultValue: "Детали заявки" })}
+            {isHotelBooking
+              ? t("bookings.accommodation", { defaultValue: "Размещение" })
+              : t("bookings.request_details", { defaultValue: "Детали заявки" })}
           </div>
           <div className="whitespace-pre-wrap break-words text-sm text-gray-700">
-            {booking.client_message || "—"}
+            {booking.source === "tour_builder" ? tbDetails.text : (booking.client_message || "—")}
           </div>
         </div>
       </div>

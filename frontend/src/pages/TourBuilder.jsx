@@ -1704,6 +1704,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
           details: {
             from_city: routeCities.from || "",
             to_city: routeCities.to || "",
+            tb_kind: p.tb_kind || p.kind || "",
+            pax_adult: Number(p.pax_adult) || 0,
+            pax_child: Number(p.pax_child) || 0,
+            resident_type: residentType,
             tour_program: Array.isArray(p.tour_program) ? p.tour_program : [],
             tour_program_text: p.tour_program_text || "",
             hotel_quotes: hotelQuoteSnapshots,
