@@ -21,6 +21,9 @@ const onlyDigitsDot = (s) =>
 
 const isFiniteNum = (n) => Number.isFinite(n) && !Number.isNaN(n);
 const fmt = (n) => (isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFractionDigits: 2 }) : "");
+const isTourBuilderHotel = (booking) =>
+  String(booking?.source || "").toLowerCase() === "tour_builder"
+  && String(booking?.details?.tb_kind || booking?.attachments?.tb_kind || "").toLowerCase() === "hotel";
 
 /* =============== Карточка согласования цены (входящие) =============== */
 function PriceAgreementCard({ booking, onSent, onReject }) {
@@ -750,6 +753,7 @@ export default function ProviderBookings() {
           const isIncoming = tab === "incoming";
           const alreadyQuoted = Number(b?.provider_price) > 0;
           const awaitingRequester = isIncoming && String(b?.status) === "quoted";
+          const fixedHotelBooking = isTourBuilderHotel(b);
 
           // подписи «кем отклонено/кем отменено»
           let rejectedByLabel = null;
@@ -775,7 +779,7 @@ export default function ProviderBookings() {
                 rejectedByLabel={rejectedByLabel}
                 cancelledByLabel={cancelledByLabel}
                 onAccept={accept}
-                onReject={isIncoming && String(b.status) === "pending" ? undefined : reject}
+                onReject={isIncoming && String(b.status) === "pending" && !fixedHotelBooking ? undefined : reject}
                 onCancel={cancelOutgoing}
                 onCancelByProvider={openCancelIncoming}
                 onHoldExpired={load}
@@ -784,7 +788,7 @@ export default function ProviderBookings() {
               />
 
               {/* Входящие: форма согласования цены (прячем после отправки предложения) */}
-              {isIncoming && String(b.status) === "pending" && !awaitingRequester && (
+              {isIncoming && String(b.status) === "pending" && !awaitingRequester && !fixedHotelBooking && (
                 <PriceAgreementCard booking={b} onSent={load} onReject={reject} />
               )}
 
@@ -973,10 +977,12 @@ export default function ProviderBookings() {
           onAccept={accept}
           onHoldExpired={load}
           onPay={payBooking}
-          onReject={String(b.status) === "pending" ? undefined : reject}
+          onReject={String(b.status) === "pending" && !isTourBuilderHotel(b) ? undefined : reject}
           onCancelByProvider={openCancelIncoming}
         />
-        {String(b.status) === "pending" && <PriceAgreementCard booking={b} onSent={load} onReject={reject} />}
+        {String(b.status) === "pending" && !isTourBuilderHotel(b) && (
+          <PriceAgreementCard booking={b} onSent={load} onReject={reject} />
+        )}
       </div>
     );
     return (
