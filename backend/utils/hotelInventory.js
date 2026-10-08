@@ -37,6 +37,29 @@ function reservationLines(details, providerId) {
   return [...unique.values()].sort((a, b) => a.rateId - b.rateId || a.date.localeCompare(b.date));
 }
 
+function quotedHotelPrice(details, providerId) {
+  const quotes = Array.isArray(details?.hotel_quotes) ? details.hotel_quotes : [];
+  const rawResidency = String(details?.resident_type || '').toLowerCase();
+  const expectedResidency = rawResidency === 'res' ? 'resident' : rawResidency === 'nrs' ? 'non_resident' : null;
+  const unique = new Map();
+  for (const quote of quotes) {
+    const quoteProviderId = Number(quote?.offer?.provider_id ?? quote?.hotel?.provider_id);
+    if (quoteProviderId !== Number(providerId) || quote?.valid !== true) continue;
+    const lines = Array.isArray(quote?.lines) ? quote.lines : [];
+    if (expectedResidency && lines.some((line) => ![expectedResidency, 'all'].includes(String(line?.residency || '').toLowerCase()))) continue;
+    const amount = Number(quote?.totals?.total);
+    const currency = String(quote?.currency || '').toUpperCase();
+    if (!Number.isFinite(amount) || amount <= 0 || !currency) continue;
+    const key = `${quote?.date || ''}:${quote?.quote_version || JSON.stringify(lines)}`;
+    unique.set(key, { amount, currency });
+  }
+  const items = [...unique.values()];
+  if (!items.length) return null;
+  const currency = items[0].currency;
+  if (items.some((item) => item.currency !== currency)) return null;
+  return { amount: items.reduce((sum, item) => sum + item.amount, 0), currency };
+}
+
 async function reserveHotelInventory({ bookingId, providerId, details, holdMinutes = 30, client: transactionClient = null }) {
   const requested = reservationLines(details, providerId);
   const hasManagedQuote = (Array.isArray(details?.hotel_quotes) ? details.hotel_quotes : [])
@@ -215,4 +238,4 @@ async function reserveHotelInventory({ bookingId, providerId, details, holdMinut
   }
 }
 
-module.exports = { HotelInventoryError, reserveHotelInventory, reservationLines, physicalAvailability, supplierAllocationAvailability };
+module.exports = { HotelInventoryError, reserveHotelInventory, reservationLines, quotedHotelPrice, physicalAvailability, supplierAllocationAvailability };

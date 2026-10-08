@@ -5,7 +5,7 @@ const tg = require("../utils/telegram");
 const { randomUUID } = require("crypto");
 const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
-const { HotelInventoryError, reserveHotelInventory } = require("../utils/hotelInventory");
+const { HotelInventoryError, quotedHotelPrice, reserveHotelInventory } = require("../utils/hotelInventory");
 const { ensureHotelOfferTables } = require("../utils/hotelOffersSchema");
 
 function buildPaymeCheckoutUrl({ orderId, amountTiyin, redirectUrl }) {
@@ -336,8 +336,13 @@ const createBooking = async (req, res) => {
           from: (x.from || x.from_city || "").trim?.() || undefined,
           to:   (x.to   || x.to_city   || "").trim?.() || undefined,
           date: x.date ? toISO(x.date) : undefined
-        }));
+      }));
     }
+
+    const managedHotelPrice = isTourBuilder && tourBuilderKind === "hotel"
+      ? quotedHotelPrice(bag, providerId)
+      : null;
+    const initialStatus = managedHotelPrice ? "quoted" : "pending";
 
     const insertCols = ["service_id", "provider_id", "client_id", "date", "status", "client_message", "attachments"];
     const values = [
@@ -346,7 +351,7 @@ const createBooking = async (req, res) => {
       providerId,
       userRole === "client" ? userId : null,
       primaryDate,
-      "pending",
+      initialStatus,
       message ?? null,
       JSON.stringify(bag), // <— объект
     ];
@@ -354,7 +359,11 @@ const createBooking = async (req, res) => {
     // опциональная валюта
     if (cols.currency) {
       insertCols.push("currency");
-      values.push(currency ?? null);
+      values.push(managedHotelPrice?.currency || currency || null);
+    }
+    if (managedHotelPrice) {
+      insertCols.push("provider_price", "provider_note");
+      values.push(managedHotelPrice.amount, "Цена зафиксирована по опубликованному тарифу Tour Builder");
     }
     // сохраняем источник и группировку, если колонки есть
     if (cols.source) {
@@ -431,7 +440,13 @@ const createBooking = async (req, res) => {
     transaction.release();
     transaction = null;
 
-    res.status(201).json({ id: bookingId, status: "pending", dates: days, inventory: inventoryReservation });
+    res.status(201).json({
+      id: bookingId,
+      status: initialStatus,
+      dates: days,
+      inventory: inventoryReservation,
+      ...(managedHotelPrice ? { price: managedHotelPrice.amount, currency: managedHotelPrice.currency } : {}),
+    });
 
     const bkg = {
       id: bookingId,

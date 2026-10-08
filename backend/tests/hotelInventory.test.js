@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { reservationLines, physicalAvailability, supplierAllocationAvailability } = require('../utils/hotelInventory');
+const { reservationLines, quotedHotelPrice, physicalAvailability, supplierAllocationAvailability } = require('../utils/hotelInventory');
 
 test('deduplicates repeated quote snapshots by rate and stay date', () => {
   const quote = {
@@ -36,4 +36,24 @@ test('calculates shared room inventory with overrides and stop-sale', () => {
 test('calculates one shared supplier allocation across its rates', () => {
   assert.equal(supplierAllocationAvailability(6, 2), 4);
   assert.equal(supplierAllocationAvailability(6, 9), 0);
+});
+
+test('uses the resident price for a resident Tour Builder booking', () => {
+  const details = { resident_type: 'res', hotel_quotes: [
+    { valid: true, date: '2026-11-07', quote_version: 'resident-v1', currency: 'UZS', offer: { provider_id: 77 },
+      lines: [{ residency: 'resident' }], totals: { total: 1000000 } },
+    { valid: true, date: '2026-11-07', quote_version: 'other-provider', currency: 'UZS', offer: { provider_id: 88 },
+      lines: [{ residency: 'resident' }], totals: { total: 999 } },
+  ] };
+  assert.deepEqual(quotedHotelPrice(details, 77), { amount: 1000000, currency: 'UZS' });
+});
+
+test('uses the non-resident price and rejects a residency mismatch', () => {
+  const matching = { resident_type: 'nrs', hotel_quotes: [
+    { valid: true, date: '2026-11-07', quote_version: 'non-resident-v1', currency: 'UZS', offer: { provider_id: 77 },
+      lines: [{ residency: 'non_resident' }], totals: { total: 1200000 } },
+  ] };
+  const mismatched = { ...matching, hotel_quotes: [{ ...matching.hotel_quotes[0], lines: [{ residency: 'resident' }] }] };
+  assert.deepEqual(quotedHotelPrice(matching, 77), { amount: 1200000, currency: 'UZS' });
+  assert.equal(quotedHotelPrice(mismatched, 77), null);
 });

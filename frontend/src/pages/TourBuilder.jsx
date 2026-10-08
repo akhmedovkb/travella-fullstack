@@ -1710,7 +1710,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
             resident_type: residentType,
             tour_program: Array.isArray(p.tour_program) ? p.tour_program : [],
             tour_program_text: p.tour_program_text || "",
-            hotel_quotes: hotelQuoteSnapshots,
+            hotel_quotes: p.kind === "hotel"
+              ? hotelQuoteSnapshots.filter((quote) => String(quote?.offer?.provider_id ?? quote?.hotel?.provider_id) === String(p.provider_id))
+              : [],
           },
           legs,
         };
