@@ -997,85 +997,117 @@ export default function ProviderBookings() {
     );
   }, [incTbGroups, loading, t]);
 
+  const incomingAttention = useMemo(
+    () => incoming.filter((b) => String(b?.status || "").toLowerCase() === "pending").length,
+    [incoming]
+  );
+  const outgoingAttention = useMemo(
+    () => outgoing.filter((b) => ["quoted", "awaiting_payment"].includes(String(b?.status || "").toLowerCase())).length,
+    [outgoing]
+  );
+  const activeSubTab = tab === "incoming" ? inSubTab : outSubTab;
+  const setActiveSubTab = tab === "incoming" ? setInSubTab : setOutSubTab;
+  const tourBuilderCount = tab === "incoming" ? incTbGroups.length : tbGroups.length;
+  const otherCount = tab === "incoming" ? incomingRest.length : outgoingRest.length;
+
   return (
-    <div className="mx-auto max-w-5xl p-4 md:p-6">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <h1 className="text-2xl font-bold">{t("bookings.titles.provider", { defaultValue: "Бронирования (Поставщик)" })}</h1>
-         <button onClick={load} className="rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm hover:bg-gray-50">
-          {t("actions.refresh", { defaultValue: "Обновить" })}
-          
-        </button>
-      </div>
-
-      {/* Вкладки */}
-      <div className="mb-3 flex flex-wrap gap-2">
-        <button
-          onClick={() => setTab("incoming")}
-          className={"rounded-full px-4 py-2 ring-1 " + (tab === "incoming" ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
-        >
-          {t("bookings.tabs.incoming", { defaultValue: "Бронирования моих услуг" })}
-          <span className={"ml-2 inline-flex items-center rounded-full px-1.5 text-xs " + (tab === "incoming" ? "bg-white/20" : "bg-gray-100")}>
-            {incoming.length}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setTab("outgoing")}
-          className={"rounded-full px-4 py-2 ring-1 " + (tab === "outgoing" ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
-        >
-          {t("bookings.tabs.outgoing", { defaultValue: "Мои бронирования услуг" })}
-          <span className={"ml-2 inline-flex items-center rounded-full px-1.5 text-xs " + (tab === "outgoing" ? "bg-white/20" : "bg-gray-100")}>
-            {outgoing.length}
-          </span>
-        </button>
-      </div>
-      {/* Под-вкладки для входящих */}
-      {tab === "incoming" && (
-        <div className="mb-3 flex flex-wrap gap-2">
+    <div className="mx-auto max-w-7xl p-4 md:p-6">
+      <header className="mb-5 border-b border-gray-200 pb-5">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="mb-1 text-xs font-semibold uppercase text-orange-600">
+              {t("bookings.workspace", { defaultValue: "Управление заявками" })}
+            </div>
+            <h1 className="text-2xl font-bold text-gray-950 md:text-3xl">
+              {t("bookings.title", { defaultValue: "Бронирования" })}
+            </h1>
+            <p className="mt-1 max-w-2xl text-sm text-gray-600">
+              {tab === "incoming"
+                ? t("bookings.incoming_help", { defaultValue: "Заявки клиентов и партнёров на ваши услуги." })
+                : t("bookings.outgoing_help", { defaultValue: "Заявки, которые вы отправили другим поставщикам." })}
+            </p>
+          </div>
           <button
-            onClick={() => setInSubTab("tb")}
-            className={"rounded-full px-3 py-1.5 ring-1 " + (inSubTab === "tb" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
+            type="button"
+            onClick={load}
+            disabled={loading}
+            className="inline-flex h-10 items-center gap-2 rounded-lg border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:bg-gray-50 disabled:cursor-wait disabled:opacity-60"
           >
-            {t("bookings.tb_tab", { defaultValue: "Пакеты TourBuilder" })}
-            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (inSubTab === "tb" ? "bg-white/20" : "bg-gray-100")}>
-              {incTbGroups.length}
-            </span>
-          </button>
-          <button
-            onClick={() => setInSubTab("rest")}
-            className={"rounded-full px-3 py-1.5 ring-1 " + (inSubTab === "rest" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
-          >
-            {t("bookings.rest_tab", { defaultValue: "Остальные входящие" })}
-            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (inSubTab === "rest" ? "bg-white/20" : "bg-gray-100")}>
-              {incomingRest.length}
-            </span>
+            <span aria-hidden="true">↻</span>
+            {loading ? t("common.loading", { defaultValue: "Загрузка..." }) : t("actions.refresh", { defaultValue: "Обновить" })}
           </button>
         </div>
-      )}
+      </header>
 
-      {/* Под-вкладки для исходящих */}
-      {tab === "outgoing" && (
-        <div className="mb-3 flex flex-wrap gap-2">
-          <button
-            onClick={() => setOutSubTab("tb")}
-            className={"rounded-full px-3 py-1.5 ring-1 " + (outSubTab === "tb" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
-          >
-            {t("bookings.tb_tab", { defaultValue: "Пакеты TourBuilder" })}
-            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (outSubTab === "tb" ? "bg-white/20" : "bg-gray-100")}>
-              {tbGroups.length}
-            </span>
-          </button>
-          <button
-            onClick={() => setOutSubTab("rest")}
-            className={"rounded-full px-3 py-1.5 ring-1 " + (outSubTab === "rest" ? "bg-violet-600 text-white ring-violet-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
-          >
-            {t("bookings.rest_tab", { defaultValue: "Остальные исходящие" })}
-            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (outSubTab === "rest" ? "bg-white/20" : "bg-gray-100")}>
-              {outgoingRest.length}
-            </span>
-          </button>
-        </div>
-      )}
+      <div className="mb-5 grid gap-3 md:grid-cols-2" role="tablist" aria-label={t("bookings.direction", { defaultValue: "Направление бронирований" })}>
+        {[
+          {
+            key: "incoming",
+            title: t("bookings.incoming", { defaultValue: "Входящие" }),
+            description: t("bookings.incoming_short", { defaultValue: "Брони ваших услуг" }),
+            total: incoming.length,
+            attention: incomingAttention,
+          },
+          {
+            key: "outgoing",
+            title: t("bookings.outgoing", { defaultValue: "Исходящие" }),
+            description: t("bookings.outgoing_short", { defaultValue: "Брони, созданные вами" }),
+            total: outgoing.length,
+            attention: outgoingAttention,
+          },
+        ].map((item) => {
+          const active = tab === item.key;
+          return (
+            <button
+              key={item.key}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(item.key)}
+              className={`min-h-[92px] rounded-lg border px-4 py-3 text-left transition ${
+                active
+                  ? "border-gray-950 bg-gray-950 text-white shadow-sm"
+                  : "border-gray-200 bg-white text-gray-950 hover:border-gray-400"
+              }`}
+            >
+              <span className="flex items-start justify-between gap-4">
+                <span>
+                  <span className="block text-lg font-bold">{item.title}</span>
+                  <span className={`mt-1 block text-sm ${active ? "text-white/70" : "text-gray-500"}`}>{item.description}</span>
+                </span>
+                <span className={`min-w-10 rounded-md px-2.5 py-1 text-center text-lg font-bold ${active ? "bg-white/10" : "bg-gray-100"}`}>
+                  {item.total}
+                </span>
+              </span>
+              <span className={`mt-2 block text-xs font-medium ${active ? "text-orange-300" : "text-orange-700"}`}>
+                {item.attention > 0
+                  ? t("bookings.need_action", { count: item.attention, defaultValue: `Требуют действия: ${item.attention}` })
+                  : t("bookings.no_action", { defaultValue: "Нет заявок, требующих действия" })}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
+        <span className="mr-2 text-xs font-semibold uppercase text-gray-500">
+          {t("bookings.source", { defaultValue: "Источник" })}
+        </span>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("tb")}
+          className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSubTab === "tb" ? "bg-orange-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
+        >
+          Tour Builder <span className="ml-1 opacity-75">{tourBuilderCount}</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveSubTab("rest")}
+          className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSubTab === "rest" ? "bg-orange-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
+        >
+          {t("bookings.other", { defaultValue: "Другие бронирования" })} <span className="ml-1 opacity-75">{otherCount}</span>
+        </button>
+      </div>
 
       {/* Фильтры статуса — только для плоских списков (входящие/остальные и исходящие/остальные) */}
       {((tab === "incoming" && inSubTab === "rest") || (tab === "outgoing" && outSubTab === "rest")) && (
