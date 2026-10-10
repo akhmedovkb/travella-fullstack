@@ -87,6 +87,35 @@ const EXTENDED_AGENT_CATEGORIES = [
   "visa_support",
 ];
 
+const CATEGORY_META = {
+  refused_tour: { label: "Отказной тур", hint: "Готовый турпакет с ограниченным сроком продажи" },
+  refused_hotel: { label: "Отказной отель", hint: "Подтверждённое размещение по специальной цене" },
+  refused_flight: { label: "Отказной авиабилет", hint: "Авиабилет, который нужно быстро перепродать" },
+  refused_ticket: { label: "Отказной билет", hint: "Билет на поезд, автобус или другое событие" },
+  refused_event_ticket: { label: "Билет на мероприятие", hint: "Концерт, выставка, матч или другое событие" },
+  visa_support: { label: "Визовая поддержка", hint: "Помощь с документами и оформлением визы" },
+  author_tour: { label: "Авторский тур", hint: "Собственная программа тура с расписанием" },
+  city_tour_guide: { label: "Городская экскурсия", hint: "Экскурсия с гидом по городу" },
+  mountain_tour_guide: { label: "Экскурсия в горы", hint: "Маршрут с гидом за пределами города" },
+  desert_tour_guide: { label: "Тур в пустыню", hint: "Экскурсионная программа в пустыне" },
+  safari_tour_guide: { label: "Сафари-тур", hint: "Приключенческая программа с гидом" },
+  city_tour_transport: { label: "Транспорт для тура по городу", hint: "Автомобиль с водителем для городской программы" },
+  mountain_tour_transport: { label: "Транспорт для тура в горы", hint: "Подходящий транспорт для загородного маршрута" },
+  desert_tour_transport: { label: "Транспорт для тура в пустыню", hint: "Транспорт для маршрута по пустыне" },
+  safari_tour_transport: { label: "Транспорт для сафари", hint: "Автомобиль для сафари-программы" },
+  one_way_transfer: { label: "Трансфер в одну сторону", hint: "Поездка между двумя точками" },
+  dinner_transfer: { label: "Трансфер на ужин", hint: "Подача автомобиля к ресторану и обратно" },
+  border_transfer: { label: "Трансфер до границы", hint: "Поездка к пограничному пункту" },
+  hotel_room: { label: "Номер в отеле", hint: "Размещение в выбранной категории номера" },
+  hotel_transfer: { label: "Трансфер отеля", hint: "Встреча или проводы гостей отеля" },
+  hall_rent: { label: "Аренда зала", hint: "Конференц-зал или площадка для мероприятия" },
+};
+
+function getCategoryMeta(category, t) {
+  const meta = CATEGORY_META[category] || { label: category, hint: "Услуга для клиентов Marketplace" };
+  return { ...meta, label: t(`category.${category}`, { defaultValue: meta.label }) };
+}
+
 const HISTORICAL_REFUSED_CATEGORIES = [
   "refused_tour",
   "author_tour",
@@ -2131,16 +2160,16 @@ export default function DashboardServices({ viewMode = "create" }) {
               <h2 className="text-xl font-black text-slate-950 sm:text-2xl">
                 {viewMode === "manage"
                   ? t("provider_services_tab_created", { defaultValue: "Мои услуги" })
-                  : t("services_marketplace", { defaultValue: "Услуги для маркетплейса" })}
+                  : "Создать услугу для Marketplace"}
               </h2>
               <p className="mt-1 max-w-2xl text-sm font-medium leading-5 text-slate-500">
                 {viewMode === "manage"
                   ? t("service_form.manage_hint", { defaultValue: "Управляйте статусами, актуальностью и публикацией созданных услуг." })
-                  : t("service_form.studio_hint", { defaultValue: "Создавайте предложения, сохраняйте черновики и отправляйте готовые карточки на модерацию." })}
+                  : "Выберите тип услуги и последовательно заполните карточку для клиента."}
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-              <div className="grid grid-cols-3 gap-2 text-center">
+              {viewMode === "manage" && <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="min-w-[88px] rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
                   <div className="text-lg font-black text-slate-950">{serviceListStats.active}</div>
                   <div className="text-[10px] font-bold text-slate-500">Активные</div>
@@ -2153,7 +2182,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                   <div className="text-lg font-black text-emerald-700">{serviceListStats.published}</div>
                   <div className="text-[10px] font-bold text-emerald-700">Опубликовано</div>
                 </div>
-              </div>
+              </div>}
               <button
                 type="button"
                 onClick={() => viewMode === "manage" ? navigate("/dashboard/services/marketplace") : navigate("/dashboard/services/my")}
@@ -2438,7 +2467,7 @@ export default function DashboardServices({ viewMode = "create" }) {
 
           {viewMode !== "manage" && (
           <section className="min-w-0 bg-slate-50/70 p-4 sm:p-5">
-            <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            {selectedService && <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-xl font-black tracking-[-0.03em] text-slate-950">
                   {selectedService
@@ -2469,14 +2498,10 @@ export default function DashboardServices({ viewMode = "create" }) {
                         {priceText || "—"}
                       </span>
                     </div>
-                  ) : (
-                    t("service_form.create_new_hint", {
-                      defaultValue: "Выберите категорию — форма покажет только нужные поля.",
-                    })
-                  )}
+                  ) : null}
                 </div>
               </div>
-            </div>
+            </div>}
 
             <div className="mx-auto max-w-[1180px] space-y-5">
             {selectedService && (
@@ -2507,57 +2532,69 @@ export default function DashboardServices({ viewMode = "create" }) {
               </div>
             )}
 
-            <div className="max-w-2xl">
-              <Field label={t("select_category", { defaultValue: "Выберите категорию" })}>
-                <SelectInput value={category} onChange={(e) => { setCategory(e.target.value); setStep(1); setDetails({ ...DEFAULT_DETAILS }); }}>
-                  <option value="">{t("select_category", { defaultValue: "Выберите категорию" })}</option>
-                  {categoryOptions.map((cat) => (
-                    <option key={cat} value={cat}>{t(`category.${cat}`, { defaultValue: cat })}</option>
-                  ))}
-                </SelectInput>
-              </Field>
-            </div>
-
             {!category && (
-              <div className="grid gap-3 sm:grid-cols-3">
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <Layers3 aria-hidden="true" className="h-5 w-5 text-orange-500" />
-                  <div className="mt-3 text-sm font-black text-slate-900">1. Категория</div>
-                  <div className="mt-1 text-xs font-medium leading-5 text-slate-500">Определяет набор полей и вид карточки.</div>
+              <div className="mx-auto max-w-5xl">
+                <div className="mb-4">
+                  <div className="text-lg font-black text-slate-950">Что вы хотите предложить?</div>
+                  <div className="mt-1 text-sm font-medium text-slate-500">Выберите один тип. Набор полей настроится автоматически.</div>
                 </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <ShieldCheck aria-hidden="true" className="h-5 w-5 text-emerald-600" />
-                  <div className="mt-3 text-sm font-black text-slate-900">2. Подтверждение</div>
-                  <div className="mt-1 text-xs font-medium leading-5 text-slate-500">Добавьте фото или документ для модерации.</div>
-                </div>
-                <div className="rounded-lg border border-slate-200 bg-white p-4">
-                  <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-blue-600" />
-                  <div className="mt-3 text-sm font-black text-slate-900">3. Публикация</div>
-                  <div className="mt-1 text-xs font-medium leading-5 text-slate-500">Проверьте карточку и отправьте её на проверку.</div>
-                </div>
-              </div>
-            )}
-
-            {category && isExtended && (
-              <div className="mt-5 border-y border-slate-200 bg-white px-2 py-3">
-                <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
-                  {steps.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => setStep(item.id)}
-                      className={cx("flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-left transition", step === item.id ? "bg-slate-950 text-white shadow-sm" : "bg-white text-slate-600 hover:bg-orange-50")}
-                    >
-                      <span className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black", step === item.id ? "bg-white text-slate-950" : "bg-slate-100 text-slate-500")}>{item.id}</span>
-                      <span className="truncate text-sm font-black">{item.label}</span>
-                    </button>
-                  ))}
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  {categoryOptions.map((cat) => {
+                    const meta = getCategoryMeta(cat, t);
+                    return (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => { setCategory(cat); setStep(1); setDetails({ ...DEFAULT_DETAILS }); }}
+                        className="group flex min-h-28 items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-orange-300 hover:bg-orange-50/40 hover:shadow-sm"
+                      >
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition group-hover:bg-orange-100 group-hover:text-orange-600">
+                          <Layers3 aria-hidden="true" className="h-5 w-5" />
+                        </span>
+                        <span>
+                          <span className="block text-sm font-black text-slate-950">{meta.label}</span>
+                          <span className="mt-1 block text-xs font-medium leading-5 text-slate-500">{meta.hint}</span>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
 
             {category && (
-              <div className="mx-auto mt-5 max-w-5xl">
+              <div className="mx-auto mt-2 grid max-w-5xl gap-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+                <aside className="space-y-3 lg:sticky lg:top-5">
+                  <div className="rounded-lg border border-slate-200 bg-white p-4">
+                    <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">Тип услуги</div>
+                    <div className="mt-2 text-sm font-black text-slate-950">{getCategoryMeta(category, t).label}</div>
+                    <button type="button" onClick={() => { setCategory(""); setStep(1); }} className="mt-3 text-xs font-black text-orange-600 hover:text-orange-700">Изменить тип</button>
+                  </div>
+
+                  {isExtended && (
+                    <nav className="rounded-lg border border-slate-200 bg-white p-2" aria-label="Шаги создания услуги">
+                      {steps.map((item) => (
+                        <button
+                          key={item.id}
+                          type="button"
+                          onClick={() => setStep(item.id)}
+                          className={cx("flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition", step === item.id ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-50")}
+                        >
+                          <span className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black", step === item.id ? "bg-white text-slate-950" : "bg-slate-100 text-slate-500")}>{item.id}</span>
+                          <span className="text-sm font-black">{item.label}</span>
+                        </button>
+                      ))}
+                    </nav>
+                  )}
+
+                  {!isExtended && (
+                    <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs font-medium leading-5 text-slate-500">
+                      Заполните данные, добавьте фотографии и сохраните услугу как черновик.
+                    </div>
+                  )}
+                </aside>
+
+                <div className="min-w-0">
                 <div className="space-y-5">
                   {!isExtended ? (
                     <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -3158,6 +3195,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                   </div>
                 </div>
 
+                </div>
               </div>
             )}
             </div>
