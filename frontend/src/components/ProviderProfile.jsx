@@ -263,6 +263,86 @@ function providerTypeLabel(type, t = (k, o) => o?.defaultValue || k) {
   return map[key] || (key ? key : t("not_specified", { defaultValue: "Не указан" }));
 }
 
+function providerProfileLabels(type) {
+  const key = String(type || "").trim().toLowerCase();
+  const common = {
+    contactsTitle: "Контактные данные",
+    contactsSubtitle: "Телефон, email и адрес, доступные клиенту после открытия контактов.",
+    photoLabel: "Логотип / фото профиля",
+    detailsTitle: "Данные поставщика",
+    detailsSubtitle: "Основная информация, география работы и Telegram.",
+    nameLabel: "Название / имя",
+    locationLabel: "Города работы",
+    locationHint: "Введите названия городов на английском языке.",
+    locationPlaceholder: "Начните вводить название города",
+    addressLabel: "Адрес",
+    telegramLabel: "Telegram",
+  };
+  const byType = {
+    hotel: {
+      contactsTitle: "Контакты отеля",
+      contactsSubtitle: "Телефон, email и адрес отеля, доступные клиенту после открытия контактов.",
+      photoLabel: "Логотип отеля",
+      detailsTitle: "Данные отеля",
+      detailsSubtitle: "Название, город расположения и Telegram отеля.",
+      nameLabel: "Название отеля",
+      locationLabel: "Город расположения",
+      locationHint: "Введите город, в котором расположен отель, на английском языке.",
+      locationPlaceholder: "Начните вводить город отеля",
+      addressLabel: "Адрес отеля",
+      telegramLabel: "Telegram отеля",
+    },
+    guide: {
+      contactsTitle: "Контактные данные гида",
+      photoLabel: "Фото профиля",
+      detailsTitle: "Данные гида",
+      detailsSubtitle: "Имя, города работы и Telegram гида.",
+      nameLabel: "Имя и фамилия",
+      locationLabel: "Города работы",
+      addressLabel: "Основной адрес",
+      telegramLabel: "Telegram гида",
+    },
+    transport: {
+      contactsTitle: "Контакты транспортного поставщика",
+      photoLabel: "Логотип / фото профиля",
+      detailsTitle: "Данные транспортного поставщика",
+      detailsSubtitle: "Название, города обслуживания и Telegram.",
+      nameLabel: "Название компании / имя",
+      locationLabel: "Города обслуживания",
+      telegramLabel: "Telegram",
+    },
+    agent: {
+      contactsTitle: "Контакты турагента",
+      photoLabel: "Логотип / фото профиля",
+      detailsTitle: "Данные турагента",
+      detailsSubtitle: "Название, города работы и Telegram турагента.",
+      nameLabel: "Название компании / имя",
+      locationLabel: "Города работы",
+      telegramLabel: "Telegram турагента",
+    },
+    tour_agent: {
+      contactsTitle: "Контакты турагента",
+      photoLabel: "Логотип / фото профиля",
+      detailsTitle: "Данные турагента",
+      detailsSubtitle: "Название, города работы и Telegram турагента.",
+      nameLabel: "Название компании / имя",
+      locationLabel: "Города работы",
+      telegramLabel: "Telegram турагента",
+    },
+    restaurant: {
+      contactsTitle: "Контакты ресторана",
+      photoLabel: "Логотип ресторана",
+      detailsTitle: "Данные ресторана",
+      detailsSubtitle: "Название, город расположения и Telegram ресторана.",
+      nameLabel: "Название ресторана",
+      locationLabel: "Город расположения",
+      addressLabel: "Адрес ресторана",
+      telegramLabel: "Telegram ресторана",
+    },
+  };
+  return { ...common, ...(byType[key] || {}) };
+}
+
 function normalizeTelegramUsername(value) {
   const raw = String(value || "").trim();
   if (!raw) return "";
@@ -711,6 +791,7 @@ const ProviderProfile = () => {
 
   const publicName = profile?.name || "Travella";
   const typeLabel = providerTypeLabel(profile?.type, t);
+  const fieldLabels = providerProfileLabels(profile?.type);
   const locations = normalizeLocationList(profile.location);
   const locationsText = locations.join(", ");
   const heroPhoto = newPhoto || profile.photo || profile.logo || "https://placehold.co/160x160?text=Travella";
@@ -829,10 +910,10 @@ const ProviderProfile = () => {
           </div>
 
           <div className={activeSection === "profile" ? "grid gap-3 lg:grid-cols-2" : "hidden"}>
-          <ProfileCard title="Основные контакты" subtitle="Эти данные показываются клиенту после открытия контактов.">
+          <ProfileCard title={fieldLabels.contactsTitle} subtitle={fieldLabels.contactsSubtitle}>
             {isEditing && (
               <div className="mb-5 rounded-2xl border border-orange-100 bg-orange-50 p-4">
-                <div className="text-sm font-black text-orange-900">Логотип / фото профиля</div>
+                <div className="text-sm font-black text-orange-900">{fieldLabels.photoLabel}</div>
                 <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">
                   {t("choose_files", { defaultValue: "Выбрать файл" })}
                   <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
@@ -849,24 +930,24 @@ const ProviderProfile = () => {
             </div>
 
             <div className="mt-4">
-              <ProfileInfoBox label={t("address", { defaultValue: "Адрес" })} icon="📍">
-                {isEditing ? <input type="text" placeholder={t("address")} value={newAddress} onChange={(e) => setNewAddress(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /> : <span>{profile.address || t("not_specified", { defaultValue: "Не указан" })}</span>}
+              <ProfileInfoBox label={fieldLabels.addressLabel} icon="📍">
+                {isEditing ? <input type="text" placeholder={fieldLabels.addressLabel} value={newAddress} onChange={(e) => setNewAddress(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /> : <span>{profile.address || t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
             </div>
 
             {profile.address && !isEditing && <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"><iframe title="provider-map" width="100%" height="140" frameBorder="0" scrolling="no" marginHeight="0" marginWidth="0" className="block" src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`} /></div>}
           </ProfileCard>
 
-          <ProfileCard title="Данные поставщика" subtitle="Тип, география работы и публичные каналы связи.">
+          <ProfileCard title={fieldLabels.detailsTitle} subtitle={fieldLabels.detailsSubtitle}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <ProfileInfoBox label={t("name", { defaultValue: "Наименование" })} icon="🏢"><span>{profile.name || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
+              <ProfileInfoBox label={fieldLabels.nameLabel} icon="🏢"><span>{profile.name || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
               <ProfileInfoBox label={t("type", { defaultValue: "Тип поставщика" })} icon="🧭"><span>{typeLabel}</span></ProfileInfoBox>
             </div>
 
             <div className="mt-4">
-              <ProfileInfoBox label={t("location", { defaultValue: "Регионы / города работы" })} icon="🌍" hint={t("location_hint", { defaultValue: "вводите название города только на английском" })}>
+              <ProfileInfoBox label={fieldLabels.locationLabel} icon="🌍" hint={fieldLabels.locationHint}>
                 {isEditing ? (
-                  <AsyncCreatableSelect isMulti cacheOptions defaultOptions {...ASYNC_MENU_PORTAL} loadOptions={loadCities} noOptionsMessage={ASYNC_I18N.noOptionsMessage} loadingMessage={ASYNC_I18N.loadingMessage} placeholder={t("profile.regions_placeholder", { defaultValue: "Start typing city name (EN)…" })} value={regions} onChange={(vals) => setRegions(vals || [])} />
+                  <AsyncCreatableSelect isMulti cacheOptions defaultOptions {...ASYNC_MENU_PORTAL} loadOptions={loadCities} noOptionsMessage={ASYNC_I18N.noOptionsMessage} loadingMessage={ASYNC_I18N.loadingMessage} placeholder={fieldLabels.locationPlaceholder} value={regions} onChange={(vals) => setRegions(vals || [])} />
                 ) : locations.length ? (
                   <div className="flex flex-wrap gap-2">{locations.map((loc) => <span key={loc} className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200">📍 {loc}</span>)}</div>
                 ) : <span>{t("not_specified", { defaultValue: "Не указан" })}</span>}
@@ -874,7 +955,7 @@ const ProviderProfile = () => {
             </div>
 
             <div className="mt-4" id="anchor-telegram">
-              <ProfileInfoBox label="Telegram / соцсети" icon="💬">
+              <ProfileInfoBox label={fieldLabels.telegramLabel} icon="💬">
                 {isEditing ? <input value={newSocial} onChange={(e) => setNewSocial(normalizeTelegramUsername(e.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder="@username или ссылка" /> : <span>{telegramDisplay || t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
               {!isTgReady && tgDeepLink ? <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950"><div className="font-black">Уведомления в Telegram</div><p className="mt-1 font-medium text-blue-900/80">Свяжите Telegram и получайте уведомления о заявках, открытиях контактов и бронированиях.</p><a href={tgDeepLink} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-700">Подключить Telegram</a></div> : null}
