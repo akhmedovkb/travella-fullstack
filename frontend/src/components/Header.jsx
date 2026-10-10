@@ -555,7 +555,7 @@ export default function Header() {
                       )}
                       <DropdownItem
                         to="/dashboard/services/marketplace"
-                        label="Мои предложения"
+                        label="Услуги для Marketplace"
                         description="Создание и управление услугами маркетплейса"
                         icon={<IconChecklist />}
                       />
@@ -774,7 +774,7 @@ export default function Header() {
 
                 <RowGroupDark title="Услуги">
                   {providerType === "hotel" && <NavItemMobileDark to="/dashboard/hotels" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />}
-                  <NavItemMobileDark to="/dashboard/services/marketplace" label="Мои предложения" icon={<IconChecklist />} />
+                  <NavItemMobileDark to="/dashboard/services/marketplace" label="Услуги для Marketplace" icon={<IconChecklist />} />
                   {TOUR_BUILDER_SERVICE_PROVIDER_TYPES.has(providerType) && (
                     <NavItemMobileDark to="/dashboard/services/tourbuilder" label="Услуги для Tour Builder" icon={<IconChecklist />} />
                   )}
