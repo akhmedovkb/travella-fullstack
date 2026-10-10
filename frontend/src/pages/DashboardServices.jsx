@@ -2,7 +2,6 @@
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import ProviderServicesCard from "../components/ProviderServicesCard";
 import ConfirmModal from "../components/ConfirmModal";
 import { tSuccess, tError, tWarn } from "../shared/toast";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
@@ -2107,17 +2106,6 @@ export default function DashboardServices() {
 
   return (
     <div className="space-y-6">
-      {(profile.type === "guide" || profile.type === "transport" || profile.type === "agent") && (
-        <details className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
-          <summary className="cursor-pointer text-sm font-black text-slate-800">
-            {t("provider_services_tourbuilder_title", { defaultValue: "Прайс-лист для TourBuilder" })}
-          </summary>
-          <div className="mt-4">
-            <ProviderServicesCard providerId={profile.id} providerType={profile.type} currencyDefault={profile.currency || "USD"} />
-          </div>
-        </details>
-      )}
-
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-white p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
