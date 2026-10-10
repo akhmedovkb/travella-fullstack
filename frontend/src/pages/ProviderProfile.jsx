@@ -84,6 +84,23 @@ const firstImageFrom = (val) => {
   return null;
 };
 
+const formatRegion = (value) => {
+  if (!value) return "";
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean).join(", ");
+  if (typeof value === "object") return [value.city, value.region, value.country].map((item) => String(item || "").trim()).filter(Boolean).join(", ");
+  const raw = String(value).trim();
+  const parsed = maybeParse(raw);
+  if (parsed) return formatRegion(parsed);
+  const pgArray = raw.match(/^\{(.+)\}$/);
+  return pgArray ? pgArray[1].split(",").map((item) => item.replace(/^"|"$/g, "").trim()).filter(Boolean).join(", ") : raw;
+};
+const telegramContact = (value) => {
+  const raw = String(value || "").trim();
+  if (!raw) return null;
+  if (/^https?:\/\//i.test(raw)) return { href: raw, label: raw.replace(/^https?:\/\/(www\.)?/i, "") };
+  const username = raw.replace(/^@/, "").replace(/^t\.me\//i, "").trim();
+  return !username || /\s/.test(username) ? { href: null, label: raw } : { href: `https://t.me/${username}`, label: `@${username}` };
+};
 // загрузка профиля провайдера (перебор возможных эндпоинтов)
 async function fetchProviderProfile(providerId) {
   const endpoints = [
@@ -297,6 +314,7 @@ export default function ProviderProfile() {
   const [reviewsAgg, setReviewsAgg] = useState({ count: 0, avg: 0 });
   const [reviews, setReviews] = useState([]);
   const [authorProvTypes, setAuthorProvTypes] = useState({});
+  const [activeTab, setActiveTab] = useState(serviceId ? "availability" : "profile");
 
   // >>> NEW: calendar state
   const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -654,204 +672,45 @@ arr = arr
     );
   }
 
+  if (!prov) return <div className="mx-auto max-w-5xl p-4"><div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm"><h1 className="text-xl font-bold text-slate-950">Поставщик не найден</h1><p className="mt-2 text-sm text-slate-500">Проверьте ссылку или вернитесь в каталог.</p><a href="/" className="mt-4 inline-flex rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white">В каталог</a></div></div>;
+
+  const regionLabel = formatRegion(details.region);
+  const telegram = telegramContact(details.telegram);
+  const tabs = [["profile", "О профиле"], ["reviews", `Отзывы (${reviewsAgg.count || 0})`], ...(canBook ? [["availability", "Свободные даты"]] : [])];
+
   return (
-    <div className="max-w-5xl mx-auto p-4 md:p-6">
-      <div className="bg-white rounded-xl border shadow overflow-hidden mb-6">
-        {details.cover && (
-          <div className="h-40 sm:h-56 w-full overflow-hidden">
-            <img src={details.cover} alt="" className="w-full h-full object-cover" />
-          </div>
-        )}
-        <div className="p-4 md:p-6 flex items-start gap-4">
-          {/* BIG logo/photo */}
-          <div className="shrink-0">
-            <div className="w-32 h-32 md:w-48 md:h-48 rounded-xl bg-gray-100 overflow-hidden flex items-center justify-center ring-1 ring-black/5">
-              {details.logo ? (
-                <img src={details.logo} alt="" className="w-full h-full object-cover" />
-              ) : (
-                <span className="text-xs text-gray-400 px-2">Нет фото</span>
-              )}
-            </div>
-          </div>
-
-          <div className="flex-1">
-            <div className="flex flex-wrap items-center gap-3">
-              <h1 className="text-xl md:text-2xl font-semibold">
-                {t("marketplace.supplier", { defaultValue: "Поставщик" })}: {details.name || "-"}
-              </h1>
-              <div className="flex items-center gap-2 text-sm text-gray-600">
-                <RatingStars value={reviewsAgg.avg} size={16} />
-                <span className="font-medium">{(reviewsAgg.avg || 0).toFixed(1)} / 5</span>
-                <span className="opacity-70">· {t("reviews.count", { count: reviewsAgg.count ?? 0 })}</span>
-              </div>
-            </div>
-
-            <div className="mt-1 text-gray-600 flex flex-wrap gap-x-4 gap-y-1">
-              {details.type   && <span>{t("provider.type", { defaultValue: "Тип поставщика" })}: <b>{providerTypeLabel(details.type, t)}</b></span>}
-              {details.region && <span>{t("provider.region", { defaultValue: "Регион поставщика" })}: <b>{details.region}</b></span>}
-              {details.phone  && (
-                <span>
-                  {t("marketplace.phone", { defaultValue: "Телефон" })}:{" "}
-                  <a className="underline" href={`tel:${String(details.phone).replace(/\s+/g, "")}`}>{details.phone}</a>
-                </span>
-              )}
-              {details.telegram && (
-                <span>
-                  {t("marketplace.telegram", { defaultValue: "Телеграм" })}:{" "}
-                  {String(details.telegram).startsWith("@")
-                    ? <a className="underline break-all" href={`https://t.me/${String(details.telegram).slice(1)}`} target="_blank" rel="noreferrer">{details.telegram}</a>
-                    : /^https?:\/\//.test(String(details.telegram))
-                      ? <a className="underline break-all" href={details.telegram} target="_blank" rel="noreferrer">{details.telegram}</a>
-                      : <span>{details.telegram}</span>}
-                </span>
-              )}
-              {details.address && <span>{t("marketplace.address", { defaultValue: "Адрес" })}: <b>{details.address}</b></span>}
-            </div>
-
-            {details.about && (
-              <div className="mt-3">
-                <div className="text-gray-500 text-sm mb-1">{t("common.about", { defaultValue: "О компании" })}</div>
-                <div className="whitespace-pre-line">{details.about}</div>
-              </div>
-            )}
-                      {/* Языки */}
-          {langs.length ? (
-            <div className="mt-3">
-              <div className="text-gray-500 text-sm mb-1">
-                {t("provider.languages", { defaultValue: "Языки" })}
-              </div>
-              <ul className="list-disc ml-5 text-sm">
-                {langs.map((l, i) => (
-                  <li key={`${l.code}-${l.level || "na"}`}>
-                    {getLangLabel(l.code, i18n.language)}
-                    {l.level ? ` — ${getLevelLabel(l.level)}` : ""}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
+    <div className="mx-auto w-full max-w-6xl space-y-3 px-3 py-3 sm:px-4">
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
+          <div className="h-24 w-24 shrink-0 overflow-hidden rounded-lg bg-slate-100 ring-1 ring-slate-200">{details.logo ? <img src={details.logo} alt={details.name || ""} className="h-full w-full object-cover" /> : <div className="flex h-full items-center justify-center text-sm font-semibold text-slate-400">Нет фото</div>}</div>
+          <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-x-3 gap-y-1"><h1 className="truncate text-xl font-black text-slate-950">{details.name || "Поставщик"}</h1><div className="flex items-center gap-2 text-sm text-slate-500"><RatingStars value={reviewsAgg.avg} size={16} /><span className="font-bold text-slate-700">{(reviewsAgg.avg || 0).toFixed(1)}</span><span>· {t("reviews.count", { count: reviewsAgg.count || 0 })}</span></div></div>
+            <div className="mt-2 flex flex-wrap gap-2 text-sm">{details.type ? <span className="rounded-md bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">{providerTypeLabel(details.type, t)}</span> : null}{regionLabel ? <span className="rounded-md bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">{regionLabel}</span> : null}{details.address ? <span className="rounded-md bg-slate-100 px-2.5 py-1 font-semibold text-slate-700">{details.address}</span> : null}</div>
           </div>
         </div>
-      </div>
+      </section>
+      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Разделы публичного профиля">{tabs.map(([key, label]) => <button key={key} type="button" onClick={() => setActiveTab(key)} className={`h-9 shrink-0 rounded-lg px-4 text-sm font-bold transition ${activeTab === key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"}`} aria-current={activeTab === key ? "page" : undefined}>{label}</button>)}</nav>
 
-      {/* Отзывы */}
-      <div className="bg-white rounded-xl border shadow p-4 md:p-6 mb-6">
-        <div className="text-lg font-semibold mb-3">{t("reviews.list", { defaultValue: "Отзывы" })}</div>
-        {!reviews.length ? (
-          <div className="text-gray-500">{t("reviews.empty", { defaultValue: "Пока нет отзывов." })}</div>
-        ) : (
-          <ul className="space-y-4">
-            {reviews.map((r) => {
-              const avatar =
-                firstImageFrom(r.author?.avatar_url) ||
-                "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='36' height='36'><rect width='100%' height='100%' fill='%23f3f4f6'/><text x='50%' y='58%' text-anchor='middle' fill='%239ca3af' font-family='Arial' font-size='10'>Нет фото</text></svg>";
-              return (
-                <li key={r.id} className="border rounded-lg p-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <img src={avatar} alt="" className="w-9 h-9 rounded-full object-cover border" />
-                      <div className="min-w-0">
-                        <div className="text-sm text-gray-700 truncate">
-                          {r.author?.name || t("common.anonymous", { defaultValue: "Аноним" })}{" "}
-                          <span className="text-gray-400">
-                            (
-                            {r.author?.role === "provider"
-                              ? (authorProvTypes[r.author.id] || t("roles.provider", { defaultValue: "Поставщик" }))
-                              : t("roles.client",   { defaultValue: "Клиент" })
-                            }
-                            )
-                          </span>
-                        </div>
-                        <div className="text-xs text-gray-400">
-                          {new Date(r.created_at || Date.now()).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                    <RatingStars value={r.rating || 0} size={16} />
-                  </div>
-                  {r.text && <div className="mt-2 whitespace-pre-line">{r.text}</div>}
-                </li>
-              );
-            })}
-          </ul>
-        )}
-      </div>
+      {activeTab === "profile" && <section className="grid gap-3 lg:grid-cols-[1.2fr_0.8fr]">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><h2 className="font-black text-slate-950">Контакты</h2><div className="mt-3 grid gap-2 sm:grid-cols-2">
+          {details.phone ? <a href={`tel:${String(details.phone).replace(/\s+/g, "")}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold text-slate-800 hover:border-orange-300">Телефон<br /><span className="font-medium text-blue-700">{details.phone}</span></a> : null}
+          {telegram ? <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold text-slate-800">Telegram<br />{telegram.href ? <a href={telegram.href} target="_blank" rel="noreferrer" className="font-medium text-blue-700">{telegram.label}</a> : <span className="font-medium text-slate-600">{telegram.label}</span>}</div> : null}
+          {details.email ? <a href={`mailto:${details.email}`} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold text-slate-800 hover:border-orange-300">Email<br /><span className="font-medium text-blue-700">{details.email}</span></a> : null}
+          {details.website ? <a href={makeAbsolute(details.website)} target="_blank" rel="noreferrer" className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm font-bold text-slate-800 hover:border-orange-300">Сайт<br /><span className="font-medium text-blue-700">Открыть сайт</span></a> : null}
+          {!details.phone && !telegram && !details.email && !details.website ? <div className="text-sm text-slate-500">Контакты не указаны.</div> : null}
+        </div>{details.about ? <div className="mt-4 border-t border-slate-200 pt-3"><h2 className="font-black text-slate-950">О поставщике</h2><p className="mt-1 whitespace-pre-line text-sm leading-6 text-slate-600">{details.about}</p></div> : null}</div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><h2 className="font-black text-slate-950">Языки</h2>{langs.length ? <div className="mt-3 flex flex-wrap gap-2">{langs.map((lang) => <span key={`${lang.code}-${lang.level || "na"}`} className="rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold text-slate-700">{getLangLabel(lang.code, i18n.language)}{lang.level ? ` · ${getLevelLabel(lang.level)}` : ""}</span>)}</div> : <p className="mt-3 text-sm text-slate-500">Не указаны.</p>}<div className="mt-4 border-t border-slate-200 pt-3 text-sm text-slate-600">{regionLabel ? <div><b className="text-slate-900">Регион:</b> {regionLabel}</div> : null}{details.address ? <div className="mt-1"><b className="text-slate-900">Адрес:</b> {details.address}</div> : null}</div></div>
+      </section>}
 
-      {/* ===== NEW: Публичный календарь бронирования (только гид/транспорт) ===== */}
-      {canBook && (
-        <div id="book" className="bg-white rounded-xl border shadow p-4 md:p-6">
-          <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
-            <h2 className="text-lg font-semibold">
-              {t("calendar.title_public", { defaultValue: "Календарь занятости" })}
-            </h2>
-            <div className="text-sm text-gray-600">
-              <span className="inline-block w-3 h-3 bg-gray-300 rounded-sm align-middle mr-1" />{" "}
-              {t("calendar.busy", { defaultValue: "занято" })}
-              <span className="mx-2">·</span>
-              <span className="inline-block w-3 h-3 bg-orange-500 rounded-sm align-middle mr-1" />{" "}
-              {t("calendar.selected", { defaultValue: "выбрано" })}
-            </div>
-          </div>
+      {activeTab === "reviews" && <section className="grid gap-3 lg:grid-cols-[1.3fr_0.7fr]">
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><div className="flex items-center justify-between gap-3"><h2 className="font-black text-slate-950">Отзывы</h2><div className="flex items-center gap-2 text-sm text-slate-500"><RatingStars value={reviewsAgg.avg} size={16} /><span>{(reviewsAgg.avg || 0).toFixed(1)} / 5</span></div></div>{!reviews.length ? <p className="mt-3 text-sm text-slate-500">Пока нет отзывов.</p> : <ul className="mt-3 max-h-[430px] space-y-2 overflow-y-auto pr-1">{reviews.map((review) => { const avatar=firstImageFrom(review.author?.avatar_url); return <li key={review.id} className="rounded-lg border border-slate-200 p-3"><div className="flex items-start justify-between gap-3"><div className="flex min-w-0 items-center gap-2">{avatar ? <img src={avatar} alt="" className="h-9 w-9 rounded-full border object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-xs font-bold text-slate-400">{String(review.author?.name || "А").slice(0,1)}</div>}<div className="min-w-0"><div className="truncate text-sm font-bold text-slate-800">{review.author?.name || "Аноним"} <span className="font-normal text-slate-400">({review.author?.role === "provider" ? authorProvTypes[review.author.id] || "Поставщик" : "Клиент"})</span></div><div className="text-xs text-slate-400">{new Date(review.created_at || Date.now()).toLocaleString()}</div></div></div><RatingStars value={review.rating || 0} size={15} /></div>{review.text ? <p className="mt-2 whitespace-pre-line text-sm leading-5 text-slate-700">{review.text}</p> : null}</li>})}</ul>}</div>
+        <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"><h2 className="font-black text-slate-950">Оставить отзыв</h2>{canReview ? <div className="mt-3"><ReviewForm onSubmit={submitReview} submitLabel={t("reviews.send", { defaultValue: "Отправить" })} /></div> : <p className="mt-3 text-sm leading-5 text-slate-500">Войдите как клиент или поставщик, чтобы оставить отзыв.</p>}</div>
+      </section>}
 
-          <DayPicker
-              locale={dpLocale}
-              weekStartsOn={weekStartsOn}
-              mode="multiple"
-              onDayClick={toggleDay}
-              selected={selectedDates}
-              disabled={disabledDays}
-              modifiers={{ past: pastMatcher, busy: busyDates }}
-              modifiersClassNames={{
-                selected: "bg-orange-500 text-white",
-                busy: "bg-gray-300 text-white",
-                past: "text-gray-400 cursor-not-allowed",
-              }}
-              modifiersStyles={{
-                selected: { backgroundColor: "#f97316", color: "#fff" }, // оранжевый
-                busy: { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 }, // серый кружок без побледнения
-                past: { color: "#9ca3af", background: "transparent" }, // бледный текст, без фона
-              }}
-              className={calendarLoading ? "opacity-60 pointer-events-none" : ""}
-            />
-
-
-          <div className="mt-4 flex items-center gap-2">
-            <button
-              onClick={openBookingModal}
-              className="px-4 py-2 rounded-md bg-orange-500 hover:bg-orange-600 text-white disabled:opacity-50"
-              disabled={!selectedYMD.length}
-            >
-              {t("actions.book", { defaultValue: "Бронировать" })}
-            </button>
-            {!!selectedYMD.length && (
-              <div className="text-sm text-gray-600">
-                {t("calendar.selected_dates", { defaultValue: "Выбрано дат" })}: <b>{selectedYMD.length}</b>
-              </div>
-            )}
-          </div>
-
-          {!token && (
-            <div className="mt-2 text-sm text-gray-500">
-              {t("booking.need_auth_hint", { defaultValue: "Чтобы отправить бронь, войдите в систему." })}
-            </div>
-          )}
-
-          <BookingModal
-            open={modalOpen}
-            onClose={() => setModalOpen(false)}
-            onSubmit={submitBooking}
-            selectedYmd={selectedYMD}
-          />
-        </div>
-      )}
-
-      {canReview && (
-        <div className="bg-white rounded-xl border shadow p-4 md:p-6 mt-6">
-          <div className="text-lg font-semibold mb-3">{t("reviews.leave", { defaultValue: "Оставить отзыв" })}</div>
-          <ReviewForm onSubmit={submitReview} submitLabel={t("reviews.send", { defaultValue: "Отправить" })} />
-        </div>
-      )}
+      {activeTab === "availability" && canBook && <section id="book" className="grid gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm lg:grid-cols-[auto_1fr]">
+        <div className={calendarLoading ? "pointer-events-none opacity-60" : ""}><DayPicker locale={dpLocale} weekStartsOn={weekStartsOn} mode="multiple" onDayClick={toggleDay} selected={selectedDates} disabled={disabledDays} modifiers={{ past: pastMatcher, busy: busyDates }} modifiersStyles={{ selected:{backgroundColor:"#f97316",color:"#fff"},busy:{backgroundColor:"#d1d5db",color:"#fff",opacity:1},past:{color:"#9ca3af",background:"transparent"} }} /></div>
+        <div className="flex flex-col justify-center border-t border-slate-200 pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0"><h2 className="text-lg font-black text-slate-950">Свободные даты</h2><p className="mt-1 text-sm leading-5 text-slate-500">Выберите доступные даты и отправьте заявку поставщику.</p><div className="mt-4 flex gap-3 text-sm text-slate-600"><span><i className="mr-1 inline-block h-3 w-3 rounded-sm bg-gray-300" />Занято</span><span><i className="mr-1 inline-block h-3 w-3 rounded-sm bg-orange-500" />Выбрано</span></div><div className="mt-5 rounded-lg bg-slate-50 p-3 text-sm">Выбрано дат: <b>{selectedYMD.length}</b></div><button type="button" onClick={openBookingModal} disabled={!selectedYMD.length} className="mt-3 h-11 rounded-lg bg-orange-500 px-4 font-bold text-white hover:bg-orange-600 disabled:opacity-50">Отправить заявку</button>{!token ? <p className="mt-2 text-xs text-slate-500">Для отправки заявки необходимо войти.</p> : null}</div>
+      </section>}
+      <BookingModal open={modalOpen} onClose={() => setModalOpen(false)} onSubmit={submitBooking} selectedYmd={selectedYMD} />
     </div>
   );
 }
