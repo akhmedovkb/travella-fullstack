@@ -1,5 +1,6 @@
 // frontend/src/pages/DashboardServices.jsx
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import ConfirmModal from "../components/ConfirmModal";
@@ -1559,8 +1560,9 @@ function AuthorProgramDaysEditor({ value, activeIndex, setActiveIndex, onChange,
   );
 }
 
-export default function DashboardServices() {
+export default function DashboardServices({ viewMode = "create" }) {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const api = useMemo(() => {
     const instance = axios.create({ baseURL: API_BASE });
@@ -1637,7 +1639,11 @@ export default function DashboardServices() {
         api.get("/api/providers/services"),
       ]);
       setProfile(profileRes.data || {});
-      setServices(Array.isArray(servicesRes.data) ? servicesRes.data : []);
+      const loadedServices = Array.isArray(servicesRes.data) ? servicesRes.data : [];
+      setServices(loadedServices);
+      const requestedServiceId = new URLSearchParams(window.location.search).get("service");
+      const requestedService = loadedServices.find((service) => String(service.id) === String(requestedServiceId));
+      if (requestedService) loadServiceToEdit(requestedService, { stayOnPage: true });
     } catch (err) {
       console.error(err);
       tError(t("services_load_error", { defaultValue: "Не удалось загрузить услуги" }));
@@ -1713,7 +1719,11 @@ export default function DashboardServices() {
     patchDetails({ [field]: value, duration: calcAuthorDurationFromDates(nextStart, nextEnd) });
   };
 
-  const loadServiceToEdit = (service) => {
+  const loadServiceToEdit = (service, { stayOnPage = false } = {}) => {
+    if (viewMode === "manage" && !stayOnPage) {
+      navigate(`/dashboard/services/marketplace?service=${service.id}`);
+      return;
+    }
     const d = service?.details && typeof service.details === "object" ? service.details : {};
     setSelectedService(service);
     setCategory(service.category || "");
@@ -2111,10 +2121,14 @@ export default function DashboardServices() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-xl font-black text-slate-950 sm:text-2xl">
-                {t("services_marketplace", { defaultValue: "Услуги для маркетплейса" })}
+                {viewMode === "manage"
+                  ? t("provider_services_tab_created", { defaultValue: "Мои услуги" })
+                  : t("services_marketplace", { defaultValue: "Услуги для маркетплейса" })}
               </h2>
               <p className="mt-1 max-w-2xl text-sm font-medium leading-5 text-slate-500">
-                {t("service_form.studio_hint", { defaultValue: "Создавайте предложения, сохраняйте черновики и отправляйте готовые карточки на модерацию." })}
+                {viewMode === "manage"
+                  ? t("service_form.manage_hint", { defaultValue: "Управляйте статусами, актуальностью и публикацией созданных услуг." })
+                  : t("service_form.studio_hint", { defaultValue: "Создавайте предложения, сохраняйте черновики и отправляйте готовые карточки на модерацию." })}
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -2134,7 +2148,7 @@ export default function DashboardServices() {
               </div>
               <button
                 type="button"
-                onClick={resetForm}
+                onClick={() => viewMode === "manage" ? navigate("/dashboard/services/marketplace") : resetForm()}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 text-sm font-black text-white shadow-sm transition hover:bg-orange-600"
               >
                 <Plus aria-hidden="true" className="h-4 w-4" />
@@ -2144,7 +2158,8 @@ export default function DashboardServices() {
           </div>
         </div>
 
-        <div className="grid gap-0 bg-slate-50/70 lg:grid-cols-[350px_minmax(0,1fr)]">
+        <div className={viewMode === "manage" ? "bg-white" : "bg-slate-50/70"}>
+          {viewMode === "manage" && (
           <aside className="border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
             <div className="border-b border-slate-100 bg-white p-4">
               <div className="flex items-center justify-between gap-3">
@@ -2201,8 +2216,8 @@ export default function DashboardServices() {
                 </div>
               ) : (
                 filteredServiceSections.map((section) => (
-                  <div key={section.id} className="space-y-3">
-                    <div className="sticky top-0 z-[1] -mx-1 flex items-center justify-between rounded-2xl bg-white/95 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500 shadow-sm ring-1 ring-slate-100 backdrop-blur">
+                    <div key={section.id} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                      <div className="sticky top-0 z-[1] -mx-1 flex items-center justify-between rounded-2xl bg-white/95 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500 shadow-sm ring-1 ring-slate-100 backdrop-blur md:col-span-2 xl:col-span-3">
                       <span>{section.label}</span>
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{section.items.length}</span>
                     </div>
@@ -2409,7 +2424,9 @@ export default function DashboardServices() {
             </div>
 
           </aside>
+          )}
 
+          {viewMode !== "manage" && (
           <section className="min-w-0 bg-slate-50/70 p-4 sm:p-6">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
@@ -3089,6 +3106,7 @@ export default function DashboardServices() {
             )}
             </div>
           </section>
+          )}
         </div>
       </div>
 
