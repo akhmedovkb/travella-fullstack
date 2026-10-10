@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const pool = require("../db");
 const { resolveCitySlugs } = require("../utils/cities");
 const { notifyModerationNew } = require("../utils/telegram");
+const { upsertFleet } = require("../utils/vehicleCatalog");
 
 const {
   extractPrices,
@@ -871,6 +872,14 @@ const updateProviderProfile = async (req, res) => {
     );
 
     const p = upd.rows[0] || null;
+
+    if (hasFleet) {
+      try {
+        await upsertFleet(nextFleet);
+      } catch (catalogError) {
+        console.warn("vehicle catalog update failed:", catalogError?.message || catalogError);
+      }
+    }
 
     res.json({
       message: "Профиль обновлён успешно",
