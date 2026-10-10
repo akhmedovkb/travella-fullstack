@@ -38,6 +38,24 @@ function normalizeLocationList(value) {
   return [raw];
 }
 
+function cityKey(value) {
+  return String(value || "").trim().toLocaleLowerCase();
+}
+
+function uniqueCityOptions(cities, selected = []) {
+  const seen = new Set(selected.map((item) => cityKey(item?.value)));
+
+  return (Array.isArray(cities) ? cities : []).reduce((options, city) => {
+    const name = String(city?.name || "").trim();
+    const key = cityKey(name);
+    if (!key || seen.has(key)) return options;
+
+    seen.add(key);
+    options.push({ value: name, label: name });
+    return options;
+  }, []);
+}
+
 // data: → blob: (для сертификата)
 function dataUrlToBlobUrl(dataUrl) {
   try {
@@ -448,17 +466,14 @@ const ProviderProfile = () => {
             signal,
           }
         );
-        return (data.geonames || []).map((city) => ({
-          value: city.name,
-          label: city.name,
-        }));
+        return uniqueCityOptions(data.geonames, regions);
       } catch (error) {
         if (error?.code === "ERR_CANCELED") return [];
         console.error("Ошибка загрузки городов:", error);
         return [];
       }
     },
-    [pickGeoLang]
+    [pickGeoLang, regions]
   );
 
   const loadCities = useDebouncedLoader(loadCitiesRaw, 400);
@@ -555,9 +570,14 @@ const ProviderProfile = () => {
     const updated = {};
 
     // location как массив строк
-    const nextLocations = regions
-      .map((r) => r.value)
-      .filter(Boolean);
+    const nextLocations = [
+      ...new Map(
+        regions
+          .map((r) => String(r?.value || "").trim())
+          .filter(Boolean)
+          .map((name) => [cityKey(name), name])
+      ).values(),
+    ];
     const sameLocations =
       Array.isArray(profile.location) &&
       profile.location.length === nextLocations.length &&
