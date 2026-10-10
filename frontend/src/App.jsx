@@ -311,6 +311,7 @@ export default function App() {
             />
             {/* публичный профиль провайдера (как на витрине) */}
             <Route path="/profile/provider/:id" element={<ProviderProfile />} />
+            <Route path="/provider/:id" element={<ProviderProfile />} />
 
             {/* Алиас старого пути MARKETPLACE */}
             <Route path="/marketplace" element={<Marketplace />} />

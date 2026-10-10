@@ -706,7 +706,7 @@ const ProviderProfile = () => {
     requests: Number(stats?.requests_total || 0),
     bookings: Number(stats?.bookings_total || 0),
   };
-  const publicPreviewUrl = hasProviderId ? `/provider/${providerId}` : "/";
+  const publicPreviewUrl = hasProviderId ? `/profile/provider/${providerId}` : "/";
 
   return (
     <div className="mx-auto w-full max-w-7xl min-w-0 space-y-3 px-3 pb-5 sm:px-4 lg:px-0">
