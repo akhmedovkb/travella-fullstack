@@ -1,158 +1,16 @@
 // frontend/src/components/ProviderCompleteness.jsx
 
-import React, { useMemo } from "react";
+import React from "react";
 import { useTranslation } from "react-i18next";
+import { CheckCircle2, Circle } from "lucide-react";
+import { getProviderTrust } from "../utils/providerTrust";
 
-const hasAny = (...vals) =>
-  vals.some((v) => (Array.isArray(v) ? v.length > 0 : !!v));
-
-export default function ProviderCompleteness({ profile = {}, onFix }) {
+export default function ProviderCompleteness({ profile = {}, stats = {}, trust, onFix }) {
   const { t } = useTranslation();
-
-  const languagesOk = hasAny(profile.languages, profile.langs, profile.languageSkills);
-
-  const carFleetOk = Array.isArray(profile?.car_fleet)
-    ? profile.car_fleet.some(
-        (c) =>
-          c &&
-          c.is_active !== false &&
-          (c.model || c.seats || (Array.isArray(c.images) && c.images.length > 0))
-      )
-    : false;
-
-  const transportOk =
-    hasAny(
-      profile.transport,
-      profile.hasTransport,
-      profile.transportAvailable,
-      profile.transport_name,
-      profile.cars,
-      profile.fleet,
-      profile.vehicleFleet
-    ) || carFleetOk;
-
-  const certificateOk = hasAny(
-    profile.certificate,
-    profile.certificateUrl,
-    profile.certificate_url,
-    profile.certUrl
-  );
-
-  const logoOk = hasAny(
-    profile.logo,
-    profile.logoUrl,
-    profile.logo_url,
-    profile.avatar,
-    profile.photo,
-    profile.photoUrl,
-    profile.image,
-    profile.imageUrl,
-    profile.image_url
-  );
-
-  const tgOk = hasAny(
-    profile.telegram_username,
-    profile.telegramUsername,
-    profile.telegram_user,
-    profile.telegram_connected,
-    profile.telegramLinked,
-    profile.telegram_chat_id,
-    profile.tg_chat_id,
-    profile.telegramChatId,
-    profile.social
-  );
-
-  const contactsOk = hasAny(profile.phone) && tgOk;
-  const locationOk = hasAny(profile.location);
-
-  const providerType = String(profile?.type || "").toLowerCase();
-  const isAgent = providerType.includes("agent");
-  const isGuide = providerType.includes("guide");
-  const isTransportProvider = providerType.includes("transport");
-
-  const items = useMemo(() => {
-    const arr = [];
-
-    arr.push(
-      {
-        key: "contacts",
-        label: t("profile.completeness.contacts", "Контакты для клиентов"),
-        ok: contactsOk,
-        required: true,
-        points: 20,
-      },
-      {
-        key: "logo",
-        label: t("profile.completeness.logo", "Логотип / фото"),
-        ok: logoOk,
-        required: true,
-        points: 15,
-      },
-      {
-        key: "certificate",
-        label: t("profile.completeness.certificate", "Сертификат"),
-        ok: certificateOk,
-        required: true,
-        points: 20,
-      },
-      {
-        key: "telegram",
-        label: t("profile.completeness.telegram", "Telegram подключён"),
-        ok: tgOk,
-        required: true,
-        points: 15,
-      },
-      {
-        key: "fallback",
-        label: t("profile.completeness.location", "География работы"),
-        ok: locationOk,
-        required: true,
-        points: 10,
-      }
-    );
-
-    if (!isAgent) {
-      arr.push({
-        key: "languages",
-        label: t("profile.completeness.languages", "Владение языками"),
-        ok: languagesOk,
-        required: true,
-        points: 10,
-      });
-    }
-
-    if (isTransportProvider || isGuide) {
-      arr.push({
-        key: "transport",
-        label: t("profile.completeness.transport", "Транспорт в наличии"),
-        ok: transportOk,
-        required: isTransportProvider,
-        points: 10,
-      });
-    }
-
-    return arr;
-  }, [
-    certificateOk,
-    contactsOk,
-    isAgent,
-    isGuide,
-    isTransportProvider,
-    languagesOk,
-    locationOk,
-    logoOk,
-    tgOk,
-    transportOk,
-    t,
-  ]);
-
-  const totalPoints = items.reduce((sum, item) => sum + (item.required ? item.points : 0), 0);
-  const donePoints = items.reduce(
-    (sum, item) => sum + (item.required && item.ok ? item.points : 0),
-    0
-  );
-  const percent = Math.round((donePoints / Math.max(1, totalPoints)) * 100);
-  const missing = items.filter((item) => item.required && !item.ok);
+  const model = trust || getProviderTrust(profile, stats);
+  const items = model.checks;
+  const percent = model.score;
+  const missing = items.filter((item) => !item.ok);
 
   const level = percent >= 90 ? "high" : percent >= 70 ? "mid" : "low";
   const levelText =
@@ -205,23 +63,22 @@ export default function ProviderCompleteness({ profile = {}, onFix }) {
         {items.map((it) => (
           <li key={it.key} className="flex items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50 px-3 py-2">
             <div className="flex min-w-0 items-center gap-2">
-              <span aria-hidden>{it.ok ? "✅" : "⚪"}</span>
+              {it.ok ? <CheckCircle2 aria-hidden="true" className="h-4 w-4 shrink-0 text-emerald-600" /> : <Circle aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-300" />}
               <span className="truncate text-sm font-bold text-slate-700">
                 {it.label}
-                {!it.required ? <span className="ml-1 text-xs font-semibold text-slate-400">optional</span> : null}
               </span>
             </div>
             {!it.ok ? (
               <button
                 type="button"
-                onClick={() => onFix?.(it.key)}
+                onClick={() => onFix?.(it.fixKey || it.key)}
                 className="shrink-0 rounded-xl border border-orange-200 bg-white px-3 py-1.5 text-xs font-black text-orange-700 transition hover:bg-orange-50"
               >
                 {t("profile.completeness.fill", "Заполнить")}
               </button>
             ) : (
               <span className="shrink-0 rounded-full bg-emerald-50 px-2 py-1 text-[11px] font-black text-emerald-700 ring-1 ring-emerald-100">
-                +{it.points}
+                +{it.weight}
               </span>
             )}
           </li>
