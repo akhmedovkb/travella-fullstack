@@ -339,7 +339,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
             <select defaultValue="" onChange={(event) => applyVehicle(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Выберите автомобиль</option>{fleet.map((car, index) => <option key={car.id || index} value={String(car.id ?? index)}>{car.model || "Автомобиль"} · {car.seats || "?"} мест</option>)}</select>
           </label>}
           <label className="text-sm font-semibold text-slate-700">Модель автомобиля
-            <VehicleModelInput value={form.vehicleModel} onChange={(vehicleModel) => setField("vehicleModel", vehicleModel)} onModelSelect={({ model, seats }) => setForm((current) => ({ ...current, vehicleModel: model, seats: String(seats) }))} placeholder="Начните вводить марку или модель" className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" />
+            <VehicleModelInput value={form.vehicleModel} onChange={(vehicleModel) => setField("vehicleModel", vehicleModel)} onModelSelect={({ model, seats }) => setForm((current) => ({ ...current, vehicleModel: model, ...(seats ? { seats: String(seats) } : {}) }))} placeholder="Начните вводить марку или модель" className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" />
           </label>
           <label className="text-sm font-semibold text-slate-700">Пассажирских мест
             <input type="number" min="1" value={form.seats} onChange={(event) => setField("seats", event.target.value)} placeholder="7" className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" />

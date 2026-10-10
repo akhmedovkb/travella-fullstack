@@ -1,4 +1,4 @@
-import React, { useId, useMemo } from "react";
+import React, { useEffect, useId, useMemo, useState } from "react";
 
 export const VEHICLE_MODELS = [
   ["Chevrolet Cobalt", 4], ["Chevrolet Gentra", 4], ["Chevrolet Lacetti", 4], ["Chevrolet Nexia 3", 4],
@@ -28,18 +28,78 @@ export const VEHICLE_MODELS = [
   ["Isuzu NPR", 2], ["Isuzu SAZ", 45], ["Yutong ZK6122", 49], ["King Long XMQ6127", 49],
 ];
 
-const normalize = (value) => String(value || "").trim().toLocaleLowerCase();
+const normalize = (value) => String(value || "").trim().replace(/\s+/g, " ").toLocaleLowerCase("en-US");
+const apiUrl = (path) => `${String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "")}${path}`;
 
 export default function VehicleModelInput({ value, onChange, onModelSelect, className = "", placeholder = "Начните вводить марку или модель" }) {
   const generatedId = useId();
   const listId = `vehicle-models-${generatedId.replace(/:/g, "")}`;
-  const selected = useMemo(() => VEHICLE_MODELS.find(([name]) => normalize(name) === normalize(value)), [value]);
+  const [remoteItems, setRemoteItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const query = String(value || "").trim();
+
+  useEffect(() => {
+    if (query.length < 2) {
+      setRemoteItems([]);
+      setLoading(false);
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setLoading(true);
+      try {
+        const token = localStorage.getItem("token") || "";
+        const response = await fetch(apiUrl(`/api/vehicles/suggestions?q=${encodeURIComponent(query)}&limit=30`), {
+          signal: controller.signal,
+          headers: token ? { Authorization: `Bearer ${token}` } : {},
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        setRemoteItems(Array.isArray(data?.items) ? data.items : []);
+      } catch (error) {
+        if (error?.name !== "AbortError") setRemoteItems([]);
+      } finally {
+        if (!controller.signal.aborted) setLoading(false);
+      }
+    }, 250);
+
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [query]);
+
+  const suggestions = useMemo(() => {
+    const items = [];
+    const seen = new Set();
+    const add = (model, seats = null, source = "built-in") => {
+      const name = String(model || "").trim();
+      const key = normalize(name);
+      if (!key || seen.has(key)) return;
+      seen.add(key);
+      items.push({ model: name, seats: Number(seats) > 0 ? Number(seats) : null, source });
+    };
+
+    remoteItems.forEach((item) => add(item.display_name, item.seats, item.source));
+    VEHICLE_MODELS
+      .filter(([model]) => !query || normalize(model).includes(normalize(query)))
+      .forEach(([model, seats]) => add(model, seats));
+    return items.slice(0, 50);
+  }, [query, remoteItems]);
+
+  const selected = useMemo(
+    () => suggestions.find((item) => normalize(item.model) === normalize(value))
+      || VEHICLE_MODELS.map(([model, seats]) => ({ model, seats })).find((item) => normalize(item.model) === normalize(value)),
+    [suggestions, value]
+  );
 
   const handleChange = (event) => {
     const nextValue = event.target.value;
     onChange?.(nextValue);
-    const match = VEHICLE_MODELS.find(([name]) => normalize(name) === normalize(nextValue));
-    if (match) onModelSelect?.({ model: match[0], seats: match[1] });
+    const match = suggestions.find((item) => normalize(item.model) === normalize(nextValue))
+      || VEHICLE_MODELS.map(([model, seats]) => ({ model, seats })).find((item) => normalize(item.model) === normalize(nextValue));
+    if (match) onModelSelect?.({ model: match.model, seats: match.seats });
   };
 
   return (
@@ -53,11 +113,16 @@ export default function VehicleModelInput({ value, onChange, onModelSelect, clas
         autoComplete="off"
         className={className}
         aria-label="Марка и модель автомобиля"
+        aria-describedby={`${listId}-status`}
       />
       <datalist id={listId}>
-        {VEHICLE_MODELS.map(([model, seats]) => <option key={model} value={model}>{seats} пассажирских мест</option>)}
+        {suggestions.map(({ model, seats, source }) => (
+          <option key={model} value={model} label={seats ? `${seats} пассажирских мест` : source === "nhtsa" ? "Внешний каталог" : "Каталог Travella"} />
+        ))}
       </datalist>
-      {selected ? <span className="sr-only">Выбрано: {selected[0]}</span> : null}
+      <span id={`${listId}-status`} className="sr-only">
+        {loading ? "Загрузка моделей" : selected ? `Выбрано: ${selected.model}` : "Можно ввести любую марку и модель"}
+      </span>
     </>
   );
 }

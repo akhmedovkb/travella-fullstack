@@ -162,6 +162,9 @@ app.use("/api/availability", availabilityRoutes);
 const providerRoutes = require("./routes/providerRoutes");
 app.use("/api/providers", providerRoutes);
 
+const vehicleCatalogRoutes = require("./routes/vehicleCatalogRoutes");
+app.use("/api/vehicles", vehicleCatalogRoutes);
+
 const hotelRoutes = require("./routes/hotelRoutes");
 app.use("/api/hotels", hotelRoutes);
 
