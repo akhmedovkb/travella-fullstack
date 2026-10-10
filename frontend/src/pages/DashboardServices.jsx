@@ -8,6 +8,17 @@ import { tSuccess, tError, tWarn } from "../shared/toast";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
 import { SERVICE_FIELD_OPTIONS } from "../constants/serviceFieldOptions";
 import { getServiceUrgency } from "../utils/serviceUrgency";
+import {
+  BadgeDollarSign,
+  CalendarDays,
+  CheckCircle2,
+  ImageIcon,
+  Layers3,
+  MapPin,
+  Plus,
+  Search,
+  ShieldCheck,
+} from "lucide-react";
 
 const DEFAULT_DETAILS = {
   directionCountry: "",
@@ -1570,6 +1581,7 @@ export default function DashboardServices() {
   const [saving, setSaving] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
   const [serviceListFilter, setServiceListFilter] = useState("active");
+  const [serviceSearch, setServiceSearch] = useState("");
   const [confirmModal, setConfirmModal] = useState(null);
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [supportPromptService, setSupportPromptService] = useState(null);
@@ -2063,14 +2075,27 @@ export default function DashboardServices() {
 
     const order = serviceListFilter === "active" ? ["draft", "pending", "published", "rejected"] : [serviceListFilter];
 
+    const query = serviceSearch.trim().toLocaleLowerCase();
+
     return order
       .map((bucket) => ({
         id: bucket,
         label: labels[bucket] || bucket,
-        items: services.filter((service) => getServiceListBucket(service) === bucket),
+        items: services.filter((service) => {
+          if (getServiceListBucket(service) !== bucket) return false;
+          if (!query) return true;
+          const details = asDetails(service);
+          return [
+            service.title,
+            service.category,
+            getServiceRouteText(service, ""),
+            details.hotel,
+            details.eventName,
+          ].some((value) => String(value || "").toLocaleLowerCase().includes(query));
+        }),
       }))
       .filter((section) => section.items.length > 0);
-  }, [services, serviceListFilter, t]);
+  }, [services, serviceListFilter, serviceSearch, t]);
 
   const filteredServicesCount = filteredServiceSections.reduce((sum, section) => sum + section.items.length, 0);
 
@@ -2093,100 +2118,87 @@ export default function DashboardServices() {
         </details>
       )}
 
-      <div className="overflow-hidden rounded-[2rem] border border-slate-200 bg-white shadow-[0_22px_60px_rgba(15,23,42,0.08)]">
-        <div className="border-b border-slate-100 bg-gradient-to-br from-white via-orange-50/45 to-amber-50/50 p-5 sm:p-6">
+      <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-200 bg-white p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="inline-flex rounded-full bg-white px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-600 ring-1 ring-orange-100">
-                {t("service_form.studio_badge", { defaultValue: "Студия создания" })}
-              </div>
-              <h2 className="mt-3 text-2xl font-black tracking-[-0.03em] text-slate-950">
-                {t("services_marketplace", { defaultValue: "Услуги для MARKETPLACE" })}
+              <h2 className="text-xl font-black text-slate-950 sm:text-2xl">
+                {t("services_marketplace", { defaultValue: "Услуги для маркетплейса" })}
               </h2>
-              <p className="mt-1 max-w-2xl text-sm font-medium leading-6 text-slate-600">
-                {t("service_form.studio_hint", { defaultValue: "Создавайте отказные услуги блоками: направление, детали, ценность, цена и proof. Чем понятнее карточка, тем выше шанс открытия контактов." })}
+              <p className="mt-1 max-w-2xl text-sm font-medium leading-5 text-slate-500">
+                {t("service_form.studio_hint", { defaultValue: "Создавайте предложения, сохраняйте черновики и отправляйте готовые карточки на модерацию." })}
               </p>
             </div>
-            <div className="flex flex-col gap-3 rounded-3xl border border-slate-200 bg-white/80 p-2 shadow-sm lg:min-w-[340px]">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="min-w-[88px] rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
+                  <div className="text-lg font-black text-slate-950">{serviceListStats.active}</div>
+                  <div className="text-[10px] font-bold text-slate-500">Активные</div>
+                </div>
+                <div className="min-w-[88px] rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-100">
+                  <div className="text-lg font-black text-amber-700">{serviceListStats.pending}</div>
+                  <div className="text-[10px] font-bold text-amber-700">На проверке</div>
+                </div>
+                <div className="min-w-[88px] rounded-lg bg-emerald-50 px-3 py-2 ring-1 ring-emerald-100">
+                  <div className="text-lg font-black text-emerald-700">{serviceListStats.published}</div>
+                  <div className="text-[10px] font-bold text-emerald-700">Опубликовано</div>
+                </div>
+              </div>
               <button
                 type="button"
                 onClick={resetForm}
-                className="rounded-2xl bg-slate-950 px-4 py-3 text-sm font-black text-white shadow transition hover:bg-slate-800"
+                className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 text-sm font-black text-white shadow-sm transition hover:bg-orange-600"
               >
-                + {t("provider_services_tab_create", { defaultValue: "Создать услугу" })}
+                <Plus aria-hidden="true" className="h-4 w-4" />
+                {t("provider_services_tab_create", { defaultValue: "Создать услугу" })}
               </button>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-2xl bg-slate-50 px-3 py-2 ring-1 ring-slate-100">
-                  <div className="text-lg font-black text-slate-950">{serviceListStats.active}</div>
-                  <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">{t("service_list_filter.active", { defaultValue: "Активные" })}</div>
-                </div>
-                <div className="rounded-2xl bg-blue-50 px-3 py-2 ring-1 ring-blue-100">
-                  <div className="text-lg font-black text-blue-700">{serviceListStats.pending}</div>
-                  <div className="text-[10px] font-black uppercase tracking-wide text-blue-400">Pending</div>
-                </div>
-                <div className="rounded-2xl bg-emerald-50 px-3 py-2 ring-1 ring-emerald-100">
-                  <div className="text-lg font-black text-emerald-700">{serviceListStats.published}</div>
-                  <div className="text-[10px] font-black uppercase tracking-wide text-emerald-500">Live</div>
-                </div>
-              </div>
             </div>
           </div>
         </div>
 
-        <div className="grid min-h-[760px] gap-0 bg-slate-50/70 lg:grid-cols-[390px_minmax(0,1fr)]">
+        <div className="grid gap-0 bg-slate-50/70 lg:grid-cols-[350px_minmax(0,1fr)]">
           <aside className="border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
-            <div className="sticky top-0 z-10 border-b border-slate-100 bg-white/95 p-4 backdrop-blur">
+            <div className="border-b border-slate-100 bg-white p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-lg font-black tracking-[-0.02em] text-slate-950">
                     {t("provider_services_tab_created", { defaultValue: "Мои услуги" })}
                   </div>
                   <div className="mt-0.5 text-xs font-semibold text-slate-500">
-                    {t("service_form.two_panel_hint", { defaultValue: "Выберите услугу слева — редактор откроется справа." })}
+                    {services.length} {t("service_form.services_count", { defaultValue: "всего" })}
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={resetForm}
-                  className="shrink-0 rounded-2xl bg-orange-500 px-3 py-2 text-xs font-black text-white shadow-sm transition hover:bg-orange-600"
-                >
-                  + {t("new_service", { defaultValue: "Новая" })}
-                </button>
               </div>
             </div>
 
-            <div className="border-b border-slate-100 bg-white px-3 py-3">
-              <div className="flex gap-2 overflow-x-auto pb-1">
+            <div className="space-y-2 border-b border-slate-100 bg-white p-3">
+              <label className="relative block">
+                <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={serviceSearch}
+                  onChange={(event) => setServiceSearch(event.target.value)}
+                  placeholder="Поиск по услугам"
+                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-semibold outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                />
+              </label>
+              <select
+                value={serviceListFilter}
+                onChange={(event) => setServiceListFilter(event.target.value)}
+                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
+              >
                 {serviceListTabs.map((item) => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => setServiceListFilter(item.id)}
-                    className={cx(
-                      "shrink-0 rounded-2xl px-3 py-2 text-[11px] font-black transition ring-1",
-                      serviceListFilter === item.id
-                        ? "bg-slate-950 text-white ring-slate-950"
-                        : "bg-slate-50 text-slate-600 ring-slate-200 hover:bg-orange-50 hover:text-orange-700 hover:ring-orange-100"
-                    )}
-                  >
-                    {item.label}
-                    <span className={cx(
-                      "ml-1 rounded-full px-1.5 py-0.5 text-[10px]",
-                      serviceListFilter === item.id ? "bg-white/15 text-white" : "bg-white text-slate-500"
-                    )}>
-                      {item.count}
-                    </span>
-                  </button>
+                  <option key={item.id} value={item.id}>{item.label} · {item.count}</option>
                 ))}
-              </div>
+              </select>
             </div>
 
-            <div className="max-h-[calc(100vh-238px)] space-y-4 overflow-y-auto p-3">
+            <div className="space-y-4 p-3">
               {serviceListFilter === "archive" && (
-                <div className="rounded-[1.5rem] border border-blue-100 bg-blue-50/70 p-3 text-xs font-semibold leading-5 text-blue-800">
+                <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs font-semibold leading-5 text-blue-800">
                   {t("service_archive.hint", {
                     defaultValue:
-                      "В архив автоматически попадают опубликованные отказные услуги, у которых закончились даты поездки, мероприятия, рейса или истёк срок актуальности. Это история, а не корзина.",
+                      "В архиве хранится история завершённых и снятых с публикации услуг.",
                   })}
                 </div>
               )}
@@ -2251,7 +2263,7 @@ export default function DashboardServices() {
                                 {service.images?.[0] ? (
                                   <img src={service.images[0]} alt="" className="h-full w-full object-cover" />
                                 ) : (
-                                  <div className="flex h-full w-full items-center justify-center text-2xl">🏝️</div>
+                                  <div className="flex h-full w-full items-center justify-center text-orange-500"><ImageIcon aria-hidden="true" className="h-7 w-7" /></div>
                                 )}
                                 <span className="absolute left-1.5 top-1.5 rounded-full bg-white/90 px-1.5 py-0.5 text-[9px] font-black text-orange-700 shadow-sm">
                                   #{service.id}
@@ -2274,9 +2286,9 @@ export default function DashboardServices() {
                                 </div>
 
                                 <div className="mt-2 space-y-1 text-xs font-semibold text-slate-600">
-                                  <div className="truncate">📍 {route}</div>
-                                  <div className="truncate">🗓 {dateText || "—"}</div>
-                                  <div className="truncate">💰 {getServicePriceText(service)}</div>
+                                  <div className="flex min-w-0 items-center gap-1.5"><MapPin aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{route}</span></div>
+                                  <div className="flex min-w-0 items-center gap-1.5"><CalendarDays aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{dateText || "—"}</span></div>
+                                  <div className="flex min-w-0 items-center gap-1.5"><BadgeDollarSign aria-hidden="true" className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{getServicePriceText(service)}</span></div>
                                 </div>
 
                                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -2444,8 +2456,7 @@ export default function DashboardServices() {
                     </div>
                   ) : (
                     t("service_form.create_new_hint", {
-                      defaultValue:
-                        "Заполните форму и сохраните черновик. После proof отправьте на модерацию.",
+                      defaultValue: "Выберите категорию — форма покажет только нужные поля.",
                     })
                   )}
                 </div>
@@ -2457,7 +2468,7 @@ export default function DashboardServices() {
               <div className="mb-5 overflow-hidden rounded-[1.75rem] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-slate-50 shadow-sm">
                 <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
                   <div className="flex h-20 w-20 shrink-0 items-center justify-center overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-orange-100">
-                    {images?.[0] ? <img src={images[0]} alt="" className="h-full w-full object-cover" /> : <span className="text-3xl">🏝️</span>}
+                    {images?.[0] ? <img src={images[0]} alt="" className="h-full w-full object-cover" /> : <ImageIcon aria-hidden="true" className="h-8 w-8 text-orange-500" />}
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -2470,11 +2481,11 @@ export default function DashboardServices() {
                     <div className="mt-2 truncate text-lg font-black text-slate-950">
                       {title || t("edit_service", { defaultValue: "Редактирование услуги" })}
                     </div>
-                    <div className="mt-1 flex flex-wrap gap-2 text-xs font-bold text-slate-500">
-                      <span>📍 {routeText}</span>
-                      <span>🗓 {dateRangeText || "—"}</span>
-                      <span>💰 {priceText || "—"}</span>
-                      <span>{serviceHasProof({ details }) ? "✅ Proof" : "⚠️ Proof"}</span>
+                    <div className="mt-1 flex flex-wrap gap-3 text-xs font-bold text-slate-500">
+                      <span className="inline-flex items-center gap-1"><MapPin aria-hidden="true" className="h-3.5 w-3.5" />{routeText}</span>
+                      <span className="inline-flex items-center gap-1"><CalendarDays aria-hidden="true" className="h-3.5 w-3.5" />{dateRangeText || "—"}</span>
+                      <span className="inline-flex items-center gap-1"><BadgeDollarSign aria-hidden="true" className="h-3.5 w-3.5" />{priceText || "—"}</span>
+                      <span className="inline-flex items-center gap-1">{serviceHasProof({ details }) ? <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-emerald-600" /> : <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5 text-amber-600" />}Подтверждение</span>
                     </div>
                   </div>
                 </div>
@@ -2489,6 +2500,26 @@ export default function DashboardServices() {
                 ))}
               </SelectInput>
             </Field>
+
+            {!category && (
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <Layers3 aria-hidden="true" className="h-5 w-5 text-orange-500" />
+                  <div className="mt-3 text-sm font-black text-slate-900">1. Категория</div>
+                  <div className="mt-1 text-xs font-medium leading-5 text-slate-500">Определяет набор полей и вид карточки.</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <ShieldCheck aria-hidden="true" className="h-5 w-5 text-emerald-600" />
+                  <div className="mt-3 text-sm font-black text-slate-900">2. Подтверждение</div>
+                  <div className="mt-1 text-xs font-medium leading-5 text-slate-500">Добавьте фото или документ для модерации.</div>
+                </div>
+                <div className="rounded-lg border border-slate-200 bg-white p-4">
+                  <CheckCircle2 aria-hidden="true" className="h-5 w-5 text-blue-600" />
+                  <div className="mt-3 text-sm font-black text-slate-900">3. Публикация</div>
+                  <div className="mt-1 text-xs font-medium leading-5 text-slate-500">Проверьте карточку и отправьте её на проверку.</div>
+                </div>
+              </div>
+            )}
 
             {category && isExtended && (
               <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-2">
