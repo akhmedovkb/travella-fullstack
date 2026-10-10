@@ -271,11 +271,11 @@ function getProviderTrust(profile = {}, stats = {}) {
 
 function ProfileCard({ title, subtitle, children, action }) {
   return (
-    <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-      <div className="mb-5 flex items-start justify-between gap-3">
+    <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div className="mb-3 flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-xl font-black tracking-[-0.03em] text-slate-950">{title}</h2>
-          {subtitle ? <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">{subtitle}</p> : null}
+          <h2 className="text-base font-black text-slate-950">{title}</h2>
+          {subtitle ? <p className="mt-0.5 text-xs font-semibold leading-5 text-slate-500">{subtitle}</p> : null}
         </div>
         {action}
       </div>
@@ -286,13 +286,13 @@ function ProfileCard({ title, subtitle, children, action }) {
 
 function ProfileInfoBox({ label, icon, hint, children }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-      <div className="mb-2 flex items-center gap-2 text-xs font-black uppercase tracking-[0.14em] text-slate-400">
+    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-1 flex items-center gap-1.5 text-[11px] font-black uppercase text-slate-400">
         <span>{icon}</span>
         <span>{label}</span>
       </div>
       {hint ? <div className="mb-2 text-xs font-semibold text-slate-400">{hint}</div> : null}
-      <div className="text-sm font-bold leading-6 text-slate-800">{children}</div>
+      <div className="text-sm font-bold leading-5 text-slate-800">{children}</div>
     </div>
   );
 }
@@ -327,6 +327,8 @@ const ProviderProfile = () => {
     return instance;
   }, [API_BASE]);
 
+  const [activeSection, setActiveSection] = useState("overview");
+
   // якоря для ProviderCompleteness
   const idMap = useRef({
     languages: "anchor-languages",
@@ -339,9 +341,15 @@ const ProviderProfile = () => {
 
   const scrollToProfilePart = useCallback(
     (key) => {
-      const id = idMap[key] || idMap.fallback;
-      const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+      const targetSection = key === "transport" ? "fleet" : key === "certificate" ? "documents" : "profile";
+      setActiveSection(targetSection);
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          const id = idMap[key] || idMap.fallback;
+          const el = document.getElementById(id);
+          if (el) el.scrollIntoView({ behavior: "smooth", block: "center" });
+        });
+      });
     },
     [idMap]
   );
@@ -701,16 +709,16 @@ const ProviderProfile = () => {
   const publicPreviewUrl = hasProviderId ? `/provider/${providerId}` : "/";
 
   return (
-    <div className="mx-auto w-full max-w-7xl min-w-0 space-y-6 px-3 pb-10 sm:px-4 lg:px-0">
+    <div className="mx-auto w-full max-w-7xl min-w-0 space-y-3 px-3 pb-5 sm:px-4 lg:px-0">
       <div id="anchor-profile-left" />
 
-      <section className="overflow-hidden rounded-[30px] border border-slate-200 bg-white shadow-[0_18px_60px_rgba(15,23,42,0.10)]">
-        <div className="relative bg-[radial-gradient(circle_at_16%_20%,rgba(255,115,22,0.30),transparent_34%),linear-gradient(135deg,#070b1d_0%,#111827_48%,#7c2d12_100%)] p-5 text-white sm:p-7">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 flex-col gap-4 sm:flex-row sm:items-center">
+      <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="relative bg-slate-950 p-4 text-white">
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 items-center gap-3">
               <div className="relative shrink-0">
                 <div id="anchor-logo" />
-                <img src={heroPhoto} className="h-24 w-24 rounded-3xl border border-white/20 object-cover shadow-2xl ring-4 ring-white/10 sm:h-28 sm:w-28" alt="Provider logo" />
+                <img src={heroPhoto} className="h-16 w-16 rounded-lg border border-white/20 object-cover" alt="Provider logo" />
                 <span className="absolute -bottom-2 -right-2 rounded-full bg-emerald-500 px-3 py-1 text-[11px] font-black uppercase tracking-wide text-white shadow-lg">
                   {trust.score >= 85 ? "Trusted" : "Profile"}
                 </span>
@@ -720,8 +728,8 @@ const ProviderProfile = () => {
                 <div className="inline-flex rounded-full bg-white/10 px-3 py-1 text-[11px] font-black uppercase tracking-[0.16em] text-orange-100 ring-1 ring-white/10">
                   Travella verified partner
                 </div>
-                <h1 className="mt-3 truncate text-3xl font-black tracking-[-0.04em] sm:text-4xl">{publicName}</h1>
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-sm font-semibold text-white/85">
+                <h1 className="mt-1 truncate text-2xl font-black">{publicName}</h1>
+                <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-white/85">
                   <span className="rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10">{typeLabel}</span>
                   {locations.length ? <span className="rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10">📍 {locations.slice(0, 3).join(", ")}{locations.length > 3 ? ` +${locations.length - 3}` : ""}</span> : null}
                   <span className={contactReady ? "rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-100 ring-1 ring-emerald-300/20" : "rounded-full bg-amber-500/15 px-3 py-1 text-amber-100 ring-1 ring-amber-300/20"}>
@@ -731,18 +739,18 @@ const ProviderProfile = () => {
               </div>
             </div>
 
-            <div className="grid min-w-[240px] gap-3 rounded-3xl bg-white/10 p-4 ring-1 ring-white/10 backdrop-blur">
+            <div className="flex min-w-[220px] items-center gap-4 rounded-lg bg-white/10 p-3 ring-1 ring-white/10">
               <div className="flex items-end justify-between gap-3">
                 <div>
                   <div className="text-xs font-black uppercase tracking-[0.16em] text-white/55">Trust Score</div>
-                  <div className="mt-1 text-4xl font-black tracking-[-0.05em]">{trust.score}/100</div>
+                  <div className="text-2xl font-black">{trust.score}/100</div>
                 </div>
                 <div className="text-right text-xs font-bold text-white/65">Профиль доверия</div>
               </div>
-              <div className="h-2 overflow-hidden rounded-full bg-white/15">
+              <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/15">
                 <div className="h-full rounded-full bg-orange-400 transition-all" style={{ width: `${trust.score}%` }} />
               </div>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="hidden flex-wrap gap-1.5 2xl:flex">
                 {trust.checks.slice(0, 4).map((it) => (
                   <span key={it.key} className={it.ok ? "rounded-full bg-emerald-400/15 px-2 py-1 text-[11px] font-black text-emerald-100" : "rounded-full bg-white/10 px-2 py-1 text-[11px] font-black text-white/60"}>{it.ok ? "✓" : "•"} {it.label}</span>
                 ))}
@@ -750,25 +758,41 @@ const ProviderProfile = () => {
             </div>
           </div>
 
-          <div className="mt-6 flex flex-wrap gap-2">
+          <div className="mt-3 flex flex-wrap gap-2">
             {isEditing ? (
               <>
-                <button type="button" onClick={handleSaveProfile} className="rounded-2xl bg-orange-500 px-5 py-3 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-600">💾 {t("save", { defaultValue: "Сохранить" })}</button>
+                <button type="button" onClick={handleSaveProfile} className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-600">💾 {t("save", { defaultValue: "Сохранить" })}</button>
                 <button type="button" onClick={() => {
                   setIsEditing(false); setNewPhoto(null); setNewCertificate(null); setNewSocial(profile.social || ""); setNewPhone(profile.phone || ""); setNewAddress(profile.address || ""); setRegions(normalizeLocationList(profile.location).map((c) => ({ value: c, label: c }))); setCarFleet(Array.isArray(profile.car_fleet) ? profile.car_fleet : []);
-                }} className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">{t("cancel", { defaultValue: "Отмена" })}</button>
+                }} className="rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">{t("cancel", { defaultValue: "Отмена" })}</button>
               </>
             ) : (
-              <button type="button" onClick={() => setIsEditing(true)} className="rounded-2xl bg-white px-5 py-3 text-sm font-black text-slate-950 shadow-lg transition hover:bg-orange-50">✏️ {t("edit", { defaultValue: "Редактировать" })}</button>
+              <button type="button" onClick={() => setIsEditing(true)} className="rounded-lg bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-orange-50">✏️ {t("edit", { defaultValue: "Редактировать" })}</button>
             )}
-            <a href={publicPreviewUrl} target="_blank" rel="noreferrer" className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">👁 Посмотреть как клиент</a>
-            <a href="/dashboard/finance" className="rounded-2xl bg-white/10 px-5 py-3 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">📈 Спрос и клиенты</a>
+            <a href={publicPreviewUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">👁 Посмотреть как клиент</a>
+            <a href="/dashboard/finance" className="rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">📈 Спрос и клиенты</a>
           </div>
         </div>
       </section>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
-        <main className="space-y-6">
+      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Разделы профиля">
+        {[
+          ["overview", "Обзор"],
+          ["profile", "Данные"],
+          ...(["guide", "transport"].includes(profile.type) ? [["fleet", "Автопарк"]] : []),
+          ["documents", "Документы"],
+          ["security", "Безопасность"],
+          ["reviews", "Отзывы"],
+        ].map(([key, label]) => (
+          <button key={key} type="button" onClick={() => setActiveSection(key)} className={`h-9 shrink-0 rounded-lg px-4 text-sm font-bold transition ${activeSection === key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"}`} aria-current={activeSection === key ? "page" : undefined}>
+            {label}
+          </button>
+        ))}
+      </nav>
+
+      <div className={`grid grid-cols-1 gap-3 ${activeSection === "overview" ? "xl:grid-cols-[1.1fr_0.9fr]" : activeSection === "profile" ? "xl:grid-cols-[minmax(0,2fr)_minmax(280px,0.7fr)]" : ""}`}>
+        <main className="space-y-3">
+          <div className={activeSection === "overview" ? "" : "hidden"}>
           <ProfileCard title="Как клиент увидит вас после открытия контакта" subtitle="Проверьте, что телефон, Telegram и бренд выглядят правильно.">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <ProfileInfoBox label="Телефон" icon="📞">{profile.phone || t("not_specified", { defaultValue: "Не указан" })}</ProfileInfoBox>
@@ -782,7 +806,9 @@ const ProviderProfile = () => {
               <TrustPill ok={locations.length > 0}>География</TrustPill>
             </div>
           </ProfileCard>
+          </div>
 
+          <div className={activeSection === "profile" ? "grid gap-3 lg:grid-cols-2" : "hidden"}>
           <ProfileCard title="Основные контакты" subtitle="Эти данные показываются клиенту после открытия контактов.">
             {isEditing && (
               <div className="mb-5 rounded-2xl border border-orange-100 bg-orange-50 p-4">
@@ -808,7 +834,7 @@ const ProviderProfile = () => {
               </ProfileInfoBox>
             </div>
 
-            {profile.address && !isEditing && <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"><iframe title="provider-map" width="100%" height="230" frameBorder="0" scrolling="no" marginHeight="0" marginWidth="0" className="block" src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`} /></div>}
+            {profile.address && !isEditing && <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50"><iframe title="provider-map" width="100%" height="140" frameBorder="0" scrolling="no" marginHeight="0" marginWidth="0" className="block" src={`https://www.google.com/maps?q=${encodeURIComponent(profile.address)}&output=embed`} /></div>}
           </ProfileCard>
 
           <ProfileCard title="Данные поставщика" subtitle="Тип, география работы и публичные каналы связи.">
@@ -834,8 +860,9 @@ const ProviderProfile = () => {
               {!isTgReady && tgDeepLink ? <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950"><div className="font-black">Уведомления в Telegram</div><p className="mt-1 font-medium text-blue-900/80">Свяжите Telegram и получайте уведомления о заявках, открытиях контактов и бронированиях.</p><a href={tgDeepLink} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-700">Подключить Telegram</a></div> : null}
             </div>
           </ProfileCard>
+          </div>
 
-          {(profile.type === "guide" || profile.type === "transport") && (
+          {activeSection === "fleet" && (profile.type === "guide" || profile.type === "transport") && (
             <ProfileCard title={t("car_fleet", { defaultValue: "Автопарк" })} subtitle="Транспорт повышает доверие к услугам гида и транспортника.">
               <div id="anchor-transport" />
               {isEditing ? (
@@ -855,7 +882,8 @@ const ProviderProfile = () => {
           )}
         </main>
 
-        <aside className="space-y-6 xl:sticky xl:top-24 xl:self-start">
+        <aside className="space-y-3">
+          <div className={activeSection === "overview" ? "space-y-3" : "hidden"}>
           <ProfileCard title="CRM-сводка" subtitle="Короткий срез активности по профилю.">
             <div className="grid grid-cols-2 gap-3">
               <div className="rounded-2xl bg-orange-50 p-4 ring-1 ring-orange-100"><div className="text-2xl font-black text-slate-950">{demandStats.opens}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-orange-700">Открытий</div></div>
@@ -866,23 +894,24 @@ const ProviderProfile = () => {
           </ProfileCard>
 
           <ProviderCompleteness profile={profile} onFix={scrollToProfilePart} />
+          </div>
 
-          {['guide', 'transport', 'agent'].includes(profile.type) && <ProfileCard title="Владение языками" subtitle="Языки помогают клиенту быстрее выбрать подходящего поставщика."><div id="anchor-languages" /><ProviderLanguages ref={langRef} token={token} editing={isEditing} /></ProfileCard>}
+          {activeSection === "profile" && ['guide', 'transport', 'agent'].includes(profile.type) && <ProfileCard title="Владение языками" subtitle="Языки помогают клиенту быстрее выбрать подходящего поставщика."><div id="anchor-languages" /><ProviderLanguages ref={langRef} token={token} editing={isEditing} /></ProfileCard>}
 
-          <ProfileCard title={t("certificate", { defaultValue: "Сертификаты и доверие" })} subtitle="Документы повышают доверие к профилю и услугам." action={<span className={certObjectUrl ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100" : "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 ring-1 ring-amber-100"}>{certObjectUrl ? "Загружен" : "Нужен"}</span>}>
+          {activeSection === "documents" && <ProfileCard title={t("certificate", { defaultValue: "Сертификаты и доверие" })} subtitle="Документы повышают доверие к профилю и услугам." action={<span className={certObjectUrl ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100" : "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 ring-1 ring-amber-100"}>{certObjectUrl ? "Загружен" : "Нужен"}</span>}>
             <div id="anchor-certificate" />
             {isEditing ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4"><label className="inline-flex cursor-pointer rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">{t("choose_files", { defaultValue: "Выбрать файл" })}<input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="hidden" /></label><div className="mt-3 text-sm font-semibold text-slate-500">{newCertificate ? `📄 ${t("file_chosen", { defaultValue: "Файл выбран" })}` : t("no_files_selected", { defaultValue: "Файл не выбран" })}</div>{newCertificate?.startsWith("data:image") ? <img src={newCertificate} alt="Certificate preview" className="mt-3 h-32 w-32 rounded-2xl border object-cover" /> : null}</div> : certObjectUrl ? <a href={certObjectUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">{t("view_certificate", { defaultValue: "Посмотреть сертификат" })}</a> : <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified", { defaultValue: "Не указан" })}</div>}
-          </ProfileCard>
+          </ProfileCard>}
 
-          <ProfileCard title="Безопасность" subtitle="Пароль и выход из кабинета.">
+          {activeSection === "security" && <ProfileCard title="Безопасность" subtitle="Пароль и выход из кабинета.">
             <button type="button" onClick={() => setPwdOpen((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:bg-slate-100" aria-expanded={pwdOpen} aria-controls="pwd-collapse"><span>🔐 {t("change_password", { defaultValue: "Сменить пароль" })}</span><svg className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.38a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg></button>
             <div id="pwd-collapse" className={`grid overflow-hidden transition-all duration-300 ease-in-out ${pwdOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]"}`}><div className="min-h-0 space-y-2"><input type="password" placeholder={t("current_password", { defaultValue: "Текущий пароль" })} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><input type="password" placeholder={t("new_password", { defaultValue: "Новый пароль" })} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><button type="button" onClick={handleChangePassword} className="w-full rounded-xl bg-orange-500 py-2.5 font-black text-white transition hover:bg-orange-600">{t("change", { defaultValue: "Изменить" })}</button></div></div>
             <button type="button" onClick={() => { if (typeof localStorage !== "undefined") { localStorage.removeItem("token"); localStorage.removeItem("provider_id"); } window.location.href = "/login"; }} className="mt-3 w-full rounded-2xl bg-red-600 px-4 py-3 font-black text-white transition hover:bg-red-700">{t("logout", { defaultValue: "Выйти" })}</button>
-          </ProfileCard>
+          </ProfileCard>}
         </aside>
       </div>
 
-      <div className="rounded-[24px] border border-slate-200 bg-white p-4 shadow-sm sm:p-6"><div className="min-w-0 max-w-full overflow-hidden break-words [text-wrap:pretty] [&_*]:min-w-0 [&_*]:break-words [&_time]:whitespace-nowrap [&_.review-date]:whitespace-nowrap [&_.rv-date]:whitespace-nowrap">{hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}</div></div>
+      <div className={activeSection === "reviews" ? "rounded-xl border border-slate-200 bg-white p-4 shadow-sm" : "hidden"}><div className="min-w-0 max-w-full overflow-hidden break-words [text-wrap:pretty] [&_*]:min-w-0 [&_*]:break-words [&_time]:whitespace-nowrap [&_.review-date]:whitespace-nowrap [&_.rv-date]:whitespace-nowrap">{hasProviderId ? <ProviderReviews providerId={providerId} t={t} /> : null}</div></div>
     </div>
   );
 };
