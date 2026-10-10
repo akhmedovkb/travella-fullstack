@@ -43,8 +43,42 @@ async function ensureBookingStatusConstraint() {
   `);
 }
 
+async function ensureBookingCancelledByConstraint(client = db) {
+  await client.query(`
+    DO $$
+    DECLARE
+      constraint_definition TEXT;
+    BEGIN
+      IF EXISTS (
+        SELECT 1
+          FROM information_schema.columns
+         WHERE table_schema='public'
+           AND table_name='bookings'
+           AND column_name='cancelled_by'
+      ) THEN
+        SELECT pg_get_constraintdef(oid)
+          INTO constraint_definition
+          FROM pg_constraint
+         WHERE conrelid='public.bookings'::regclass
+           AND conname='bookings_cancelled_by_check';
+
+        IF constraint_definition IS NULL
+           OR POSITION('system' IN constraint_definition)=0
+           OR POSITION('requester' IN constraint_definition)=0 THEN
+          ALTER TABLE bookings DROP CONSTRAINT IF EXISTS bookings_cancelled_by_check;
+          ALTER TABLE bookings
+            ADD CONSTRAINT bookings_cancelled_by_check
+            CHECK (cancelled_by IS NULL OR cancelled_by IN ('client','provider','requester','system')) NOT VALID;
+        END IF;
+      END IF;
+    END
+    $$
+  `);
+}
+
 async function ensureHotelOfferTablesOnce() {
   await ensureBookingStatusConstraint();
+  await ensureBookingCancelledByConstraint();
   const schemaProbe = await db.query(`
     SELECT
       to_regclass('public.hotel_offers') IS NOT NULL
@@ -392,4 +426,4 @@ function ensureHotelOfferTables() {
   return hotelOfferTablesReadyPromise;
 }
 
-module.exports = { ensureHotelOfferTables };
+module.exports = { ensureHotelOfferTables, ensureBookingCancelledByConstraint };

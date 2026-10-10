@@ -8,7 +8,7 @@ test('expires overdue payment holds and notifies once per returned booking', asy
   const db = {
     async query(sql) {
       queries.push(sql);
-      if (queries.length === 1) return { rows: [{ column_name: 'hold_until' }, { column_name: 'cancelled_by' }] };
+      if (queries.length === 2) return { rows: [{ column_name: 'hold_until' }, { column_name: 'cancelled_by' }] };
       return { rows: [{ id: 41 }, { id: 42 }] };
     },
   };
@@ -19,9 +19,11 @@ test('expires overdue payment holds and notifies once per returned booking', asy
 
   assert.equal(result.expired, 2);
   assert.deepEqual(notified, [41, 42]);
-  assert.match(queries[1], /FOR UPDATE SKIP LOCKED/);
-  assert.match(queries[1], /status='cancelled_unpaid'/);
-  assert.match(queries[1], /cancelled_by='system'/);
+  assert.match(queries[0], /bookings_cancelled_by_check/);
+  assert.match(queries[0], /'system'/);
+  assert.match(queries[2], /FOR UPDATE SKIP LOCKED/);
+  assert.match(queries[2], /status='cancelled_unpaid'/);
+  assert.match(queries[2], /cancelled_by='system'/);
 });
 
 test('supports schemas without hold_until and cancelled_by', async () => {
@@ -36,6 +38,6 @@ test('supports schemas without hold_until and cancelled_by', async () => {
   const result = await runExpireHotelBookingHoldsJob({ db, notifier: {} });
 
   assert.equal(result.expired, 0);
-  assert.match(queries[1], /created_at \+ INTERVAL '30 minutes'/);
-  assert.doesNotMatch(queries[1], /cancelled_by='system'/);
+  assert.match(queries[2], /created_at \+ INTERVAL '30 minutes'/);
+  assert.doesNotMatch(queries[2], /cancelled_by='system'/);
 });

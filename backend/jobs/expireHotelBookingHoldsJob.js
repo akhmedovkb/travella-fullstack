@@ -1,7 +1,9 @@
 const pool = require('../db');
 const telegram = require('../utils/telegram');
+const { ensureBookingCancelledByConstraint } = require('../utils/hotelOffersSchema');
 
 async function runExpireHotelBookingHoldsJob({ db = pool, notifier = telegram } = {}) {
+  await ensureBookingCancelledByConstraint(db);
   const columns = await db.query(
     `SELECT column_name
        FROM information_schema.columns
