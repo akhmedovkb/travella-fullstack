@@ -6,6 +6,8 @@ const pool = require("../db");
 const TRANSPORT_ALLOWED = new Set([
   "city_tour_transport",
   "mountain_tour_transport",
+  "desert_tour_transport",
+  "safari_tour_transport",
   "one_way_transfer",
   "dinner_transfer",
   "border_transfer",

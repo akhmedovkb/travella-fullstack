@@ -38,7 +38,7 @@ module.exports = async function providersAvailable(req, res) {
         WHERE NOT EXISTS (
           SELECT 1
           FROM provider_blocked_dates d
-          WHERE d.provider_id = b.id AND d.day = $6
+          WHERE d.provider_id = b.id AND d.date = $6
         )
       ),
       not_booked AS (
@@ -47,9 +47,10 @@ module.exports = async function providersAvailable(req, res) {
         WHERE NOT EXISTS (
           SELECT 1
           FROM bookings bk
+          JOIN booking_dates bd ON bd.booking_id = bk.id
           WHERE bk.provider_id = nb.id
-            AND $6 BETWEEN bk.date_from AND bk.date_to
-            AND COALESCE(bk.status, 'pending') IN ('pending', 'confirmed', 'accepted')
+            AND bd.date = $6
+            AND COALESCE(bk.status, 'pending') IN ('confirmed', 'active', 'accepted')
         )
       ),
       by_lang AS (
