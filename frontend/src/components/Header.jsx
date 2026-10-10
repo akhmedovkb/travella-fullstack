@@ -448,7 +448,7 @@ export default function Header() {
             <button
               type="button"
               onClick={() => setMobileOpen((v) => !v)}
-              className="relative z-20 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-white/5 text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400 2xl:hidden"
+              className="relative z-20 inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/30 bg-white/5 text-white transition hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-orange-400 xl:hidden"
               aria-label="Menu"
             >
               {mobileOpen ? <IconClose /> : <IconBurger />}
@@ -466,7 +466,7 @@ export default function Header() {
                 />
               </Link>
 
-              <nav className="hidden min-w-0 items-center gap-1 lg:gap-2 2xl:flex">
+              <nav className="hidden min-w-0 items-center gap-1 lg:gap-2 xl:flex">
               
                 <div className="relative" ref={productsRef}>
                   <MenuButton
@@ -494,32 +494,32 @@ export default function Header() {
               
                       <DropdownItem
                         to="/"
-                        label="Marketplace"
+                        label="Маркетплейс"
                         description="Отказные туры, отели, билеты и услуги"
                         icon={<IconChecklist />}
                       />
 
-                      <DropdownItem
-                        to="/community"
-                        label="Travella Community"
-                        description="Лента поставщиков, новости, обзоры и предложения"
-                        icon={<IconDoc />}
-                      />
-              
                       {role === "provider" && (
                         <DropdownItem
                           to="/tour-builder"
-                          label="Tour Builder"
-                          description="Конструктор туров"
+                          label="Конструктор туров"
+                          description="Соберите программу и рассчитайте стоимость"
                           icon={<IconDoc />}
                         />
                       )}
-              
+
                       <DropdownItem
                         to="/hotels"
-                        label={t("nav.hotels", "Отели")}
-                        description="База отелей и инспекции"
+                        label="Каталог отелей"
+                        description="Отели, тарифы и инспекции"
                         icon={<IconHotel />}
+                      />
+
+                      <DropdownItem
+                        to="/community"
+                        label="Сообщество Travella"
+                        description="Новости, обзоры и предложения поставщиков"
+                        icon={<IconDoc />}
                       />
               
                     </DropdownPanel>
@@ -529,7 +529,7 @@ export default function Header() {
               </nav>
           </div>
 
-          <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 2xl:flex">
+          <div className="hidden min-w-0 flex-1 items-center justify-end gap-1 xl:flex">
             {role === "provider" && (
               <>
                 <NavItemDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
@@ -545,7 +545,7 @@ export default function Header() {
                   {servicesOpen && (
                     <DropdownPanel align="right" width="w-80">
                       <DropdownCaption title={t("nav.services_group", "Управление услугами")} />
-                      {!isAdmin && (
+                      {providerType === "hotel" && (
                         <DropdownItem
                           to="/dashboard/hotels"
                           label={t("nav.my_hotels", "Мои отели")}
@@ -555,14 +555,14 @@ export default function Header() {
                       )}
                       <DropdownItem
                         to="/dashboard/services/marketplace"
-                        label={t("nav.services_marketplace_short", "Маркетплейс")}
-                        description={t("nav.services_marketplace_desc", "Отказные туры, отели, авиабилеты и другие услуги")}
+                        label="Мои предложения"
+                        description="Создание и управление услугами маркетплейса"
                         icon={<IconChecklist />}
                       />
                       {TOUR_BUILDER_SERVICE_PROVIDER_TYPES.has(providerType) && (
                         <DropdownItem
                           to="/dashboard/services/tourbuilder"
-                          label={t("nav.services_tourbuilder_short", "Tour Builder")}
+                          label="Услуги для Tour Builder"
                           description={t("nav.services_tourbuilder_desc", "Услуги для конструктора туров")}
                           icon={<IconChecklist />}
                         />
@@ -584,7 +584,7 @@ export default function Header() {
                     active={workspaceOpen}
                     open={workspaceOpen}
                     icon={<IconDashboard />}
-                    label={t("nav.activity", "Активность")}
+                    label="Работа"
                     onClick={() => setWorkspaceOpen((v) => !v)}
                   />
                   
@@ -592,10 +592,7 @@ export default function Header() {
                     <DropdownPanel align="right" width="w-80">
                   
                       <DropdownCaption
-                        title={t(
-                          "nav.activity",
-                          "АКТИВНОСТЬ"
-                        )}
+                        title="Работа с клиентами"
                       />
                   
                       <DropdownItem
@@ -630,14 +627,14 @@ export default function Header() {
 
                       <DropdownItem
                         to="/dashboard/finance"
-                        label={`${t("nav.provider_finance", "📈 Спрос и клиенты")}${demandNewCount > 0 ? ` · ${demandNewCount}` : ""}`}
+                        label={`${t("nav.provider_finance", "Спрос и клиенты")}${demandNewCount > 0 ? ` · ${demandNewCount}` : ""}`}
                         description={t("nav.provider_finance_desc", "Открытия контактов, горячие клиенты и быстрые запросы")}
                         icon={<IconWallet />}
                       />
 
                       <DropdownItem
                         to="/dashboard/social"
-                        label="🧭 Публикации"
+                        label="Публикации"
                         description="Посты, фото, видео и новости для ленты Travella"
                         icon={<IconDoc />}
                       />
@@ -658,7 +655,7 @@ export default function Header() {
                     <DropdownPanel align="right" width="w-72">
                       <DropdownItem
                         to="/dashboard/passport-parser"
-                        label="Passport Parser"
+                        label="Распознавание паспорта"
                         description={t("nav.passport_parser_desc", "Распознавание паспортных данных")}
                         icon={<IconDoc />}
                       />
@@ -702,7 +699,7 @@ export default function Header() {
                 {adminOpen && (
                   <DropdownPanel align="right" width="w-80">
                     <DropdownCaption title={t("nav.admin_core", "Администрирование")} />
-                    <DropdownItem to="/admin/ai-platform" label="🤖 AI Platform" description="Цифровые сотрудники Travella" icon={<IconDashboard />}/>
+                    <DropdownItem to="/admin/ai-platform" label="AI Platform" description="Цифровые сотрудники Travella" icon={<IconDashboard />}/>
                     <DropdownItem to="/admin/operations" label="Operations" description="Контроль отказных и настроек" icon={<IconModeration />} />
                     <DropdownItem to="/admin/finance" label={t("nav.finance_admin", "Finance")} description="Финансы платформы" icon={<IconDoc />} />
                     <DropdownItem to="/admin/billing" label={t("nav.billing_admin", "Billing")} description="Биллинг и открытия контактов" icon={<IconWallet />} />
@@ -747,7 +744,7 @@ export default function Header() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2 2xl:hidden">
+          <div className="flex items-center gap-2 xl:hidden">
             {role === "client" && (
               <Link to="/client/balance" className="rounded-full bg-white/10 px-2.5 py-1 text-xs font-semibold text-white">
                 {balanceLoading ? "…" : formatHeaderBalance(clientBalance, i18n.language)}
@@ -758,35 +755,46 @@ export default function Header() {
         </div>
 
         <div
-          className={`2xl:hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[82vh] overflow-y-auto overscroll-contain" : "max-h-0 overflow-hidden"}`}
+          className={`xl:hidden transition-[max-height] duration-300 ${mobileOpen ? "max-h-[82vh] overflow-y-auto overscroll-contain" : "max-h-0 overflow-hidden"}`}
           aria-hidden={!mobileOpen}
         >
           <nav className="space-y-2 pb-3">
-            <RowGroupDark title={t("nav.products", "Продукты")}>
-              <NavItemMobileDark to="/" label="MARKETPLACE" icon={<IconChecklist />} end />
-              <NavItemMobileDark to="/community" label="Travella Community" icon={<IconDoc />} />
-              {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder", "Tour Builder")} icon={<IconDoc />} />}
-              <NavItemMobileDark to="/hotels" label={t("nav.hotels", "Отели")} icon={<IconHotel />} />
+            <RowGroupDark title="Продукты">
+              <NavItemMobileDark to="/" label="Маркетплейс" icon={<IconChecklist />} end />
+              {role === "provider" && <NavItemMobileDark to="/tour-builder" label="Конструктор туров" icon={<IconDoc />} />}
+              <NavItemMobileDark to="/hotels" label="Каталог отелей" icon={<IconHotel />} />
+              <NavItemMobileDark to="/community" label="Сообщество Travella" icon={<IconUsers />} />
             </RowGroupDark>
 
             {role === "provider" && (
-              <RowGroupDark title={t("nav.activity", "Активность")}>
-                <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
-                {!isAdmin && <NavItemMobileDark to="/dashboard/hotels" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />}
-                <NavItemMobileDark to="/dashboard/services/marketplace" label={t("nav.services_marketplace_short", "Маркетплейс")} icon={<IconChecklist />} />
-                {TOUR_BUILDER_SERVICE_PROVIDER_TYPES.has(providerType) && (
-                  <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder_short", "Tour Builder")} icon={<IconChecklist />} />
-                )}
-                {CALENDAR_PROVIDER_TYPES.has(providerType) && (
-                  <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь")} icon={<IconBookings />} />
-                )}
-                <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
-                <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
-                <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings", "Брони")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
-                <NavItemMobileDark to="/dashboard/finance" label={`${t("nav.provider_finance", "📈 Спрос и клиенты")}${demandNewCount > 0 ? ` · ${demandNewCount}` : ""}`} icon={<IconWallet />} badge={demandNewCount} />
-                <NavItemMobileDark to="/dashboard/social" label="🧭 Публикации" icon={<IconDoc />} />
-                <NavItemMobileDark to="/dashboard/passport-parser" label="Passport Parser" icon={<IconDoc />} />
-              </RowGroupDark>
+              <>
+                <RowGroupDark title="Кабинет">
+                  <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
+                </RowGroupDark>
+
+                <RowGroupDark title="Услуги">
+                  {providerType === "hotel" && <NavItemMobileDark to="/dashboard/hotels" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />}
+                  <NavItemMobileDark to="/dashboard/services/marketplace" label="Мои предложения" icon={<IconChecklist />} />
+                  {TOUR_BUILDER_SERVICE_PROVIDER_TYPES.has(providerType) && (
+                    <NavItemMobileDark to="/dashboard/services/tourbuilder" label="Услуги для Tour Builder" icon={<IconChecklist />} />
+                  )}
+                  {CALENDAR_PROVIDER_TYPES.has(providerType) && (
+                    <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь занятости")} icon={<IconBookings />} />
+                  )}
+                </RowGroupDark>
+
+                <RowGroupDark title="Работа с клиентами">
+                  <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
+                  <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings", "Бронирования")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                  <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
+                  <NavItemMobileDark to="/dashboard/finance" label={t("nav.provider_finance", "Спрос и клиенты")} icon={<IconWallet />} badge={demandNewCount} />
+                  <NavItemMobileDark to="/dashboard/social" label="Публикации" icon={<IconDoc />} />
+                </RowGroupDark>
+
+                <RowGroupDark title="Инструменты">
+                  <NavItemMobileDark to="/dashboard/passport-parser" label="Распознавание паспорта" icon={<IconDoc />} />
+                </RowGroupDark>
+              </>
             )}
 
             {role === "client" && (
@@ -803,7 +811,7 @@ export default function Header() {
 
             {isAdmin && (
               <RowGroupDark title={t("nav.admin", "Админ")}>
-                <NavItemMobileDark to="/admin/ai-platform" label="🤖 AI Platform" icon={<IconDashboard />}/>
+                <NavItemMobileDark to="/admin/ai-platform" label="AI Platform" icon={<IconDashboard />}/>
                 <NavItemMobileDark to="/admin/operations" label="Operations" icon={<IconModeration />} />
                 <NavItemMobileDark to="/admin/finance" label={t("nav.finance_admin", "Finance")} icon={<IconDoc />} />
                 <NavItemMobileDark to="/admin/billing" label={t("nav.billing_admin", "Billing")} icon={<IconWallet />} />
