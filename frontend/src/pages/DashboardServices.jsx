@@ -2148,11 +2148,13 @@ export default function DashboardServices({ viewMode = "create" }) {
               </div>
               <button
                 type="button"
-                onClick={() => viewMode === "manage" ? navigate("/dashboard/services/marketplace") : resetForm()}
+                onClick={() => viewMode === "manage" ? navigate("/dashboard/services/marketplace") : navigate("/dashboard/services/my")}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 text-sm font-black text-white shadow-sm transition hover:bg-orange-600"
               >
-                <Plus aria-hidden="true" className="h-4 w-4" />
-                {t("provider_services_tab_create", { defaultValue: "Создать услугу" })}
+                {viewMode === "manage" ? <Plus aria-hidden="true" className="h-4 w-4" /> : <Layers3 aria-hidden="true" className="h-4 w-4" />}
+                {viewMode === "manage"
+                  ? t("provider_services_tab_create", { defaultValue: "Создать услугу" })
+                  : t("provider_services_tab_created", { defaultValue: "Мои услуги" })}
               </button>
             </div>
           </div>
@@ -2427,7 +2429,7 @@ export default function DashboardServices({ viewMode = "create" }) {
           )}
 
           {viewMode !== "manage" && (
-          <section className="min-w-0 bg-slate-50/70 p-4 sm:p-6">
+          <section className="min-w-0 bg-slate-50/70 p-4 sm:p-5">
             <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <div className="text-xl font-black tracking-[-0.03em] text-slate-950">
@@ -2468,7 +2470,7 @@ export default function DashboardServices({ viewMode = "create" }) {
               </div>
             </div>
 
-            <div className="space-y-5">
+            <div className="mx-auto max-w-[1180px] space-y-5">
             {selectedService && (
               <div className="mb-5 overflow-hidden rounded-[1.75rem] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-slate-50 shadow-sm">
                 <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
@@ -2497,14 +2499,16 @@ export default function DashboardServices({ viewMode = "create" }) {
               </div>
             )}
 
-            <Field label={t("select_category", { defaultValue: "Выберите категорию" })}>
-              <SelectInput value={category} onChange={(e) => { setCategory(e.target.value); setStep(1); setDetails({ ...DEFAULT_DETAILS }); }}>
-                <option value="">{t("select_category", { defaultValue: "Выберите категорию" })}</option>
-                {categoryOptions.map((cat) => (
-                  <option key={cat} value={cat}>{t(`category.${cat}`, { defaultValue: cat })}</option>
-                ))}
-              </SelectInput>
-            </Field>
+            <div className="max-w-2xl">
+              <Field label={t("select_category", { defaultValue: "Выберите категорию" })}>
+                <SelectInput value={category} onChange={(e) => { setCategory(e.target.value); setStep(1); setDetails({ ...DEFAULT_DETAILS }); }}>
+                  <option value="">{t("select_category", { defaultValue: "Выберите категорию" })}</option>
+                  {categoryOptions.map((cat) => (
+                    <option key={cat} value={cat}>{t(`category.${cat}`, { defaultValue: cat })}</option>
+                  ))}
+                </SelectInput>
+              </Field>
+            </div>
 
             {!category && (
               <div className="grid gap-3 sm:grid-cols-3">
@@ -2527,18 +2531,17 @@ export default function DashboardServices({ viewMode = "create" }) {
             )}
 
             {category && isExtended && (
-              <div className="mt-5 rounded-[1.75rem] border border-slate-200 bg-slate-50 p-2">
+              <div className="mt-5 border-y border-slate-200 bg-white px-2 py-3">
                 <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
                   {steps.map((item) => (
                     <button
                       key={item.id}
                       type="button"
                       onClick={() => setStep(item.id)}
-                      className={cx("rounded-2xl px-3 py-3 text-left transition", step === item.id ? "bg-slate-950 text-white shadow-lg" : "bg-white text-slate-600 hover:bg-orange-50")}
+                      className={cx("flex min-h-11 items-center gap-2 rounded-lg px-3 py-2 text-left transition", step === item.id ? "bg-slate-950 text-white shadow-sm" : "bg-white text-slate-600 hover:bg-orange-50")}
                     >
-                      <div className="text-[10px] font-black uppercase tracking-wide opacity-70">{t("service_form.step", { defaultValue: "Шаг" })} {item.id}</div>
-                      <div className="mt-1 text-sm font-black">{item.label}</div>
-                      <div className="mt-0.5 line-clamp-1 text-[11px] font-semibold opacity-70">{item.hint}</div>
+                      <span className={cx("flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-black", step === item.id ? "bg-white text-slate-950" : "bg-slate-100 text-slate-500")}>{item.id}</span>
+                      <span className="truncate text-sm font-black">{item.label}</span>
                     </button>
                   ))}
                 </div>
@@ -2546,7 +2549,7 @@ export default function DashboardServices({ viewMode = "create" }) {
             )}
 
             {category && (
-              <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+              <div className="mx-auto mt-5 max-w-5xl">
                 <div className="space-y-5">
                   {!isExtended ? (
                     <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
@@ -3027,20 +3030,22 @@ export default function DashboardServices({ viewMode = "create" }) {
                     </>
                   )}
 
-                  <ImageUploader title={t("service_images", { defaultValue: "Фото услуги" })} hint={t("images_hint", { defaultValue: "До 10 изображений, ≤ 3 МБ каждое" })} images={images} onChange={setImages} max={10} />
+                  {(!isExtended || step === 3) && (
+                    <ImageUploader title={t("service_images", { defaultValue: "Фото услуги" })} hint={t("images_hint", { defaultValue: "До 10 изображений, ≤ 3 МБ каждое" })} images={images} onChange={setImages} max={10} />
+                  )}
 
                   <div className="sticky bottom-0 z-20 -mx-4 flex gap-2 border-t border-slate-100 bg-white/90 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6">
                     {isExtended && step > 1 && (
-                      <button type="button" onClick={() => setStep((v) => Math.max(1, v - 1))} className="rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600">
+                      <button type="button" onClick={() => setStep((v) => Math.max(1, v - 1))} className="rounded-lg border border-slate-200 bg-white px-4 py-3 text-sm font-black text-slate-600">
                         {t("service_form.prev_step", { defaultValue: "Назад" })}
                       </button>
                     )}
                     {isExtended && step < steps.length ? (
-                      <button type="button" onClick={() => setStep((v) => Math.min(steps.length, v + 1))} className="w-full rounded-2xl bg-slate-950 py-3 text-sm font-black text-white shadow-sm hover:bg-slate-800">
+                      <button type="button" onClick={() => setStep((v) => Math.min(steps.length, v + 1))} className="w-full rounded-lg bg-slate-950 py-3 text-sm font-black text-white shadow-sm hover:bg-slate-800">
                         {t("service_form.next_step", { defaultValue: "Следующий шаг" })}
                       </button>
                     ) : (
-                      <button type="button" onClick={saveService} disabled={saving} className="w-full rounded-2xl bg-orange-500 py-3 text-sm font-black text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-60">
+                      <button type="button" onClick={saveService} disabled={saving} className="w-full rounded-lg bg-orange-500 py-3 text-sm font-black text-white shadow-sm transition hover:bg-orange-600 disabled:opacity-60">
                         {saving ? t("saving", { defaultValue: "Сохраняю…" }) : t("save_service", { defaultValue: "Сохранить услугу" })}
                       </button>
                     )}
@@ -3084,24 +3089,6 @@ export default function DashboardServices({ viewMode = "create" }) {
                   </div>
                 </div>
 
-                <aside className="hidden xl:block">
-                  <div className="sticky top-5 space-y-4">
-                    <MarketplacePreviewCard
-                      category={category}
-                      title={title}
-                      routeText={routeText}
-                      dateRangeText={dateRangeText}
-                      priceText={priceText}
-                      images={images}
-                      details={details}
-                      includedPreview={includedPreview}
-                      t={t}
-                    />
-                    <div className="rounded-2xl bg-orange-50 p-3 text-xs font-semibold leading-5 text-orange-800 ring-1 ring-orange-100">
-                      {t("service_form.preview_tip", { defaultValue: "Так клиент будет воспринимать вашу услугу. Фото и proof повышают доверие." })}
-                    </div>
-                  </div>
-                </aside>
               </div>
             )}
             </div>
