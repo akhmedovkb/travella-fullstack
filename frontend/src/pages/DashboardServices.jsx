@@ -12,12 +12,15 @@ import {
   BadgeDollarSign,
   CalendarDays,
   CheckCircle2,
+  Clock3,
   ImageIcon,
+  Languages,
   Layers3,
   MapPin,
   Plus,
   Search,
   ShieldCheck,
+  Users,
 } from "lucide-react";
 
 const DEFAULT_DETAILS = {
@@ -1097,7 +1100,7 @@ function fileToDataUrl(file) {
 function Field({ label, children, hint }) {
   return (
     <label className="block">
-      <span className="mb-1.5 block text-xs font-black uppercase tracking-wide text-slate-500">{label}</span>
+      <span className="mb-1.5 block text-sm font-bold text-slate-700">{label}</span>
       {children}
       {hint ? <span className="mt-1 block text-xs font-semibold text-slate-400">{hint}</span> : null}
     </label>
@@ -1109,7 +1112,7 @@ function TextInput(props) {
     <input
       {...props}
       className={cx(
-        "h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100",
+        "h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100",
         props.className
       )}
     />
@@ -1121,7 +1124,7 @@ function SelectInput(props) {
     <select
       {...props}
       className={cx(
-        "h-11 w-full rounded-2xl border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100",
+        "h-11 w-full rounded-lg border border-slate-200 bg-white px-3.5 text-sm font-semibold text-slate-800 outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100",
         props.className
       )}
     />
@@ -1153,7 +1156,7 @@ function TextArea(props) {
     <textarea
       {...props}
       className={cx(
-        "min-h-[92px] w-full rounded-2xl border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100",
+        "min-h-[108px] w-full rounded-lg border border-slate-200 bg-white px-3.5 py-3 text-sm font-semibold leading-6 text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:ring-4 focus:ring-orange-100",
         props.className
       )}
     />
@@ -1599,6 +1602,8 @@ export default function DashboardServices({ viewMode = "create" }) {
   const [authorInclusionSearch, setAuthorInclusionSearch] = useState("");
 
   const isAgent = profile?.type === "agent";
+  const isGuide = profile?.type === "guide";
+  const isTransport = profile?.type === "transport";
   const isExtended = isAgent && EXTENDED_AGENT_CATEGORIES.includes(category);
 
   const steps = useMemo(
@@ -1798,7 +1803,10 @@ export default function DashboardServices({ viewMode = "create" }) {
                 ? { expiration_ts: Math.floor(expirationDate.getTime() / 1000) }
                 : {}),
             }
-          : undefined,
+          : {
+              ...details,
+              proofImages: details.proofImages || [],
+            },
       });
       const res = selectedService?.id
         ? await api.put(`/api/providers/services/${selectedService.id}`, payload)
@@ -2552,11 +2560,72 @@ export default function DashboardServices({ viewMode = "create" }) {
               <div className="mx-auto mt-5 max-w-5xl">
                 <div className="space-y-5">
                   {!isExtended ? (
-                    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4 shadow-sm">
-                      <div className="grid gap-4 sm:grid-cols-2">
-                        <Field label={t("title", { defaultValue: "Название" })}><TextInput value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-                        <Field label={t("price", { defaultValue: "Цена" })}><TextInput inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} /></Field>
-                        <div className="sm:col-span-2"><Field label={t("description", { defaultValue: "Описание" })}><TextArea value={description} onChange={(e) => setDescription(e.target.value)} /></Field></div>
+                    <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+                      <div className="flex items-center gap-3 border-b border-slate-100 px-5 py-4">
+                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-orange-50 text-orange-600">
+                          <Layers3 aria-hidden="true" className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <div className="text-base font-black text-slate-950">Основная информация</div>
+                          <div className="text-xs font-medium text-slate-500">То, что клиент увидит в карточке услуги</div>
+                        </div>
+                      </div>
+
+                      <div className="grid gap-5 p-5 sm:grid-cols-2">
+                        <div className="sm:col-span-2">
+                          <Field label={t("title", { defaultValue: "Название услуги" })} hint="Короткое и конкретное: например, «Обзорная экскурсия по Самарканду»">
+                            <TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Введите название" />
+                          </Field>
+                        </div>
+
+                        <Field label="Город или регион">
+                          <div className="relative">
+                            <MapPin aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <TextInput className="pl-9" value={details.location} onChange={(e) => patchDetails({ location: e.target.value })} placeholder="Например, Samarkand" />
+                          </div>
+                        </Field>
+
+                        <Field label="Продолжительность">
+                          <div className="relative">
+                            <Clock3 aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <TextInput className="pl-9" value={details.duration} onChange={(e) => patchDetails({ duration: e.target.value })} placeholder="Например, 4 часа" />
+                          </div>
+                        </Field>
+
+                        {(isGuide || isTransport) && (
+                          <Field label={isTransport ? "Место подачи" : "Место встречи"}>
+                            <TextInput value={details.meetingPoint} onChange={(e) => patchDetails({ meetingPoint: e.target.value })} placeholder="Адрес или ориентир" />
+                          </Field>
+                        )}
+
+                        {isGuide && (
+                          <Field label="Язык проведения">
+                            <div className="relative">
+                              <Languages aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                              <TextInput className="pl-9" value={details.guideLanguage} onChange={(e) => patchDetails({ guideLanguage: e.target.value })} placeholder="Русский, English" />
+                            </div>
+                          </Field>
+                        )}
+
+                        <Field label={isTransport ? "Количество мест" : "Максимум гостей"}>
+                          <div className="relative">
+                            <Users aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <TextInput className="pl-9" type="number" min="1" value={details.maxPax} onChange={(e) => patchDetails({ maxPax: e.target.value })} placeholder="Например, 8" />
+                          </div>
+                        </Field>
+
+                        <Field label={`Цена за услугу${profile?.currency ? `, ${profile.currency}` : ""}`} hint="Итоговая стоимость, которую увидит клиент">
+                          <div className="relative">
+                            <BadgeDollarSign aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <TextInput className="pl-9" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" />
+                          </div>
+                        </Field>
+
+                        <div className="sm:col-span-2">
+                          <Field label={t("description", { defaultValue: "Описание" })} hint="Расскажите о маршруте, программе и важных условиях">
+                            <TextArea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Что входит в услугу и как она проходит" />
+                          </Field>
+                        </div>
                       </div>
                     </div>
                   ) : (
