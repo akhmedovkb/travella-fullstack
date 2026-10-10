@@ -273,6 +273,15 @@ export default function App() {
               }
             />
 
+            <Route
+              path="/dashboard/services/my"
+              element={
+                <PrivateRoute>
+                  <DashboardServices viewMode="manage" />
+                </PrivateRoute>
+              }
+            />
+
             {/* 🔹 НОВОЕ: КАЛЕНДАРЬ ПРОВАЙДЕРА */}
             <Route
               path="/dashboard/calendar"
