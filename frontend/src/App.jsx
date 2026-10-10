@@ -1,7 +1,7 @@
 //frontend/src/App.jsx
 
 import React from "react";
-import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ToastMount } from "./shared/toast";
 
 import PrivateRoute from "./pages/PrivateRoute";
@@ -126,6 +126,13 @@ function AdminRoute({ children }) {
   } catch {
     return <Navigate to="/" replace />;
   }
+}
+
+function RouteAwareFooter() {
+  const { pathname } = useLocation();
+  const isPublicProviderProfile = /^\/(?:profile\/)?provider\/\d+\/?$/.test(pathname);
+
+  return isPublicProviderProfile ? null : <Footer />;
 }
 
 export default function App() {
@@ -660,7 +667,7 @@ export default function App() {
           </Routes>
           </React.Suspense>
         </main>
-        <Footer />
+        <RouteAwareFooter />
       </div>
       <LeadModal
         open={leadOpen}
