@@ -10,6 +10,36 @@ import React, {
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import AsyncCreatableSelect from "react-select/async-creatable";
+import {
+  AlertTriangle,
+  BarChart3,
+  Building2,
+  CarFront,
+  Check,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  Compass,
+  Eye,
+  FileText,
+  Globe2,
+  LayoutDashboard,
+  LockKeyhole,
+  LogOut,
+  Mail,
+  MapPin,
+  Plus,
+  MessageCircle,
+  Pencil,
+  Save,
+  ShieldCheck,
+  Star,
+  Upload,
+  Trash2,
+  UserRound,
+  X,
+  Phone,
+} from "lucide-react";
 
 import ProviderLanguages from "./ProviderLanguages";
 import ProviderCompleteness from "./ProviderCompleteness";
@@ -382,11 +412,11 @@ function ProfileCard({ title, subtitle, children, action }) {
   );
 }
 
-function ProfileInfoBox({ label, icon, hint, children }) {
+function ProfileInfoBox({ label, icon: Icon, hint, children }) {
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="mb-1 flex items-center gap-1.5 text-[11px] font-black uppercase text-slate-400">
-        <span>{icon}</span>
+        {Icon ? <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> : null}
         <span>{label}</span>
       </div>
       {hint ? <div className="mb-2 text-xs font-semibold text-slate-400">{hint}</div> : null}
@@ -396,11 +426,12 @@ function ProfileInfoBox({ label, icon, hint, children }) {
 }
 
 function TrustPill({ ok, children }) {
+  const Icon = ok ? CheckCircle2 : Circle;
   return (
     <span className={[
-      "inline-flex items-center rounded-full px-3 py-1 text-xs font-black ring-1",
+      "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black ring-1",
       ok ? "bg-emerald-50 text-emerald-700 ring-emerald-100" : "bg-amber-50 text-amber-700 ring-amber-100",
-    ].join(" ")}>{ok ? "✅" : "⚪"} {children}</span>
+    ].join(" ")}><Icon aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={2.25} />{children}</span>
   );
 }
 
@@ -832,9 +863,9 @@ const ProviderProfile = () => {
                 <h1 className="mt-1 truncate text-2xl font-black">{publicName}</h1>
                 <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-xs font-semibold text-white/85">
                   <span className="rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10">{typeLabel}</span>
-                  {locations.length ? <span className="rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10">📍 {locations.slice(0, 3).join(", ")}{locations.length > 3 ? ` +${locations.length - 3}` : ""}</span> : null}
-                  <span className={contactReady ? "rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-100 ring-1 ring-emerald-300/20" : "rounded-full bg-amber-500/15 px-3 py-1 text-amber-100 ring-1 ring-amber-300/20"}>
-                    {contactReady ? "✅ Контакты готовы" : "⚠️ Проверьте контакты"}
+                  {locations.length ? <span className="inline-flex items-center gap-1.5 rounded-full bg-white/10 px-3 py-1 ring-1 ring-white/10"><MapPin aria-hidden="true" className="h-3.5 w-3.5" />{locations.slice(0, 3).join(", ")}{locations.length > 3 ? ` +${locations.length - 3}` : ""}</span> : null}
+                  <span className={contactReady ? "inline-flex items-center gap-1.5 rounded-full bg-emerald-500/15 px-3 py-1 text-emerald-100 ring-1 ring-emerald-300/20" : "inline-flex items-center gap-1.5 rounded-full bg-amber-500/15 px-3 py-1 text-amber-100 ring-1 ring-amber-300/20"}>
+                    {contactReady ? <><CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5" />Контакты готовы</> : <><AlertTriangle aria-hidden="true" className="h-3.5 w-3.5" />Проверьте контакты</>}
                   </span>
                 </div>
               </div>
@@ -853,7 +884,7 @@ const ProviderProfile = () => {
               </div>
               <div className="hidden flex-wrap gap-1.5 2xl:flex">
                 {trust.checks.slice(0, 4).map((it) => (
-                  <span key={it.key} className={it.ok ? "rounded-full bg-emerald-400/15 px-2 py-1 text-[11px] font-black text-emerald-100" : "rounded-full bg-white/10 px-2 py-1 text-[11px] font-black text-white/60"}>{it.ok ? "✓" : "•"} {it.label}</span>
+                  <span key={it.key} className={it.ok ? "inline-flex items-center gap-1 rounded-full bg-emerald-400/15 px-2 py-1 text-[11px] font-black text-emerald-100" : "inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-[11px] font-black text-white/60"}>{it.ok ? <Check aria-hidden="true" className="h-3 w-3" /> : <Circle aria-hidden="true" className="h-2.5 w-2.5" />}{it.label}</span>
                 ))}
               </div>
             </div>
@@ -862,31 +893,31 @@ const ProviderProfile = () => {
           <div className="mt-3 flex flex-wrap gap-2">
             {isEditing ? (
               <>
-                <button type="button" onClick={handleSaveProfile} className="rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-600">💾 {t("save", { defaultValue: "Сохранить" })}</button>
+                <button type="button" onClick={handleSaveProfile} className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-600"><Save aria-hidden="true" className="h-4 w-4" />{t("save", { defaultValue: "Сохранить" })}</button>
                 <button type="button" onClick={() => {
                   setIsEditing(false); setNewPhoto(null); setNewCertificate(null); setNewSocial(profile.social || ""); setNewPhone(profile.phone || ""); setNewAddress(profile.address || ""); setRegions(normalizeLocationList(profile.location).map((c) => ({ value: c, label: c }))); setCarFleet(Array.isArray(profile.car_fleet) ? profile.car_fleet : []);
-                }} className="rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">{t("cancel", { defaultValue: "Отмена" })}</button>
+                }} className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15"><X aria-hidden="true" className="h-4 w-4" />{t("cancel", { defaultValue: "Отмена" })}</button>
               </>
             ) : (
-              <button type="button" onClick={() => setIsEditing(true)} className="rounded-lg bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-orange-50">✏️ {t("edit", { defaultValue: "Редактировать" })}</button>
+              <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-orange-50"><Pencil aria-hidden="true" className="h-4 w-4" />{t("edit", { defaultValue: "Редактировать" })}</button>
             )}
-            <a href={publicPreviewUrl} target="_blank" rel="noreferrer" className="rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">👁 Посмотреть как клиент</a>
-            <a href="/dashboard/finance" className="rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15">📈 Спрос и клиенты</a>
+            <a href={publicPreviewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15"><Eye aria-hidden="true" className="h-4 w-4" />Посмотреть как клиент</a>
+            <a href="/dashboard/finance" className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15"><BarChart3 aria-hidden="true" className="h-4 w-4" />Спрос и клиенты</a>
           </div>
         </div>
       </section>
 
       <nav className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm" aria-label="Разделы профиля">
         {[
-          ["overview", "Обзор"],
-          ["profile", "Данные"],
-          ...(["guide", "transport"].includes(profile.type) ? [["fleet", "Автопарк"]] : []),
-          ["documents", "Документы"],
-          ["security", "Безопасность"],
-          ["reviews", "Отзывы"],
-        ].map(([key, label]) => (
-          <button key={key} type="button" onClick={() => setActiveSection(key)} className={`h-9 shrink-0 rounded-lg px-4 text-sm font-bold transition ${activeSection === key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"}`} aria-current={activeSection === key ? "page" : undefined}>
-            {label}
+          ["overview", "Обзор", LayoutDashboard],
+          ["profile", "Данные", UserRound],
+          ...(["guide", "transport"].includes(profile.type) ? [["fleet", "Автопарк", CarFront]] : []),
+          ["documents", "Документы", FileText],
+          ["security", "Безопасность", ShieldCheck],
+          ["reviews", "Отзывы", Star],
+        ].map(([key, label, Icon]) => (
+          <button key={key} type="button" onClick={() => setActiveSection(key)} className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-4 text-sm font-bold transition ${activeSection === key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"}`} aria-current={activeSection === key ? "page" : undefined}>
+            <Icon aria-hidden="true" className="h-4 w-4" strokeWidth={2} />{label}
           </button>
         ))}
       </nav>
@@ -896,9 +927,9 @@ const ProviderProfile = () => {
           <div className={activeSection === "overview" ? "" : "hidden"}>
           <ProfileCard title="Как клиент увидит вас после открытия контакта" subtitle="Проверьте, что телефон, Telegram и бренд выглядят правильно.">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-              <ProfileInfoBox label="Телефон" icon="📞">{profile.phone || t("not_specified", { defaultValue: "Не указан" })}</ProfileInfoBox>
-              <ProfileInfoBox label="Telegram" icon="💬">{telegramDisplay || t("not_specified", { defaultValue: "Не указан" })}</ProfileInfoBox>
-              <ProfileInfoBox label="Статус" icon="🛡️">{trust.score >= 85 ? "Высокое доверие" : "Можно усилить"}</ProfileInfoBox>
+              <ProfileInfoBox label="Телефон" icon={Phone}>{profile.phone || t("not_specified", { defaultValue: "Не указан" })}</ProfileInfoBox>
+              <ProfileInfoBox label="Telegram" icon={MessageCircle}>{telegramDisplay || t("not_specified", { defaultValue: "Не указан" })}</ProfileInfoBox>
+              <ProfileInfoBox label="Статус" icon={ShieldCheck}>{trust.score >= 85 ? "Высокое доверие" : "Можно усилить"}</ProfileInfoBox>
             </div>
             <div className="mt-4 flex flex-wrap gap-2">
               <TrustPill ok={certStatus}>Сертификат</TrustPill>
@@ -914,8 +945,8 @@ const ProviderProfile = () => {
             {isEditing && (
               <div className="mb-5 rounded-2xl border border-orange-100 bg-orange-50 p-4">
                 <div className="text-sm font-black text-orange-900">{fieldLabels.photoLabel}</div>
-                <label className="mt-3 inline-flex cursor-pointer items-center rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">
-                  {t("choose_files", { defaultValue: "Выбрать файл" })}
+                <label className="mt-3 inline-flex cursor-pointer items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">
+                  <Upload aria-hidden="true" className="h-4 w-4" />{t("choose_files", { defaultValue: "Выбрать файл" })}
                   <input type="file" accept="image/*" onChange={handlePhotoChange} className="hidden" />
                 </label>
                 <div className="mt-2 text-xs font-semibold text-orange-800/80">{newPhoto ? t("file_chosen", { defaultValue: "Файл выбран" }) : t("no_files_selected", { defaultValue: "Файл не выбран" })}</div>
@@ -923,14 +954,14 @@ const ProviderProfile = () => {
             )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <ProfileInfoBox label={t("phone", { defaultValue: "Телефон" })} icon="📞">
+              <ProfileInfoBox label={t("phone", { defaultValue: "Телефон" })} icon={Phone}>
                 {isEditing ? <input type="tel" placeholder={t("phone")} value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /> : <span>{profile.phone || t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
-              <ProfileInfoBox label={t("email", { defaultValue: "Email" })} icon="✉️"><span>{profile.email || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
+              <ProfileInfoBox label={t("email", { defaultValue: "Email" })} icon={Mail}><span>{profile.email || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
             </div>
 
             <div className="mt-4">
-              <ProfileInfoBox label={fieldLabels.addressLabel} icon="📍">
+              <ProfileInfoBox label={fieldLabels.addressLabel} icon={MapPin}>
                 {isEditing ? <input type="text" placeholder={fieldLabels.addressLabel} value={newAddress} onChange={(e) => setNewAddress(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /> : <span>{profile.address || t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
             </div>
@@ -940,22 +971,22 @@ const ProviderProfile = () => {
 
           <ProfileCard title={fieldLabels.detailsTitle} subtitle={fieldLabels.detailsSubtitle}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <ProfileInfoBox label={fieldLabels.nameLabel} icon="🏢"><span>{profile.name || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
-              <ProfileInfoBox label={t("type", { defaultValue: "Тип поставщика" })} icon="🧭"><span>{typeLabel}</span></ProfileInfoBox>
+              <ProfileInfoBox label={fieldLabels.nameLabel} icon={Building2}><span>{profile.name || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
+              <ProfileInfoBox label={t("type", { defaultValue: "Тип поставщика" })} icon={Compass}><span>{typeLabel}</span></ProfileInfoBox>
             </div>
 
             <div className="mt-4">
-              <ProfileInfoBox label={fieldLabels.locationLabel} icon="🌍" hint={fieldLabels.locationHint}>
+              <ProfileInfoBox label={fieldLabels.locationLabel} icon={Globe2} hint={fieldLabels.locationHint}>
                 {isEditing ? (
                   <AsyncCreatableSelect isMulti cacheOptions defaultOptions {...ASYNC_MENU_PORTAL} loadOptions={loadCities} noOptionsMessage={ASYNC_I18N.noOptionsMessage} loadingMessage={ASYNC_I18N.loadingMessage} placeholder={fieldLabels.locationPlaceholder} value={regions} onChange={(vals) => setRegions(vals || [])} />
                 ) : locations.length ? (
-                  <div className="flex flex-wrap gap-2">{locations.map((loc) => <span key={loc} className="rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200">📍 {loc}</span>)}</div>
+                  <div className="flex flex-wrap gap-2">{locations.map((loc) => <span key={loc} className="inline-flex items-center gap-1.5 rounded-full bg-white px-3 py-1 text-xs font-black text-slate-700 ring-1 ring-slate-200"><MapPin aria-hidden="true" className="h-3.5 w-3.5 text-slate-400" />{loc}</span>)}</div>
                 ) : <span>{t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
             </div>
 
             <div className="mt-4" id="anchor-telegram">
-              <ProfileInfoBox label={fieldLabels.telegramLabel} icon="💬">
+              <ProfileInfoBox label={fieldLabels.telegramLabel} icon={MessageCircle}>
                 {isEditing ? <input value={newSocial} onChange={(e) => setNewSocial(normalizeTelegramUsername(e.target.value))} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder="@username или ссылка" /> : <span>{telegramDisplay || t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
               {!isTgReady && tgDeepLink ? <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-950"><div className="font-black">Уведомления в Telegram</div><p className="mt-1 font-medium text-blue-900/80">Свяжите Telegram и получайте уведомления о заявках, открытиях контактов и бронированиях.</p><a href={tgDeepLink} target="_blank" rel="noreferrer" className="mt-3 inline-flex rounded-xl bg-blue-600 px-4 py-2 text-sm font-black text-white transition hover:bg-blue-700">Подключить Telegram</a></div> : null}
@@ -971,13 +1002,13 @@ const ProviderProfile = () => {
                   {carFleet.map((car, idx) => (
                     <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><VehicleModelInput className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder="Марка или модель автомобиля" value={car.model} onChange={(model) => updateCar(idx, { model })} onModelSelect={({ model, seats }) => updateCar(idx, { model, ...(seats ? { seats } : {}) })} /><input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" type="number" min={1} placeholder="Мест" value={car.seats} onChange={(e) => updateCar(idx, { seats: e.target.value })} /></div>
-                      <div className="mt-3 flex flex-wrap items-center gap-3"><label className="cursor-pointer rounded-xl bg-orange-500 px-3 py-2 text-sm font-black text-white transition hover:bg-orange-600">{t("choose_files", { defaultValue: "Выбрать файлы" })}<input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => { const files = Array.from(e.target.files || []); const out = []; for (const f of files.slice(0, 10)) { try { out.push(await resizeImageFile(f, 1200, 800, 0.85, "image/jpeg")); } catch {} } updateCarImage(idx, [...(car.images || []), ...out].slice(0, 10)); e.target.value = ""; }} /></label><label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={car.is_active !== false} onChange={(e) => updateCar(idx, { is_active: e.target.checked })} /><span>{t("is_active", { defaultValue: "Активно" })}</span></label><button type="button" onClick={() => removeCar(idx)} className="ml-auto text-sm font-black text-red-600">{t("delete", { defaultValue: "Удалить" })}</button></div>
+                      <div className="mt-3 flex flex-wrap items-center gap-3"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-orange-500 px-3 py-2 text-sm font-black text-white transition hover:bg-orange-600"><Upload aria-hidden="true" className="h-4 w-4" />{t("choose_files", { defaultValue: "Выбрать файлы" })}<input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => { const files = Array.from(e.target.files || []); const out = []; for (const f of files.slice(0, 10)) { try { out.push(await resizeImageFile(f, 1200, 800, 0.85, "image/jpeg")); } catch {} } updateCarImage(idx, [...(car.images || []), ...out].slice(0, 10)); e.target.value = ""; }} /></label><label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={car.is_active !== false} onChange={(e) => updateCar(idx, { is_active: e.target.checked })} /><span>{t("is_active", { defaultValue: "Активно" })}</span></label><button type="button" onClick={() => removeCar(idx)} className="ml-auto inline-flex items-center gap-1.5 text-sm font-black text-red-600"><Trash2 aria-hidden="true" className="h-4 w-4" />{t("delete", { defaultValue: "Удалить" })}</button></div>
                     </div>
                   ))}
-                  <button type="button" onClick={addCar} className="rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-black text-orange-700 hover:bg-orange-100">+ {t("add", { defaultValue: "Добавить" })}</button>
+                  <button type="button" onClick={addCar} className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-black text-orange-700 hover:bg-orange-100"><Plus aria-hidden="true" className="h-4 w-4" />{t("add", { defaultValue: "Добавить" })}</button>
                 </div>
               ) : (
-                <div className="grid gap-3">{(Array.isArray(profile.car_fleet) ? profile.car_fleet : []).map((c, i) => <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">{c.images?.[0] ? <img src={c.images[0]} alt="" className="h-14 w-14 rounded-xl object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white text-xl">🚗</div>}<div className="min-w-0"><div className="font-black text-slate-950">{c.model}</div><div className="text-sm font-semibold text-slate-500">{c.seats} мест</div></div></div>)}{!profile?.car_fleet?.length && <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified", { defaultValue: "Не указан" })}</div>}</div>
+                <div className="grid gap-3">{(Array.isArray(profile.car_fleet) ? profile.car_fleet : []).map((c, i) => <div key={i} className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-3">{c.images?.[0] ? <img src={c.images[0]} alt="" className="h-14 w-14 rounded-xl object-cover" /> : <div className="flex h-14 w-14 items-center justify-center rounded-xl bg-white text-slate-400"><CarFront aria-hidden="true" className="h-6 w-6" /></div>}<div className="min-w-0"><div className="font-black text-slate-950">{c.model}</div><div className="text-sm font-semibold text-slate-500">{c.seats} мест</div></div></div>)}{!profile?.car_fleet?.length && <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified", { defaultValue: "Не указан" })}</div>}</div>
               )}
             </ProfileCard>
           )}
@@ -1001,13 +1032,13 @@ const ProviderProfile = () => {
 
           {activeSection === "documents" && <ProfileCard title={t("certificate", { defaultValue: "Сертификаты и доверие" })} subtitle="Документы повышают доверие к профилю и услугам." action={<span className={certObjectUrl ? "rounded-full bg-emerald-50 px-3 py-1 text-xs font-black text-emerald-700 ring-1 ring-emerald-100" : "rounded-full bg-amber-50 px-3 py-1 text-xs font-black text-amber-700 ring-1 ring-amber-100"}>{certObjectUrl ? "Загружен" : "Нужен"}</span>}>
             <div id="anchor-certificate" />
-            {isEditing ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4"><label className="inline-flex cursor-pointer rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600">{t("choose_files", { defaultValue: "Выбрать файл" })}<input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="hidden" /></label><div className="mt-3 text-sm font-semibold text-slate-500">{newCertificate ? `📄 ${t("file_chosen", { defaultValue: "Файл выбран" })}` : t("no_files_selected", { defaultValue: "Файл не выбран" })}</div>{newCertificate?.startsWith("data:image") ? <img src={newCertificate} alt="Certificate preview" className="mt-3 h-32 w-32 rounded-2xl border object-cover" /> : null}</div> : certObjectUrl ? <a href={certObjectUrl} target="_blank" rel="noopener noreferrer" className="inline-flex rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800">{t("view_certificate", { defaultValue: "Посмотреть сертификат" })}</a> : <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified", { defaultValue: "Не указан" })}</div>}
+            {isEditing ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600"><Upload aria-hidden="true" className="h-4 w-4" />{t("choose_files", { defaultValue: "Выбрать файл" })}<input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="hidden" /></label><div className="mt-3 text-sm font-semibold text-slate-500">{newCertificate ? <span className="inline-flex items-center gap-1.5"><FileText aria-hidden="true" className="h-4 w-4" />{t("file_chosen", { defaultValue: "Файл выбран" })}</span> : t("no_files_selected", { defaultValue: "Файл не выбран" })}</div>{newCertificate?.startsWith("data:image") ? <img src={newCertificate} alt="Certificate preview" className="mt-3 h-32 w-32 rounded-2xl border object-cover" /> : null}</div> : certObjectUrl ? <a href={certObjectUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800"><Eye aria-hidden="true" className="h-4 w-4" />{t("view_certificate", { defaultValue: "Посмотреть сертификат" })}</a> : <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified", { defaultValue: "Не указан" })}</div>}
           </ProfileCard>}
 
           {activeSection === "security" && <ProfileCard title="Безопасность" subtitle="Пароль и выход из кабинета.">
-            <button type="button" onClick={() => setPwdOpen((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:bg-slate-100" aria-expanded={pwdOpen} aria-controls="pwd-collapse"><span>🔐 {t("change_password", { defaultValue: "Сменить пароль" })}</span><svg className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`} viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.06l3.71-3.83a.75.75 0 111.08 1.04l-4.25 4.38a.75.75 0 01-1.08 0L5.21 8.27a.75.75 0 01.02-1.06z" clipRule="evenodd" /></svg></button>
-            <div id="pwd-collapse" className={`grid overflow-hidden transition-all duration-300 ease-in-out ${pwdOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]"}`}><div className="min-h-0 space-y-2"><input type="password" placeholder={t("current_password", { defaultValue: "Текущий пароль" })} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><input type="password" placeholder={t("new_password", { defaultValue: "Новый пароль" })} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><button type="button" onClick={handleChangePassword} className="w-full rounded-xl bg-orange-500 py-2.5 font-black text-white transition hover:bg-orange-600">{t("change", { defaultValue: "Изменить" })}</button></div></div>
-            <button type="button" onClick={() => { if (typeof localStorage !== "undefined") { localStorage.removeItem("token"); localStorage.removeItem("provider_id"); } window.location.href = "/login"; }} className="mt-3 w-full rounded-2xl bg-red-600 px-4 py-3 font-black text-white transition hover:bg-red-700">{t("logout", { defaultValue: "Выйти" })}</button>
+            <button type="button" onClick={() => setPwdOpen((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:bg-slate-100" aria-expanded={pwdOpen} aria-controls="pwd-collapse"><span className="inline-flex items-center gap-2"><LockKeyhole aria-hidden="true" className="h-4 w-4 text-slate-500" />{t("change_password", { defaultValue: "Сменить пароль" })}</span><ChevronDown aria-hidden="true" className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`} /></button>
+            <div id="pwd-collapse" className={`grid overflow-hidden transition-all duration-300 ease-in-out ${pwdOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]"}`}><div className="min-h-0 space-y-2"><input type="password" placeholder={t("current_password", { defaultValue: "Текущий пароль" })} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><input type="password" placeholder={t("new_password", { defaultValue: "Новый пароль" })} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><button type="button" onClick={handleChangePassword} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-2.5 font-black text-white transition hover:bg-orange-600"><Save aria-hidden="true" className="h-4 w-4" />{t("change", { defaultValue: "Изменить" })}</button></div></div>
+            <button type="button" onClick={() => { if (typeof localStorage !== "undefined") { localStorage.removeItem("token"); localStorage.removeItem("provider_id"); } window.location.href = "/login"; }} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 font-black text-white transition hover:bg-red-700"><LogOut aria-hidden="true" className="h-4 w-4" />{t("logout", { defaultValue: "Выйти" })}</button>
           </ProfileCard>}
         </aside>
       </div>
