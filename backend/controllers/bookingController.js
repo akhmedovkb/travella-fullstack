@@ -196,7 +196,68 @@ async function getProviderProfile(providerId) {
  * excludeBookingId — игнорировать конкретную бронь (на accept/confirm).
  * ВАЖНО: Даты блокируют только 'confirmed' и ручные блокировки provider_blocked_dates.
  */
-async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
+async function ensureBookingTimeSlotsTable(db = pool) {
+  await db.query(`
+    CREATE TABLE IF NOT EXISTS booking_time_slots (
+      id BIGSERIAL PRIMARY KEY,
+      booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      slot_date DATE NOT NULL,
+      start_time TIME NOT NULL,
+      end_time TIME NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT booking_time_slots_valid_range CHECK (end_time > start_time),
+      CONSTRAINT booking_time_slots_unique UNIQUE (booking_id, slot_date, start_time, end_time)
+    )
+  `);
+  await db.query(`CREATE INDEX IF NOT EXISTS booking_time_slots_date_range_idx ON booking_time_slots (slot_date, start_time, end_time)`);
+}
+
+function normalizeBookingTimeSlots(value = []) {
+  const timePattern = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  const seen = new Set();
+  return toArray(value)
+    .map((slot) => {
+      const date = toISO(slot?.date || slot?.slot_date);
+      const startTime = String(slot?.start_time || slot?.startTime || "").slice(0, 5);
+      const endTime = String(slot?.end_time || slot?.endTime || "").slice(0, 5);
+      if (!date || !timePattern.test(startTime) || !timePattern.test(endTime) || endTime <= startTime) return null;
+      return { date, start_time: startTime, end_time: endTime };
+    })
+    .filter(Boolean)
+    .filter((slot) => {
+      const key = `${slot.date}:${slot.start_time}:${slot.end_time}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+}
+
+async function getBookingTimeSlots(bookingId, db = pool) {
+  if (!bookingId) return [];
+  await ensureBookingTimeSlotsTable(db);
+  const result = await db.query(
+    `SELECT slot_date::text AS date,start_time::text,end_time::text
+       FROM booking_time_slots WHERE booking_id=$1 ORDER BY slot_date,start_time`,
+    [bookingId]
+  );
+  return normalizeBookingTimeSlots(result.rows);
+}
+
+async function saveBookingTimeSlots(bookingId, slots, db) {
+  const normalized = normalizeBookingTimeSlots(slots);
+  if (!normalized.length) return [];
+  await ensureBookingTimeSlotsTable(db);
+  for (const slot of normalized) {
+    await db.query(
+      `INSERT INTO booking_time_slots (booking_id,slot_date,start_time,end_time)
+       VALUES ($1,$2::date,$3::time,$4::time)
+       ON CONFLICT (booking_id,slot_date,start_time,end_time) DO NOTHING`,
+      [bookingId, slot.date, slot.start_time, slot.end_time]
+    );
+  }
+  return normalized;
+}
+async function isDatesFree(providerId, ymdList, excludeBookingId = null, proposedSlots = []) {
   const list = toArray(ymdList).map(toISO).filter(Boolean);
   if (!list.length) return false;
 
@@ -209,23 +270,47 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null) {
   );
   if (q1.rowCount) return false;
 
-  // 2) нет пересечений с "живыми" бронями
-  let sql =
-    `SELECT 1
-       FROM booking_dates bd
-       JOIN bookings b ON b.id = bd.booking_id
-      WHERE b.provider_id=$1
-        AND b.status IN ('confirmed')
-        AND bd.date = ANY($2::date[])`;
-  const params = [providerId, list];
-  if (excludeBookingId) {
-    sql += ` AND b.id <> $3`;
-    params.push(excludeBookingId);
-  }
-  sql += ` LIMIT 1`;
+  await ensureBookingTimeSlotsTable();
+  let slots = normalizeBookingTimeSlots(proposedSlots);
+  if (!slots.length && excludeBookingId) slots = await getBookingTimeSlots(excludeBookingId);
 
-  const q2 = await pool.query(sql, params);
-  return q2.rowCount === 0;
+  if (!slots.length) {
+    let sql =
+      `SELECT 1
+         FROM booking_dates bd
+         JOIN bookings b ON b.id = bd.booking_id
+        WHERE b.provider_id=$1
+          AND b.status IN ('confirmed','active','accepted')
+          AND bd.date = ANY($2::date[])`;
+    const params = [providerId, list];
+    if (excludeBookingId) {
+      sql += ` AND b.id <> $3`;
+      params.push(excludeBookingId);
+    }
+    sql += ` LIMIT 1`;
+    const conflict = await pool.query(sql, params);
+    return conflict.rowCount === 0;
+  }
+
+  for (const slot of slots) {
+    const conflict = await pool.query(
+      `SELECT 1
+         FROM bookings b
+         JOIN booking_dates bd ON bd.booking_id=b.id AND bd.date=$2::date
+         LEFT JOIN booking_time_slots existing ON existing.booking_id=b.id AND existing.slot_date=$2::date
+        WHERE b.provider_id=$1
+          AND b.status IN ('confirmed','active','accepted')
+          AND ($5::bigint IS NULL OR b.id <> $5::bigint)
+          AND (
+            existing.id IS NULL
+            OR (existing.start_time < $4::time AND existing.end_time > $3::time)
+          )
+        LIMIT 1`,
+      [providerId, slot.date, slot.start_time, slot.end_time, excludeBookingId || null]
+    );
+    if (conflict.rowCount) return false;
+  }
+  return true;
 }
 
 /* ================= API ================= */
@@ -252,6 +337,7 @@ const createBooking = async (req, res) => {
       attachments: attachmentsRaw,
       details:     detailsRaw,
       legs,
+      time_slots: timeSlotsRaw,
       currency
     } = req.body || {};
     const isTourBuilder = (req.body?.source === "tour_builder");
@@ -275,11 +361,12 @@ const createBooking = async (req, res) => {
     if (!days.length) return res.status(400).json({ message: "Не указаны корректные даты" });
 
     const primaryDate = [...days].sort()[0];
+    const timeSlots = normalizeBookingTimeSlots(timeSlotsRaw || detailsRaw?.time_slots || attachmentsRaw?.time_slots);
 
    // Для отелей и агентств фильтра по доступности нет — не блокируем создание.
     // Для остальных типов проверяем как раньше.
     if (!["hotel", "agent"].includes(pType) && !hotelOfferProvider) {
-      const ok = await isDatesFree(providerId, days);
+      const ok = await isDatesFree(providerId, days, null, timeSlots);
       if (!ok) return res.status(409).json({ message: "Даты уже заняты" });
     }
 
@@ -428,6 +515,7 @@ const createBooking = async (req, res) => {
         [bookingId, d]
       );
     }
+    await saveBookingTimeSlots(bookingId, timeSlots, transaction);
 
     let inventoryReservation = { count: 0, items: [] };
     if (isTourBuilder && tourBuilderKind === "hotel") {
@@ -448,6 +536,7 @@ const createBooking = async (req, res) => {
       id: bookingId,
       status: initialStatus,
       dates: days,
+      time_slots: timeSlots,
       inventory: inventoryReservation,
       ...(managedHotelPrice ? { price: managedHotelPrice.amount, currency: managedHotelPrice.currency } : {}),
     });
