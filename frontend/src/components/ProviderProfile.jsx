@@ -15,10 +15,8 @@ import {
   BarChart3,
   Building2,
   CarFront,
-  Check,
   CheckCircle2,
   ChevronDown,
-  Circle,
   Compass,
   Eye,
   FileText,
@@ -860,7 +858,7 @@ const ProviderProfile = () => {
               </div>
             </div>
 
-            <div className="flex min-w-[220px] items-center gap-4 rounded-lg bg-white/10 p-3 ring-1 ring-white/10">
+            <div className="flex min-w-[280px] items-center gap-4 rounded-lg bg-white/10 p-3 ring-1 ring-white/10">
               <div className="flex items-end justify-between gap-3">
                 <div>
                   <div className="text-xs font-black uppercase tracking-[0.16em] text-white/55">Trust Score</div>
@@ -870,11 +868,6 @@ const ProviderProfile = () => {
               </div>
               <div className="h-2 flex-1 overflow-hidden rounded-full bg-white/15">
                 <div className="h-full rounded-full bg-orange-400 transition-all" style={{ width: `${trust.score}%` }} />
-              </div>
-              <div className="hidden flex-wrap gap-1.5 2xl:flex">
-                {trust.checks.slice(0, 4).map((it) => (
-                  <span key={it.key} className={it.ok ? "inline-flex items-center gap-1 rounded-full bg-emerald-400/15 px-2 py-1 text-[11px] font-black text-emerald-100" : "inline-flex items-center gap-1 rounded-full bg-white/10 px-2 py-1 text-[11px] font-black text-white/60"}>{it.ok ? <Check aria-hidden="true" className="h-3 w-3" /> : <Circle aria-hidden="true" className="h-2.5 w-2.5" />}{it.label}</span>
-                ))}
               </div>
             </div>
           </div>
