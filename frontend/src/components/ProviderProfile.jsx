@@ -46,6 +46,7 @@ import ProviderCompleteness from "./ProviderCompleteness";
 import ProviderReviews from "./ProviderReviews";
 import VehicleModelInput from "./VehicleModelInput";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
+import { getProviderTrust } from "../utils/providerTrust";
 
 /** ================= Helpers ================= */
 
@@ -381,22 +382,6 @@ function normalizeTelegramUsername(value) {
   return raw.startsWith("@") ? raw : `@${raw}`;
 }
 
-function getProviderTrust(profile = {}, stats = {}) {
-  const locations = normalizeLocationList(profile.location);
-  const languages = Array.isArray(profile.languages) ? profile.languages : [];
-  const checks = [
-    { key: "logo", label: "Логотип", ok: !!(profile.photo || profile.logo || profile.logoUrl || profile.avatar), weight: 15 },
-    { key: "contacts", label: "Контакты", ok: !!(profile.phone && (profile.social || profile.telegram_username || profile.telegram_chat_id || profile.tg_chat_id)), weight: 20 },
-    { key: "certificate", label: "Сертификат", ok: !!(profile.certificate || profile.certificateUrl || profile.certificate_url), weight: 20 },
-    { key: "telegram", label: "Telegram", ok: !!(profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_username || profile.social), weight: 15 },
-    { key: "geo", label: "География", ok: locations.length > 0, weight: 10 },
-    { key: "languages", label: "Языки", ok: String(profile.type || "").toLowerCase() === "agent" || languages.length > 0, weight: 10 },
-    { key: "activity", label: "Активность", ok: Number(stats?.requests_total || stats?.bookings_total || stats?.completed || 0) > 0, weight: 10 },
-  ];
-  const score = checks.reduce((sum, x) => sum + (x.ok ? x.weight : 0), 0);
-  return { score: Math.max(0, Math.min(100, score)), checks };
-}
-
 function ProfileCard({ title, subtitle, children, action }) {
   return (
     <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
@@ -465,6 +450,10 @@ const ProviderProfile = () => {
     certificate: "anchor-certificate",
     logo: "anchor-logo",
     telegram: "anchor-telegram",
+    contacts: "anchor-profile-left",
+    location: "anchor-profile-left",
+    details: "anchor-profile-left",
+    activity: "anchor-profile-left",
     fallback: "anchor-profile-left",
   }).current;
 
@@ -1025,7 +1014,7 @@ const ProviderProfile = () => {
             </div>
           </ProfileCard>
 
-          <ProviderCompleteness profile={profile} onFix={scrollToProfilePart} />
+          <ProviderCompleteness profile={profile} stats={stats} trust={trust} onFix={scrollToProfilePart} />
           </div>
 
           {activeSection === "profile" && ['guide', 'transport', 'agent'].includes(profile.type) && <ProfileCard title="Владение языками" subtitle="Языки помогают клиенту быстрее выбрать подходящего поставщика."><div id="anchor-languages" /><ProviderLanguages ref={langRef} token={token} editing={isEditing} /></ProfileCard>}
