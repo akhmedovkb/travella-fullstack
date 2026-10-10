@@ -13,6 +13,7 @@ import { pickProviderService } from "../utils/pickProviderService";
 import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
+import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -238,6 +239,8 @@ const createEmptyTourDayState = (overrides = {}) => ({
   transfers: [],
   meals: [],
   program_i18n: emptyProgramI18n(),
+  schedule: [],
+  selectedScheduleId: null,
   _programTab: "ru",
   ...overrides,
 });
@@ -1591,6 +1594,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           city: String(st?.city || "").trim(),
           program_i18n,
           program_text: pickProgramText(program_i18n, lang || i18n.language || "ru"),
+          schedule: normalizeScheduleItems(st?.schedule),
         };
       })
       .filter((row) => row.city || row.program_text);
@@ -1883,6 +1887,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         transfers: [],
         meals: [],
         program_i18n: normalizeProgramI18n(tpl.days[i]?.program_i18n || tpl.program_i18n || {}),
+        schedule: normalizeScheduleItems(tpl.days[i]?.schedule),
         _programTab: TB_PROGRAM_LANGS.includes(String(i18n.language || "ru").slice(0, 2))
           ? String(i18n.language || "ru").slice(0, 2)
           : "ru",
@@ -2110,6 +2115,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
             const k = ymd(d);
             const st = byDay[k] || {};
             const cityChosen = Boolean(st.city);
+            const selectedSchedule = normalizeScheduleItems(st.schedule).find((item) => item.id === st.selectedScheduleId) || null;
             return (
               <div
                 key={k}
@@ -2156,6 +2162,23 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     {t('tb.delete_day', { defaultValue: 'Удалить день' })}
                   </button>
                 </div>
+
+                <TourDayTimeline
+                  items={st.schedule}
+                  selectedId={st.selectedScheduleId}
+                  onSelect={(selectedScheduleId) =>
+                    setByDay((previous) => ({
+                      ...previous,
+                      [k]: { ...previous[k], selectedScheduleId },
+                    }))
+                  }
+                  onChange={(schedule) =>
+                    setByDay((previous) => ({
+                      ...previous,
+                      [k]: { ...previous[k], schedule },
+                    }))
+                  }
+                />
 
                 {/* Программа дня */}
                 <div className="border rounded p-3 bg-white/70">
@@ -2229,6 +2252,24 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   })()}
                 </div>
 
+                <div className="flex flex-wrap items-center justify-between gap-2 border-y border-slate-200 bg-white px-3 py-2">
+                  <div>
+                    <div className="text-sm font-bold text-slate-950">
+                      {selectedSchedule
+                        ? `Поставщики на ${selectedSchedule.start_time}–${selectedSchedule.end_time}`
+                        : "Поставщики на день"}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {selectedSchedule?.title || "Выберите событие в расписании, чтобы закрепить время услуги"}
+                    </div>
+                  </div>
+                  {selectedSchedule && (
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      Проверяем весь интервал
+                    </span>
+                  )}
+                </div>
+
                 <div className="grid md:grid-cols-2 gap-3">
                   {/* Guide */}
                   <div className="border rounded p-2">
@@ -2251,7 +2292,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
                         onChange={async (opt) => {
                           const guide = opt?.raw || null;
-                          setByDay((p) => ({ ...p, [k]: { ...p[k], guide, guideService: null } }));
+                          setByDay((p) => {
+                            const current = p[k] || {};
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                              item.id === current.selectedScheduleId
+                                ? { ...item, type: "guide", provider_id: guide?.id || null, provider_name: guide?.name || "", service_id: null, service_title: "" }
+                                : item
+                            );
+                            return { ...p, [k]: { ...current, guide, guideService: null, schedule } };
+                          });
                           const list = await ensureServicesLoaded(guide);
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
                           const citySlug = (byDay[k]?.city || "").trim();
@@ -2260,7 +2309,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             : [...GUIDE_ALLOWED_ARR, ...TRANSPORT_ALLOWED_ARR];
                           const picked = pickFromCache(guide.id, cats, citySlug, pax);
                           if (picked) {
-                            setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: picked } }));
+                            setByDay((p) => {
+                              const current = p[k] || {};
+                              const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                                item.id === current.selectedScheduleId
+                                  ? { ...item, type: "guide", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Услуга гида" }
+                                  : item
+                              );
+                              return { ...p, [k]: { ...current, guideService: picked, schedule } };
+                            });
                           }
                         }}
                         classNamePrefix="rs"
@@ -2292,7 +2349,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             )
                           );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
-                        setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: chosen } }));
+                        setByDay((p) => {
+                          const current = p[k] || {};
+                          const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                            item.id === current.selectedScheduleId
+                              ? { ...item, type: "guide", service_id: chosen?.id || null, service_title: chosen?.title || "" }
+                              : item
+                          );
+                          return { ...p, [k]: { ...current, guideService: chosen, schedule } };
+                        });
                       }}
                     >
                       <option value="">{t('tb.pick_guide_service_ph')}</option>
@@ -2353,14 +2418,30 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
                         onChange={async (opt) => {
                           const transport = opt?.raw || null;            // <-- объявляем переменную
-                          setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
+                          setByDay((p) => {
+                            const current = p[k] || {};
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                              item.id === current.selectedScheduleId
+                                ? { ...item, type: "transport", provider_id: transport?.id || null, provider_name: transport?.name || "", service_id: null, service_title: "" }
+                                : item
+                            );
+                            return { ...p, [k]: { ...current, transport, transportService: null, schedule } };
+                          });
                           if (transport) {
                             await ensureServicesLoaded(transport); // прогреем кеш
                             const pax = Math.max(1, toNum(adt) + toNum(chd));
                             const citySlug = (byDay[k]?.city || "").trim();
                             const picked = pickFromCache(transport.id, TRANSPORT_ALLOWED_ARR, citySlug, pax);
                             if (picked) {
-                              setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: picked } }));
+                              setByDay((p) => {
+                                const current = p[k] || {};
+                                const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                                  item.id === current.selectedScheduleId
+                                    ? { ...item, type: "transport", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Транспорт" }
+                                    : item
+                                );
+                                return { ...p, [k]: { ...current, transportService: picked, schedule } };
+                              });
                             }
                           } 
                         }}
@@ -2386,7 +2467,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             fitsCity(s, citySlug)
                         );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
-                        setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: chosen } }));
+                        setByDay((p) => {
+                          const current = p[k] || {};
+                          const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                            item.id === current.selectedScheduleId
+                              ? { ...item, type: "transport", service_id: chosen?.id || null, service_title: chosen?.title || "" }
+                              : item
+                          );
+                          return { ...p, [k]: { ...current, transportService: chosen, schedule } };
+                        });
                       }}
                     >
                       <option value="">{t('tb.pick_transport_service_ph')}</option>
