@@ -669,7 +669,8 @@ export default function ProviderServicesCard({
             <label className="text-xs font-semibold text-slate-600">Цена полного дня<input inputMode="decimal" className="mt-1 h-9 w-full rounded border px-2 text-sm" value={fullDayPrice} onChange={(e) => setFullDayPrice(e.target.value)} /></label>
             <label className="text-xs font-semibold text-slate-600">Дополнительный час<input inputMode="decimal" className="mt-1 h-9 w-full rounded border px-2 text-sm" value={extraHourPrice} onChange={(e) => setExtraHourPrice(e.target.value)} /></label>
           </div>
-        )}`r`n        <div className="mt-4 flex justify-end">
+        )}
+        <div className="mt-4 flex justify-end">
           <button
             type="button"
             onClick={addOne}
