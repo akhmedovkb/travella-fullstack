@@ -126,6 +126,13 @@ export default function ProviderServicesCard({
   const [currency, setCurrency] = useState(FORCE_CURRENCY);
   const [seats, setSeats] = useState("");
   const [vehicleModel, setVehicleModel] = useState("");
+  const [pricingMode, setPricingMode] = useState("fixed");
+  const [minimumHours, setMinimumHours] = useState("2");
+  const [halfDayHours, setHalfDayHours] = useState("4");
+  const [halfDayPrice, setHalfDayPrice] = useState("");
+  const [fullDayHours, setFullDayHours] = useState("8");
+  const [fullDayPrice, setFullDayPrice] = useState("");
+  const [extraHourPrice, setExtraHourPrice] = useState("");
 
   // bulk
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -243,6 +250,20 @@ export default function ProviderServicesCard({
   }, [pid]);
 
   async function addOne() {
+    const basePrice = toMoney(price);
+    if (!category) {
+      setErr("Выберите категорию услуги");
+      return;
+    }
+    if (pricingMode !== "packages" && basePrice <= 0) {
+      setErr(pricingMode === "hourly" ? "Укажите стоимость одного часа" : "Укажите стоимость услуги");
+      return;
+    }
+    if (pricingMode === "packages" && (toMoney(halfDayPrice) <= 0 || toMoney(fullDayPrice) <= 0)) {
+      setErr("Укажите цены неполного и полного дня");
+      return;
+    }
+    setErr("");
     if (!category) return;
     try {
       const citySlug =
@@ -259,6 +280,15 @@ export default function ProviderServicesCard({
         details: {
           ...(citySlug ? { city_slug: citySlug } : {}),
           ...(Number(seats) > 0 ? { seats: Number(seats) } : {}),
+          pricing_mode: pricingMode,
+          minimum_hours: Math.max(1, Number(minimumHours) || 1),
+          ...(pricingMode === "packages" ? {
+            half_day_hours: Math.max(1, Number(halfDayHours) || 4),
+            half_day_price: toMoney(halfDayPrice),
+            full_day_hours: Math.max(1, Number(fullDayHours) || 8),
+            full_day_price: toMoney(fullDayPrice),
+            extra_hour_price: toMoney(extraHourPrice),
+          } : {}),
         },
       };
 
@@ -271,6 +301,10 @@ export default function ProviderServicesCard({
       setPrice("");
       setSeats("");
       setVehicleModel("");
+      setPricingMode("fixed");
+      setHalfDayPrice("");
+      setFullDayPrice("");
+      setExtraHourPrice("");
       tSuccess(
         TT("service_added", "Услуга добавлена", "Xizmat qo‘shildi", "Service added")
       );
@@ -603,13 +637,46 @@ export default function ProviderServicesCard({
           </div>
         </div>
 
-        <div className="pt-5">
+
+
+      </div>
+
+      <div className="mx-4 mb-4 border-t border-slate-200 pt-4">
+        <div className="mb-3">
+          <h3 className="text-sm font-bold text-slate-950">Тариф по продолжительности</h3>
+          <p className="text-xs text-slate-500">Tour Builder рассчитает стоимость по времени выбранного события.</p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <label className="text-xs font-semibold text-slate-600">Тип тарифа
+            <select className="mt-1 h-9 w-full rounded border px-2 text-sm" value={pricingMode} onChange={(e) => setPricingMode(e.target.value)}>
+              <option value="fixed">Фиксированная цена</option>
+              <option value="hourly">Почасовой</option>
+              <option value="packages">Неполный / полный день</option>
+            </select>
+          </label>
+          {pricingMode !== "fixed" && (
+            <label className="text-xs font-semibold text-slate-600">Минимум часов
+              <input type="number" min="1" className="mt-1 h-9 w-full rounded border px-2 text-sm" value={minimumHours} onChange={(e) => setMinimumHours(e.target.value)} />
+            </label>
+          )}
+          {pricingMode === "hourly" && <div className="self-end pb-2 text-xs text-slate-500">Поле «Цена» выше считается стоимостью одного часа.</div>}
+        </div>
+        {pricingMode === "packages" && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            <label className="text-xs font-semibold text-slate-600">Неполный день, часов<input type="number" min="1" className="mt-1 h-9 w-full rounded border px-2 text-sm" value={halfDayHours} onChange={(e) => setHalfDayHours(e.target.value)} /></label>
+            <label className="text-xs font-semibold text-slate-600">Цена неполного дня<input inputMode="decimal" className="mt-1 h-9 w-full rounded border px-2 text-sm" value={halfDayPrice} onChange={(e) => setHalfDayPrice(e.target.value)} /></label>
+            <label className="text-xs font-semibold text-slate-600">Полный день, часов<input type="number" min="1" className="mt-1 h-9 w-full rounded border px-2 text-sm" value={fullDayHours} onChange={(e) => setFullDayHours(e.target.value)} /></label>
+            <label className="text-xs font-semibold text-slate-600">Цена полного дня<input inputMode="decimal" className="mt-1 h-9 w-full rounded border px-2 text-sm" value={fullDayPrice} onChange={(e) => setFullDayPrice(e.target.value)} /></label>
+            <label className="text-xs font-semibold text-slate-600">Дополнительный час<input inputMode="decimal" className="mt-1 h-9 w-full rounded border px-2 text-sm" value={extraHourPrice} onChange={(e) => setExtraHourPrice(e.target.value)} /></label>
+          </div>
+        )}`r`n        <div className="mt-4 flex justify-end">
           <button
+            type="button"
             onClick={addOne}
-            className="h-9 px-4 rounded bg-blue-600 text-white text-sm hover:bg-blue-700 disabled:opacity-60"
+            className="h-10 rounded bg-orange-600 px-5 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-60"
             disabled={!category}
           >
-            {TT("ps.form.add", "Добавить", "Qo‘shish", "Add")}
+            {TT("ps.form.add", "Добавить услугу", "Xizmat qo‘shish", "Add service")}
           </button>
         </div>
       </div>
@@ -652,6 +719,7 @@ export default function ProviderServicesCard({
                 <th className="text-left p-2 border-b">
                   {TT("ps.table.price", "Цена", "Narx", "Price")}
                 </th>
+                <th className="text-left p-2 border-b">Тариф</th>
                 <th className="text-left p-2 border-b">
                   {TT("ps.table.currency", "Валюта", "Valyuta", "Currency")}
                 </th>
@@ -666,7 +734,7 @@ export default function ProviderServicesCard({
             <tbody>
               {loading ? (
                 <tr>
-                  <td className="p-3 text-gray-500" colSpan={8}>
+                  <td className="p-3 text-gray-500" colSpan={9}>
                     {TT(
                       "common.loading",
                       "Загрузка…",
@@ -805,6 +873,14 @@ export default function ProviderServicesCard({
                         />
                       </td>
 
+                      <td className="p-2 text-xs text-slate-600">
+                        {r.details?.pricing_mode === "hourly"
+                          ? `${r.price || 0} / час, минимум ${r.details?.minimum_hours || 1} ч.`
+                          : r.details?.pricing_mode === "packages"
+                            ? `${r.details?.half_day_hours || 4} ч. — ${r.details?.half_day_price || 0}; ${r.details?.full_day_hours || 8} ч. — ${r.details?.full_day_price || 0}`
+                            : "За услугу"}
+                      </td>
+
                       <td className="p-2">
                         <select
                           className="h-8 border rounded px-2"
@@ -890,7 +966,7 @@ export default function ProviderServicesCard({
                 })
               ) : (
                 <tr>
-                  <td className="p-3 text-gray-500" colSpan={8}>
+                  <td className="p-3 text-gray-500" colSpan={9}>
                     {TT(
                       "ps.empty",
                       "Услуги не найдены. Добавьте хотя бы одну.",

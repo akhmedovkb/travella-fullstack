@@ -24,6 +24,33 @@ const fmt = (n) => (isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFracti
 const isTourBuilderHotel = (booking) =>
   String(booking?.source || "").toLowerCase() === "tour_builder"
   && String(booking?.details?.tb_kind || booking?.attachments?.tb_kind || "").toLowerCase() === "hotel";
+const bookingTimeSlots = (booking) => {
+  const raw = booking?.details?.time_slots || booking?.attachments?.time_slots || booking?.time_slots;
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .map((slot) => ({
+      date: String(slot?.date || slot?.slot_date || "").slice(0, 10),
+      start: String(slot?.start_time || "").slice(0, 5),
+      end: String(slot?.end_time || "").slice(0, 5),
+      title: String(slot?.title || "").trim(),
+    }))
+    .filter((slot) => slot.date && slot.start && slot.end);
+};
+
+function BookingTimeSlots({ booking }) {
+  const slots = bookingTimeSlots(booking);
+  if (!slots.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {slots.map((slot, index) => (
+        <span key={`${slot.date}-${slot.start}-${slot.end}-${index}`} className="inline-flex items-center gap-2 rounded-md border border-orange-200 bg-orange-50 px-3 py-1.5 text-sm text-gray-800">
+          <span className="font-semibold">{slot.start}–{slot.end}</span>
+          {slot.title ? <span className="text-gray-600">{slot.title}</span> : null}
+        </span>
+      ))}
+    </div>
+  );
+}
 
 /* =============== Карточка согласования цены (входящие) =============== */
 function PriceAgreementCard({ booking, onSent, onReject }) {
@@ -786,6 +813,7 @@ export default function ProviderBookings() {
                 onPay={payBooking}
                 onRefund={!isIncoming ? requestRefund : undefined}
               />
+              <BookingTimeSlots booking={b} />
 
               {/* Входящие: форма согласования цены (прячем после отправки предложения) */}
               {isIncoming && String(b.status) === "pending" && !awaitingRequester && !fixedHotelBooking && (
@@ -935,6 +963,7 @@ export default function ProviderBookings() {
                     onPay={payBooking}
                     onRefund={requestRefund}
                   />
+                  <BookingTimeSlots booking={b} />
                   {String(b.status) === "quoted" && (
                     <div className="mt-3 flex flex-wrap gap-2">
                       <button
@@ -980,6 +1009,7 @@ export default function ProviderBookings() {
           onReject={String(b.status) === "pending" && !isTourBuilderHotel(b) ? undefined : reject}
           onCancelByProvider={openCancelIncoming}
         />
+        <BookingTimeSlots booking={b} />
         {String(b.status) === "pending" && !isTourBuilderHotel(b) && (
           <PriceAgreementCard booking={b} onSent={load} onReject={reject} />
         )}

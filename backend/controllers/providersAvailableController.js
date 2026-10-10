@@ -1,16 +1,44 @@
-// backend/controllers/providersAvailableController.js
 const pool = require("../db");
 
-function asDate(v) {
-  const d = new Date(v);
-  if (Number.isNaN(d.getTime())) return null;
-  d.setHours(0, 0, 0, 0);
-  return d.toISOString().slice(0, 10);
+function asDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return null;
+  date.setHours(0, 0, 0, 0);
+  return date.toISOString().slice(0, 10);
+}
+
+function asTime(value) {
+  const match = String(value || "").match(/^([01]\d|2[0-3]):([0-5]\d)$/);
+  return match ? `${match[1]}:${match[2]}` : null;
+}
+
+async function ensureBookingTimeSlotsTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS booking_time_slots (
+      id BIGSERIAL PRIMARY KEY,
+      booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      slot_date DATE NOT NULL,
+      start_time TIME NOT NULL,
+      end_time TIME NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      CONSTRAINT booking_time_slots_valid_range CHECK (end_time > start_time),
+      CONSTRAINT booking_time_slots_unique UNIQUE (booking_id, slot_date, start_time, end_time)
+    )
+  `);
 }
 
 module.exports = async function providersAvailable(req, res) {
   try {
-    const { type = "", location = "", date = "", language = "", q = "", limit = 50 } = req.query;
+    const {
+      type = "",
+      location = "",
+      date = "",
+      language = "",
+      q = "",
+      limit = 50,
+      start_time: startTimeRaw = "",
+      end_time: endTimeRaw = "",
+    } = req.query;
 
     const kind = String(type || "").toLowerCase().trim();
     if (!kind) return res.status(400).json({ error: "type required" });
@@ -19,11 +47,15 @@ module.exports = async function providersAvailable(req, res) {
     const day = asDate(date);
     if (!city || !day) return res.json({ items: [] });
 
+    const startTime = asTime(startTimeRaw);
+    const endTime = asTime(endTimeRaw);
+    const hasTimeRange = Boolean(startTime && endTime && endTime > startTime);
     const qLike = `%${String(q).trim()}%`;
     const cityNorm = city.toLowerCase();
     const lim = Math.max(1, Math.min(100, Number(limit) || 50));
 
-    // Таблицы: providers, provider_blocked_dates, bookings
+    await ensureBookingTimeSlotsTable();
+
     const sql = `
       WITH base AS (
         SELECT p.*
@@ -38,7 +70,7 @@ module.exports = async function providersAvailable(req, res) {
         WHERE NOT EXISTS (
           SELECT 1
           FROM provider_blocked_dates d
-          WHERE d.provider_id = b.id AND d.day = $6
+          WHERE d.provider_id = b.id AND d.date = $6
         )
       ),
       not_booked AS (
@@ -47,9 +79,15 @@ module.exports = async function providersAvailable(req, res) {
         WHERE NOT EXISTS (
           SELECT 1
           FROM bookings bk
+          JOIN booking_dates bd ON bd.booking_id = bk.id AND bd.date = $6
+          LEFT JOIN booking_time_slots slot ON slot.booking_id = bk.id AND slot.slot_date = $6
           WHERE bk.provider_id = nb.id
-            AND $6 BETWEEN bk.date_from AND bk.date_to
-            AND COALESCE(bk.status, 'pending') IN ('pending', 'confirmed', 'accepted')
+            AND COALESCE(bk.status, 'pending') IN ('confirmed', 'active', 'accepted')
+            AND (
+              slot.id IS NULL
+              OR $9::boolean = FALSE
+              OR (slot.start_time < $11::time AND slot.end_time > $10::time)
+            )
         )
       ),
       by_lang AS (
@@ -57,13 +95,13 @@ module.exports = async function providersAvailable(req, res) {
         FROM not_booked x
         WHERE
           $7 = '' OR
-          ( (x.languages::text ILIKE '%' || $7 || '%')
-            OR (x.languages @> to_jsonb(ARRAY[$7]::text[])) )
+          ((x.languages::text ILIKE '%' || $7 || '%')
+            OR (x.languages @> to_jsonb(ARRAY[$7]::text[])))
       )
       SELECT
         id, name, type, location, phone, email,
         COALESCE(price_per_day, 0) AS price_per_day,
-        COALESCE(currency, 'USD')  AS currency,
+        COALESCE(currency, 'USD') AS currency,
         languages
       FROM by_lang
       ORDER BY COALESCE(rating, 0) DESC, name ASC
@@ -71,27 +109,36 @@ module.exports = async function providersAvailable(req, res) {
     `;
 
     const params = [
-      kind, cityNorm, `%${cityNorm}%`,
-      String(q).trim(), qLike,
+      kind,
+      cityNorm,
+      `%${cityNorm}%`,
+      String(q).trim(),
+      qLike,
       day,
       String(language || "").trim().toLowerCase(),
       lim,
+      hasTimeRange,
+      startTime || "00:00",
+      endTime || "23:59",
     ];
 
     const { rows } = await pool.query(sql, params);
-    const items = rows.map(r => ({
-      id: r.id,
-      name: r.name,
-      phone: r.phone || "",
-      email: r.email || "",
-      location: r.location || "",
-      price_per_day: Number(r.price_per_day) || 0,
-      currency: r.currency || "USD",
-      languages: r.languages || [],
+    const items = rows.map((row) => ({
+      id: row.id,
+      name: row.name,
+      phone: row.phone || "",
+      email: row.email || "",
+      location: row.location || "",
+      price_per_day: Number(row.price_per_day) || 0,
+      currency: row.currency || "USD",
+      languages: row.languages || [],
+      availability: hasTimeRange
+        ? { date: day, start_time: startTime, end_time: endTime }
+        : { date: day },
     }));
     return res.json({ items });
-  } catch (e) {
-    console.error("GET /api/providers/available error:", e);
+  } catch (error) {
+    console.error("GET /api/providers/available error:", error);
     return res.status(500).json({ error: "failed" });
   }
 };

@@ -13,6 +13,7 @@ import { pickProviderService } from "../utils/pickProviderService";
 import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
+import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -238,6 +239,8 @@ const createEmptyTourDayState = (overrides = {}) => ({
   transfers: [],
   meals: [],
   program_i18n: emptyProgramI18n(),
+  schedule: [],
+  selectedScheduleId: null,
   _programTab: "ru",
   ...overrides,
 });
@@ -690,11 +693,11 @@ const vehicleModel =
 };
 
 
-async function fetchProvidersSmart({ kind, city, date, language, q = "", limit = 30 }) {
+async function fetchProvidersSmart({ kind, city, date, startTime = "", endTime = "", language, q = "", limit = 30 }) {
   // Пробуем строго /available
   try {
     const j = await fetchJSON("/api/providers/available", {
-      type: kind, location: city, date, language, q, limit,
+      type: kind, location: city, date, start_time: startTime, end_time: endTime, language, q, limit,
     });
     const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
     // Возвращаем как есть (даже если пусто) — это и есть «нет свободных»
@@ -1431,10 +1434,13 @@ export default function TourBuilder() {
   const makeGuideLoader = (dateKey) => async (input) => {
   const day = byDay[dateKey] || {};
   if (!dateKey || !day.city) return [];
+  const selectedSlot = normalizeScheduleItems(day.schedule).find((item) => item.id === day.selectedScheduleId);
   const rows = await fetchProvidersSmart({
     kind: "guide",
     city: day.city,
     date: dateKey,
+    startTime: selectedSlot?.start_time || "",
+    endTime: selectedSlot?.end_time || "",
     language: lang,
     q: (input || "").trim(),
     limit: 50,
@@ -1460,10 +1466,13 @@ export default function TourBuilder() {
 const makeTransportLoader = (dateKey) => async (input) => {
   const day = byDay[dateKey] || {};
   if (!dateKey || !day.city) return [];
+  const selectedSlot = normalizeScheduleItems(day.schedule).find((item) => item.id === day.selectedScheduleId);
   const rows = await fetchProvidersSmart({
     kind: "transport",
     city: day.city,
     date: dateKey,
+    startTime: selectedSlot?.start_time || "",
+    endTime: selectedSlot?.end_time || "",
     language: lang,
     q: (input || "").trim(),
     limit: 50,
@@ -1523,14 +1532,47 @@ const makeTransportLoader = (dateKey) => async (input) => {
   };
 
 
-    const calcGuideForDay = (dateKey) => {
+    const durationHoursForProvider = (state, kind, providerId) => {
+    const slots = normalizeScheduleItems(state?.schedule).filter((item) =>
+      item.type === kind && String(item.provider_id || "") === String(providerId || "")
+    );
+    return slots.reduce((sum, item) => {
+      const [startHour, startMinute] = String(item.start_time || "").split(":").map(Number);
+      const [endHour, endMinute] = String(item.end_time || "").split(":").map(Number);
+      const minutes = (endHour * 60 + endMinute) - (startHour * 60 + startMinute);
+      return sum + (Number.isFinite(minutes) && minutes > 0 ? minutes / 60 : 0);
+    }, 0);
+  };
+
+  const priceForDuration = (service, durationHours, fallback = 0) => {
+    if (!service) return toNum(fallback, 0);
+    const details = service?.raw?.details || service?.details || {};
+    const mode = String(details.pricing_mode || "fixed").toLowerCase();
+    const basePrice = toNum(service.price, toNum(fallback, 0));
+    const hours = Math.max(toNum(details.minimum_hours, 1), toNum(durationHours, 0));
+    if (mode === "hourly") return basePrice * Math.max(hours, 1);
+    if (mode === "packages") {
+      const halfHours = Math.max(1, toNum(details.half_day_hours, 4));
+      const fullHours = Math.max(halfHours, toNum(details.full_day_hours, 8));
+      const halfPrice = toNum(details.half_day_price, basePrice);
+      const fullPrice = toNum(details.full_day_price, halfPrice || basePrice);
+      const extraHourPrice = toNum(details.extra_hour_price, basePrice);
+      if (hours <= halfHours) return halfPrice;
+      if (hours <= fullHours) return fullPrice;
+      return fullPrice + (hours - fullHours) * extraHourPrice;
+    }
+    return basePrice;
+  };
+
+  const calcGuideForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
-    // приоритет: выбранная услуга гида -> ставка провайдера
-    return toNum(st?.guideService?.price, toNum(st?.guide?.price_per_day, 0));
+    const hours = durationHoursForProvider(st, "guide", st?.guide?.id);
+    return priceForDuration(st?.guideService, hours, st?.guide?.price_per_day);
   };
   const calcTransportForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
-    return toNum(st?.transportService?.price, toNum(st?.transport?.price_per_day, 0));
+    const hours = durationHoursForProvider(st, "transport", st?.transport?.id);
+    return priceForDuration(st?.transportService, hours, st?.transport?.price_per_day);
   };
   
   const moneyToUZS = (amount, currency) => {
@@ -1591,6 +1633,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           city: String(st?.city || "").trim(),
           program_i18n,
           program_text: pickProgramText(program_i18n, lang || i18n.language || "ru"),
+          schedule: normalizeScheduleItems(st?.schedule),
         };
       })
       .filter((row) => row.city || row.program_text);
@@ -1612,6 +1655,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
     const buckets = new Map(); // key = `${kind}:${provider_id}` → { kind, provider_id, service_id?, dates[] }
     for (const [dateKey, st] of Object.entries(byDay)) {
       if (!st?.city) continue;
+      const schedule = normalizeScheduleItems(st.schedule);
   // гид → смотрим категорию выбранной услуги
   if (st?.guide?.id) {
     const pid = String(st.guide.id);
@@ -1623,21 +1667,27 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
     const key = `${kindForGuide}:${pid}`;
     if (!buckets.has(key)) {
-      buckets.set(key, { kind: kindForGuide, provider_id: pid, service_id: null, dates: [] });
+      buckets.set(key, { kind: kindForGuide, provider_id: pid, service_id: null, dates: [], time_slots: [] });
     }
     const b = buckets.get(key);
     if (svcId && !b.service_id) b.service_id = String(svcId);
     b.dates.push(dateKey);
+    b.time_slots.push(...schedule
+      .filter((item) => String(item.provider_id || "") === pid && item.type === kindForGuide)
+      .map((item) => ({ date: dateKey, start_time: item.start_time, end_time: item.end_time, title: item.title || item.service_title || "" })));
   }
       // транспорт
       if (st?.transport?.id) {
         const pid = String(st.transport.id);
         const key = `transport:${pid}`;
         const svcId = (st?.transportService?.raw?.id ?? st?.transportService?.id) || null; // ← real
-        if (!buckets.has(key)) buckets.set(key, { kind: "transport", provider_id: pid, service_id: null, dates: [] });
+        if (!buckets.has(key)) buckets.set(key, { kind: "transport", provider_id: pid, service_id: null, dates: [], time_slots: [] });
         const b = buckets.get(key);
         if (svcId && !b.service_id) b.service_id = String(svcId);
         b.dates.push(dateKey);
+        b.time_slots.push(...schedule
+          .filter((item) => String(item.provider_id || "") === pid && item.type === "transport")
+          .map((item) => ({ date: dateKey, start_time: item.start_time, end_time: item.end_time, title: item.title || item.service_title || "" })));
       }
       // отель: котировка уже содержит владельца предложения и точный snapshot
       const hotelQuote = st?.hotelBreakdown?.quoteSnapshot;
@@ -1657,6 +1707,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         provider_id: b.provider_id,
         ...(b.service_id ? { service_id: b.service_id } : {}), // ← только если есть реальный id
         dates: [...new Set(b.dates)].sort(),
+        time_slots: b.time_slots || [],
         pax_adult: Number(adt) || 0,
         pax_child: Number(chd) || 0,
         language: String(lang || "en"),
@@ -1731,6 +1782,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
           provider_id: String(p.provider_id),
           ...(belongs ? { service_id: String(p.service_id) } : {}),
           dates: p.dates,
+          time_slots: Array.isArray(p.time_slots) ? p.time_slots : [],
           pax_adult: Number(p.pax_adult) || 0,
           pax_child: Number(p.pax_child) || 0,
           language: p.language || "en",
@@ -1748,6 +1800,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
             resident_type: residentType,
             tour_program: Array.isArray(p.tour_program) ? p.tour_program : [],
             tour_program_text: p.tour_program_text || "",
+            time_slots: Array.isArray(p.time_slots) ? p.time_slots : [],
             hotel_quotes: p.kind === "hotel"
               ? hotelQuoteSnapshots.filter((quote) => String(quote?.offer?.provider_id ?? quote?.hotel?.provider_id) === String(p.provider_id))
               : [],
@@ -1883,6 +1936,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         transfers: [],
         meals: [],
         program_i18n: normalizeProgramI18n(tpl.days[i]?.program_i18n || tpl.program_i18n || {}),
+        schedule: normalizeScheduleItems(tpl.days[i]?.schedule),
         _programTab: TB_PROGRAM_LANGS.includes(String(i18n.language || "ru").slice(0, 2))
           ? String(i18n.language || "ru").slice(0, 2)
           : "ru",
@@ -2110,6 +2164,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
             const k = ymd(d);
             const st = byDay[k] || {};
             const cityChosen = Boolean(st.city);
+            const selectedSchedule = normalizeScheduleItems(st.schedule).find((item) => item.id === st.selectedScheduleId) || null;
             return (
               <div
                 key={k}
@@ -2156,6 +2211,23 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     {t('tb.delete_day', { defaultValue: 'Удалить день' })}
                   </button>
                 </div>
+
+                <TourDayTimeline
+                  items={st.schedule}
+                  selectedId={st.selectedScheduleId}
+                  onSelect={(selectedScheduleId) =>
+                    setByDay((previous) => ({
+                      ...previous,
+                      [k]: { ...previous[k], selectedScheduleId },
+                    }))
+                  }
+                  onChange={(schedule) =>
+                    setByDay((previous) => ({
+                      ...previous,
+                      [k]: { ...previous[k], schedule },
+                    }))
+                  }
+                />
 
                 {/* Программа дня */}
                 <div className="border rounded p-3 bg-white/70">
@@ -2229,6 +2301,24 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   })()}
                 </div>
 
+                <div className="flex flex-wrap items-center justify-between gap-2 border-y border-slate-200 bg-white px-3 py-2">
+                  <div>
+                    <div className="text-sm font-bold text-slate-950">
+                      {selectedSchedule
+                        ? `Поставщики на ${selectedSchedule.start_time}–${selectedSchedule.end_time}`
+                        : "Поставщики на день"}
+                    </div>
+                    <div className="text-xs text-slate-500">
+                      {selectedSchedule?.title || "Выберите событие в расписании, чтобы закрепить время услуги"}
+                    </div>
+                  </div>
+                  {selectedSchedule && (
+                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
+                      Проверяем весь интервал
+                    </span>
+                  )}
+                </div>
+
                 <div className="grid md:grid-cols-2 gap-3">
                   {/* Guide */}
                   <div className="border rounded p-2">
@@ -2239,7 +2329,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       {t('tb.guide')}
                     </label>
                     <AsyncSelect
-                        key={`guide-${k}-${st.city}-${lang}`}        // ⬅️ форс-ремаунт при смене условий
+                        key={`guide-${k}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}        // ⬅️ форс-ремаунт при смене условий
                         isDisabled={!cityChosen}
                         cacheOptions={false}                         // ⬅️ убираем кеш для надежности
                         defaultOptions
@@ -2251,7 +2341,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         value={st.guide ? { value: st.guide.id, label: st.guide.name, raw: st.guide } : null}
                         onChange={async (opt) => {
                           const guide = opt?.raw || null;
-                          setByDay((p) => ({ ...p, [k]: { ...p[k], guide, guideService: null } }));
+                          setByDay((p) => {
+                            const current = p[k] || {};
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                              item.id === current.selectedScheduleId
+                                ? { ...item, type: "guide", provider_id: guide?.id || null, provider_name: guide?.name || "", service_id: null, service_title: "" }
+                                : item
+                            );
+                            return { ...p, [k]: { ...current, guide, guideService: null, schedule } };
+                          });
                           const list = await ensureServicesLoaded(guide);
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
                           const citySlug = (byDay[k]?.city || "").trim();
@@ -2260,7 +2358,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             : [...GUIDE_ALLOWED_ARR, ...TRANSPORT_ALLOWED_ARR];
                           const picked = pickFromCache(guide.id, cats, citySlug, pax);
                           if (picked) {
-                            setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: picked } }));
+                            setByDay((p) => {
+                              const current = p[k] || {};
+                              const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                                item.id === current.selectedScheduleId
+                                  ? { ...item, type: "guide", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Услуга гида" }
+                                  : item
+                              );
+                              return { ...p, [k]: { ...current, guideService: picked, schedule } };
+                            });
                           }
                         }}
                         classNamePrefix="rs"
@@ -2292,7 +2398,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             )
                           );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
-                        setByDay((p) => ({ ...p, [k]: { ...p[k], guideService: chosen } }));
+                        setByDay((p) => {
+                          const current = p[k] || {};
+                          const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                            item.id === current.selectedScheduleId
+                              ? { ...item, type: "guide", service_id: chosen?.id || null, service_title: chosen?.title || "" }
+                              : item
+                          );
+                          return { ...p, [k]: { ...current, guideService: chosen, schedule } };
+                        });
                       }}
                     >
                       <option value="">{t('tb.pick_guide_service_ph')}</option>
@@ -2341,7 +2455,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       {t('tb.transport')}
                     </label>
                     <AsyncSelect
-                        key={`transport-${k}-${st.city}-${lang}`}   // ⬅️ важный ключ
+                        key={`transport-${k}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}   // ⬅️ важный ключ
                         isDisabled={!cityChosen}
                         cacheOptions={false}                         // ⬅️ отключаем кеш
                         defaultOptions
@@ -2353,14 +2467,30 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         value={st.transport ? { value: st.transport.id, label: st.transport.name, raw: st.transport } : null}
                         onChange={async (opt) => {
                           const transport = opt?.raw || null;            // <-- объявляем переменную
-                          setByDay((p) => ({ ...p, [k]: { ...p[k], transport, transportService: null } }));
+                          setByDay((p) => {
+                            const current = p[k] || {};
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                              item.id === current.selectedScheduleId
+                                ? { ...item, type: "transport", provider_id: transport?.id || null, provider_name: transport?.name || "", service_id: null, service_title: "" }
+                                : item
+                            );
+                            return { ...p, [k]: { ...current, transport, transportService: null, schedule } };
+                          });
                           if (transport) {
                             await ensureServicesLoaded(transport); // прогреем кеш
                             const pax = Math.max(1, toNum(adt) + toNum(chd));
                             const citySlug = (byDay[k]?.city || "").trim();
                             const picked = pickFromCache(transport.id, TRANSPORT_ALLOWED_ARR, citySlug, pax);
                             if (picked) {
-                              setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: picked } }));
+                              setByDay((p) => {
+                                const current = p[k] || {};
+                                const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                                  item.id === current.selectedScheduleId
+                                    ? { ...item, type: "transport", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Транспорт" }
+                                    : item
+                                );
+                                return { ...p, [k]: { ...current, transportService: picked, schedule } };
+                              });
                             }
                           } 
                         }}
@@ -2386,7 +2516,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             fitsCity(s, citySlug)
                         );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
-                        setByDay((p) => ({ ...p, [k]: { ...p[k], transportService: chosen } }));
+                        setByDay((p) => {
+                          const current = p[k] || {};
+                          const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                            item.id === current.selectedScheduleId
+                              ? { ...item, type: "transport", service_id: chosen?.id || null, service_title: chosen?.title || "" }
+                              : item
+                          );
+                          return { ...p, [k]: { ...current, transportService: chosen, schedule } };
+                        });
                       }}
                     >
                       <option value="">{t('tb.pick_transport_service_ph')}</option>
