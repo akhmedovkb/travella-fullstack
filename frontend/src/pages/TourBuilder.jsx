@@ -14,6 +14,7 @@ import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
+import TransportSegmentEditor from "../components/tourbuilder/TransportSegmentEditor";
 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -31,12 +32,6 @@ const BRAND = {
 };
 
 /* ---------------- intercity transfer types ---------------- */
- const TRANSFER_TYPES = [
-  { id: "car" },   // подписи берём из i18n: tb.transfer_types.*
-  { id: "train" },
-  { id: "air" },
- ];
-
 /* ---------------- per-day meals ---------------- */
 const MEAL_TYPES = [
   { id: "lunch" },  // tb.meal_types.lunch
@@ -122,6 +117,30 @@ const buildLegsFromByDay = (stateByDay = {}) => {
   }
   return legs;
 };
+const buildTransportSegments = (stateByDay = {}) =>
+  Object.entries(stateByDay)
+    .sort(([a], [b]) => String(a).localeCompare(String(b)))
+    .flatMap(([date, state]) => (Array.isArray(state?.transfers) ? state.transfers : []).map((segment, index) => ({
+      id: `${date}-${index + 1}`,
+      date,
+      mode: String(segment?.type || "car"),
+      provider: String(segment?.provider || "manual"),
+      from: String(segment?.from || "").trim(),
+      to: String(segment?.to || "").trim(),
+      departure_at: segment?.departure_at || null,
+      arrival_at: segment?.arrival_at || null,
+      carrier: String(segment?.carrier || "").trim(),
+      number: String(segment?.number || "").trim(),
+      cabin_class: String(segment?.cabin_class || "").trim(),
+      baggage: String(segment?.baggage || "").trim(),
+      price: toNum(segment?.price, 0),
+      currency: String(segment?.currency || "UZS"),
+      per_pax: Boolean(segment?.perPax),
+      raw_offer_id: segment?.raw_offer_id || null,
+      offer_expires_at: segment?.offer_expires_at || null,
+      segments: Array.isArray(segment?.segments) ? segment.segments : [],
+    })))
+    .filter((segment) => segment.from || segment.to);
 /* ---------------- categories / labels (для выпадашек услуг) ---------------- */
 const CATEGORY_LABELS = {
   // guide
@@ -1755,14 +1774,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
   const routeCities = computeRouteCities(byDay);
   const legs = buildLegsFromByDay(byDay);
-  setBookingConfirmation({ hotelQuoteSnapshots, payloads, routeCities, legs });
+  const transportSegments = buildTransportSegments(byDay);
+  setBookingConfirmation({ hotelQuoteSnapshots, payloads, routeCities, legs, transportSegments });
 };
 
   const confirmSendRequests = async () => {
   const plan = bookingConfirmation;
   if (!plan || sending || bookingSendLockRef.current) return;
   bookingSendLockRef.current = true;
-  const { hotelQuoteSnapshots, payloads, routeCities, legs } = plan;
+  const { hotelQuoteSnapshots, payloads, routeCities, legs, transportSegments = [] } = plan;
   setSending(true);
 
   try {
@@ -1804,6 +1824,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
             hotel_quotes: p.kind === "hotel"
               ? hotelQuoteSnapshots.filter((quote) => String(quote?.offer?.provider_id ?? quote?.hotel?.provider_id) === String(p.provider_id))
               : [],
+            transport_segments: transportSegments,
           },
           legs,
         };
@@ -2801,107 +2822,28 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     {/* список трансферов */}
                     <div className="space-y-2">
                       {(st.transfers || []).map((tr, idx) => (
-                        <div key={idx} className="grid md:grid-cols-12 gap-2 items-center">
-                          {/* From / To */}
-                          <input
-                            className="md:col-span-3 border rounded px-2 py-2 text-sm"
-                            placeholder={t('tb.transfer_from_ph')}
-                            value={tr.from || ""}
-                            onChange={(e) =>
-                              setByDay((p) => {
-                                const arr = [...(p[k].transfers || [])];
-                                arr[idx] = { ...arr[idx], from: e.target.value };
-                                return { ...p, [k]: { ...p[k], transfers: arr } };
-                              })
-                            }
-                          />
-                          <span className="hidden md:block text-center md:col-span-1">→</span>
-                          <input
-                            className="md:col-span-3 border rounded px-2 py-2 text-sm"
-                            placeholder={t('tb.transfer_to_ph')}
-                            value={tr.to || ""}
-                            onChange={(e) =>
-                              setByDay((p) => {
-                                const arr = [...(p[k].transfers || [])];
-                                arr[idx] = { ...arr[idx], to: e.target.value };
-                                return { ...p, [k]: { ...p[k], transfers: arr } };
-                              })
-                            }
-                          />
-                          {/* type */}
-                          <select
-                            className="md:col-span-2 border rounded px-2 py-2 text-sm"
-                            value={tr.type || "car"}
-                            onChange={(e) =>
-                              setByDay((p) => {
-                                const arr = [...(p[k].transfers || [])];
-                                arr[idx] = { ...arr[idx], type: e.target.value };
-                                return { ...p, [k]: { ...p[k], transfers: arr } };
-                              })
-                            }
-                          >
-                             {TRANSFER_TYPES.map(tt => (
-                               <option key={tt.id} value={tt.id}>{t(`tb.transfer_types.${tt.id}`)}</option>
-                             ))}
-                          </select>
-                          {/* price */}
-                          <input
-                            type="number"
-                            min={0}
-                            className="md:col-span-2 border rounded px-2 py-2 text-sm"
-                            placeholder={t('tb.transfer_price_ph')}
-                            value={tr.price ?? 0}
-                            onChange={(e) =>
-                              setByDay((p) => {
-                                const arr = [...(p[k].transfers || [])];
-                                arr[idx] = { ...arr[idx], price: Number(e.target.value) || 0 };
-                                return { ...p, [k]: { ...p[k], transfers: arr } };
-                              })
-                            }
-                          />
-                          <select
-                            className="md:col-span-1 border rounded px-2 py-2 text-sm"
-                            value={tr.currency || "UZS"}
-                            onChange={(e) =>
-                              setByDay((p) => {
-                                const arr = [...(p[k].transfers || [])];
-                                arr[idx] = { ...arr[idx], currency: e.target.value };
-                                return { ...p, [k]: { ...p[k], transfers: arr } };
-                              })
-                            }
-                          >
-                          <option value="UZS">{t('tb.currencyintercities.uzs')}</option>
-                         <option value="USD">{t('tb.currencyintercities.usd')}</option>
-                          </select>
-                          <label className="md:col-span-2 inline-flex items-center gap-2 text-xs">
-                            <input
-                              type="checkbox"
-                              checked={!!tr.perPax}
-                              onChange={(e) =>
-                                setByDay((p) => {
-                                  const arr = [...(p[k].transfers || [])];
-                                  arr[idx] = { ...arr[idx], perPax: e.target.checked };
-                                  return { ...p, [k]: { ...p[k], transfers: arr } };
-                                })
-                              }
-                            />
-                            <span>{t('tb.per_pax')}</span>
-                          </label>
-                          <button
-                            type="button"
-                            className="md:col-span-1 text-xs px-2 py-2 rounded border"
-                            style={{ borderColor: `${BRAND.accent}88` }}
-                            onClick={() =>
-                              setByDay((p) => {
-                                const arr = [...(p[k].transfers || [])];
-                                arr.splice(idx, 1);
-                                return { ...p, [k]: { ...p[k], transfers: arr } };
-                              })
-                            }
-                          >
-                            {t('tb.remove')}
-                          </button>
-                        </div>
+                        <TransportSegmentEditor
+                          key={`${k}-${idx}`}
+                          value={tr}
+                          date={k}
+                          adults={toNum(adt, 0)}
+                          children={toNum(chd, 0)}
+                          lang={String(i18n.language || "ru").slice(0, 2)}
+                          onChange={(nextTransfer) =>
+                            setByDay((p) => {
+                              const arr = [...(p[k].transfers || [])];
+                              arr[idx] = nextTransfer;
+                              return { ...p, [k]: { ...p[k], transfers: arr } };
+                            })
+                          }
+                          onRemove={() =>
+                            setByDay((p) => {
+                              const arr = [...(p[k].transfers || [])];
+                              arr.splice(idx, 1);
+                              return { ...p, [k]: { ...p[k], transfers: arr } };
+                            })
+                          }
+                        />
                      ))}
                     </div>
 
@@ -2916,7 +2858,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               ...p[k],
                               transfers: [
                                 ...(p[k].transfers || []),
-                                { from: st.city || "", to: "", type: "car", price: 0, currency: "UZS", perPax: false },
+                                { from: st.city || "", to: "", type: "car", provider: "manual", price: 0, currency: "UZS", perPax: false },
                               ],
                             },
                           }))
