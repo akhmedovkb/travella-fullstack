@@ -1,5 +1,15 @@
 import { useEffect, useMemo, useState } from "react";
 
+const COMPONENT_TYPES = [
+  { value: "transfer", label: "Транспорт", legacyType: "transport" },
+  { value: "hotel", label: "Отель", legacyType: "hotel" },
+  { value: "tour", label: "Сити-тур", legacyType: "guide" },
+  { value: "attractions", label: "Достопримечательности", legacyType: "activity" },
+  { value: "meal", label: "Питание", legacyType: "meal" },
+];
+
+const componentMeta = (value) => COMPONENT_TYPES.find((item) => item.value === value) || COMPONENT_TYPES[0];
+
 const toMinutes = (value) => {
   const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
   if (!match) return null;
@@ -51,7 +61,7 @@ export const normalizeScheduleItems = (value) =>
       service_id: item?.service_id || null,
       service_title: String(item?.service_title || ""),
       services: item?.services && typeof item.services === "object" ? item.services : {},
-      active_service_category: String(item?.active_service_category || ""),
+      active_service_category: String(item?.active_service_category || (item?.type === "hotel" ? "hotel" : item?.type === "guide" ? "tour" : item?.type === "meal" ? "meal" : "transfer")),
     }))
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
@@ -84,8 +94,9 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
       id: `event-${Date.now()}`,
       start_time: start,
       end_time: plusHours(start),
-      title: "Новый компонент",
-      type: "activity",
+      title: "Транспорт",
+      type: "transport",
+      active_service_category: "transfer",
     };
     onChange([...normalized, item]);
     select(item.id);
@@ -119,6 +130,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
           {normalized.map((item) => {
             const active = item.id === activeId;
             const invalid = hasOverlap(item, normalized);
+            const component = componentMeta(item.active_service_category);
             return (
               <div key={item.id} className="grid grid-cols-[96px_1fr] gap-3 py-2.5">
                 <div className="pt-2">
@@ -134,9 +146,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                       <div className="min-w-0">
                         <div className="truncate text-sm font-bold text-slate-950">{item.title || "Без названия"}</div>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          {item.type === "guide" && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">Гид</span>}
-                          {item.type === "transport" && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Транспорт</span>}
-                          {item.type === "activity" && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">Компонент</span>}
+                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{component.label}</span>
                           {item.provider_name && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{item.provider_name}</span>}
                           {item.services?.guide?.provider_name && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">Гид: {item.services.guide.provider_name}</span>}
                           {item.services?.transport?.provider_name && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Транспорт: {item.services.transport.provider_name}</span>}
@@ -161,7 +171,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                     <div className="mt-3 grid gap-3 border-t border-slate-200 pt-3 md:grid-cols-[110px_110px_1fr_auto]">
                       <label className="text-xs font-semibold text-slate-500">Начало<input type="time" value={item.start_time} onChange={(e) => patch(item.id, { start_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
                       <label className="text-xs font-semibold text-slate-500">Окончание<input type="time" value={item.end_time} onChange={(e) => patch(item.id, { end_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
-                      <label className="text-xs font-semibold text-slate-500">Название<input value={item.title} onChange={(e) => patch(item.id, { title: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm text-slate-900" /></label>
+                      <label className="text-xs font-semibold text-slate-500">Компонент<select value={component.value} onChange={(e) => { const next = componentMeta(e.target.value); patch(item.id, { active_service_category: next.value, type: next.legacyType, title: next.label }); }} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900">{COMPONENT_TYPES.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
                       <button type="button" onClick={() => remove(item.id)} className="self-end rounded-md border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">Удалить</button>
                     </div>
                   )}
