@@ -39,6 +39,14 @@ const MEAL_TYPES = [
   { id: "gala" },   // tb.meal_types.gala
 ];
 
+const EVENT_SERVICE_CATEGORIES = [
+  { id: "transfer", label: "Трансфер" },
+  { id: "hotel", label: "Отель" },
+  { id: "tour", label: "Сити-тур" },
+  { id: "attractions", label: "Достопримечательности" },
+  { id: "meal", label: "Питание" },
+];
+
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
   menuPortal: (b) => ({ ...b, zIndex: 9999 }),
@@ -1098,6 +1106,7 @@ export default function TourBuilder() {
   
   const [range, setRange] = useState(EMPTY_RANGE);
   const [collapsedDays, setCollapsedDays] = useState({});
+  const [eventServiceTabs, setEventServiceTabs] = useState({});
 
   const [adt, setAdt] = useState(2);
   const [chd, setChd] = useState(0);
@@ -2211,6 +2220,27 @@ const makeTransportLoader = (dateKey) => async (input) => {
               Boolean(st.hotel),
             ].filter(Boolean).length;
             const collapsed = Boolean(collapsedDays[k]);
+            const eventServiceKey = `${k}:${selectedSchedule?.id || "day"}`;
+            const suggestedServiceCategory = selectedSchedule?.active_service_category
+              || (selectedSchedule?.type === "guide" ? "tour"
+                : selectedSchedule?.type === "transport" ? "transfer"
+                  : selectedSchedule?.type === "hotel" ? "hotel"
+                    : selectedSchedule?.type === "meal" ? "meal"
+                      : "tour");
+            const activeEventService = eventServiceTabs[eventServiceKey] || suggestedServiceCategory;
+            const selectEventService = (category) => {
+              setEventServiceTabs((previous) => ({ ...previous, [eventServiceKey]: category }));
+              if (!selectedSchedule?.id) return;
+              setByDay((previous) => ({
+                ...previous,
+                [k]: {
+                  ...previous[k],
+                  schedule: normalizeScheduleItems(previous[k]?.schedule).map((item) =>
+                    item.id === selectedSchedule.id ? { ...item, active_service_category: category } : item
+                  ),
+                },
+              }));
+            };
             return (
               <div
                 key={k}
@@ -2265,6 +2295,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                 {!collapsed && <>
                 <TourDayTimeline
+                  dayKey={k}
                   items={st.schedule}
                   selectedId={st.selectedScheduleId}
                   onSelect={(selectedScheduleId) =>
@@ -2353,26 +2384,52 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   })()}
                 </div>
 
-                <div className="flex flex-wrap items-center justify-between gap-2 border-y border-slate-200 bg-white px-3 py-2">
+                <div className="rounded-lg border border-slate-200 bg-white">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-3">
                   <div>
                     <div className="text-sm font-bold text-slate-950">
                       {selectedSchedule
-                        ? `Поставщики на ${selectedSchedule.start_time}–${selectedSchedule.end_time}`
-                        : "Поставщики на день"}
+                        ? `Услуги события · ${selectedSchedule.start_time}–${selectedSchedule.end_time}`
+                        : "Услуги события"}
                     </div>
                     <div className="text-xs text-slate-500">
-                      {selectedSchedule?.title || "Выберите событие в расписании, чтобы закрепить время услуги"}
+                      {selectedSchedule?.title || "Выберите событие в расписании, чтобы назначить услуги и поставщиков"}
                     </div>
                   </div>
                   {selectedSchedule && (
                     <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                      Проверяем весь интервал
+                      Доступность проверяется на весь интервал
                     </span>
                   )}
+                  </div>
+                  <div className="flex gap-1 overflow-x-auto p-2">
+                    {EVENT_SERVICE_CATEGORIES.map((category) => {
+                      const selected = activeEventService === category.id;
+                      const eventServices = selectedSchedule?.services || {};
+                      const assigned = category.id === "tour" ? Boolean(eventServices.guide?.service_id)
+                        : category.id === "transfer" ? Boolean(eventServices.transport?.service_id || (st.transfers || []).some((row) => !row.schedule_id || row.schedule_id === selectedSchedule?.id))
+                          : category.id === "hotel" ? Boolean(eventServices.hotel?.provider_id)
+                            : category.id === "attractions" ? Boolean(eventServices.attractions?.items?.length)
+                              : Boolean((st.meals || []).some((row) => !row.schedule_id || row.schedule_id === selectedSchedule?.id));
+                      return (
+                        <button
+                          key={category.id}
+                          type="button"
+                          disabled={!selectedSchedule}
+                          onClick={() => selectEventService(category.id)}
+                          className={`shrink-0 rounded-md px-3 py-2 text-sm font-semibold transition ${selected ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"} disabled:cursor-not-allowed disabled:opacity-40`}
+                        >
+                          {category.label}{assigned ? " · ✓" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-3">
+                {selectedSchedule ? (<>
+                <div className="grid gap-3 md:grid-cols-2">
                   {/* Guide */}
+                  {activeEventService === "tour" && <>
                   <div className="border rounded p-2">
                     <label
                       className="block text-sm font-medium mb-1"
@@ -2397,7 +2454,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             const current = p[k] || {};
                             const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                               item.id === current.selectedScheduleId
-                                ? { ...item, type: "guide", provider_id: guide?.id || null, provider_name: guide?.name || "", service_id: null, service_title: "" }
+                                ? { ...item, services: { ...item.services, guide: { provider_id: guide?.id || null, provider_name: guide?.name || "", service_id: null, service_title: "" } } }
                                 : item
                             );
                             return { ...p, [k]: { ...current, guide, guideService: null, schedule } };
@@ -2414,7 +2471,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               const current = p[k] || {};
                               const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                                 item.id === current.selectedScheduleId
-                                  ? { ...item, type: "guide", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Услуга гида" }
+                                  ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: guide.id, provider_name: guide.name || "", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Услуга гида" } } }
                                   : item
                               );
                               return { ...p, [k]: { ...current, guideService: picked, schedule } };
@@ -2454,7 +2511,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           const current = p[k] || {};
                           const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                             item.id === current.selectedScheduleId
-                              ? { ...item, type: "guide", service_id: chosen?.id || null, service_title: chosen?.title || "" }
+                              ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: current.guide?.id || null, provider_name: current.guide?.name || "", service_id: chosen?.id || null, service_title: chosen?.title || "" } } }
                               : item
                           );
                           return { ...p, [k]: { ...current, guideService: chosen, schedule } };
@@ -2497,8 +2554,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       {t('tb.no_services_for_guide')}
                     </div>
                   )}
+                  </>}
 
                   {/* Transport */}
+                  {activeEventService === "transfer" && <>
                   <div className="border rounded p-2">
                     <label
                       className="block text-sm font-medium mb-1"
@@ -2523,7 +2582,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             const current = p[k] || {};
                             const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                               item.id === current.selectedScheduleId
-                                ? { ...item, type: "transport", provider_id: transport?.id || null, provider_name: transport?.name || "", service_id: null, service_title: "" }
+                                ? { ...item, services: { ...item.services, transport: { provider_id: transport?.id || null, provider_name: transport?.name || "", service_id: null, service_title: "" } } }
                                 : item
                             );
                             return { ...p, [k]: { ...current, transport, transportService: null, schedule } };
@@ -2538,7 +2597,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                                 const current = p[k] || {};
                                 const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                                   item.id === current.selectedScheduleId
-                                    ? { ...item, type: "transport", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Транспорт" }
+                                    ? { ...item, services: { ...item.services, transport: { ...(item.services?.transport || {}), provider_id: transport.id, provider_name: transport.name || "", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Транспорт" } } }
                                     : item
                                 );
                                 return { ...p, [k]: { ...current, transportService: picked, schedule } };
@@ -2572,7 +2631,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           const current = p[k] || {};
                           const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                             item.id === current.selectedScheduleId
-                              ? { ...item, type: "transport", service_id: chosen?.id || null, service_title: chosen?.title || "" }
+                              ? { ...item, services: { ...item.services, transport: { ...(item.services?.transport || {}), provider_id: current.transport?.id || null, provider_name: current.transport?.name || "", service_id: chosen?.id || null, service_title: chosen?.title || "" } } }
                               : item
                           );
                           return { ...p, [k]: { ...current, transportService: chosen, schedule } };
@@ -2614,7 +2673,9 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       {t('tb.no_services_for_transport')}
                     </div>
                   )}
+                  </>}
                   {/* Hotel */}
+                  {activeEventService === "hotel" && (
                   <div className="border rounded p-2">
                      <label
                       className="block text-sm font-medium mb-1"
@@ -2643,15 +2704,23 @@ const makeTransportLoader = (dateKey) => async (input) => {
                          // сбрасываем прежние данные отеля
                          setByDay((p) => ({
                            ...p,
-                           [k]: { 
-                             ...p[k],
+                           [k]: (() => {
+                             const current = p[k] || {};
+                             const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                               item.id === current.selectedScheduleId
+                                 ? { ...item, services: { ...item.services, hotel: { provider_id: hotel?.id || null, provider_name: hotel?.name || "" } } }
+                                 : item
+                             );
+                             return {
+                             ...current,
                              hotel,
                              hotelBrief: null,
                              hotelOffers: [],
                              hotelOffer: null,
                              hotelRoomsTotal: 0,
-                             hotelLoading: !!hotel
-                           }
+                             hotelLoading: !!hotel,
+                             schedule,
+                           }; })()
                          }));
                          if (!hotel) return;
                          try {
@@ -2801,8 +2870,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       {t('tb.price_per_night')}: <b style={{ color: BRAND.primary }}>{toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)}</b> {st.hotel?.currency || st.hotelBrief?.currency || "UZS"}
                     </div>*/}
                   </div>
+                  )}
                   
                   {/* Entry fees */}
+                  {activeEventService === "attractions" && (
                     <div className="border rounded p-2">
                     <label
                       className="block text-sm font-medium mb-1"
@@ -2829,7 +2900,16 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       defaultOptions={entryOptionsMap[k] || []}
                       loadOptions={(input, cb) => cb(entryOptionsMap[k] || [])}
                       value={st.entrySelected || []}
-                      onChange={(vals) => setByDay((p) => ({ ...p, [k]: { ...p[k], entrySelected: vals || [] } }))}
+                      onChange={(vals) => setByDay((p) => {
+                        const current = p[k] || {};
+                        const selected = vals || [];
+                        const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                          item.id === current.selectedScheduleId
+                            ? { ...item, services: { ...item.services, attractions: { items: selected.map((entry) => ({ id: entry.value, title: entry.label })) } } }
+                            : item
+                        );
+                        return { ...p, [k]: { ...current, entrySelected: selected, schedule } };
+                      })}
                       placeholder={cityChosen ? t('tb.pick_sites') : t('tb.pick_city_first')}
                       noOptionsMessage={() => (cityChosen ? t('tb.nothing_found') : t('tb.pick_city_first'))}
                       menuPortalTarget={document.body}
@@ -2839,9 +2919,11 @@ const makeTransportLoader = (dateKey) => async (input) => {
                      {t('tb.calc_day_hint', { amount: calcEntryForDay(k).toFixed(2) })}
                    </div>
                   </div>
+                  )}
                 </div>
 
                   {/* Intercity transfers */}
+                  {activeEventService === "transfer" && (
                   <div className="border rounded p-2 md:col-span-2">
                     <label
                       className="block text-sm font-medium mb-1"
@@ -2852,7 +2934,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                     {/* список трансферов */}
                     <div className="space-y-2">
-                      {(st.transfers || []).map((tr, idx) => (
+                      {(st.transfers || [])
+                        .map((tr, idx) => ({ tr, idx }))
+                        .filter(({ tr }) => !tr.schedule_id || tr.schedule_id === selectedSchedule?.id)
+                        .map(({ tr, idx }) => (
                         <TransportSegmentEditor
                           key={`${k}-${idx}`}
                           value={tr}
@@ -2889,7 +2974,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                               ...p[k],
                               transfers: [
                                 ...(p[k].transfers || []),
-                                { from: st.city || "", to: "", type: "car", provider: "manual", price: 0, currency: "UZS", perPax: false },
+                                { id: `transfer-${Date.now()}`, from: st.city || "", to: "", type: "car", provider: "manual", price: 0, currency: "UZS", perPax: false, schedule_id: st.selectedScheduleId || null },
                               ],
                             },
                           }))
@@ -2902,8 +2987,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       </div>
                     </div>
                   </div>
+                  )}
 
                                 {/* Meals */}
+                {activeEventService === "meal" && (
                 <div className="border rounded p-2 md:col-span-2">
                   <label
                     className="block text-sm font-medium mb-1"
@@ -2914,7 +3001,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                   {/* список позиций питания */}
                   <div className="space-y-2">
-                    {(st.meals || []).map((ml, idx) => (
+                    {(st.meals || [])
+                      .map((ml, idx) => ({ ml, idx }))
+                      .filter(({ ml }) => !ml.schedule_id || ml.schedule_id === selectedSchedule?.id)
+                      .map(({ ml, idx }) => (
                       <div key={idx} className="grid md:grid-cols-12 gap-2 items-center">
                         {/* тип питания */}
                         <select
@@ -3008,7 +3098,17 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       onClick={() =>
                         setByDay((p) => ({
                           ...p,
-                          [k]: { ...(p[k] || {}), meals: [ ...(p[k]?.meals || []), { type: "lunch", price: 0, currency: "UZS", perPax: true } ] }
+                          [k]: (() => {
+                            const current = p[k] || {};
+                            const meal = { id: `meal-${Date.now()}`, type: "lunch", price: 0, currency: "UZS", perPax: true, schedule_id: current.selectedScheduleId || null };
+                            const meals = [...(current.meals || []), meal];
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                              item.id === current.selectedScheduleId
+                                ? { ...item, services: { ...item.services, meal: { items: meals.filter((row) => row.schedule_id === item.id).map((row) => ({ id: row.id, type: row.type })) } } }
+                                : item
+                            );
+                            return { ...current, meals, schedule };
+                          })()
                         }))
                       }
                     >
@@ -3019,6 +3119,18 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     </div>
                   </div>
                 </div>
+                )}
+
+                </>
+                ) : (
+                  <button
+                    type="button"
+                    className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500 hover:border-orange-300 hover:text-orange-700"
+                    onClick={() => document.querySelector(`[data-tour-event-day="${k}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
+                  >
+                    Выберите событие в расписании, чтобы добавить услуги
+                  </button>
+                )}
 
                 </>}
 

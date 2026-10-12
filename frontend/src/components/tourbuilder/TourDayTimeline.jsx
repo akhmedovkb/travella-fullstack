@@ -58,10 +58,12 @@ export const normalizeScheduleItems = (value) =>
       provider_name: String(item?.provider_name || ""),
       service_id: item?.service_id || null,
       service_title: String(item?.service_title || ""),
+      services: item?.services && typeof item.services === "object" ? item.services : {},
+      active_service_category: String(item?.active_service_category || ""),
     }))
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
-export default function TourDayTimeline({ items, onChange, selectedId, onSelect }) {
+export default function TourDayTimeline({ dayKey, items, onChange, selectedId, onSelect }) {
   const normalized = useMemo(() => normalizeScheduleItems(items), [items]);
   const [draftId, setDraftId] = useState(selectedId || normalized[0]?.id || null);
   const activeId = selectedId || draftId;
@@ -103,7 +105,7 @@ export default function TourDayTimeline({ items, onChange, selectedId, onSelect 
   };
 
   return (
-    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <section data-tour-event-day={dayKey} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
         <div>
           <h3 className="text-base font-bold text-slate-950">Расписание дня</h3>
@@ -141,6 +143,11 @@ export default function TourDayTimeline({ items, onChange, selectedId, onSelect 
                           {item.type === "transport" && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Транспорт</span>}
                           {item.type === "activity" && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">Программа</span>}
                           {item.provider_name && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{item.provider_name}</span>}
+                          {item.services?.guide?.provider_name && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">Гид: {item.services.guide.provider_name}</span>}
+                          {item.services?.transport?.provider_name && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Транспорт: {item.services.transport.provider_name}</span>}
+                          {item.services?.hotel?.provider_name && <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700">Отель: {item.services.hotel.provider_name}</span>}
+                          {item.services?.attractions?.items?.length > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">Объекты: {item.services.attractions.items.length}</span>}
+                          {item.services?.meal?.items?.length > 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">Питание</span>}
                         </div>
                       </div>
                       <span className="text-xs font-semibold text-slate-400">{active ? "Выбрано" : "Изменить"}</span>
