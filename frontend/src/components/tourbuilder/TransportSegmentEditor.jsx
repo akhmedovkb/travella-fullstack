@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Car, Check, Loader2, Plane, Search, Train, Trash2 } from "lucide-react";
+import { ArrowLeftRight, Car, Check, Loader2, Plane, Search, Train, Trash2 } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -25,21 +25,23 @@ const copy = {
     price: "Цена", perPax: "за пассажира", carrier: "Перевозчик", number: "Номер",
     departure: "Отправление", arrival: "Прибытие", class: "Класс", search: "Найти рейсы",
     searching: "Ищем", choose: "Выбрать", selected: "Выбрано", noOffers: "Предложений не найдено",
-    manualAir: "Можно заполнить рейс вручную", iata: "Код IATA", remove: "Удалить сегмент",
+    manualAir: "Выберите подходящий вариант из результатов поиска", iata: "Код IATA", remove: "Удалить сегмент",
+    swap: "Поменять направление", flightDate: "Дата отправления",
   },
   en: {
     car: "Car", train: "Train", air: "Flight", from: "From", to: "To", price: "Price",
     perPax: "per passenger", carrier: "Carrier", number: "Number", departure: "Departure",
     arrival: "Arrival", class: "Class", search: "Search flights", searching: "Searching",
     choose: "Select", selected: "Selected", noOffers: "No offers found", manualAir: "You can enter the flight manually",
-    iata: "IATA code", remove: "Remove segment",
+    iata: "IATA code", remove: "Remove segment", swap: "Swap direction", flightDate: "Departure date",
   },
   uz: {
     car: "Avtomobil", train: "Poyezd", air: "Samolyot", from: "Qayerdan", to: "Qayerga",
     price: "Narx", perPax: "har bir yo'lovchi uchun", carrier: "Tashuvchi", number: "Raqam",
     departure: "Jo'nash", arrival: "Yetib kelish", class: "Klass", search: "Reyslarni topish",
     searching: "Qidirilmoqda", choose: "Tanlash", selected: "Tanlandi", noOffers: "Taklif topilmadi",
-    manualAir: "Reysni qo'lda kiritish mumkin", iata: "IATA kodi", remove: "Segmentni o'chirish",
+    manualAir: "Qidiruv natijalaridan mos variantni tanlang", iata: "IATA kodi", remove: "Segmentni o'chirish",
+    swap: "Yo'nalishni almashtirish", flightDate: "Jo'nash sanasi",
   },
 };
 
@@ -174,6 +176,19 @@ export default function TransportSegmentEditor({ value, date, adults, children, 
     });
   };
 
+  const swapAirports = () => {
+    patch({
+      from: value.to || "",
+      to: value.from || "",
+      raw_offer_id: "",
+      booking_token: null,
+      segments: [],
+      offer_expires_at: null,
+    });
+    setOffers([]);
+    setError("");
+  };
+
   const TypeIcon = type === "air" ? Plane : type === "train" ? Train : Car;
   return (
     <div className="rounded-md border border-slate-200 bg-slate-50 p-3">
@@ -189,27 +204,42 @@ export default function TransportSegmentEditor({ value, date, adults, children, 
         <button type="button" title={text.remove} aria-label={text.remove} className="grid h-9 w-9 place-items-center rounded-md text-rose-600 hover:bg-rose-50" onClick={onRemove}><Trash2 size={17} /></button>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        {type === "air" ? (
-          <>
-            <AirportInput label={text.from} value={value.from} lang={locale} onChange={(from) => patch({ from, raw_offer_id: "", segments: [] })} />
-            <AirportInput label={text.to} value={value.to} lang={locale} onChange={(to) => patch({ to, raw_offer_id: "", segments: [] })} />
-          </>
-        ) : (
+      {type === "air" ? (
+        <div className="grid items-end gap-3 md:grid-cols-[minmax(0,1fr)_40px_minmax(0,1fr)_minmax(180px,0.7fr)]">
+          <AirportInput label={text.from} value={value.from} lang={locale} onChange={(from) => patch({ from, raw_offer_id: "", segments: [] })} />
+          <button
+            type="button"
+            title={text.swap}
+            aria-label={text.swap}
+            onClick={swapAirports}
+            className="grid h-10 w-10 place-items-center rounded-md border border-slate-200 bg-white text-slate-600 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-600"
+          >
+            <ArrowLeftRight size={17} />
+          </button>
+          <AirportInput label={text.to} value={value.to} lang={locale} onChange={(to) => patch({ to, raw_offer_id: "", segments: [] })} />
+          <Field
+            type="date"
+            label={text.flightDate}
+            value={value.departure_date || date || ""}
+            onChange={(departure_date) => patch({ departure_date, raw_offer_id: "", segments: [] })}
+          />
+        </div>
+      ) : (
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <>
             <Field label={text.from} value={value.from} onChange={(from) => patch({ from })} />
             <Field label={text.to} value={value.to} onChange={(to) => patch({ to })} />
           </>
-        )}
-        {type !== "car" ? <Field label={text.carrier} value={value.carrier} onChange={(carrier) => patch({ carrier })} /> : null}
-        {type !== "car" ? <Field label={text.number} value={value.number} onChange={(number) => patch({ number })} /> : null}
-        {type !== "car" ? <Field type="datetime-local" label={text.departure} value={value.departure_at || ""} onChange={(departure_at) => patch({ departure_at })} /> : null}
-        {type !== "car" ? <Field type="datetime-local" label={text.arrival} value={value.arrival_at || ""} onChange={(arrival_at) => patch({ arrival_at })} /> : null}
-        {type !== "car" ? <Field label={text.class} value={value.cabin_class} onChange={(cabin_class) => patch({ cabin_class })} /> : null}
-        <Field type="number" label={text.price} value={value.price ?? 0} onChange={(price) => patch({ price: Number(price) || 0, raw_offer_id: type === "air" ? "" : value.raw_offer_id })} />
-        <label className="block"><span className="mb-1 block text-xs font-semibold text-slate-600">Currency</span><select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm" value={value.currency || "UZS"} onChange={(event) => patch({ currency: event.target.value })}><option>UZS</option><option>USD</option></select></label>
-        <label className="flex items-end pb-2"><span className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={Boolean(value.perPax)} onChange={(event) => patch({ perPax: event.target.checked })} />{text.perPax}</span></label>
-      </div>
+          {type === "train" ? <Field label={text.carrier} value={value.carrier} onChange={(carrier) => patch({ carrier })} /> : null}
+          {type === "train" ? <Field label={text.number} value={value.number} onChange={(number) => patch({ number })} /> : null}
+          {type === "train" ? <Field type="datetime-local" label={text.departure} value={value.departure_at || ""} onChange={(departure_at) => patch({ departure_at })} /> : null}
+          {type === "train" ? <Field type="datetime-local" label={text.arrival} value={value.arrival_at || ""} onChange={(arrival_at) => patch({ arrival_at })} /> : null}
+          {type === "train" ? <Field label={text.class} value={value.cabin_class} onChange={(cabin_class) => patch({ cabin_class })} /> : null}
+          <Field type="number" label={text.price} value={value.price ?? 0} onChange={(price) => patch({ price: Number(price) || 0 })} />
+          <label className="block"><span className="mb-1 block text-xs font-semibold text-slate-600">Currency</span><select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm" value={value.currency || "UZS"} onChange={(event) => patch({ currency: event.target.value })}><option>UZS</option><option>USD</option></select></label>
+          <label className="flex items-end pb-2"><span className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={Boolean(value.perPax)} onChange={(event) => patch({ perPax: event.target.checked })} />{text.perPax}</span></label>
+        </div>
+      )}
 
       {type === "air" ? (
         <div className="mt-3 border-t border-slate-200 pt-3">
