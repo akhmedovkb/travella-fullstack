@@ -40,11 +40,17 @@ const MEAL_TYPES = [
 ];
 
 const EVENT_SERVICE_CATEGORIES = [
-  { id: "transfer", label: "Трансфер" },
+  { id: "transfer", label: "Транспорт" },
   { id: "hotel", label: "Отель" },
   { id: "tour", label: "Сити-тур" },
   { id: "attractions", label: "Достопримечательности" },
   { id: "meal", label: "Питание" },
+];
+
+const TRANSPORT_SERVICE_TYPES = [
+  { id: "international", label: "Международный трансфер", categories: ["border_transfer"] },
+  { id: "intercity", label: "Междугородний трансфер", categories: ["one_way_transfer", "border_transfer"] },
+  { id: "hotel", label: "Отельный трансфер", categories: ["hotel_transfer", "one_way_transfer", "dinner_transfer"] },
 ];
 
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
@@ -167,14 +173,15 @@ const CATEGORY_LABELS = {
   one_way_transfer: "Трансфер в одну сторону",
   dinner_transfer: "Трансфер на ужин",
   border_transfer: "Междугородний/погран. трансфер",
+  hotel_transfer: "Трансфер отеля",
 };
 
 const GUIDE_ALLOWED = new Set(["city_tour_guide","mountain_tour_guide","desert_tour_guide","safari_tour_guide","meet","seeoff","translation"]);
-const TRANSPORT_ALLOWED = new Set(["city_tour_transport","mountain_tour_transport","desert_tour_transport","safari_tour_transport","one_way_transfer","dinner_transfer","border_transfer"]);
+const TRANSPORT_ALLOWED = new Set(["city_tour_transport","mountain_tour_transport","desert_tour_transport","safari_tour_transport","one_way_transfer","dinner_transfer","border_transfer","hotel_transfer"]);
 
 // массивы для утилиты подбора
 const GUIDE_ALLOWED_ARR = ["city_tour_guide","mountain_tour_guide","desert_tour_guide","safari_tour_guide","meet","seeoff","translation"];
-const TRANSPORT_ALLOWED_ARR = ["city_tour_transport","mountain_tour_transport","desert_tour_transport","safari_tour_transport","one_way_transfer","dinner_transfer","border_transfer"];
+const TRANSPORT_ALLOWED_ARR = ["city_tour_transport","mountain_tour_transport","desert_tour_transport","safari_tour_transport","one_way_transfer","dinner_transfer","border_transfer","hotel_transfer"];
 /* helpers для фильтрации услуг под PAX и город */
 const svcSeats = (s) =>
   toNum(s?.raw?.details?.seats ?? s?.details?.seats ?? NaN, NaN);
@@ -218,11 +225,12 @@ const providerMatchesByPaxCity = async ({
   citySlug,
   pax,
   ensureServicesLoaded,
+  allowedCategories,
 }) => {
   if (!provider?.id) return false;
   const list = await ensureServicesLoaded(provider);
   if (!Array.isArray(list) || !list.length) return false;
-  const allowedSet = kind === "transport" ? TRANSPORT_ALLOWED : GUIDE_ALLOWED;
+  const allowedSet = allowedCategories ? new Set(allowedCategories) : (kind === "transport" ? TRANSPORT_ALLOWED : GUIDE_ALLOWED);
   return list.some((s) => {
     // s может быть нормализованной услугой (из normalizeService), а сырые поля лежат в s.raw
     const raw = s?.raw || s;
@@ -1492,7 +1500,7 @@ export default function TourBuilder() {
 };
  
 
-const makeTransportLoader = (dateKey) => async (input) => {
+const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR) => async (input) => {
   const day = byDay[dateKey] || {};
   if (!dateKey || !day.city) return [];
   const selectedSlot = normalizeScheduleItems(day.schedule).find((item) => item.id === day.selectedScheduleId);
@@ -1515,6 +1523,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
         citySlug: day.city,
         pax,
         ensureServicesLoaded,
+        allowedCategories,
       })
     )
   );
@@ -2228,6 +2237,8 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     : selectedSchedule?.type === "meal" ? "meal"
                       : "tour");
             const activeEventService = eventServiceTabs[eventServiceKey] || suggestedServiceCategory;
+            const activeTransportSubtype = selectedSchedule?.services?.transport?.subtype || "";
+            const activeTransportCategories = TRANSPORT_SERVICE_TYPES.find((item) => item.id === activeTransportSubtype)?.categories || [];
             const selectEventService = (category) => {
               setEventServiceTabs((previous) => ({ ...previous, [eventServiceKey]: category }));
               if (!selectedSchedule?.id) return;
@@ -2240,6 +2251,17 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   ),
                 },
               }));
+            };
+            const selectTransportSubtype = (subtype) => {
+              setByDay((previous) => {
+                const current = previous[k] || {};
+                const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                  item.id === selectedSchedule?.id
+                    ? { ...item, services: { ...item.services, transport: { subtype } } }
+                    : item
+                );
+                return { ...previous, [k]: { ...current, transport: null, transportService: null, schedule } };
+              });
             };
             return (
               <div
@@ -2387,7 +2409,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                 <div className="rounded-lg border border-slate-200 bg-white">
                   <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2.5">
-                    <strong className="mr-auto text-sm text-slate-950">Добавить к событию</strong>
+                    <strong className="mr-auto text-sm text-slate-950">Услуги компонента</strong>
                     {selectedSchedule && <span className="text-xs text-slate-500">{selectedSchedule.start_time}–{selectedSchedule.end_time}</span>}
                   </div>
                   <div className="flex gap-1 overflow-x-auto p-1.5">
@@ -2547,18 +2569,29 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   {/* Transport */}
                   {activeEventService === "transfer" && <>
                   <div className="rounded-md bg-slate-50 p-3">
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
-                    >
-                      {t('tb.transport')}
-                    </label>
+                    <div className="mb-3">
+                      <div className="mb-1.5 text-xs font-semibold uppercase text-slate-500">Тип транспорта</div>
+                      <div className="flex flex-wrap gap-2">
+                        {TRANSPORT_SERVICE_TYPES.map((type) => (
+                          <button
+                            key={type.id}
+                            type="button"
+                            onClick={() => selectTransportSubtype(type.id)}
+                            className={`rounded-md border px-3 py-2 text-sm font-semibold ${activeTransportSubtype === type.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"}`}
+                          >
+                            {type.label}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {activeTransportSubtype && <>
+                    <label className="mb-1 block text-sm font-semibold text-slate-800">Поставщик</label>
                     <AsyncSelect
-                        key={`transport-${k}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}   // ⬅️ важный ключ
-                        isDisabled={!cityChosen}
+                        key={`transport-${k}-${activeTransportSubtype}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}
+                        isDisabled={!cityChosen || !activeTransportSubtype}
                         cacheOptions={false}                         // ⬅️ отключаем кеш
                         defaultOptions
-                        loadOptions={makeTransportLoader(k)}
+                        loadOptions={makeTransportLoader(k, activeTransportCategories)}
                         filterOption={() => true}
                         components={{ Option: ProviderOption }}
                         placeholder={cityChosen ? t('tb.pick_transport') : t('tb.pick_city_first')}
@@ -2570,7 +2603,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             const current = p[k] || {};
                             const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                               item.id === current.selectedScheduleId
-                                ? { ...item, services: { ...item.services, transport: { provider_id: transport?.id || null, provider_name: transport?.name || "", service_id: null, service_title: "" } } }
+                                ? { ...item, services: { ...item.services, transport: { ...(item.services?.transport || {}), subtype: activeTransportSubtype, provider_id: transport?.id || null, provider_name: transport?.name || "", service_id: null, service_title: "" } } }
                                 : item
                             );
                             return { ...p, [k]: { ...current, transport, transportService: null, schedule } };
@@ -2579,7 +2612,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                             await ensureServicesLoaded(transport); // прогреем кеш
                             const pax = Math.max(1, toNum(adt) + toNum(chd));
                             const citySlug = (byDay[k]?.city || "").trim();
-                            const picked = pickFromCache(transport.id, TRANSPORT_ALLOWED_ARR, citySlug, pax);
+                            const picked = pickFromCache(transport.id, activeTransportCategories, citySlug, pax);
                             if (picked) {
                               setByDay((p) => {
                                 const current = p[k] || {};
@@ -2607,9 +2640,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
                         const list = servicesCache[st.transport?.id] || [];
                         const pax = Math.max(1, toNum(adt) + toNum(chd));
                         const citySlug = (byDay[k]?.city || "").trim();
+                        const allowedSet = new Set(activeTransportCategories);
                         const allowed = list.filter(
                           s =>
-                            TRANSPORT_ALLOWED.has(s.category) &&
+                            allowedSet.has(s.category) &&
                             s.price > 0 &&
                             fitsPax(s, pax) &&
                             fitsCity(s, citySlug)
@@ -2632,7 +2666,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
                           const citySlug = (byDay[k]?.city || "").trim();
                           return (
-                            TRANSPORT_ALLOWED.has(s.category) &&
+                            activeTransportCategories.includes(s.category) &&
                             s.price > 0 &&
                             fitsPax(s, pax) &&
                             fitsCity(s, citySlug)
@@ -2654,6 +2688,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     <div className="text-xs text-gray-600 mt-1">
                      {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{calcTransportForDay(k).toFixed(2)}</b> {(st.transportService?.currency || st.transport?.currency || "UZS")}
                     </div>
+                    </>}
                   </div>
                   {/* если услуг нет: */}
                   {st.transport && (servicesCache[st.transport.id]?.length === 0) && (
@@ -3116,7 +3151,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                     className="rounded-lg border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-center text-sm font-semibold text-slate-500 hover:border-orange-300 hover:text-orange-700"
                     onClick={() => document.querySelector(`[data-tour-event-day="${k}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" })}
                   >
-                    Выберите событие в расписании, чтобы добавить услуги
+                    Выберите компонент дня, чтобы добавить услуги
                   </button>
                 )}
 

@@ -1,13 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
 
-const TYPES = [
-  { value: "activity", label: "Событие" },
-  { value: "guide", label: "Гид" },
-  { value: "transport", label: "Транспорт" },
-  { value: "meal", label: "Питание" },
-  { value: "hotel", label: "Отель" },
-];
-
 const toMinutes = (value) => {
   const match = String(value || "").match(/^(\d{2}):(\d{2})$/);
   if (!match) return null;
@@ -52,7 +44,7 @@ export const normalizeScheduleItems = (value) =>
       id: String(item?.id || `event-${index + 1}`),
       start_time: String(item?.start_time || item?.startTime || "10:00"),
       end_time: String(item?.end_time || item?.endTime || "12:00"),
-      title: String(item?.title || "Событие программы"),
+      title: String(item?.title || "Компонент программы"),
       type: String(item?.type || "activity"),
       provider_id: item?.provider_id || null,
       provider_name: String(item?.provider_name || ""),
@@ -92,7 +84,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
       id: `event-${Date.now()}`,
       start_time: start,
       end_time: plusHours(start),
-      title: "Новое событие",
+      title: "Новый компонент",
       type: "activity",
     };
     onChange([...normalized, item]);
@@ -110,17 +102,17 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
     <section data-tour-event-day={dayKey} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
         <div>
-          <h3 className="text-base font-bold text-slate-950">Расписание дня</h3>
-          <p className="text-xs text-slate-500">Время определяет доступность и тариф гида или транспорта</p>
+          <h3 className="text-base font-bold text-slate-950">Компоненты дня</h3>
+          <p className="text-xs text-slate-500">Добавьте части программы и назначьте услуги каждому компоненту</p>
         </div>
         <button type="button" onClick={add} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:border-orange-300 hover:bg-orange-50">
-          + Добавить событие
+          + Добавить компонент
         </button>
       </header>
 
       {normalized.length === 0 ? (
         <button type="button" onClick={add} className="m-4 flex min-h-28 w-[calc(100%-2rem)] items-center justify-center rounded-md border border-dashed border-slate-300 text-sm font-semibold text-slate-500 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700">
-          + Создать первое событие дня
+          + Создать первый компонент дня
         </button>
       ) : (
         <div className="divide-y divide-slate-100 px-4">
@@ -144,7 +136,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                         <div className="mt-1 flex flex-wrap gap-1">
                           {item.type === "guide" && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">Гид</span>}
                           {item.type === "transport" && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Транспорт</span>}
-                          {item.type === "activity" && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">Программа</span>}
+                          {item.type === "activity" && <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-600">Компонент</span>}
                           {item.provider_name && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{item.provider_name}</span>}
                           {item.services?.guide?.provider_name && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">Гид: {item.services.guide.provider_name}</span>}
                           {item.services?.transport?.provider_name && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Транспорт: {item.services.transport.provider_name}</span>}
@@ -166,10 +158,9 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                   </div>
 
                   {editingId === item.id && (
-                    <div className="mt-3 grid gap-3 border-t border-slate-200 pt-3 md:grid-cols-[110px_110px_160px_1fr_auto]">
+                    <div className="mt-3 grid gap-3 border-t border-slate-200 pt-3 md:grid-cols-[110px_110px_1fr_auto]">
                       <label className="text-xs font-semibold text-slate-500">Начало<input type="time" value={item.start_time} onChange={(e) => patch(item.id, { start_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
                       <label className="text-xs font-semibold text-slate-500">Окончание<input type="time" value={item.end_time} onChange={(e) => patch(item.id, { end_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
-                      <label className="text-xs font-semibold text-slate-500">Тип<select value={item.type} onChange={(e) => patch(item.id, { type: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900">{TYPES.map((type) => <option key={type.value} value={type.value}>{type.label}</option>)}</select></label>
                       <label className="text-xs font-semibold text-slate-500">Название<input value={item.title} onChange={(e) => patch(item.id, { title: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-3 text-sm text-slate-900" /></label>
                       <button type="button" onClick={() => remove(item.id)} className="self-end rounded-md border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">Удалить</button>
                     </div>
