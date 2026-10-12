@@ -2319,79 +2319,6 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   }
                 />
 
-                {/* Программа дня */}
-                <details className="group rounded-lg border border-slate-200 bg-white">
-                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-slate-800">
-                    <span>{t('tb.day_program', { defaultValue: 'Программа дня' })}</span>
-                    <span className="text-xs font-medium text-slate-500 group-open:hidden">Открыть описание</span>
-                    <span className="hidden text-xs font-medium text-slate-500 group-open:inline">Свернуть</span>
-                  </summary>
-                  <div className="border-t border-slate-200 p-3">
-                  <div className="mb-2 flex items-center justify-end gap-2">
-                    <div className="flex flex-wrap justify-end gap-1">
-                      <button
-                        type="button"
-                        className="px-2 py-1 text-xs border rounded bg-white hover:bg-orange-50"
-                        onClick={() => generateProgramForDay(k, { overwrite: true })}
-                      >
-                        {t('tb.generate_day_program', { defaultValue: 'Сгенерировать день' })}
-                      </button>
-                      <button
-                        type="button"
-                        className="px-2 py-1 text-xs border rounded bg-white hover:bg-orange-50"
-                        onClick={() => generateProgramForAllDays({ overwrite: true })}
-                      >
-                        {t('tb.generate_all_program', { defaultValue: 'Сгенерировать все' })}
-                      </button>
-                      {TB_PROGRAM_LANGS.map((code) => {
-                        const active = (st._programTab || String(i18n.language || 'ru').slice(0, 2) || 'ru') === code;
-                        return (
-                          <button
-                            key={code}
-                            type="button"
-                            className={`px-2 py-1 text-xs border rounded ${active ? "bg-orange-50 border-orange-300" : "bg-white"}`}
-                            onClick={() =>
-                              setByDay((p) => ({
-                                ...p,
-                                [k]: { ...p[k], _programTab: code },
-                              }))
-                            }
-                          >
-                            {code.toUpperCase()}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-                  {(() => {
-                    const activeLangRaw = st._programTab || String(i18n.language || 'ru').slice(0, 2) || 'ru';
-                    const activeLang = TB_PROGRAM_LANGS.includes(activeLangRaw) ? activeLangRaw : 'ru';
-                    return (
-                      <textarea
-                        className="w-full border rounded px-3 py-2 text-sm min-h-[90px] bg-white"
-                        placeholder={t('tb.day_program_ph', { defaultValue: 'Описание программы этого дня...' })}
-                        value={st.program_i18n?.[activeLang] || ""}
-                        onChange={(e) => {
-                          const value = e.target.value;
-                          setByDay((p) => ({
-                            ...p,
-                            [k]: {
-                              ...p[k],
-                              program_i18n: {
-                                ...emptyProgramI18n(),
-                                ...(p[k]?.program_i18n || {}),
-                                [activeLang]: value,
-                              },
-                              _programTab: activeLang,
-                            },
-                          }));
-                        }}
-                      />
-                    );
-                  })()}
-                  </div>
-                </details>
-
                 <div className="rounded-lg border border-slate-200 bg-white">
                   <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2.5">
                     <strong className="mr-auto text-sm text-slate-950">{EVENT_SERVICE_CATEGORIES.find((item) => item.id === activeEventService)?.label || "Услуги компонента"}</strong>
@@ -3132,6 +3059,55 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   <span>{t('tb.meals')} <strong className="text-slate-900">{calcMealsForDay(k).toLocaleString("ru-RU")}</strong></span>
                   <span className="ml-auto text-sm font-bold text-slate-950">{dayTotal.toLocaleString("ru-RU")} UZS</span>
                 </div>
+
+                {/* Программа дня завершает карточку дня. */}
+                <details className="group rounded-lg border border-slate-200 bg-white">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-slate-800">
+                    <span>{t('tb.day_program', { defaultValue: 'Программа дня' })}</span>
+                    <span className="text-xs font-medium text-slate-500 group-open:hidden">Открыть описание</span>
+                    <span className="hidden text-xs font-medium text-slate-500 group-open:inline">Свернуть</span>
+                  </summary>
+                  <div className="border-t border-slate-200 p-3">
+                    <div className="mb-2 flex flex-wrap justify-end gap-1">
+                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs hover:bg-orange-50" onClick={() => generateProgramForDay(k, { overwrite: true })}>
+                        {t('tb.generate_day_program', { defaultValue: 'Сгенерировать день' })}
+                      </button>
+                      <button type="button" className="rounded border bg-white px-2 py-1 text-xs hover:bg-orange-50" onClick={() => generateProgramForAllDays({ overwrite: true })}>
+                        {t('tb.generate_all_program', { defaultValue: 'Сгенерировать все' })}
+                      </button>
+                      {TB_PROGRAM_LANGS.map((code) => {
+                        const active = (st._programTab || String(i18n.language || 'ru').slice(0, 2) || 'ru') === code;
+                        return (
+                          <button key={code} type="button" className={`rounded border px-2 py-1 text-xs ${active ? "border-orange-300 bg-orange-50" : "bg-white"}`} onClick={() => setByDay((p) => ({ ...p, [k]: { ...p[k], _programTab: code } }))}>
+                            {code.toUpperCase()}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {(() => {
+                      const activeLangRaw = st._programTab || String(i18n.language || 'ru').slice(0, 2) || 'ru';
+                      const activeLang = TB_PROGRAM_LANGS.includes(activeLangRaw) ? activeLangRaw : 'ru';
+                      return (
+                        <textarea
+                          className="min-h-[90px] w-full rounded border bg-white px-3 py-2 text-sm"
+                          placeholder={t('tb.day_program_ph', { defaultValue: 'Описание программы этого дня...' })}
+                          value={st.program_i18n?.[activeLang] || ""}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setByDay((p) => ({
+                              ...p,
+                              [k]: {
+                                ...p[k],
+                                program_i18n: { ...emptyProgramI18n(), ...(p[k]?.program_i18n || {}), [activeLang]: value },
+                                _programTab: activeLang,
+                              },
+                            }));
+                          }}
+                        />
+                      );
+                    })()}
+                  </div>
+                </details>
               </div>
             );
           })}
