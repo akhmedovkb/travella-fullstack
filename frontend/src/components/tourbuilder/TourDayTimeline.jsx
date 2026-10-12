@@ -16,8 +16,10 @@ const toMinutes = (value) => {
 };
 
 const durationText = (start, end) => {
-  const minutes = toMinutes(end) - toMinutes(start);
-  if (!Number.isFinite(minutes) || minutes <= 0) return "Укажите время";
+  const startMinutes = toMinutes(start);
+  const endMinutes = toMinutes(end);
+  if (!Number.isFinite(startMinutes) || !Number.isFinite(endMinutes) || startMinutes === endMinutes) return "Укажите время";
+  const minutes = endMinutes > startMinutes ? endMinutes - startMinutes : endMinutes + 24 * 60 - startMinutes;
   const hours = Math.floor(minutes / 60);
   const rest = minutes % 60;
   return [hours ? `${hours} ч` : "", rest ? `${rest} мин` : ""].filter(Boolean).join(" ");
@@ -40,14 +42,17 @@ const hasOverlap = (item, items) => {
   // оно может пересекаться с экскурсиями, питанием и трансферами.
   if (item.active_service_category === "hotel" || item.type === "hotel") return false;
   const start = toMinutes(item.start_time);
-  const end = toMinutes(item.end_time);
-  if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return true;
+  const rawEnd = toMinutes(item.end_time);
+  if (!Number.isFinite(start) || !Number.isFinite(rawEnd) || rawEnd === start) return true;
+  const end = rawEnd > start ? rawEnd : rawEnd + 24 * 60;
   return items.some((other) => {
     if (other.id === item.id) return false;
     if (other.active_service_category === "hotel" || other.type === "hotel") return false;
     const otherStart = toMinutes(other.start_time);
-    const otherEnd = toMinutes(other.end_time);
-    return Number.isFinite(otherStart) && Number.isFinite(otherEnd) && start < otherEnd && end > otherStart;
+    const otherRawEnd = toMinutes(other.end_time);
+    if (!Number.isFinite(otherStart) || !Number.isFinite(otherRawEnd) || otherRawEnd === otherStart) return false;
+    const otherEnd = otherRawEnd > otherStart ? otherRawEnd : otherRawEnd + 24 * 60;
+    return start < otherEnd && end > otherStart;
   });
 };
 

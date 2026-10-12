@@ -254,6 +254,18 @@ export default function TransportSegmentEditor({ value, date, adults, children, 
             <span className="text-xs text-slate-500">{text.manualAir}</span>
             {selectedSummary ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700"><Check size={13} />{selectedSummary}</span> : null}
           </div>
+          {selectedId && offers.length === 0 ? (
+            <div className="mt-3 flex items-center justify-between gap-3 rounded-md border border-emerald-300 bg-emerald-50 p-3">
+              <span className="min-w-0">
+                <strong className="block truncate text-sm text-slate-900">{value.carrier || value.segments?.[0]?.carrier_name || value.segments?.[0]?.carrier_code || text.air} {value.number || value.segments?.[0]?.number || ""}</strong>
+                <span className="mt-1 block text-xs text-slate-600">{formatDateTime(value.departure_at, locale)} → {formatDateTime(value.arrival_at, locale)} · {value.from || "—"}–{value.to || "—"}</span>
+              </span>
+              <span className="shrink-0 text-right">
+                <strong className="block text-sm">{Number(value.price || 0).toLocaleString()} {value.currency || "USD"}</strong>
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-700"><Check size={13} />{text.selected}</span>
+              </span>
+            </div>
+          ) : null}
           {error ? <div className="mt-2 rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">{error}</div> : null}
           {offers.length ? <div className="mt-3 grid gap-2 lg:grid-cols-2">{offers.map((offer) => {
             const first = offer.segments?.[0] || {};
