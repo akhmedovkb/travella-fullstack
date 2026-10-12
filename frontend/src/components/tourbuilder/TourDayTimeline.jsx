@@ -36,11 +36,15 @@ const plusHours = (value, hours = 2) => {
 };
 
 const hasOverlap = (item, items) => {
+  // Размещение описывает период проживания, а не занятость туриста:
+  // оно может пересекаться с экскурсиями, питанием и трансферами.
+  if (item.active_service_category === "hotel" || item.type === "hotel") return false;
   const start = toMinutes(item.start_time);
   const end = toMinutes(item.end_time);
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) return true;
   return items.some((other) => {
     if (other.id === item.id) return false;
+    if (other.active_service_category === "hotel" || other.type === "hotel") return false;
     const otherStart = toMinutes(other.start_time);
     const otherEnd = toMinutes(other.end_time);
     return Number.isFinite(otherStart) && Number.isFinite(otherEnd) && start < otherEnd && end > otherStart;
