@@ -14,7 +14,6 @@ import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
-import TransportSegmentEditor from "../components/tourbuilder/TransportSegmentEditor";
 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -2838,73 +2837,6 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   )}
                 </div>
 
-                  {/* Intercity transfers */}
-                  {activeEventService === "transfer" && (
-                  <div className="rounded-md bg-slate-50 p-3">
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
-                    >
-                      {t('tb.transfers')}
-                    </label>
-
-                    {/* список трансферов */}
-                    <div className="space-y-2">
-                      {(st.transfers || [])
-                        .map((tr, idx) => ({ tr, idx }))
-                        .filter(({ tr }) => !tr.schedule_id || tr.schedule_id === selectedSchedule?.id)
-                        .map(({ tr, idx }) => (
-                        <TransportSegmentEditor
-                          key={`${k}-${idx}`}
-                          value={tr}
-                          date={k}
-                          adults={toNum(adt, 0)}
-                          children={toNum(chd, 0)}
-                          lang={String(i18n.language || "ru").slice(0, 2)}
-                          onChange={(nextTransfer) =>
-                            setByDay((p) => {
-                              const arr = [...(p[k].transfers || [])];
-                              arr[idx] = nextTransfer;
-                              return { ...p, [k]: { ...p[k], transfers: arr } };
-                            })
-                          }
-                          onRemove={() =>
-                            setByDay((p) => {
-                              const arr = [...(p[k].transfers || [])];
-                              arr.splice(idx, 1);
-                              return { ...p, [k]: { ...p[k], transfers: arr } };
-                            })
-                          }
-                        />
-                     ))}
-                    </div>
-
-                    <div className="mt-2">
-                      <button
-                        className="text-sm px-3 py-1 rounded border"
-                        style={{ color: BRAND.primary, borderColor: BRAND.accent }}
-                        onClick={() =>
-                         setByDay((p) => ({
-                            ...p,
-                            [k]: {
-                              ...p[k],
-                              transfers: [
-                                ...(p[k].transfers || []),
-                                { id: `transfer-${Date.now()}`, from: st.city || "", to: "", type: "car", provider: "manual", price: 0, currency: "UZS", perPax: false, schedule_id: st.selectedScheduleId || null },
-                              ],
-                            },
-                          }))
-                        }
-                      >
-                        + {t('tb.add_transfer')}
-                      </button>
-                      <div className="text-xs text-gray-600 mt-1">
-                        {t('tb.transfers_day_sum')}: <b style={{ color: BRAND.primary }}>{calcTransfersForDay(k).toFixed(2)} UZS</b>
-                      </div>
-                    </div>
-                  </div>
-                  )}
-
                                 {/* Meals */}
                 {activeEventService === "meal" && (
                 <div className="rounded-md bg-slate-50 p-3">
@@ -3052,9 +2984,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
                 <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                   <span>{t('tb.guide')} <strong className="text-slate-900">{calcGuideForDay(k).toLocaleString("ru-RU")}</strong></span>
-                  <span>{t('tb.transport')} <strong className="text-slate-900">{calcTransportForDay(k).toLocaleString("ru-RU")}</strong></span>
+                  <span>{t('tb.transport')} <strong className="text-slate-900">{(calcTransportForDay(k) + calcTransfersForDay(k)).toLocaleString("ru-RU")}</strong></span>
                   <span>{t('tb.hotel_short')} <strong className="text-slate-900">{calcHotelForDay(k).toLocaleString("ru-RU")}</strong></span>
-                  <span>{t('tb.totals.transfers')} <strong className="text-slate-900">{calcTransfersForDay(k).toLocaleString("ru-RU")}</strong></span>
                   <span>{t('tb.totals.entry')} <strong className="text-slate-900">{calcEntryForDay(k).toLocaleString("ru-RU")}</strong></span>
                   <span>{t('tb.meals')} <strong className="text-slate-900">{calcMealsForDay(k).toLocaleString("ru-RU")}</strong></span>
                   <span className="ml-auto text-sm font-bold text-slate-950">{dayTotal.toLocaleString("ru-RU")} UZS</span>
@@ -3121,18 +3052,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         servicesCache={servicesCache}
         onRecalc={autoPickForDay}
       />
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 text-sm">
+        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')}</div><div>{totals.guide.toFixed(2)} UZS</div>
           </div>
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')}</div><div>{totals.transport.toFixed(2)} UZS</div>
+            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')}</div><div>{(totals.transport + totals.transfers).toFixed(2)} UZS</div>
           </div>
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transfers')}</div><div>{totals.transfers.toFixed(2)} UZS</div>
           </div>
           <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
             <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.meals')}</div>
@@ -3165,22 +3093,18 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7 gap-3 text-sm">
+      <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')} (USD)</div>
           <div>{toUSD(totals.guide).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')} (USD)</div>
-          <div>{toUSD(totals.transport).toFixed(2)} USD</div>
+          <div>{toUSD(totals.transport + totals.transfers).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')} (USD)</div>
           <div>{toUSD(totals.hotel).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transfers')} (USD)</div>
-          <div>{toUSD(totals.transfers).toFixed(2)} USD</div>
         </div>
         <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
           <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.meals')} (USD)</div>
