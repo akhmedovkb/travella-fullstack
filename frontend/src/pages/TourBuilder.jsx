@@ -14,6 +14,7 @@ import { enUS, ru as ruLocale, uz as uzLocale } from "date-fns/locale";
 import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
+import TransportSegmentEditor from "../components/tourbuilder/TransportSegmentEditor";
 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -46,7 +47,7 @@ const EVENT_SERVICE_CATEGORIES = [
 ];
 
 const TRANSPORT_SERVICE_TYPES = [
-  { id: "international", label: "Международный трансфер", categories: ["border_transfer"] },
+  { id: "international", label: "Авиабилеты", categories: [] },
   { id: "intercity", label: "Междугородний трансфер", categories: ["one_way_transfer", "border_transfer"] },
   { id: "hotel", label: "Отельный трансфер", categories: ["hotel_transfer", "one_way_transfer", "dinner_transfer"] },
 ];
@@ -132,7 +133,12 @@ const buildLegsFromByDay = (stateByDay = {}) => {
 const buildTransportSegments = (stateByDay = {}) =>
   Object.entries(stateByDay)
     .sort(([a], [b]) => String(a).localeCompare(String(b)))
-    .flatMap(([date, state]) => (Array.isArray(state?.transfers) ? state.transfers : []).map((segment, index) => ({
+    .flatMap(([date, state]) => {
+      const legacy = Array.isArray(state?.transfers) ? state.transfers : [];
+      const flights = normalizeScheduleItems(state?.schedule)
+        .map((item) => item?.services?.transport?.flight)
+        .filter(Boolean);
+      return [...legacy, ...flights].map((segment, index) => ({
       id: `${date}-${index + 1}`,
       date,
       mode: String(segment?.type || "car"),
@@ -151,7 +157,8 @@ const buildTransportSegments = (stateByDay = {}) =>
       raw_offer_id: segment?.raw_offer_id || null,
       offer_expires_at: segment?.offer_expires_at || null,
       segments: Array.isArray(segment?.segments) ? segment.segments : [],
-    })))
+      }));
+    })
     .filter((segment) => segment.from || segment.to);
 /* ---------------- categories / labels (для выпадашек услуг) ---------------- */
 const CATEGORY_LABELS = {
@@ -1631,7 +1638,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   const calcTransfersForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
     const pax = Math.max(1, toNum(adt) + toNum(chd));
-    const list = Array.isArray(st.transfers) ? st.transfers : [];
+    const flights = normalizeScheduleItems(st.schedule)
+      .map((item) => item?.services?.transport?.flight)
+      .filter(Boolean);
+    const list = [...(Array.isArray(st.transfers) ? st.transfers : []), ...flights];
     let sum = 0;
     for (const tr of list) {
       const price = toNum(tr?.price, 0);
@@ -2476,7 +2486,57 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       </div>
                     </div>
                     )}
-                    {(activeEventService === "tour" || activeTransportSubtype) && <>
+                    {activeEventService === "transfer" && activeTransportSubtype === "international" && (
+                      <TransportSegmentEditor
+                        value={{
+                          type: "air",
+                          ...(selectedSchedule?.services?.transport?.flight || {}),
+                        }}
+                        date={k}
+                        adults={Math.max(1, toNum(adt, 1))}
+                        children={Math.max(0, toNum(chd, 0))}
+                        lang={lang}
+                        lockType="air"
+                        onChange={(flight) => {
+                          setByDay((previous) => {
+                            const current = previous[k] || {};
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) =>
+                              item.id === current.selectedScheduleId
+                                ? {
+                                    ...item,
+                                    services: {
+                                      ...item.services,
+                                      transport: {
+                                        ...(item.services?.transport || {}),
+                                        subtype: "international",
+                                        provider_id: null,
+                                        provider_name: "",
+                                        service_id: null,
+                                        service_title: flight.raw_offer_id ? "Авиабилет" : "",
+                                        flight: { ...flight, type: "air" },
+                                      },
+                                    },
+                                  }
+                                : item
+                            );
+                            return { ...previous, [k]: { ...current, transport: null, transportService: null, schedule } };
+                          });
+                        }}
+                        onRemove={() => {
+                          setByDay((previous) => {
+                            const current = previous[k] || {};
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                              if (item.id !== current.selectedScheduleId) return item;
+                              const transport = { ...(item.services?.transport || {}) };
+                              delete transport.flight;
+                              return { ...item, services: { ...item.services, transport } };
+                            });
+                            return { ...previous, [k]: { ...current, schedule } };
+                          });
+                        }}
+                      />
+                    )}
+                    {(activeEventService === "tour" || (activeTransportSubtype && activeTransportSubtype !== "international")) && <>
                     <label className="mb-1 block text-sm font-semibold text-slate-800">Поставщик</label>
                     <AsyncSelect
                         key={`transport-${k}-${activeEventService === "tour" ? "city-tour" : activeTransportSubtype}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}

@@ -114,10 +114,10 @@ function formatDateTime(value, lang) {
   }
 }
 
-export default function TransportSegmentEditor({ value, date, adults, children, lang = "ru", onChange, onRemove }) {
+export default function TransportSegmentEditor({ value, date, adults, children, lang = "ru", onChange, onRemove, lockType = "" }) {
   const locale = copy[lang] ? lang : "ru";
   const text = copy[locale];
-  const type = value.type || "car";
+  const type = lockType || value.type || "car";
   const [offers, setOffers] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -195,11 +195,15 @@ export default function TransportSegmentEditor({ value, date, adults, children, 
       <div className="mb-3 flex items-center justify-between gap-3">
         <div className="flex items-center gap-2">
           <span className="grid h-8 w-8 place-items-center rounded-md bg-white text-slate-700 ring-1 ring-slate-200"><TypeIcon size={17} /></span>
-          <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-semibold" value={type} onChange={(event) => patch({ type: event.target.value, provider: event.target.value === "air" ? value.provider : "manual", raw_offer_id: "", segments: [] })}>
-            <option value="car">{text.car}</option>
-            <option value="train">{text.train}</option>
-            <option value="air">{text.air}</option>
-          </select>
+          {lockType ? (
+            <span className="inline-flex h-9 items-center rounded-md border border-slate-200 bg-white px-3 text-sm font-semibold">{text.air}</span>
+          ) : (
+            <select className="h-9 rounded-md border border-slate-200 bg-white px-2 text-sm font-semibold" value={type} onChange={(event) => patch({ type: event.target.value, provider: event.target.value === "air" ? value.provider : "manual", raw_offer_id: "", segments: [] })}>
+              <option value="car">{text.car}</option>
+              <option value="train">{text.train}</option>
+              <option value="air">{text.air}</option>
+            </select>
+          )}
         </div>
         <button type="button" title={text.remove} aria-label={text.remove} className="grid h-9 w-9 place-items-center rounded-md text-rose-600 hover:bg-rose-50" onClick={onRemove}><Trash2 size={17} /></button>
       </div>
