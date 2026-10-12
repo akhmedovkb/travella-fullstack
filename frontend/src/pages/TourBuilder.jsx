@@ -2313,14 +2313,14 @@ const makeTransportLoader = (dateKey) => async (input) => {
                 />
 
                 {/* Программа дня */}
-                <div className="border rounded p-3 bg-white/70">
-                  <div className="flex items-center justify-between gap-2 mb-2">
-                    <label
-                      className="block text-sm font-medium"
-                      style={{ color: BRAND.primary }}
-                    >
-                      {t('tb.day_program', { defaultValue: 'Программа дня' })}
-                    </label>
+                <details className="group rounded-lg border border-slate-200 bg-white">
+                  <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-slate-800">
+                    <span>{t('tb.day_program', { defaultValue: 'Программа дня' })}</span>
+                    <span className="text-xs font-medium text-slate-500 group-open:hidden">Открыть описание</span>
+                    <span className="hidden text-xs font-medium text-slate-500 group-open:inline">Свернуть</span>
+                  </summary>
+                  <div className="border-t border-slate-200 p-3">
+                  <div className="mb-2 flex items-center justify-end gap-2">
                     <div className="flex flex-wrap justify-end gap-1">
                       <button
                         type="button"
@@ -2382,27 +2382,15 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       />
                     );
                   })()}
-                </div>
+                  </div>
+                </details>
 
                 <div className="rounded-lg border border-slate-200 bg-white">
-                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 px-3 py-3">
-                  <div>
-                    <div className="text-sm font-bold text-slate-950">
-                      {selectedSchedule
-                        ? `Услуги события · ${selectedSchedule.start_time}–${selectedSchedule.end_time}`
-                        : "Услуги события"}
-                    </div>
-                    <div className="text-xs text-slate-500">
-                      {selectedSchedule?.title || "Выберите событие в расписании, чтобы назначить услуги и поставщиков"}
-                    </div>
+                  <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2.5">
+                    <strong className="mr-auto text-sm text-slate-950">Добавить к событию</strong>
+                    {selectedSchedule && <span className="text-xs text-slate-500">{selectedSchedule.start_time}–{selectedSchedule.end_time}</span>}
                   </div>
-                  {selectedSchedule && (
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                      Доступность проверяется на весь интервал
-                    </span>
-                  )}
-                  </div>
-                  <div className="flex gap-1 overflow-x-auto p-2">
+                  <div className="flex gap-1 overflow-x-auto p-1.5">
                     {EVENT_SERVICE_CATEGORIES.map((category) => {
                       const selected = activeEventService === category.id;
                       const eventServices = selectedSchedule?.services || {};
@@ -2427,10 +2415,10 @@ const makeTransportLoader = (dateKey) => async (input) => {
                 </div>
 
                 {selectedSchedule ? (<>
-                <div className="grid gap-3 md:grid-cols-2">
+                <div className="grid gap-3">
                   {/* Guide */}
                   {activeEventService === "tour" && <>
-                  <div className="border rounded p-2">
+                  <div className="rounded-md bg-slate-50 p-3">
                     <label
                       className="block text-sm font-medium mb-1"
                       style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
@@ -2558,7 +2546,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                   {/* Transport */}
                   {activeEventService === "transfer" && <>
-                  <div className="border rounded p-2">
+                  <div className="rounded-md bg-slate-50 p-3">
                     <label
                       className="block text-sm font-medium mb-1"
                       style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
@@ -2676,7 +2664,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   </>}
                   {/* Hotel */}
                   {activeEventService === "hotel" && (
-                  <div className="border rounded p-2">
+                  <div className="rounded-md bg-slate-50 p-3">
                      <label
                       className="block text-sm font-medium mb-1"
                       style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
@@ -2874,7 +2862,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   
                   {/* Entry fees */}
                   {activeEventService === "attractions" && (
-                    <div className="border rounded p-2">
+                    <div className="rounded-md bg-slate-50 p-3">
                     <label
                       className="block text-sm font-medium mb-1"
                       style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
@@ -2924,7 +2912,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                   {/* Intercity transfers */}
                   {activeEventService === "transfer" && (
-                  <div className="border rounded p-2 md:col-span-2">
+                  <div className="rounded-md bg-slate-50 p-3">
                     <label
                       className="block text-sm font-medium mb-1"
                       style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
@@ -2991,7 +2979,7 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
                                 {/* Meals */}
                 {activeEventService === "meal" && (
-                <div className="border rounded p-2 md:col-span-2">
+                <div className="rounded-md bg-slate-50 p-3">
                   <label
                     className="block text-sm font-medium mb-1"
                     style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
