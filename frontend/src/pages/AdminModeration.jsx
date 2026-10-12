@@ -2377,6 +2377,8 @@ export default function AdminModeration() {
   const [editDetailsRows, setEditDetailsRows] = useState([]);
   const [editImages, setEditImages] = useState([]);
   const [newImageUrl, setNewImageUrl] = useState("");
+  const [imageAddError, setImageAddError] = useState("");
+  const [imageUploadBusy, setImageUploadBusy] = useState(false);
   const [moderationEvents, setModerationEvents] = useState([]);
   const [actionBusy, setActionBusy] = useState(null);
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
@@ -2675,6 +2677,7 @@ export default function AdminModeration() {
       setEditDetailsRows(detailsToRows(details));
       setEditImages(images);
       setNewImageUrl("");
+      setImageAddError("");
 
       setEditItemId(id);
       setEditForm({
@@ -2701,8 +2704,9 @@ export default function AdminModeration() {
     }
   };
 
-    const removeEditImage = (idx) => {
+  const removeEditImage = (idx) => {
     setEditImages((prev) => prev.filter((_, i) => i !== idx));
+    setImageAddError("");
   };
 
   const addEditImage = () => {
@@ -2711,10 +2715,78 @@ export default function AdminModeration() {
       .map((x) => x.trim())
       .filter(Boolean);
 
-    if (!list.length) return;
+    if (!list.length) {
+      setImageAddError("Вставьте хотя бы одну ссылку на изображение.");
+      return;
+    }
 
-    setEditImages((prev) => [...prev, ...list]);
+    const invalid = list.find((url) => !/^https?:\/\/\S+$/i.test(url));
+    if (invalid) {
+      setImageAddError(`Некорректная ссылка: ${invalid}`);
+      return;
+    }
+
+    const next = [...new Set([...editImages, ...list])];
+    if (next.length > 20) {
+      setImageAddError("Для одной услуги можно добавить не более 20 изображений.");
+      return;
+    }
+
+    setEditImages(next);
     setNewImageUrl("");
+    setImageAddError("");
+  };
+
+  const uploadEditImages = async (event) => {
+    const input = event.currentTarget;
+    const files = Array.from(input.files || []);
+    if (!files.length) return;
+
+    const remaining = 20 - editImages.length;
+    if (files.length > remaining) {
+      setImageAddError(`Можно добавить ещё только ${Math.max(0, remaining)} изображений.`);
+      input.value = "";
+      return;
+    }
+
+    const invalid = files.find(
+      (file) => !String(file.type || "").startsWith("image/") || file.size > 8 * 1024 * 1024
+    );
+    if (invalid) {
+      setImageAddError(
+        String(invalid.type || "").startsWith("image/")
+          ? `Файл «${invalid.name}» больше 8 МБ.`
+          : `Файл «${invalid.name}» не является изображением.`
+      );
+      input.value = "";
+      return;
+    }
+
+    setImageUploadBusy(true);
+    setImageAddError("");
+    try {
+      const formData = new FormData();
+      files.forEach((file) => formData.append("files", file));
+      const res = await axios.post(
+        `${API_BASE}/api/admin/services/${editItemId}/images/upload`,
+        formData,
+        cfg
+      );
+      const urls = Array.isArray(res.data?.images)
+        ? res.data.images.map((item) => String(item?.url || "").trim()).filter(Boolean)
+        : [];
+      if (!urls.length) throw new Error("Сервер не вернул ссылки на загруженные изображения.");
+
+      setEditImages((prev) => [...new Set([...prev, ...urls])].slice(0, 20));
+      tSuccess(urls.length === 1 ? "Изображение добавлено" : `Добавлено изображений: ${urls.length}`);
+    } catch (error) {
+      setImageAddError(
+        error?.response?.data?.message || error?.message || "Не удалось загрузить изображения."
+      );
+    } finally {
+      setImageUploadBusy(false);
+      input.value = "";
+    }
   };
 
   const updateDetailRow = (idx, patch) => {
@@ -3592,10 +3664,32 @@ export default function AdminModeration() {
                     </div>
                   )}
 
-                  <div className="space-y-2">
+                  <div className="space-y-3 rounded-xl border border-gray-200 bg-gray-50 p-3">
+                    <div className="flex flex-wrap items-center gap-3">
+                      <label className={`inline-flex cursor-pointer items-center rounded-lg bg-gray-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black ${imageUploadBusy ? "pointer-events-none opacity-60" : ""}`}>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={uploadEditImages}
+                          disabled={imageUploadBusy || editImages.length >= 20}
+                          className="sr-only"
+                        />
+                        {imageUploadBusy ? "Загрузка..." : "Выбрать изображения"}
+                      </label>
+                      <span className="text-xs text-gray-500">
+                        JPG, PNG или WebP, до 8 МБ. Добавлено {editImages.length} из 20.
+                      </span>
+                    </div>
+                    <div className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+                      Или добавьте ссылки
+                    </div>
                     <textarea
                       value={newImageUrl}
-                      onChange={(e) => setNewImageUrl(e.target.value)}
+                      onChange={(e) => {
+                        setNewImageUrl(e.target.value);
+                        setImageAddError("");
+                      }}
                       placeholder="https://... (можно несколько ссылок, каждая с новой строки)"
                       rows={3}
                       className="w-full border rounded-lg px-3 py-2"
@@ -3603,10 +3697,16 @@ export default function AdminModeration() {
                     <button
                       type="button"
                       onClick={addEditImage}
-                      className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-black"
+                      disabled={!newImageUrl.trim() || imageUploadBusy || editImages.length >= 20}
+                      className="px-4 py-2 rounded-lg bg-gray-900 text-white hover:bg-black disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      {t("common.add", { defaultValue: "Добавить" })}
+                      Добавить ссылки
                     </button>
+                    {imageAddError && (
+                      <div role="alert" className="text-sm font-medium text-rose-700">
+                        {imageAddError}
+                      </div>
+                    )}
                   </div>
                 </div>
                 <div>
