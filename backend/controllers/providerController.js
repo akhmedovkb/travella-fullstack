@@ -912,36 +912,90 @@ const updateProviderProfile = async (req, res) => {
   }
 };
 
+function providerHasUsablePassword(password) {
+  const stored = String(password || "");
+  return Boolean(stored && stored !== "telegram");
+}
+
+function providerTelegramMatches(row, telegramId) {
+  if (telegramId == null) return false;
+  const expected = String(telegramId);
+  return [row.telegram_chat_id, row.tg_chat_id, row.telegram_web_chat_id]
+    .filter((value) => value != null && String(value).trim())
+    .some((value) => String(value) === expected);
+}
+
+const getProviderPasswordStatus = async (req, res) => {
+  try {
+    const q = await pool.query(
+      "SELECT password FROM providers WHERE id=$1",
+      [req.user.id]
+    );
+    if (!q.rows.length) {
+      return res.status(404).json({ message: "Провайдер не найден" });
+    }
+    return res.json({ hasPassword: providerHasUsablePassword(q.rows[0].password) });
+  } catch (err) {
+    console.error("Ошибка загрузки статуса пароля:", err);
+    return res.status(500).json({ message: "Ошибка сервера" });
+  }
+};
+
 // ---------- Change password ----------
 const changeProviderPassword = async (req, res) => {
   try {
     const id = req.user.id;
     const { oldPassword, newPassword } = req.body || {};
 
-    if (!newPassword || String(newPassword).length < 6) {
-      return res.status(400).json({ message: "Пароль слишком короткий" });
+    const nextPassword = String(newPassword || "");
+    if (nextPassword.length < 8) {
+      return res.status(400).json({ message: "Новый пароль должен содержать минимум 8 символов" });
+    }
+    if (nextPassword.length > 128) {
+      return res.status(400).json({ message: "Новый пароль не должен превышать 128 символов" });
     }
 
-    const q = await pool.query("SELECT password FROM providers WHERE id=$1", [id]);
+    const q = await pool.query(
+      `SELECT password,
+              to_jsonb(p)->>'telegram_chat_id' AS telegram_chat_id,
+              to_jsonb(p)->>'tg_chat_id' AS tg_chat_id,
+              to_jsonb(p)->>'telegram_web_chat_id' AS telegram_web_chat_id
+         FROM providers p
+        WHERE id=$1`,
+      [id]
+    );
     if (!q.rows.length) return res.status(404).json({ message: "Провайдер не найден" });
 
     const plain = String(oldPassword || "");
     const stored = String(q.rows[0].password || "");
 
-    let ok;
-    if (/^\$2[aby]\$/.test(stored)) {
-      // В БД bcrypt-хэш
-      ok = await bcrypt.compare(plain, stored);
-    } else {
-      // В БД пароль в открытом виде
-      ok = plain === stored;
+    const hasPassword = providerHasUsablePassword(stored);
+    const canSetInitialPassword =
+      !hasPassword && providerTelegramMatches(q.rows[0], req.user.telegram_id);
+
+    if (!canSetInitialPassword) {
+      let ok;
+      if (/^\$2[aby]\$/.test(stored)) {
+        ok = await bcrypt.compare(plain, stored);
+      } else {
+        ok = plain === stored;
+      }
+
+      if (!ok) return res.status(400).json({ message: "Неверный текущий пароль" });
     }
 
-    if (!ok) return res.status(400).json({ message: "Неверный старый пароль" });
+    if (hasPassword) {
+      const samePassword = /^\$2[aby]\$/.test(stored)
+        ? await bcrypt.compare(nextPassword, stored)
+        : nextPassword === stored;
+      if (samePassword) {
+        return res.status(400).json({ message: "Новый пароль должен отличаться от текущего" });
+      }
+    }
 
-    const hashed = await bcrypt.hash(String(newPassword), 10);
+    const hashed = await bcrypt.hash(nextPassword, 10);
     await pool.query("UPDATE providers SET password=$1 WHERE id=$2", [hashed, id]);
-    res.json({ message: "Пароль обновлён" });
+    res.json({ message: hasPassword ? "Пароль обновлён" : "Пароль установлен" });
   } catch (err) {
     console.error("❌ Ошибка смены пароля:", err);
     res.status(500).json({ message: "Ошибка сервера" });
@@ -2373,6 +2427,7 @@ module.exports = {
   getProviderProfile,
   updateProviderProfile,
   changeProviderPassword,
+  getProviderPasswordStatus,
   addService,
   getServices,
   updateService,

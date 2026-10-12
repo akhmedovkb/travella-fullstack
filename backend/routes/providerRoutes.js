@@ -11,6 +11,7 @@ const {
   getProviderProfile,
   updateProviderProfile,
   changeProviderPassword,
+  getProviderPasswordStatus,
   addService,
   getServices,
   updateService,
@@ -78,6 +79,7 @@ router.post("/telegram-login", loginProviderWithTelegram);
 router.get("/profile", authenticateToken, requireProvider, getProviderProfile);
 router.put("/profile", authenticateToken, requireProvider, updateProviderProfile);
 router.put("/password", authenticateToken, requireProvider, changeProviderPassword);
+router.get("/password/status", authenticateToken, requireProvider, getProviderPasswordStatus);
 
 router.get("/stats", authenticateToken, requireProvider, getProviderStats);
 
