@@ -99,6 +99,14 @@ async function ensureHotelOfferTablesOnce() {
       )
       AND EXISTS (
         SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='hotel_offer_rates' AND column_name='occupancy_code'
+      )
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
+         WHERE table_schema='public' AND table_name='hotel_offer_rates' AND column_name='guest_count'
+      )
+      AND EXISTS (
+        SELECT 1 FROM information_schema.columns
          WHERE table_schema='public' AND table_name='hotel_offers' AND column_name='ownership_claim_status'
       )
       AND EXISTS (
@@ -157,6 +165,8 @@ async function ensureHotelOfferTablesOnce() {
       id SERIAL PRIMARY KEY,
       offer_id INTEGER NOT NULL REFERENCES hotel_offers(id) ON DELETE CASCADE,
       room_type TEXT NOT NULL,
+      occupancy_code TEXT NOT NULL DEFAULT 'ROOM',
+      guest_count INTEGER NOT NULL DEFAULT 1,
       meal_plan TEXT NOT NULL DEFAULT 'BB',
       residency TEXT NOT NULL DEFAULT 'all',
       date_from DATE NOT NULL,
@@ -169,6 +179,7 @@ async function ensureHotelOfferTablesOnce() {
       updated_at TIMESTAMP WITHOUT TIME ZONE NOT NULL DEFAULT NOW(),
       CHECK (date_from <= date_to),
       CHECK (amount > 0),
+      CHECK (guest_count > 0 AND guest_count <= 20),
       CHECK (min_stay > 0)
     )
   `);
@@ -293,6 +304,10 @@ async function ensureHotelOfferTablesOnce() {
     ON hotel_supplier_inventory_allocations(hotel_id,provider_id,pool_id,date_from,date_to) WHERE active=true`);
   await db.query(`ALTER TABLE hotel_offer_rates ADD COLUMN IF NOT EXISTS inventory_pool_id BIGINT REFERENCES hotel_room_inventory_pools(id) ON DELETE RESTRICT`);
   await db.query(`ALTER TABLE hotel_offer_rates ADD COLUMN IF NOT EXISTS source_rate_id INTEGER REFERENCES hotel_offer_rates(id) ON DELETE CASCADE`);
+  await db.query(`ALTER TABLE hotel_offer_rates ADD COLUMN IF NOT EXISTS occupancy_code TEXT NOT NULL DEFAULT 'ROOM'`);
+  await db.query(`ALTER TABLE hotel_offer_rates ADD COLUMN IF NOT EXISTS guest_count INTEGER NOT NULL DEFAULT 1`);
+  await db.query(`UPDATE hotel_offer_rates SET occupancy_code='ROOM' WHERE occupancy_code IS NULL OR BTRIM(occupancy_code)=''`);
+  await db.query(`UPDATE hotel_offer_rates SET guest_count=1 WHERE guest_count IS NULL OR guest_count < 1`);
   await db.query(`CREATE INDEX IF NOT EXISTS idx_hotel_offer_rates_pool ON hotel_offer_rates(inventory_pool_id)`);
   await db.query(`CREATE UNIQUE INDEX IF NOT EXISTS ux_hotel_offer_rates_source
     ON hotel_offer_rates(offer_id,source_rate_id) WHERE source_rate_id IS NOT NULL`);

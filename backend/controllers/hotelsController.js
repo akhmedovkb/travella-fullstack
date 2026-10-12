@@ -107,7 +107,11 @@ async function quoteHotel(req, res) {
   }
 
   const requestedRooms = (Array.isArray(req.body?.rooms) ? req.body.rooms : [])
-    .map((room) => ({ type: String(room?.type || room?.room_type || '').trim(), quantity: Math.max(0, Math.trunc(quoteNumber(room?.quantity, 0))) }))
+    .map((room) => ({
+      type: String(room?.type || room?.room_type || '').trim(),
+      occupancy_code: String(room?.occupancy_code || room?.occupancy || 'ROOM').trim().toUpperCase(),
+      quantity: Math.max(0, Math.trunc(quoteNumber(room?.quantity, 0))),
+    }))
     .filter((room) => room.type && room.quantity > 0);
 
   try {
@@ -141,7 +145,7 @@ async function quoteHotel(req, res) {
     if (!requestedRooms.length) warnings.push('room_required');
     {
       const rateResult = await db.query(
-        `SELECT id,inventory_pool_id,room_type,meal_plan,residency,date_from::text,date_to::text,
+        `SELECT id,inventory_pool_id,room_type,occupancy_code,guest_count,meal_plan,residency,date_from::text,date_to::text,
                 amount::numeric,allotment,min_stay,refundable
            FROM hotel_offer_rates
           WHERE offer_id=$1 AND meal_plan=$2
@@ -153,15 +157,18 @@ async function quoteHotel(req, res) {
       const offerRates = rateResult.rows;
       for (const date of dates) {
         for (const requested of requestedRooms) {
-          const rate = offerRates.find((row) => row.room_type === requested.type && date >= row.date_from && date <= row.date_to);
+          const rate = offerRates.find((row) => row.room_type === requested.type
+            && String(row.occupancy_code || 'ROOM') === requested.occupancy_code
+            && date >= row.date_from && date <= row.date_to);
           if (!rate) {
-            warnings.push(`rate_missing:${date}:${requested.type}:${mealPlan}:offer`);
+            warnings.push(`rate_missing:${date}:${requested.type}:${requested.occupancy_code}:${mealPlan}:offer`);
             continue;
           }
           const allotment = rate.allotment == null ? null : Math.max(0, Math.trunc(Number(rate.allotment)));
           const unitAmount = quoteNumber(rate.amount, 0);
           lines.push({
-            date, rate_id: rate.id, inventory_pool_id: rate.inventory_pool_id, room_type: requested.type, meal_plan: mealPlan,
+            date, rate_id: rate.id, inventory_pool_id: rate.inventory_pool_id, room_type: requested.type,
+            occupancy_code: rate.occupancy_code, guest_count: Number(rate.guest_count || 1), meal_plan: mealPlan,
             residency: rate.residency, quantity: requested.quantity, unit_amount: unitAmount,
             subtotal: unitAmount * requested.quantity, refundable: rate.refundable !== false,
             min_stay: Number(rate.min_stay || 1), allotment,
@@ -231,6 +238,12 @@ async function quoteHotel(req, res) {
           [poolIds, dates]
         );
         const physicalOverrides = new Map(physicalOverrideRows.map((row) => [`${row.pool_id}:${row.stay_date}`, row]));
+        const requestedByPoolDate = new Map();
+        for (const line of lines) {
+          if (!line.inventory_pool_id) continue;
+          const key = `${line.inventory_pool_id}:${line.date}`;
+          requestedByPoolDate.set(key, (requestedByPoolDate.get(key) || 0) + line.quantity);
+        }
         for (const line of lines) {
           const pool = pools.get(Number(line.inventory_pool_id));
           if (!pool) continue;
@@ -243,7 +256,8 @@ async function quoteHotel(req, res) {
           line.available = line.available == null ? physicalAvailable : Math.min(line.available, physicalAvailable);
           line.stop_sell = line.stop_sell || override?.stop_sell === true;
           if (override?.stop_sell === true) warnings.push(`stop_sell:${line.room_type}:${line.date}`);
-          if (line.quantity > physicalAvailable) warnings.push(`room_stock_exceeded:${line.room_type}:${line.date}`);
+          const totalRequested = requestedByPoolDate.get(`${pool.id}:${line.date}`) || line.quantity;
+          if (totalRequested > physicalAvailable) warnings.push(`room_stock_exceeded:${line.room_type}:${line.date}`);
         }
 
         const { rows: allocationRows } = await db.query(
@@ -281,7 +295,8 @@ async function quoteHotel(req, res) {
           line.supplier_allotment = Number(allocation.allotment);
           line.supplier_available = available;
           line.available = line.available == null ? available : Math.min(line.available, available);
-          if (line.quantity > available) warnings.push(`supplier_allocation_exceeded:${line.room_type}:${line.date}`);
+          const totalRequested = requestedByPoolDate.get(`${line.inventory_pool_id}:${line.date}`) || line.quantity;
+          if (totalRequested > available) warnings.push(`supplier_allocation_exceeded:${line.room_type}:${line.date}`);
         }
       }
     }
