@@ -43,7 +43,6 @@ const EVENT_SERVICE_CATEGORIES = [
   { id: "transfer", label: "Транспорт" },
   { id: "hotel", label: "Отель" },
   { id: "tour", label: "Сити-тур" },
-  { id: "attractions", label: "Достопримечательности" },
   { id: "meal", label: "Питание" },
 ];
 
@@ -2237,6 +2236,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             const activeEventService = suggestedServiceCategory;
             const activeTransportSubtype = selectedSchedule?.services?.transport?.subtype || "";
             const activeTransportCategories = TRANSPORT_SERVICE_TYPES.find((item) => item.id === activeTransportSubtype)?.categories || [];
+            const providerTransportCategories = activeEventService === "tour" ? ["city_tour_transport"] : activeTransportCategories;
             const selectTransportSubtype = (subtype) => {
               setByDay((previous) => {
                 const current = previous[k] || {};
@@ -2530,8 +2530,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   </>}
 
                   {/* Transport */}
-                  {activeEventService === "transfer" && <>
+                  {(activeEventService === "transfer" || activeEventService === "tour") && <>
                   <div className="rounded-md bg-slate-50 p-3">
+                    {activeEventService === "tour" && <div className="mb-3 text-sm font-bold text-slate-950">Транспорт сити-тура</div>}
+                    {activeEventService === "transfer" && (
                     <div className="mb-3">
                       <div className="mb-1.5 text-xs font-semibold uppercase text-slate-500">Тип транспорта</div>
                       <div className="flex flex-wrap gap-2">
@@ -2547,14 +2549,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         ))}
                       </div>
                     </div>
-                    {activeTransportSubtype && <>
+                    )}
+                    {(activeEventService === "tour" || activeTransportSubtype) && <>
                     <label className="mb-1 block text-sm font-semibold text-slate-800">Поставщик</label>
                     <AsyncSelect
-                        key={`transport-${k}-${activeTransportSubtype}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}
-                        isDisabled={!cityChosen || !activeTransportSubtype}
+                        key={`transport-${k}-${activeEventService === "tour" ? "city-tour" : activeTransportSubtype}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}
+                        isDisabled={!cityChosen || (activeEventService === "transfer" && !activeTransportSubtype)}
                         cacheOptions={false}                         // ⬅️ отключаем кеш
                         defaultOptions
-                        loadOptions={makeTransportLoader(k, activeTransportCategories)}
+                        loadOptions={makeTransportLoader(k, providerTransportCategories)}
                         filterOption={() => true}
                         components={{ Option: ProviderOption }}
                         placeholder={cityChosen ? t('tb.pick_transport') : t('tb.pick_city_first')}
@@ -2566,7 +2569,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             const current = p[k] || {};
                             const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                               item.id === current.selectedScheduleId
-                                ? { ...item, services: { ...item.services, transport: { ...(item.services?.transport || {}), subtype: activeTransportSubtype, provider_id: transport?.id || null, provider_name: transport?.name || "", service_id: null, service_title: "" } } }
+                                ? { ...item, services: { ...item.services, transport: { ...(item.services?.transport || {}), subtype: activeEventService === "tour" ? "city_tour" : activeTransportSubtype, provider_id: transport?.id || null, provider_name: transport?.name || "", service_id: null, service_title: "" } } }
                                 : item
                             );
                             return { ...p, [k]: { ...current, transport, transportService: null, schedule } };
@@ -2575,7 +2578,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             await ensureServicesLoaded(transport); // прогреем кеш
                             const pax = Math.max(1, toNum(adt) + toNum(chd));
                             const citySlug = (byDay[k]?.city || "").trim();
-                            const picked = pickFromCache(transport.id, activeTransportCategories, citySlug, pax);
+                            const picked = pickFromCache(transport.id, providerTransportCategories, citySlug, pax);
                             if (picked) {
                               setByDay((p) => {
                                 const current = p[k] || {};
@@ -2603,7 +2606,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         const list = servicesCache[st.transport?.id] || [];
                         const pax = Math.max(1, toNum(adt) + toNum(chd));
                         const citySlug = (byDay[k]?.city || "").trim();
-                        const allowedSet = new Set(activeTransportCategories);
+                        const allowedSet = new Set(providerTransportCategories);
                         const allowed = list.filter(
                           s =>
                             allowedSet.has(s.category) &&
@@ -2629,7 +2632,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
                           const citySlug = (byDay[k]?.city || "").trim();
                           return (
-                            activeTransportCategories.includes(s.category) &&
+                            providerTransportCategories.includes(s.category) &&
                             s.price > 0 &&
                             fitsPax(s, pax) &&
                             fitsCity(s, citySlug)
@@ -2859,7 +2862,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   )}
                   
                   {/* Entry fees */}
-                  {activeEventService === "attractions" && (
+                  {activeEventService === "tour" && (
                     <div className="rounded-md bg-slate-50 p-3">
                     <label
                       className="block text-sm font-medium mb-1"

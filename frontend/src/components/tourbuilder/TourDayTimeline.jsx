@@ -4,7 +4,6 @@ const COMPONENT_TYPES = [
   { value: "transfer", label: "Транспорт", legacyType: "transport" },
   { value: "hotel", label: "Отель", legacyType: "hotel" },
   { value: "tour", label: "Сити-тур", legacyType: "guide" },
-  { value: "attractions", label: "Достопримечательности", legacyType: "activity" },
   { value: "meal", label: "Питание", legacyType: "meal" },
 ];
 
@@ -61,7 +60,7 @@ export const normalizeScheduleItems = (value) =>
       service_id: item?.service_id || null,
       service_title: String(item?.service_title || ""),
       services: item?.services && typeof item.services === "object" ? item.services : {},
-      active_service_category: String(item?.active_service_category || (item?.type === "hotel" ? "hotel" : item?.type === "guide" ? "tour" : item?.type === "meal" ? "meal" : "transfer")),
+      active_service_category: String(item?.active_service_category === "attractions" ? "tour" : item?.active_service_category || (item?.type === "hotel" ? "hotel" : item?.type === "guide" ? "tour" : item?.type === "meal" ? "meal" : "transfer")),
     }))
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
