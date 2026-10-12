@@ -2246,6 +2246,71 @@ async function askRole(ctx) {
   });
 }
 
+const PROVIDER_TYPE_LABELS = {
+  agent: "Турагент",
+  guide: "Гид",
+  transport: "Транспорт",
+  hotel: "Отель",
+};
+
+async function askProviderType(ctx) {
+  await ctx.reply(
+    "🏢 <b>Какой тип услуг вы предоставляете?</b>\n\n" +
+      "Выберите основной тип профиля. После модерации его можно будет уточнить через поддержку.",
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✈️ Турагент", callback_data: "provider_type:agent" },
+            { text: "🧑‍🏫 Гид", callback_data: "provider_type:guide" },
+          ],
+          [
+            { text: "🚐 Транспорт", callback_data: "provider_type:transport" },
+            { text: "🏨 Отель", callback_data: "provider_type:hotel" },
+          ],
+          [{ text: "← Назад", callback_data: "provider_type:back" }],
+        ],
+      },
+    }
+  );
+}
+
+async function askRegistrationPhone(ctx, requestedRole) {
+  const isClient = requestedRole === "client";
+  const providerType = PROVIDER_TYPE_LABELS[requestedRole] || "Поставщик";
+
+  await ctx.reply(
+    isClient
+      ? "👤 <b>Вы вошли как клиент</b>\n\n" +
+        "🔥 <b>Найдём туры и услуги дешевле рынка</b>\n" +
+        "(отказные предложения со скидками)\n\n" +
+        "💰 <b>Экономия обычно 20–40%</b>\n" +
+        "⚡ Лучшие варианты быстро разбирают\n\n" +
+        "📲 Чтобы продолжить, подтвердите номер телефона\n\n" +
+        "Это нужно для:\n" +
+        "— входа в ваш кабинет\n" +
+        "— заявок и бронирований\n" +
+        "— открытия контактов поставщиков\n\n" +
+        "Нажмите кнопку ниже 👇"
+      : `🏢 <b>Тип профиля: ${providerType}</b>\n\n` +
+        "📲 Отправьте номер телефона, указанный при регистрации на <b>travella.uz</b>.\n\n" +
+        "После подтверждения вы сможете:\n" +
+        "— размещать свои услуги\n" +
+        "— управлять доступностью\n" +
+        "— получать заявки\n\n" +
+        "Можно текстом или через кнопку ниже 👇",
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        keyboard: [[{ text: "📲 Отправить мой номер", request_contact: true }]],
+        resize_keyboard: true,
+        one_time_keyboard: true,
+      },
+    }
+  );
+}
+
 function getClientHomeKeyboard() {
   return {
     keyboard: [
@@ -8757,41 +8822,45 @@ bot.action(/^role:(client|provider)$/, async (ctx) => {
   try {
     const role = ctx.match[1];
     if (!ctx.session) ctx.session = {};
-    ctx.session.requestedRole = role;
-
     await ctx.answerCbQuery();
 
-    await ctx.reply(
-      role === "client"
-        ? "👤 <b>Вы вошли как клиент</b>\n\n" +
-          "🔥 <b>Найдём туры и услуги дешевле рынка</b>\n" +
-          "(отказные предложения со скидками)\n\n" +
-          "💰 <b>Экономия обычно 20–40%</b>\n" +
-          "⚡ Лучшие варианты быстро разбирают\n\n" +
-          "📲 Чтобы продолжить, подтвердите номер телефона\n\n" +
-          "Это нужно для:\n" +
-          "— входа в ваш кабинет\n" +
-          "— заявок и бронирований\n" +
-          "— открытия контактов поставщиков\n\n" +
-          "Нажмите кнопку ниже 👇"
-        : "🏢 <b>Вы вошли как поставщик</b>\n\n" +
-          "📲 Отправьте номер телефона, указанный при регистрации на <b>travella.uz</b>.\n\n" +
-          "После подтверждения вы сможете:\n" +
-          "— размещать свои отказы\n" +
-          "— искать предложения\n" +
-          "— получать заявки\n\n" +
-          "Можно текстом или через кнопку ниже 👇",
-      {
-        parse_mode: "HTML",
-        reply_markup: {
-          keyboard: [[{ text: "📲 Отправить мой номер", request_contact: true }]],
-          resize_keyboard: true,
-          one_time_keyboard: true,
-        },
-      }
-    );
+    if (role === "provider") {
+      ctx.session.requestedRole = null;
+      ctx.session.state = "choosing_provider_type";
+      await askProviderType(ctx);
+      return;
+    }
+
+    ctx.session.state = null;
+    ctx.session.requestedRole = "client";
+    await askRegistrationPhone(ctx, "client");
   } catch (e) {
     console.error("[tg-bot] role action error:", e);
+  }
+});
+
+bot.action(/^provider_type:(agent|guide|transport|hotel)$/, async (ctx) => {
+  try {
+    const providerType = ctx.match[1];
+    if (!ctx.session) ctx.session = {};
+    ctx.session.state = null;
+    ctx.session.requestedRole = providerType;
+    await ctx.answerCbQuery(`Выбрано: ${PROVIDER_TYPE_LABELS[providerType]}`);
+    await askRegistrationPhone(ctx, providerType);
+  } catch (e) {
+    console.error("[tg-bot] provider type action error:", e);
+  }
+});
+
+bot.action("provider_type:back", async (ctx) => {
+  try {
+    if (!ctx.session) ctx.session = {};
+    ctx.session.state = null;
+    ctx.session.requestedRole = null;
+    await ctx.answerCbQuery();
+    await askRole(ctx);
+  } catch (e) {
+    console.error("[tg-bot] provider type back error:", e);
   }
 });
 
@@ -8823,6 +8892,12 @@ bot.on("contact", async (ctx) => {
     return;
   }
 
+  if (ctx.session?.state === "choosing_provider_type") {
+    await ctx.reply("Сначала выберите тип поставщика 👇");
+    await askProviderType(ctx);
+    return;
+  }
+
   const requestedRole = ctx.session?.requestedRole || "client";
   await handlePhoneRegistration(ctx, requestedRole, phone);
 });
@@ -8845,6 +8920,12 @@ bot.hears(/^\+?\d[\d\s\-()]{5,}$/i, async (ctx, next) => {
 
   if (ctx.session?.state === "awaiting_provider_support_click_phone" || ctx.session?.pendingProviderSupportClick) {
     await handleProviderSupportClickPhoneInput(ctx, t);
+    return;
+  }
+
+  if (ctx.session?.state === "choosing_provider_type") {
+    await ctx.reply("Сначала выберите тип поставщика 👇");
+    await askProviderType(ctx);
     return;
   }
 
