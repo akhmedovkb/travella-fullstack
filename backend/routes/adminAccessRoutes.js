@@ -69,8 +69,8 @@ router.get("/admin-access", authenticateToken, requirePlatformAdmin, async (req,
 
     const [providersResult, statsResult, eventsResult] = await Promise.all([
       pool.query(
-        `SELECT p.id, p.name, p.email, p.phone, p.type, p.is_admin, p.is_moderator,
-                p.created_at
+        `SELECT p.id, p.name, p.email, p.phone, p.type, p.is_admin,
+                FALSE AS is_moderator, p.created_at
            FROM providers p
           ${where.length ? `WHERE ${where.join(" AND ")}` : ""}
           ORDER BY p.is_admin DESC, LOWER(COALESCE(p.name, p.email, '')), p.id
@@ -151,7 +151,7 @@ router.patch("/admin-access/:id", authenticateToken, requirePlatformAdmin, async
       `UPDATE providers
           SET is_admin = $1
         WHERE id = $2
-      RETURNING id, name, email, phone, type, is_admin, is_moderator, created_at`,
+      RETURNING id, name, email, phone, type, is_admin, FALSE AS is_moderator, created_at`,
       [makeAdmin, targetId]
     );
     await client.query(
