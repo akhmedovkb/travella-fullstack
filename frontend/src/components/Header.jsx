@@ -143,6 +143,16 @@ function detectAdmin(profile) {
   return is;
 }
 
+function detectPlatformAdmin(profile) {
+  const p = profile || {};
+  const roles = []
+    .concat(p.role || [])
+    .concat(p.roles || [])
+    .flatMap((r) => String(r).split(","))
+    .map((s) => s.trim().toLowerCase());
+  return !!(p.is_admin || p.isAdmin || p.admin) || roles.some((role) => ["admin", "super", "root"].includes(role));
+}
+
 function detectAdminFromJwt() {
   try {
     const tok = localStorage.getItem("token") || localStorage.getItem("providerToken");
@@ -202,6 +212,7 @@ export default function Header() {
   const location = useLocation();
 
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [providerType, setProviderType] = useState("");
   const [adminOpen, setAdminOpen] = useState(false);
   const adminRef = useRef(null);
@@ -235,6 +246,7 @@ export default function Header() {
       if (role !== "provider") {
         if (alive) {
           setIsAdmin(false);
+          setIsPlatformAdmin(false);
           setProviderType("");
         }
         return;
@@ -243,12 +255,14 @@ export default function Header() {
         const p = await apiGet("/api/providers/profile", role);
         if (alive) {
           setIsAdmin(jwtAdmin || detectAdmin(p));
+          setIsPlatformAdmin(detectPlatformAdmin(p));
           setProviderType(detectProviderType(p));
         }
       } catch {
         const v = localStorage.getItem("isAdminUiHint");
         if (alive) {
           setIsAdmin(jwtAdmin || !!(v && YES.has(String(v).toLowerCase())));
+          setIsPlatformAdmin(false);
           setProviderType("");
         }
       }
@@ -707,6 +721,7 @@ export default function Header() {
                     <DropdownCaption title={t("nav.admin_core", "Администрирование")} />
                     <DropdownItem to="/admin/ai-platform" label="AI Platform" description="Цифровые сотрудники Travella" icon={<IconDashboard />}/>
                     <DropdownItem to="/admin/operations" label="Operations" description="Контроль отказных и настроек" icon={<IconModeration />} />
+                    {isPlatformAdmin && <DropdownItem to="/admin/access" label="Администраторы" description="Назначение и отзыв полного доступа" icon={<IconUsers />} />}
                     <DropdownItem to="/admin/finance" label={t("nav.finance_admin", "Finance")} description="Финансы платформы" icon={<IconDoc />} />
                     <DropdownItem to="/admin/billing" label={t("nav.billing_admin", "Billing")} description="Биллинг и открытия контактов" icon={<IconWallet />} />
                     <DropdownItem to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} description="Telegram/платформенные рассылки" icon={<IconDoc />} />
@@ -820,6 +835,7 @@ export default function Header() {
               <RowGroupDark title={t("nav.admin", "Админ")}>
                 <NavItemMobileDark to="/admin/ai-platform" label="AI Platform" icon={<IconDashboard />}/>
                 <NavItemMobileDark to="/admin/operations" label="Operations" icon={<IconModeration />} />
+                {isPlatformAdmin && <NavItemMobileDark to="/admin/access" label="Администраторы" icon={<IconUsers />} />}
                 <NavItemMobileDark to="/admin/finance" label={t("nav.finance_admin", "Finance")} icon={<IconDoc />} />
                 <NavItemMobileDark to="/admin/billing" label={t("nav.billing_admin", "Billing")} icon={<IconWallet />} />
                 <NavItemMobileDark to="/admin/broadcast" label={t("nav.broadcast", "Рассылка")} icon={<IconDoc />} />

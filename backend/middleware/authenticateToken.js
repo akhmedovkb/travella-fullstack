@@ -19,10 +19,7 @@ function pickName(obj) {
 }
 
 async function readProviderFlags(id) {
-  const key = `provider:${id}`;
   const now = Date.now();
-  const hit = cache.get(key);
-  if (hit && now - hit.ts < 60_000) return hit;
 
   const { rows } = await pool.query(
     "SELECT to_jsonb(p) AS p FROM providers p WHERE id = $1 LIMIT 1",
@@ -42,7 +39,6 @@ async function readProviderFlags(id) {
       }
     : null;
 
-  cache.set(key, val ? val : { ts: now });
   return val;
 }
 
@@ -113,7 +109,7 @@ module.exports = async function authenticateToken(req, res, next) {
     let role = payload.role ?? payload.type ?? null;
 
     // roles[] из токена
-    const roles = []
+    let roles = []
       .concat(payload.roles || [])
       .flatMap((r) => String(r).split(","))
       .map((s) => s.trim().toLowerCase())
@@ -129,8 +125,11 @@ module.exports = async function authenticateToken(req, res, next) {
       }
     }
 
-    // если в БД нашли провайдера — это провайдер
-    if (pFlags && !role) role = "provider";
+    // Для найденного провайдера роль и привилегии берём из БД, а не из старого JWT.
+    if (pFlags) {
+      role = "provider";
+      roles = roles.filter((item) => !["admin", "moderator", "super", "root"].includes(item));
+    }
 
     // если провайдера не нашли — мягко проверим клиента
     let cIdentity = null;
@@ -166,8 +165,10 @@ module.exports = async function authenticateToken(req, res, next) {
       roleLc === "moderator" ||
       roles.includes("moderator");
 
-    const is_admin = !!((pFlags && pFlags.is_admin) || tokenSaysAdmin);
-    const is_moderator = !!((pFlags && pFlags.is_moderator) || tokenSaysModerator);
+    // Для существующего провайдера БД является источником истины. Иначе старый JWT
+    // продолжал бы давать административный доступ после отзыва роли.
+    const is_admin = pFlags ? !!pFlags.is_admin : tokenSaysAdmin;
+    const is_moderator = pFlags ? !!pFlags.is_moderator : tokenSaysModerator;
 
     // ======= ВАЖНО ДЛЯ АУДИТА: email/name =======
     // Приоритет:

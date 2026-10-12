@@ -51,6 +51,7 @@ const PaymeLab = lazy(() => import("./pages/admin/PaymeLab"));
 const AdminBilling = lazy(() => import("./pages/admin/AdminBilling"));
 const AdminFinance = lazy(() => import("./pages/admin/AdminFinance"));
 const AdminOperations = lazy(() => import("./pages/admin/AdminOperations"));
+const AdminAccess = lazy(() => import("./pages/admin/AdminAccess"));
 const AdminAiPlatform = lazy(() => import("./pages/admin/AdminAiPlatform"));
 const AdminProviderSupport = lazy(() => import("./pages/admin/AdminProviderSupport"));
 const AdminServiceAudit = lazy(() => import("./pages/admin/AdminServiceAudit"));
@@ -372,6 +373,16 @@ export default function App() {
                 <PrivateRoute>
                   <AdminRoute>
                     <AdminOperations />
+                  </AdminRoute>
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/admin/access"
+              element={
+                <PrivateRoute>
+                  <AdminRoute>
+                    <AdminAccess />
                   </AdminRoute>
                 </PrivateRoute>
               }
