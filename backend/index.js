@@ -976,6 +976,9 @@ app.use("/api/cms", cmsRoutes);
 const adminProvidersRoutes = require("./routes/adminProvidersRoutes");
 app.use("/api/admin", adminProvidersRoutes);
 
+const adminAccessRoutes = require("./routes/adminAccessRoutes");
+app.use("/api/admin", adminAccessRoutes);
+
 /** ===================== Admin: Actual Refused ===================== */
 const adminRefusedRoutes = require("./routes/adminRefusedRoutes");
 app.use("/api/admin", adminRefusedRoutes);
