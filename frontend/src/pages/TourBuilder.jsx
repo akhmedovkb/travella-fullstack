@@ -94,6 +94,10 @@ const parseYmdLocal = (value) => {
   if (!Number.isFinite(y) || !Number.isFinite(m) || !Number.isFinite(d)) return null;
   return new Date(y, m - 1, d);
 };
+const timeFromFlightDateTime = (value) => {
+  const match = String(value || "").match(/T(\d{2}:\d{2})/);
+  return match?.[1] || "";
+};
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
 const addDays     = (d, n) => new Date(d.getFullYear(), d.getMonth(), d.getDate() + n);
 const daysInclusive = (a, b) => {
@@ -2500,10 +2504,14 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         onChange={(flight) => {
                           setByDay((previous) => {
                             const current = previous[k] || {};
-                            const schedule = normalizeScheduleItems(current.schedule).map((item) =>
-                              item.id === current.selectedScheduleId
-                                ? {
+                            const departureTime = timeFromFlightDateTime(flight.departure_at);
+                            const arrivalTime = timeFromFlightDateTime(flight.arrival_at);
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                              if (item.id !== current.selectedScheduleId) return item;
+                              return {
                                     ...item,
+                                    ...(departureTime ? { start_time: departureTime } : {}),
+                                    ...(arrivalTime ? { end_time: arrivalTime } : {}),
                                     services: {
                                       ...item.services,
                                       transport: {
@@ -2516,9 +2524,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                                         flight: { ...flight, type: "air" },
                                       },
                                     },
-                                  }
-                                : item
-                            );
+                                  };
+                            });
                             return { ...previous, [k]: { ...current, transport: null, transportService: null, schedule } };
                           });
                         }}
