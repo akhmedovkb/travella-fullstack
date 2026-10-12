@@ -168,6 +168,9 @@ app.use("/api/vehicles", vehicleCatalogRoutes);
 const hotelRoutes = require("./routes/hotelRoutes");
 app.use("/api/hotels", hotelRoutes);
 
+const travelSearchRoutes = require("./routes/travelSearchRoutes");
+app.use("/api/travel-search", travelSearchRoutes);
+
 // Compatibility for clients that still use /api/inspections/*.
 // Both URL families delegate to the same controller and inspections tables.
 const hotelInspectionRoutes = require("./routes/hotelInspectionRoutes");
