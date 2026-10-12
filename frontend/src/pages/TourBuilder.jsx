@@ -1114,7 +1114,6 @@ export default function TourBuilder() {
   
   const [range, setRange] = useState(EMPTY_RANGE);
   const [collapsedDays, setCollapsedDays] = useState({});
-  const [eventServiceTabs, setEventServiceTabs] = useState({});
 
   const [adt, setAdt] = useState(2);
   const [chd, setChd] = useState(0);
@@ -2229,29 +2228,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
               Boolean(st.hotel),
             ].filter(Boolean).length;
             const collapsed = Boolean(collapsedDays[k]);
-            const eventServiceKey = `${k}:${selectedSchedule?.id || "day"}`;
             const suggestedServiceCategory = selectedSchedule?.active_service_category
               || (selectedSchedule?.type === "guide" ? "tour"
                 : selectedSchedule?.type === "transport" ? "transfer"
                   : selectedSchedule?.type === "hotel" ? "hotel"
                     : selectedSchedule?.type === "meal" ? "meal"
                       : "tour");
-            const activeEventService = eventServiceTabs[eventServiceKey] || suggestedServiceCategory;
+            const activeEventService = suggestedServiceCategory;
             const activeTransportSubtype = selectedSchedule?.services?.transport?.subtype || "";
             const activeTransportCategories = TRANSPORT_SERVICE_TYPES.find((item) => item.id === activeTransportSubtype)?.categories || [];
-            const selectEventService = (category) => {
-              setEventServiceTabs((previous) => ({ ...previous, [eventServiceKey]: category }));
-              if (!selectedSchedule?.id) return;
-              setByDay((previous) => ({
-                ...previous,
-                [k]: {
-                  ...previous[k],
-                  schedule: normalizeScheduleItems(previous[k]?.schedule).map((item) =>
-                    item.id === selectedSchedule.id ? { ...item, active_service_category: category } : item
-                  ),
-                },
-              }));
-            };
             const selectTransportSubtype = (subtype) => {
               setByDay((previous) => {
                 const current = previous[k] || {};
@@ -2409,30 +2394,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
                 <div className="rounded-lg border border-slate-200 bg-white">
                   <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2.5">
-                    <strong className="mr-auto text-sm text-slate-950">Услуги компонента</strong>
+                    <strong className="mr-auto text-sm text-slate-950">{EVENT_SERVICE_CATEGORIES.find((item) => item.id === activeEventService)?.label || "Услуги компонента"}</strong>
                     {selectedSchedule && <span className="text-xs text-slate-500">{selectedSchedule.start_time}–{selectedSchedule.end_time}</span>}
-                  </div>
-                  <div className="flex gap-1 overflow-x-auto p-1.5">
-                    {EVENT_SERVICE_CATEGORIES.map((category) => {
-                      const selected = activeEventService === category.id;
-                      const eventServices = selectedSchedule?.services || {};
-                      const assigned = category.id === "tour" ? Boolean(eventServices.guide?.service_id)
-                        : category.id === "transfer" ? Boolean(eventServices.transport?.service_id || (st.transfers || []).some((row) => !row.schedule_id || row.schedule_id === selectedSchedule?.id))
-                          : category.id === "hotel" ? Boolean(eventServices.hotel?.provider_id)
-                            : category.id === "attractions" ? Boolean(eventServices.attractions?.items?.length)
-                              : Boolean((st.meals || []).some((row) => !row.schedule_id || row.schedule_id === selectedSchedule?.id));
-                      return (
-                        <button
-                          key={category.id}
-                          type="button"
-                          disabled={!selectedSchedule}
-                          onClick={() => selectEventService(category.id)}
-                          className={`shrink-0 rounded-md px-3 py-2 text-sm font-semibold transition ${selected ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"} disabled:cursor-not-allowed disabled:opacity-40`}
-                        >
-                          {category.label}{assigned ? " · ✓" : ""}
-                        </button>
-                      );
-                    })}
                   </div>
                 </div>
 
