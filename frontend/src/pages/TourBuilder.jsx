@@ -95,7 +95,7 @@ const parseYmdLocal = (value) => {
   return new Date(y, m - 1, d);
 };
 const timeFromFlightDateTime = (value) => {
-  const match = String(value || "").match(/T(\d{2}:\d{2})/);
+  const match = String(value || "").match(/[T ](\d{2}:\d{2})/);
   return match?.[1] || "";
 };
 const startOfDay = (d) => new Date(d.getFullYear(), d.getMonth(), d.getDate());
@@ -2253,12 +2253,23 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             const selectTransportSubtype = (subtype) => {
               setByDay((previous) => {
                 const current = previous[k] || {};
-                const schedule = normalizeScheduleItems(current.schedule).map((item) =>
-                  item.id === selectedSchedule?.id
-                    ? { ...item, services: { ...item.services, transport: { subtype } } }
-                    : item
-                );
-                return { ...previous, [k]: { ...current, transport: null, transportService: null, schedule } };
+                const currentTransport = selectedSchedule?.services?.transport || {};
+                const sameSubtype = currentTransport.subtype === subtype;
+                const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                  if (item.id !== selectedSchedule?.id) return item;
+                  const transport = sameSubtype
+                    ? { ...(item.services?.transport || {}), subtype }
+                    : { subtype };
+                  return { ...item, services: { ...item.services, transport } };
+                });
+                return {
+                  ...previous,
+                  [k]: {
+                    ...current,
+                    ...(sameSubtype ? {} : { transport: null, transportService: null }),
+                    schedule,
+                  },
+                };
               });
             };
             return (
@@ -2502,12 +2513,13 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         lang={lang}
                         lockType="air"
                         onChange={(flight) => {
+                          const scheduleId = selectedSchedule.id;
                           setByDay((previous) => {
                             const current = previous[k] || {};
                             const departureTime = timeFromFlightDateTime(flight.departure_at);
                             const arrivalTime = timeFromFlightDateTime(flight.arrival_at);
                             const schedule = normalizeScheduleItems(current.schedule).map((item) => {
-                              if (item.id !== current.selectedScheduleId) return item;
+                              if (item.id !== scheduleId) return item;
                               return {
                                     ...item,
                                     ...(departureTime ? { start_time: departureTime } : {}),
@@ -2530,10 +2542,11 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           });
                         }}
                         onRemove={() => {
+                          const scheduleId = selectedSchedule.id;
                           setByDay((previous) => {
                             const current = previous[k] || {};
                             const schedule = normalizeScheduleItems(current.schedule).map((item) => {
-                              if (item.id !== current.selectedScheduleId) return item;
+                              if (item.id !== scheduleId) return item;
                               const transport = { ...(item.services?.transport || {}) };
                               delete transport.flight;
                               return { ...item, services: { ...item.services, transport } };
