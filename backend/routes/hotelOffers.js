@@ -437,6 +437,12 @@ router.get('/', async (req, res, next) => {
               CASE WHEN o.valid_to IS NULL THEN NULL ELSE (o.valid_to - CURRENT_DATE)::int END AS days_until_expiry,
               COUNT(r.id)::int AS rate_count, MIN(r.amount)::numeric AS min_rate,
               ARRAY_REMOVE(ARRAY_AGG(DISTINCT r.room_type), NULL) AS room_types,
+              COALESCE(JSONB_AGG(DISTINCT JSONB_BUILD_OBJECT(
+                'room_type',r.room_type,
+                'occupancy_code',r.occupancy_code,
+                'guest_count',r.guest_count,
+                'meal_plan',r.meal_plan
+              )) FILTER (WHERE r.id IS NOT NULL),'[]'::jsonb) AS rate_options,
               ARRAY_REMOVE(ARRAY_AGG(DISTINCT r.meal_plan), NULL) AS meal_plans,
               COALESCE(BOOL_OR(r.allotment IS NULL),false) AS unlimited_allotment,
               COALESCE(BOOL_OR(r.allotment > 0),false) AS has_allotment,
@@ -753,7 +759,7 @@ router.get('/:offerId/rates', async (req, res, next) => {
     if (!isHotelTemplate) {
       const { rows } = await db.query(
         `SELECT own.id,own.offer_id,source.id AS source_rate_id,source.inventory_pool_id,
-                COALESCE(pool.room_type,source.room_type) AS room_type,source.meal_plan,source.residency,
+                COALESCE(pool.room_type,source.room_type) AS room_type,source.occupancy_code,source.guest_count,source.meal_plan,source.residency,
                 source.date_from::text,source.date_to::text,source.amount::numeric AS hotel_amount,
                 own.amount::numeric AS amount,NULL::int AS allotment,
                 source.min_stay,source.refundable,own.created_at,own.updated_at,
@@ -788,13 +794,13 @@ router.get('/:offerId/rates', async (req, res, next) => {
                FROM hotel_inventory_reservations hir WHERE hir.rate_id=own.id
            ) stock ON true
           WHERE hotel_offer.hotel_id=$1 AND hotel_offer.provider_id=$4
-          ORDER BY source.date_from,source.room_type,source.meal_plan,source.residency,source.id`,
+          ORDER BY source.date_from,source.room_type,source.occupancy_code,source.meal_plan,source.residency,source.id`,
         [hotelId, offerId, offer.provider_id, templateProviderId]
       );
       return res.json({ offer, items: rows, cascade: true, can_edit: canEdit });
     }
     const { rows } = await db.query(
-      `SELECT r.id,r.offer_id,r.source_rate_id,r.inventory_pool_id,COALESCE(p.room_type,r.room_type) AS room_type,r.meal_plan,r.residency,r.date_from::text,r.date_to::text,
+      `SELECT r.id,r.offer_id,r.source_rate_id,r.inventory_pool_id,COALESCE(p.room_type,r.room_type) AS room_type,r.occupancy_code,r.guest_count,r.meal_plan,r.residency,r.date_from::text,r.date_to::text,
               r.amount::numeric,r.allotment,r.min_stay,r.refundable,r.created_at,r.updated_at,
               COALESCE(stock.held,0)::int AS held,
               COALESCE(stock.confirmed,0)::int AS confirmed,
@@ -808,7 +814,7 @@ router.get('/:offerId/rates', async (req, res, next) => {
              FROM hotel_inventory_reservations hir
             WHERE hir.rate_id=r.id
          ) stock ON true
-        WHERE r.offer_id=$1 ORDER BY r.date_from,r.room_type,r.meal_plan,r.residency,r.id`,
+        WHERE r.offer_id=$1 ORDER BY r.date_from,r.room_type,r.occupancy_code,r.meal_plan,r.residency,r.id`,
       [offerId]
     );
     return res.json({ offer, items: rows, cascade: false, can_edit: canEdit });
@@ -830,6 +836,8 @@ router.put('/:offerId/rates', async (req, res, next) => {
       id: positiveInt(row?.id), source_rate_id: positiveInt(row?.source_rate_id),
       inventory_pool_id: positiveInt(row?.inventory_pool_id),
       room_type: String(row?.room_type || '').trim(),
+      occupancy_code: String(row?.occupancy_code || 'ROOM').trim().toUpperCase(),
+      guest_count: Math.max(1, Math.min(20, Math.trunc(Number(row?.guest_count || 1)))),
       meal_plan: String(row?.meal_plan || 'BB').toUpperCase(),
       residency: String(row?.residency || 'all').toLowerCase(),
       date_from: isoDate(row?.date_from), date_to: isoDate(row?.date_to),
@@ -847,7 +855,7 @@ router.put('/:offerId/rates', async (req, res, next) => {
     if (!isHotelTemplate) {
       const sourceIds = items.map((row) => row.source_rate_id).filter(Boolean);
       const sourceResult = await db.query(
-        `SELECT r.id,r.inventory_pool_id,COALESCE(p.room_type,r.room_type) AS room_type,r.meal_plan,r.residency,
+        `SELECT r.id,r.inventory_pool_id,COALESCE(p.room_type,r.room_type) AS room_type,r.occupancy_code,r.guest_count,r.meal_plan,r.residency,
                 r.date_from::text,r.date_to::text,r.min_stay,r.refundable
            FROM hotel_offer_rates r JOIN hotel_offers o ON o.id=r.offer_id
            LEFT JOIN hotel_room_inventory_pools p ON p.id=r.inventory_pool_id
@@ -864,14 +872,14 @@ router.put('/:offerId/rates', async (req, res, next) => {
         const source = sources.get(row.source_rate_id);
         const saved = await client.query(
           `INSERT INTO hotel_offer_rates
-             (offer_id,source_rate_id,inventory_pool_id,room_type,meal_plan,residency,date_from,date_to,amount,allotment,min_stay,refundable)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,NULL,$10,$11)
+             (offer_id,source_rate_id,inventory_pool_id,room_type,occupancy_code,guest_count,meal_plan,residency,date_from,date_to,amount,allotment,min_stay,refundable)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NULL,$12,$13)
            ON CONFLICT (offer_id,source_rate_id) WHERE source_rate_id IS NOT NULL DO UPDATE SET
-             inventory_pool_id=EXCLUDED.inventory_pool_id,room_type=EXCLUDED.room_type,meal_plan=EXCLUDED.meal_plan,
+             inventory_pool_id=EXCLUDED.inventory_pool_id,room_type=EXCLUDED.room_type,occupancy_code=EXCLUDED.occupancy_code,guest_count=EXCLUDED.guest_count,meal_plan=EXCLUDED.meal_plan,
              residency=EXCLUDED.residency,date_from=EXCLUDED.date_from,date_to=EXCLUDED.date_to,
              amount=EXCLUDED.amount,allotment=NULL,min_stay=EXCLUDED.min_stay,refundable=EXCLUDED.refundable,updated_at=NOW()
            RETURNING id`,
-          [offerId,source.id,source.inventory_pool_id,source.room_type,source.meal_plan,source.residency,
+          [offerId,source.id,source.inventory_pool_id,source.room_type,source.occupancy_code,source.guest_count,source.meal_plan,source.residency,
             source.date_from,source.date_to,row.amount,source.min_stay,source.refundable]
         );
         kept.push(saved.rows[0].id);
@@ -887,14 +895,15 @@ router.put('/:offerId/rates', async (req, res, next) => {
       if (pool) row.room_type = String(pool.room_type || '').trim();
     });
     const invalid = items.some((row) => !row.room_type || !row.inventory_pool_id || !poolMap.has(row.inventory_pool_id)
+      || !row.occupancy_code || row.occupancy_code.length > 40 || row.guest_count < 1 || row.guest_count > 20
       || !MEAL_PLANS.has(row.meal_plan) || !RESIDENCIES.has(row.residency)
       || !row.date_from || !row.date_to || row.date_from > row.date_to || !(row.amount > 0));
     if (invalid) return res.status(400).json({ error: 'bad_rate_rows' });
 
-    const sorted = [...items].sort((a, b) => `${a.room_type}|${a.meal_plan}|${a.residency}|${a.date_from}`.localeCompare(`${b.room_type}|${b.meal_plan}|${b.residency}|${b.date_from}`));
+    const sorted = [...items].sort((a, b) => `${a.room_type}|${a.occupancy_code}|${a.meal_plan}|${a.residency}|${a.date_from}`.localeCompare(`${b.room_type}|${b.occupancy_code}|${b.meal_plan}|${b.residency}|${b.date_from}`));
     for (let i = 1; i < sorted.length; i += 1) {
       const prev = sorted[i - 1]; const current = sorted[i];
-      if (prev.room_type === current.room_type && prev.meal_plan === current.meal_plan && prev.residency === current.residency && current.date_from <= prev.date_to) {
+      if (prev.room_type === current.room_type && prev.occupancy_code === current.occupancy_code && prev.meal_plan === current.meal_plan && prev.residency === current.residency && current.date_from <= prev.date_to) {
         return res.status(409).json({ error: 'rate_overlap', rows: [i - 1, i] });
       }
     }
@@ -904,18 +913,18 @@ router.put('/:offerId/rates', async (req, res, next) => {
     for (const row of items) {
       if (row.id) {
         const updated = await client.query(
-          `UPDATE hotel_offer_rates SET inventory_pool_id=$3,room_type=$4,meal_plan=$5,residency=$6,date_from=$7,date_to=$8,
-                  amount=$9,allotment=$10,min_stay=$11,refundable=$12,updated_at=NOW()
+          `UPDATE hotel_offer_rates SET inventory_pool_id=$3,room_type=$4,occupancy_code=$5,guest_count=$6,meal_plan=$7,residency=$8,date_from=$9,date_to=$10,
+                  amount=$11,allotment=$12,min_stay=$13,refundable=$14,updated_at=NOW()
             WHERE id=$1 AND offer_id=$2 AND source_rate_id IS NULL RETURNING id`,
-          [row.id,offerId,row.inventory_pool_id,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,null,row.min_stay,row.refundable]
+          [row.id,offerId,row.inventory_pool_id,row.room_type,row.occupancy_code,row.guest_count,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,null,row.min_stay,row.refundable]
         );
         if (updated.rowCount) keptRateIds.push(updated.rows[0].id);
       } else {
         const inserted = await client.query(
         `INSERT INTO hotel_offer_rates
-          (offer_id,inventory_pool_id,room_type,meal_plan,residency,date_from,date_to,amount,allotment,min_stay,refundable)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id`,
-        [offerId,row.inventory_pool_id,row.room_type,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,null,row.min_stay,row.refundable]
+          (offer_id,inventory_pool_id,room_type,occupancy_code,guest_count,meal_plan,residency,date_from,date_to,amount,allotment,min_stay,refundable)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING id`,
+        [offerId,row.inventory_pool_id,row.room_type,row.occupancy_code,row.guest_count,row.meal_plan,row.residency,row.date_from,row.date_to,row.amount,null,row.min_stay,row.refundable]
         );
         keptRateIds.push(inserted.rows[0].id);
       }
@@ -923,7 +932,7 @@ router.put('/:offerId/rates', async (req, res, next) => {
     await client.query('DELETE FROM hotel_offer_rates WHERE offer_id=$1 AND source_rate_id IS NULL AND NOT (id=ANY($2::int[]))', [offerId, keptRateIds.length ? keptRateIds : [0]]);
     await client.query(
       `UPDATE hotel_offer_rates child SET
-          inventory_pool_id=source.inventory_pool_id,room_type=source.room_type,meal_plan=source.meal_plan,
+          inventory_pool_id=source.inventory_pool_id,room_type=source.room_type,occupancy_code=source.occupancy_code,guest_count=source.guest_count,meal_plan=source.meal_plan,
           residency=source.residency,date_from=source.date_from,date_to=source.date_to,
           allotment=NULL,min_stay=source.min_stay,refundable=source.refundable,updated_at=NOW()
         FROM hotel_offer_rates source

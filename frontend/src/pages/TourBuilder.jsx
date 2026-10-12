@@ -3266,7 +3266,7 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
     return fromOffer.length ? fromOffer : MEALS;
   }, [offer]);
   const [meal, setMeal] = useState("BB");
-  // карта количеств по типам: { 'Double': 2, 'Triple': 1, ... }
+  // Количество выбирается по тарифному варианту, а физический остаток общий для типа номера.
   const [qty, setQty] = useState({});
   const [extraBeds, setExtraBeds] = useState(0); // кол-во доп. мест на эту ночь
   const [quoteLoading, setQuoteLoading] = useState(false);
@@ -3287,11 +3287,25 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
   }, [hotelBrief?.id, offer?.id, availableMeals]);
 
   // Room categories and meal plans come only from the selected supplier offer.
-  const roomTypes = useMemo(() => {
-    const arr = Array.isArray(offer?.room_types) ? offer.room_types.map((type) => ({ type })) : [];
-    const names = Array.from(new Set(arr.map(r => r.type).filter(Boolean)));
-    return names;
-  }, [offer]);
+  const roomOptions = useMemo(() => {
+    const options = Array.isArray(offer?.rate_options)
+      ? offer.rate_options.filter((option) => !option?.meal_plan || option.meal_plan === meal)
+      : [];
+    if (options.length) {
+      const unique = new Map();
+      options.forEach((option) => {
+        const type = String(option?.room_type || "").trim();
+        const occupancy = String(option?.occupancy_code || "ROOM").trim().toUpperCase();
+        if (!type) return;
+        const key = `${type}::${occupancy}`;
+        if (!unique.has(key)) unique.set(key, { key, type, occupancy, guests: Number(option?.guest_count || 1) });
+      });
+      return [...unique.values()];
+    }
+    return (Array.isArray(offer?.room_types) ? offer.room_types : [])
+      .filter(Boolean)
+      .map((type) => ({ key: `${type}::ROOM`, type, occupancy: "ROOM", guests: 1 }));
+  }, [offer, meal]);
 
   
   // --- универсальные геттеры числовых полей из брифа ---
@@ -3320,7 +3334,7 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
   // The backend is the pricing authority. Keep the returned payload as the
   // immutable quote candidate that will be attached to booking details.
   useEffect(() => {
-    const selectedRooms = Object.values(qty).some((n) => Number(n) > 0);
+    const selectedRooms = roomOptions.some((option) => Number(qty[option.key]) > 0);
     if (!hotelBrief?.id || !offer?.id || !selectedRooms || !quoteNightDates.length) {
       onTotalChangeRef.current?.(0);
       onBreakdownRef.current?.({
@@ -3343,7 +3357,10 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
           dates: quoteNightDates,
           residency: residentFlag ? "resident" : "non_resident",
           meal_plan: meal,
-          rooms: Object.entries(qty).map(([type, quantity]) => ({ type, quantity })),
+          rooms: Object.entries(qty).filter(([key]) => roomOptions.some((item) => item.key === key)).map(([key, quantity]) => {
+            const option = roomOptions.find((item) => item.key === key);
+            return { type: option?.type || key.split("::")[0], occupancy_code: option?.occupancy || "ROOM", quantity };
+          }),
           extra_beds: extraBeds,
           pax: paxCount,
           fx: { usd_uzs: Number(usdRate) || 0 },
@@ -3380,7 +3397,7 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
     }, 250);
 
     return () => clearTimeout(timer);
-  }, [qty, meal, quoteNightDates, residentFlag, extraBeds, paxCount, hotelBrief?.id, hotelBrief?.currency, offer?.id, usdRate]);
+  }, [qty, meal, roomOptions, quoteNightDates, residentFlag, extraBeds, paxCount, hotelBrief?.id, hotelBrief?.currency, offer?.id, usdRate]);
 
   return (
     <div className="mt-3 border rounded p-2">
@@ -3435,26 +3452,26 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
       </div>
 
       <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
-        {roomTypes.map((type) => {
+        {roomOptions.map((option) => {
           const upperLimit = 99;
           return (
-            <label key={type} className="flex items-center justify-between border rounded px-2 py-1">
-              <span className="text-sm">{type}</span>
+            <label key={option.key} className="flex items-center justify-between border rounded px-2 py-1">
+              <span className="text-sm"><b>{option.type}</b>{option.occupancy !== "ROOM" ? ` · ${option.occupancy}` : ""}<span className="ml-1 text-xs text-gray-500">до {option.guests} гост.</span></span>
               <input
                 type="number"
                 min={0}
                 max={upperLimit}
                 className="h-8 w-20 border rounded px-2 text-sm"
-                value={qty[type] ?? 0}
+                value={qty[option.key] ?? 0}
                 onChange={(e) => {
                   const v = Math.max(0, Math.min(Number(e.target.value || 0), upperLimit));
-                  setQty((p) => ({ ...p, [type]: v }));
+                  setQty((p) => ({ ...p, [option.key]: v }));
                 }}
               />
             </label>
           );
         })}
-        {!roomTypes.length && (
+        {!roomOptions.length && (
           <div className="text-xs text-amber-600">
             В выбранном предложении нет опубликованных категорий номеров.
           </div>

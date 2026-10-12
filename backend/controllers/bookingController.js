@@ -1774,8 +1774,8 @@ const downloadBookingRoomingList = async (req, res) => {
 
     const roomMap = new Map();
     for (const line of lines) {
-      const key = `${line.room_type || 'Room'}|${line.meal_plan || ''}`;
-      const current = roomMap.get(key) || { room_type: line.room_type || 'Room', meal_plan: line.meal_plan || '', quantity: 0 };
+      const key = `${line.room_type || 'Room'}|${line.occupancy_code || 'ROOM'}|${line.meal_plan || ''}`;
+      const current = roomMap.get(key) || { room_type: line.room_type || 'Room', occupancy_code: line.occupancy_code || 'ROOM', meal_plan: line.meal_plan || '', quantity: 0 };
       current.quantity = Math.max(current.quantity, Number(line.quantity || 0));
       roomMap.set(key, current);
     }
@@ -1807,7 +1807,7 @@ const downloadBookingRoomingList = async (req, res) => {
     let rowNo = 1;
     for (const room of roomMap.values()) {
       for (let index = 0; index < Math.max(1, room.quantity); index += 1) {
-        sheet.addRow([rowNo, rowNo === 1 ? booking.customer_name : '', room.room_type, '', room.meal_plan, checkIn, checkOut, '']);
+        sheet.addRow([rowNo, rowNo === 1 ? booking.customer_name : '', `${room.room_type} · ${room.occupancy_code}`, '', room.meal_plan, checkIn, checkOut, '']);
         rowNo += 1;
       }
     }
