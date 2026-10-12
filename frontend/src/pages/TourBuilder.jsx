@@ -1097,6 +1097,7 @@ export default function TourBuilder() {
   }, []);
   
   const [range, setRange] = useState(EMPTY_RANGE);
+  const [collapsedDays, setCollapsedDays] = useState({});
 
   const [adt, setAdt] = useState(2);
   const [chd, setChd] = useState(0);
@@ -2005,9 +2006,19 @@ const makeTransportLoader = (dateKey) => async (input) => {
 
   /* ---------------- render ---------------- */
   return (
-    <div className="p-4 md:p-6 overflow-x-hidden">
-      <div className="max-w-6xl mx-auto bg-white rounded-xl shadow border p-4 md:p-6 space-y-6">
-        <h1 className="text-2xl font-bold">{t('tb.title')}</h1>
+    <div className="overflow-x-hidden bg-slate-100 p-3 md:p-5">
+      <div className="mx-auto max-w-[1440px] space-y-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-4">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-950">{t('tb.title')}</h1>
+            <p className="mt-1 text-sm text-slate-500">Соберите маршрут по дням, назначьте услуги и проверьте итог перед отправкой.</p>
+          </div>
+          <div className="flex items-center gap-5 text-sm">
+            <div><span className="text-slate-500">Дней</span><strong className="ml-2 text-slate-950">{days.length}</strong></div>
+            <div><span className="text-slate-500">PAX</span><strong className="ml-2 text-slate-950">{Math.max(0, toNum(adt) + toNum(chd))}</strong></div>
+            <div className="rounded-md bg-slate-950 px-3 py-2 text-white"><span className="text-slate-300">Итого</span><strong className="ml-2">{totals.net.toLocaleString("ru-RU")} UZS</strong></div>
+          </div>
+        </div>
         {/* [TPL] панель шаблонов — аккордеон по странам */}
         <div className="flex items-start gap-3">
           <div className="text-sm text-gray-700 mt-2 shrink-0">{t('tb.templates')}:</div>
@@ -2186,21 +2197,29 @@ const makeTransportLoader = (dateKey) => async (input) => {
             const st = byDay[k] || {};
             const cityChosen = Boolean(st.city);
             const selectedSchedule = normalizeScheduleItems(st.schedule).find((item) => item.id === st.selectedScheduleId) || null;
+            const dayTotal = calcGuideForDay(k)
+              + calcTransportForDay(k)
+              + calcHotelForDay(k)
+              + calcTransfersForDay(k)
+              + calcEntryForDay(k)
+              + calcMealsForDay(k);
+            const completedSections = [
+              cityChosen,
+              normalizeScheduleItems(st.schedule).length > 0,
+              Boolean(st.guide),
+              Boolean(st.transport),
+              Boolean(st.hotel),
+            ].filter(Boolean).length;
+            const collapsed = Boolean(collapsedDays[k]);
             return (
               <div
                 key={k}
-                className="border rounded-lg p-3 space-y-3"
-                style={{
-                  background: BRAND.sand,
-                  borderColor: `${BRAND.accent}55`,
-                }}
+                className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
               >
-                <div className="flex flex-wrap items-center gap-3">
-                  <div className="font-semibold" style={{ color: BRAND.primary }}>
-                    D{i + 1}
-                  </div>
+                <div className="-mx-3 -mt-3 flex flex-wrap items-center gap-3 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-3">
+                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">D{i + 1}</div>
                   <input
-                    className="border rounded px-3 py-2 min-w-[220px] flex-1"
+                    className="h-10 min-w-[220px] flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
                     placeholder={t('tb.city_ph')}
                     value={st.city || ""}
                     onChange={(e) => {
@@ -2214,25 +2233,37 @@ const makeTransportLoader = (dateKey) => async (input) => {
                       // при смене города сбросили поставщиков; автоподбор произойдёт после выбора
                     }}
                   />
-                  <div className="text-sm" style={{ color: BRAND.primary }}>
-                    {k}
+                  <div className="text-sm font-medium text-slate-600">{k}</div>
+                  <div className="min-w-[130px] text-right">
+                    <div className="text-xs text-slate-500">Заполнено {completedSections} из 5</div>
+                    <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${completedSections * 20}%` }} /></div>
                   </div>
+                  <div className="min-w-[140px] text-right"><div className="text-xs text-slate-500">Итого за день</div><strong className="text-sm text-slate-950">{dayTotal.toLocaleString("ru-RU")} UZS</strong></div>
                   <button
                     type="button"
-                    className="px-2 py-1 text-xs border rounded bg-white hover:bg-orange-50"
+                    className="rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                     onClick={() => insertTourDayAfter(k)}
                   >
                     {t('tb.insert_day_after', { defaultValue: '+ день после' })}
                   </button>
                   <button
                     type="button"
-                    className="px-2 py-1 text-xs border rounded bg-white text-red-600 hover:bg-red-50"
+                    className="rounded-md border border-rose-200 bg-white px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
                     onClick={() => removeTourDay(k)}
                   >
                     {t('tb.delete_day', { defaultValue: 'Удалить день' })}
                   </button>
+                  <button
+                    type="button"
+                    aria-expanded={!collapsed}
+                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
+                    onClick={() => setCollapsedDays((previous) => ({ ...previous, [k]: !previous[k] }))}
+                  >
+                    {collapsed ? "Развернуть" : "Свернуть"}
+                  </button>
                 </div>
 
+                {!collapsed && <>
                 <TourDayTimeline
                   items={st.schedule}
                   selectedId={st.selectedScheduleId}
@@ -2989,18 +3020,16 @@ const makeTransportLoader = (dateKey) => async (input) => {
                   </div>
                 </div>
 
-                <div className="text-sm text-gray-700">
-                  {t('tb.day_total')}: {t('tb.guide')} {calcGuideForDay(k).toFixed(2)} + {t('tb.transport')} {calcTransportForDay(k).toFixed(2)} + {t('tb.hotel_short')} {calcHotelForDay(k).toFixed(2)} + Transfer {calcTransfersForDay(k).toFixed(2)} + Entry {calcEntryForDay(k).toFixed(2)} + {t('tb.meals')} {calcMealsForDay(k).toFixed(2)} =
-                  {" "}
-                  <b style={{ color: BRAND.primary }}>
-                    {(calcGuideForDay(k)
-                      + calcTransportForDay(k)
-                      + calcHotelForDay(k)
-                      + calcTransfersForDay(k)
-                      + calcEntryForDay(k)
-                      + calcMealsForDay(k)
-                    ).toFixed(2)} UZS
-                  </b>
+                </>}
+
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                  <span>{t('tb.guide')} <strong className="text-slate-900">{calcGuideForDay(k).toLocaleString("ru-RU")}</strong></span>
+                  <span>{t('tb.transport')} <strong className="text-slate-900">{calcTransportForDay(k).toLocaleString("ru-RU")}</strong></span>
+                  <span>{t('tb.hotel_short')} <strong className="text-slate-900">{calcHotelForDay(k).toLocaleString("ru-RU")}</strong></span>
+                  <span>{t('tb.totals.transfers')} <strong className="text-slate-900">{calcTransfersForDay(k).toLocaleString("ru-RU")}</strong></span>
+                  <span>{t('tb.totals.entry')} <strong className="text-slate-900">{calcEntryForDay(k).toLocaleString("ru-RU")}</strong></span>
+                  <span>{t('tb.meals')} <strong className="text-slate-900">{calcMealsForDay(k).toLocaleString("ru-RU")}</strong></span>
+                  <span className="ml-auto text-sm font-bold text-slate-950">{dayTotal.toLocaleString("ru-RU")} UZS</span>
                 </div>
               </div>
             );
