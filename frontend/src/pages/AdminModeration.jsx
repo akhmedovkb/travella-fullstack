@@ -3,6 +3,7 @@ import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { createPortal } from "react-dom";
 import axios from "axios";
+import { BadgeCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo } from "../shared/toast";
 import { getServiceUrgency } from "../utils/serviceUrgency";
@@ -2348,7 +2349,7 @@ function PublishResultModal({ result, saving = false, onClose, onRetry }) {
   );
 }
 
-export default function AdminModeration() {
+export default function AdminModeration({ embedded = false }) {
   const { t } = useTranslation();
 
   const [tab, setTab] = useState("pending");
@@ -3019,11 +3020,13 @@ export default function AdminModeration() {
 
   return (
     <>
-      <div className="max-w-6xl mx-auto p-4">
-        <div className="mb-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold">
-            {t("moderation.title", { defaultValue: "Модерация услуг" })}
-          </h1>
+      <div className={embedded ? "w-full" : "max-w-6xl mx-auto p-4"}>
+        <div className={`mb-4 flex items-center ${embedded ? "justify-end" : "justify-between"}`}>
+          {!embedded && (
+            <h1 className="text-2xl font-bold">
+              {t("moderation.title", { defaultValue: "Модерация услуг" })}
+            </h1>
+          )}
           <button
             onClick={() => {
               load(tab);
@@ -3131,8 +3134,16 @@ export default function AdminModeration() {
             {t("common.loading", { defaultValue: "Загрузка…" })}
           </div>
         ) : items.length === 0 ? (
-          <div className="text-gray-600">
-            {t("moderation.empty", { defaultValue: "Нет элементов" })}
+          <div className="flex min-h-44 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 text-center">
+            <div>
+              <BadgeCheck className="mx-auto mb-3 text-emerald-600" size={28} strokeWidth={1.8} />
+              <div className="font-semibold text-slate-900">
+                {tab === "pending" ? "Очередь проверена" : t("moderation.empty", { defaultValue: "Нет элементов" })}
+              </div>
+              <div className="mt-1 text-sm text-slate-500">
+                {tab === "pending" ? "Новых услуг, ожидающих модерации, сейчас нет." : "В этом разделе пока нет услуг."}
+              </div>
+            </div>
           </div>
         ) : displayedItems.length === 0 ? (
           <div className="rounded-2xl border border-slate-200 bg-white p-6 text-sm text-slate-600">
