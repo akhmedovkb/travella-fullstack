@@ -18,6 +18,11 @@ const { logProviderServiceAction } = require("../utils/serviceAuditLog");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");
+const {
+  GUIDE_SERVICE_CATEGORIES,
+  TRANSPORT_SERVICE_CATEGORIES,
+  TRANSPORT_SERVICE_CATEGORY_SET,
+} = require("../utils/providerServiceCatalog");
 
 require("../utils/refusedPriceDropBroadcast");
 
@@ -373,16 +378,7 @@ const EXT_CATS = new Set([
 const isExtendedCategory = (cat) => EXT_CATS.has(String(cat || ""));
 
 // Транспортные категории — только здесь допускаем details.seats
-const TRANSPORT_CATS = new Set([
-  "city_tour_transport",
-  "mountain_tour_transport",
-  "desert_tour_transport",
-  "safari_tour_transport",
-  "one_way_transfer",
-  "dinner_transfer",
-  "border_transfer",
-  "hotel_transfer",
-]);
+const TRANSPORT_CATS = TRANSPORT_SERVICE_CATEGORY_SET;
 const isTransportCategory = (cat) => TRANSPORT_CATS.has(String(cat || ""));
 
 function toArray(val) {
@@ -2412,24 +2408,8 @@ module.exports = {
  * =========================== */
 
 // Категории для каскада (как в UI)
-const GUIDE_CATS_PUBLIC = [
-  "city_tour_guide",
-  "mountain_tour_guide",
-  "desert_tour_guide",
-  "safari_tour_guide",
-  "meet",
-  "seeoff",
-  "translation",
-];
-const TRANSPORT_CATS_PUBLIC = [
-  "city_tour_transport",
-  "mountain_tour_transport",
-  "desert_tour_transport",
-  "safari_tour_transport",
-  "one_way_transfer",
-  "dinner_transfer",
-  "border_transfer",
-];
+const GUIDE_CATS_PUBLIC = GUIDE_SERVICE_CATEGORIES;
+const TRANSPORT_CATS_PUBLIC = TRANSPORT_SERVICE_CATEGORIES;
 function catsForPublic(type) {
   const t = String(type || "").toLowerCase();
   if (t === "guide" || t === "gid") return GUIDE_CATS_PUBLIC;

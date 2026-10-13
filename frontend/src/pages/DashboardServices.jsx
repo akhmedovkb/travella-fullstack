@@ -8,6 +8,7 @@ import { tSuccess, tError, tWarn } from "../shared/toast";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
 import { SERVICE_FIELD_OPTIONS } from "../constants/serviceFieldOptions";
 import { getServiceUrgency } from "../utils/serviceUrgency";
+import { GUIDE_CATEGORY_IDS, TRANSPORT_CATEGORY_IDS, PROVIDER_SERVICE_LABELS } from "../config/providerServiceCatalog";
 import {
   BadgeDollarSign,
   CalendarDays,
@@ -112,7 +113,7 @@ const CATEGORY_META = {
 };
 
 function getCategoryMeta(category, t) {
-  const meta = CATEGORY_META[category] || { label: category, hint: "Услуга для клиентов Marketplace" };
+  const meta = CATEGORY_META[category] || { label: PROVIDER_SERVICE_LABELS[category] || category, hint: "Услуга для клиентов Marketplace" };
   return { ...meta, label: t(`category.${category}`, { defaultValue: meta.label }) };
 }
 
@@ -1659,12 +1660,8 @@ export default function DashboardServices({ viewMode = "create" }) {
         "author_tour",
       ];
     }
-    if (type === "guide") return [
-      "city_tour_guide", "mountain_tour_guide", "desert_tour_guide", "safari_tour_guide",
-      "city_tour_transport", "mountain_tour_transport", "desert_tour_transport", "safari_tour_transport",
-      "one_way_transfer", "dinner_transfer", "border_transfer", "hotel_transfer",
-    ];
-    if (type === "transport") return ["city_tour_transport", "mountain_tour_transport", "desert_tour_transport", "safari_tour_transport", "one_way_transfer", "dinner_transfer", "border_transfer", "hotel_transfer"];
+    if (type === "guide") return [...GUIDE_CATEGORY_IDS, ...TRANSPORT_CATEGORY_IDS];
+    if (type === "transport") return TRANSPORT_CATEGORY_IDS;
     if (type === "hotel") return ["hotel_room", "hotel_transfer", "hall_rent"];
     return [];
   }, [profile?.type]);

@@ -15,6 +15,14 @@ import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
 import TransportSegmentEditor from "../components/tourbuilder/TransportSegmentEditor";
+import {
+  GUIDE_CATEGORY_IDS,
+  TRANSPORT_CATEGORY_IDS,
+  PROVIDER_SERVICE_LABELS,
+  TOUR_BUILDER_TYPES,
+  GUIDE_SUPPORT_BUILDER_TYPES,
+  TRANSPORT_BUILDER_TYPES,
+} from "../config/providerServiceCatalog";
 
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -43,14 +51,11 @@ const EVENT_SERVICE_CATEGORIES = [
   { id: "transfer", label: "Транспорт" },
   { id: "hotel", label: "Отель" },
   { id: "tour", label: "Сити-тур" },
+  { id: "support", label: "Сопровождение" },
   { id: "meal", label: "Питание" },
 ];
 
-const TRANSPORT_SERVICE_TYPES = [
-  { id: "international", label: "Авиабилеты", categories: [] },
-  { id: "intercity", label: "Междугородний трансфер", categories: ["one_way_transfer", "border_transfer"] },
-  { id: "hotel", label: "Отельный трансфер", categories: ["hotel_transfer"] },
-];
+const TRANSPORT_SERVICE_TYPES = TRANSPORT_BUILDER_TYPES;
 
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
 const RS_STYLES = {
@@ -165,32 +170,14 @@ const buildTransportSegments = (stateByDay = {}) =>
     })
     .filter((segment) => segment.from || segment.to);
 /* ---------------- categories / labels (для выпадашек услуг) ---------------- */
-const CATEGORY_LABELS = {
-  // guide
-  city_tour_guide: "Тур по городу",
-  mountain_tour_guide: "Тур в горы",
-  desert_tour_guide: "Пустынный тур",
-  safari_tour_guide: "Сафари-тур",
-  meet: "Встреча",
-  seeoff: "Провод",
-  translation: "Перевод",
-  // transport
-  city_tour_transport: "Тур по городу",
-  mountain_tour_transport: "Тур в горы",
-  desert_tour_transport: "Пустынный тур",
-  safari_tour_transport: "Сафари-тур",
-  one_way_transfer: "Трансфер в одну сторону",
-  dinner_transfer: "Трансфер на ужин",
-  border_transfer: "Междугородний/погран. трансфер",
-  hotel_transfer: "Трансфер отеля",
-};
+const CATEGORY_LABELS = PROVIDER_SERVICE_LABELS;
 
-const GUIDE_ALLOWED = new Set(["city_tour_guide","mountain_tour_guide","desert_tour_guide","safari_tour_guide","meet","seeoff","translation"]);
-const TRANSPORT_ALLOWED = new Set(["city_tour_transport","mountain_tour_transport","desert_tour_transport","safari_tour_transport","one_way_transfer","dinner_transfer","border_transfer","hotel_transfer"]);
+const GUIDE_ALLOWED = new Set(GUIDE_CATEGORY_IDS);
+const TRANSPORT_ALLOWED = new Set(TRANSPORT_CATEGORY_IDS);
 
 // массивы для утилиты подбора
-const GUIDE_ALLOWED_ARR = ["city_tour_guide","mountain_tour_guide","desert_tour_guide","safari_tour_guide","meet","seeoff","translation"];
-const TRANSPORT_ALLOWED_ARR = ["city_tour_transport","mountain_tour_transport","desert_tour_transport","safari_tour_transport","one_way_transfer","dinner_transfer","border_transfer","hotel_transfer"];
+const GUIDE_ALLOWED_ARR = GUIDE_CATEGORY_IDS;
+const TRANSPORT_ALLOWED_ARR = TRANSPORT_CATEGORY_IDS;
 /* helpers для фильтрации услуг под PAX и город */
 const svcSeats = (s) =>
   toNum(s?.raw?.details?.seats ?? s?.details?.seats ?? NaN, NaN);
@@ -1418,9 +1405,17 @@ export default function TourBuilder() {
         .find((item) => item.id === st.selectedScheduleId);
       const componentCategory = selectedSchedule?.active_service_category;
       const transportSubtype = selectedSchedule?.services?.transport?.subtype || "";
-      const guideCategories = componentCategory === "tour" ? ["city_tour_guide"] : [];
+      const tourSubtype = selectedSchedule?.services?.tour?.subtype || "city";
+      const tourType = TOUR_BUILDER_TYPES.find((item) => item.id === tourSubtype) || TOUR_BUILDER_TYPES[0];
+      const supportSubtype = selectedSchedule?.services?.support?.subtype || "escort";
+      const supportType = GUIDE_SUPPORT_BUILDER_TYPES.find((item) => item.id === supportSubtype) || GUIDE_SUPPORT_BUILDER_TYPES[0];
+      const guideCategories = componentCategory === "tour"
+        ? tourType.guideCategories
+        : componentCategory === "support"
+          ? supportType.guideCategories
+          : [];
       const transportCategories = componentCategory === "tour"
-        ? ["city_tour_transport"]
+        ? tourType.transportCategories
         : componentCategory === "transfer"
           ? (TRANSPORT_SERVICE_TYPES.find((item) => item.id === transportSubtype)?.categories || [])
           : [];
@@ -2289,8 +2284,12 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             const activeEventService = suggestedServiceCategory;
             const activeTransportSubtype = selectedSchedule?.services?.transport?.subtype || "";
             const activeTransportCategories = TRANSPORT_SERVICE_TYPES.find((item) => item.id === activeTransportSubtype)?.categories || [];
-            const guideComponentCategories = ["city_tour_guide"];
-            const providerTransportCategories = activeEventService === "tour" ? ["city_tour_transport"] : activeTransportCategories;
+            const activeTourSubtype = selectedSchedule?.services?.tour?.subtype || "city";
+            const activeTourType = TOUR_BUILDER_TYPES.find((item) => item.id === activeTourSubtype) || TOUR_BUILDER_TYPES[0];
+            const activeSupportSubtype = selectedSchedule?.services?.support?.subtype || "escort";
+            const activeSupportType = GUIDE_SUPPORT_BUILDER_TYPES.find((item) => item.id === activeSupportSubtype) || GUIDE_SUPPORT_BUILDER_TYPES[0];
+            const guideComponentCategories = activeEventService === "support" ? activeSupportType.guideCategories : activeTourType.guideCategories;
+            const providerTransportCategories = activeEventService === "tour" ? activeTourType.transportCategories : activeTransportCategories;
             const activeGuideService = guideComponentCategories.includes(st.guideService?.category) ? st.guideService : null;
             const activeTransportService = providerTransportCategories.includes(st.transportService?.category) ? st.transportService : null;
             const selectTransportSubtype = (subtype) => {
@@ -2312,6 +2311,54 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     ...(sameSubtype ? {} : { transport: null, transportService: null }),
                     schedule,
                   },
+                };
+              });
+            };
+            const selectTourSubtype = (subtype) => {
+              setByDay((previous) => {
+                const current = previous[k] || {};
+                const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                  if (item.id !== selectedSchedule?.id) return item;
+                  return {
+                    ...item,
+                    services: {
+                      ...item.services,
+                      tour: { ...(item.services?.tour || {}), subtype },
+                      guide: {},
+                      transport: { subtype: "city_tour" },
+                    },
+                  };
+                });
+                return {
+                  ...previous,
+                  [k]: {
+                    ...current,
+                    guide: null,
+                    guideService: null,
+                    transport: null,
+                    transportService: null,
+                    schedule,
+                  },
+                };
+              });
+            };
+            const selectSupportSubtype = (subtype) => {
+              setByDay((previous) => {
+                const current = previous[k] || {};
+                const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                  if (item.id !== selectedSchedule?.id) return item;
+                  return {
+                    ...item,
+                    services: {
+                      ...item.services,
+                      support: { ...(item.services?.support || {}), subtype },
+                      guide: {},
+                    },
+                  };
+                });
+                return {
+                  ...previous,
+                  [k]: { ...current, guide: null, guideService: null, schedule },
                 };
               });
             };
@@ -2401,7 +2448,37 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 {selectedSchedule ? (<>
                 <div className="grid gap-3">
                   {/* Guide */}
-                  {activeEventService === "tour" && <>
+                  {["tour", "support"].includes(activeEventService) && <>
+                  {activeEventService === "tour" && <div className="rounded-md border border-slate-200 bg-white p-3">
+                    <div className="mb-2 text-xs font-semibold uppercase text-slate-500">Сценарий сити-тура</div>
+                    <div className="flex flex-wrap gap-2">
+                      {TOUR_BUILDER_TYPES.map((type) => (
+                        <button
+                          key={type.id}
+                          type="button"
+                          onClick={() => selectTourSubtype(type.id)}
+                          className={`rounded-md border px-3 py-2 text-sm font-semibold ${activeTourType.id === type.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"}`}
+                        >
+                          {type.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>}
+                  {activeEventService === "support" && <div className="rounded-md border border-slate-200 bg-white p-3">
+                    <div className="mb-2 text-xs font-semibold uppercase text-slate-500">Вид сопровождения</div>
+                    <div className="flex flex-wrap gap-2">
+                      {GUIDE_SUPPORT_BUILDER_TYPES.map((type) => (
+                        <button
+                          key={type.id}
+                          type="button"
+                          onClick={() => selectSupportSubtype(type.id)}
+                          className={`rounded-md border px-3 py-2 text-sm font-semibold ${activeSupportType.id === type.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"}`}
+                        >
+                          {type.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>}
                   <div className="rounded-md bg-slate-50 p-3">
                     <label
                       className="block text-sm font-medium mb-1"
@@ -2410,7 +2487,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       {t('tb.guide')}
                     </label>
                     <AsyncSelect
-                        key={`guide-${k}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}        // ⬅️ форс-ремаунт при смене условий
+                        key={`guide-${k}-${activeEventService}-${activeEventService === "support" ? activeSupportType.id : activeTourType.id}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}        // ⬅️ форс-ремаунт при смене условий
                         isDisabled={!cityChosen}
                         cacheOptions={false}                         // ⬅️ убираем кеш для надежности
                         defaultOptions
@@ -2516,7 +2593,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   {/* Transport */}
                   {(activeEventService === "transfer" || activeEventService === "tour") && <>
                   <div className="rounded-md bg-slate-50 p-3">
-                    {activeEventService === "tour" && <div className="mb-3 text-sm font-bold text-slate-950">Транспорт сити-тура</div>}
+                    {activeEventService === "tour" && <div className="mb-3 text-sm font-bold text-slate-950">Транспорт: {activeTourType.label.toLowerCase()}</div>}
                     {activeEventService === "transfer" && (
                     <div className="mb-3">
                       <div className="mb-1.5 text-xs font-semibold uppercase text-slate-500">Тип транспорта</div>

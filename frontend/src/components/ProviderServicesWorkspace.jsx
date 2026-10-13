@@ -2,28 +2,15 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { tError, tInfo, tSuccess } from "../shared/toast";
 import VehicleModelInput from "./VehicleModelInput";
+import {
+  GUIDE_SERVICE_GROUPS,
+  TRANSPORT_SERVICE_GROUPS,
+  TRANSPORT_CATEGORY_IDS,
+  PROVIDER_SERVICE_LABELS as LABELS,
+  findServiceGroup,
+} from "../config/providerServiceCatalog";
 
-const GUIDE_CATEGORIES = [
-  ["city_tour_guide", "Городская экскурсия"],
-  ["mountain_tour_guide", "Экскурсия в горы"],
-  ["desert_tour_guide", "Пустынный тур"],
-  ["safari_tour_guide", "Сафари-тур"],
-  ["meet", "Встреча"],
-  ["seeoff", "Проводы"],
-  ["translation", "Переводчик"],
-];
-const TRANSPORT_CATEGORIES = [
-  ["city_tour_transport", "Тур по городу"],
-  ["mountain_tour_transport", "Тур в горы"],
-  ["desert_tour_transport", "Пустынный тур"],
-  ["safari_tour_transport", "Сафари-тур"],
-  ["one_way_transfer", "Трансфер в одну сторону"],
-  ["dinner_transfer", "Трансфер на ужин"],
-  ["border_transfer", "Междугородний трансфер"],
-  ["hotel_transfer", "Отельный трансфер"],
-];
-const LABELS = Object.fromEntries([...GUIDE_CATEGORIES, ...TRANSPORT_CATEGORIES]);
-const transportCategory = (value) => TRANSPORT_CATEGORIES.some(([key]) => key === value);
+const transportCategory = (value) => TRANSPORT_CATEGORY_IDS.includes(value);
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number(value));
 
@@ -43,6 +30,7 @@ async function fetchJSON(path, init = {}) {
 }
 
 const blankForm = () => ({
+  catalogGroup: "",
   category: "",
   title: "",
   citySlug: "",
@@ -100,18 +88,16 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
   const fleet = useMemo(() => (Array.isArray(profile?.car_fleet) ? profile.car_fleet.filter((car) => car && car.is_active !== false) : []), [profile]);
   const cities = useMemo(() => (Array.isArray(profile?.city_slugs) ? profile.city_slugs : []), [profile]);
-  const guideCanDrive = providerType === "guide" && fleet.length > 0;
   const isTransport = transportCategory(form.category);
   const preview = calculatedPreview(form);
 
   const categoryGroups = useMemo(() => {
-    const groups = [];
-    if (providerType !== "transport") groups.push({ label: "Услуги гида", items: GUIDE_CATEGORIES });
-    if (providerType === "transport" || providerType === "agent" || guideCanDrive) {
-      groups.push({ label: providerType === "guide" ? "Гид с транспортом" : "Транспорт", items: TRANSPORT_CATEGORIES });
-    }
-    return groups;
-  }, [providerType, guideCanDrive]);
+    if (providerType === "transport") return TRANSPORT_SERVICE_GROUPS;
+    if (providerType === "guide") return [...GUIDE_SERVICE_GROUPS, ...TRANSPORT_SERVICE_GROUPS];
+    return [...GUIDE_SERVICE_GROUPS, ...TRANSPORT_SERVICE_GROUPS];
+  }, [providerType]);
+  const activeCategoryGroup = categoryGroups.find((group) => group.id === form.catalogGroup)
+    || findServiceGroup(form.category, categoryGroups);
 
   async function load() {
     if (!pid) return;
@@ -253,8 +239,19 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     const existing = new Set(rows.map((row) => `${row.category}:${row.details?.city_slug || ""}:${row.details?.vehicle_model || ""}`));
     const candidates = [];
     for (const city of cities) {
-      if (providerType !== "transport") candidates.push({ category: "city_tour_guide", title: `Городская экскурсия · ${city}`, city });
-      for (const car of fleet) candidates.push({ category: "city_tour_transport", title: `Тур по городу · ${city} · ${car.model || "автомобиль"}`, city, car });
+      if (providerType !== "transport") {
+        candidates.push({ category: "city_tour_guide", title: `Обзорная экскурсия · ${city}`, city });
+        candidates.push({ category: "group_escort", title: `Сопровождение группы · ${city}`, city });
+      }
+      for (const car of fleet) {
+        const vehicle = car.model || "автомобиль";
+        candidates.push({ category: "city_tour_transport", title: `Транспорт для сити-тура · ${city} · ${vehicle}`, city, car });
+        candidates.push({ category: "airport_to_hotel_transfer", title: `Аэропорт → отель · ${city} · ${vehicle}`, city, car });
+        candidates.push({ category: "hotel_to_airport_transfer", title: `Отель → аэропорт · ${city} · ${vehicle}`, city, car });
+        candidates.push({ category: "intercity_transfer", title: `Междугородний трансфер · ${city} · ${vehicle}`, city, car });
+        candidates.push({ category: "hourly_driver", title: `Автомобиль с водителем · ${city} · ${vehicle}`, city, car });
+        candidates.push({ category: "full_day_driver", title: `Автомобиль на день · ${city} · ${vehicle}`, city, car });
+      }
     }
     const unique = candidates.filter((item) => !existing.has(`${item.category}:${item.city}:${item.car?.model || ""}`));
     setSuggestions(unique.map((item, index) => ({ ...item, id: index, selected: true })));
@@ -317,11 +314,17 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
           <span className="text-sm font-medium text-slate-500">Основные данные</span>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <label className="text-sm font-semibold text-slate-700">Категория
-            <select value={form.category} onChange={(event) => setField("category", event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal">
-              <option value="">Выберите категорию</option>
-              {categoryGroups.map((group) => <optgroup key={group.label} label={group.label}>{group.items.map(([key, label]) => <option key={key} value={key}>{label}</option>)}</optgroup>)}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+          <label className="text-sm font-semibold text-slate-700">Направление услуги
+            <select value={activeCategoryGroup?.id || ""} onChange={(event) => setForm((current) => ({ ...current, catalogGroup: event.target.value, category: "", title: "" }))} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal">
+              <option value="">Выберите направление</option>
+              {categoryGroups.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
+            </select>
+          </label>
+          <label className="text-sm font-semibold text-slate-700">Услуга
+            <select value={form.category} disabled={!activeCategoryGroup} onChange={(event) => setField("category", event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal disabled:bg-slate-50">
+              <option value="">Выберите услугу</option>
+              {(activeCategoryGroup?.services || []).map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}
             </select>
           </label>
           <label className="text-sm font-semibold text-slate-700">Название

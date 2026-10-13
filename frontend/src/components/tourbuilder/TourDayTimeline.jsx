@@ -4,6 +4,7 @@ const COMPONENT_TYPES = [
   { value: "transfer", label: "Транспорт", legacyType: "transport" },
   { value: "hotel", label: "Отель", legacyType: "hotel" },
   { value: "tour", label: "Сити-тур", legacyType: "guide" },
+  { value: "support", label: "Сопровождение", legacyType: "guide" },
   { value: "meal", label: "Питание", legacyType: "meal" },
 ];
 
@@ -12,6 +13,33 @@ const TRANSPORT_SUBTYPE_LABELS = {
   intercity: "Междугородний трансфер",
   hotel: "Отельный трансфер",
   city_tour: "Транспорт сити-тура",
+  hourly: "Почасовой транспорт",
+  half_day: "Транспорт на полдня",
+  full_day: "Транспорт на день",
+  vip: "VIP-трансфер",
+  bus: "Групповой автобус",
+  dinner: "Трансфер в ресторан",
+  meet_sign: "Встреча с табличкой",
+  waiting: "Дополнительное ожидание",
+};
+
+const TOUR_SUBTYPE_LABELS = {
+  city: "Обзорный тур",
+  thematic: "Тематический тур",
+  attraction: "Экскурсия по объекту",
+  countryside: "Загородный тур",
+  mountain: "Горный тур",
+  desert: "Пустынный тур",
+  safari: "Сафари-тур",
+  shopping: "Шопинг-сопровождение",
+};
+
+const SUPPORT_SUBTYPE_LABELS = {
+  escort: "Сопровождение группы",
+  meet: "Встреча гостей",
+  seeoff: "Проводы гостей",
+  translation: "Переводчик",
+  coordinator: "Координатор",
 };
 
 const componentMeta = (value) => COMPONENT_TYPES.find((item) => item.value === value) || COMPONENT_TYPES[0];
@@ -164,6 +192,8 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{component.label}</span>
                           {item.provider_name && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{item.provider_name}</span>}
                           {item.services?.guide?.provider_name && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">Гид: {item.services.guide.provider_name}</span>}
+                          {item.services?.tour?.subtype && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{TOUR_SUBTYPE_LABELS[item.services.tour.subtype] || "Сити-тур"}</span>}
+                          {item.services?.support?.subtype && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{SUPPORT_SUBTYPE_LABELS[item.services.support.subtype] || "Сопровождение"}</span>}
                           {item.services?.transport?.subtype && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">{TRANSPORT_SUBTYPE_LABELS[item.services.transport.subtype] || "Транспорт"}</span>}
                           {item.services?.transport?.provider_name && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Транспорт: {item.services.transport.provider_name}</span>}
                           {item.services?.transport?.flight?.raw_offer_id && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">Авиабилет выбран</span>}
