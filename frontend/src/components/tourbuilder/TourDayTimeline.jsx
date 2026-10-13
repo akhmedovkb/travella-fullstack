@@ -80,10 +80,9 @@ export const normalizeScheduleItems = (value) =>
     }))
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
-export default function TourDayTimeline({ dayKey, items, onChange, selectedId, onSelect }) {
+export default function TourDayTimeline({ dayKey, items, onChange, selectedId, onSelect, expandedId = null, onExpandedChange }) {
   const normalized = useMemo(() => normalizeScheduleItems(items), [items]);
   const [draftId, setDraftId] = useState(selectedId || normalized[0]?.id || null);
-  const [editingId, setEditingId] = useState(null);
   const activeId = selectedId || draftId;
 
   useEffect(() => {
@@ -115,12 +114,13 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
     };
     onChange([...normalized, item]);
     select(item.id);
-    setEditingId(item.id);
+    onExpandedChange?.(item.id);
   };
 
   const remove = (id) => {
     const next = normalized.filter((item) => item.id !== id);
     onChange(next);
+    if (expandedId === id) onExpandedChange?.(null);
     if (activeId === id) select(next[0]?.id || null);
   };
 
@@ -156,7 +156,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                 </div>
                 <div className={`rounded-md border px-3 py-2.5 transition ${active ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white hover:border-slate-400"}`}>
                   <div className="flex items-center gap-3">
-                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => select(item.id)}>
+                  <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { select(item.id); onExpandedChange?.(null); }}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-bold text-slate-950">{item.title || "Без названия"}</div>
@@ -177,14 +177,18 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                   </button>
                   <button
                     type="button"
-                    onClick={() => { select(item.id); setEditingId((current) => current === item.id ? null : item.id); }}
+                    onClick={() => {
+                      const nextExpandedId = expandedId === item.id ? null : item.id;
+                      select(item.id);
+                      onExpandedChange?.(nextExpandedId);
+                    }}
                     className="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
                   >
-                    {editingId === item.id ? "Готово" : "Настроить"}
+                    {expandedId === item.id ? "Готово" : "Настроить"}
                   </button>
                   </div>
 
-                  {editingId === item.id && (
+                  {expandedId === item.id && (
                     <div className="mt-3 grid gap-3 border-t border-slate-200 pt-3 md:grid-cols-[110px_110px_1fr_auto]">
                       <label className="text-xs font-semibold text-slate-500">Начало<input type="time" value={item.start_time} onChange={(e) => patch(item.id, { start_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
                       <label className="text-xs font-semibold text-slate-500">Окончание<input type="time" value={item.end_time} onChange={(e) => patch(item.id, { end_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
