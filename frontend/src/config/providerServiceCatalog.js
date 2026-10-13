@@ -111,14 +111,6 @@ export const TRANSPORT_BUILDER_TYPES = [
   { id: "international", label: "Авиабилеты", categories: [] },
   { id: "hotel", label: "Отельный трансфер", categories: ["airport_to_hotel_transfer", "hotel_to_airport_transfer", "station_to_hotel_transfer", "hotel_to_station_transfer", "hotel_transfer"] },
   { id: "intercity", label: "Междугородний", categories: ["intercity_transfer", "border_transfer", "one_way_transfer"] },
-  { id: "hourly", label: "Почасовой", categories: ["hourly_driver"] },
-  { id: "half_day", label: "На полдня", categories: ["half_day_driver"] },
-  { id: "full_day", label: "На день", categories: ["full_day_driver"] },
-  { id: "vip", label: "VIP", categories: ["vip_transfer"] },
-  { id: "bus", label: "Автобус", categories: ["group_bus"] },
-  { id: "dinner", label: "В ресторан", categories: ["dinner_transfer"] },
-  { id: "meet_sign", label: "Встреча с табличкой", categories: ["meet_with_sign"] },
-  { id: "waiting", label: "Ожидание", categories: ["extra_waiting"] },
 ];
 
 export const findServiceGroup = (category, groups) =>
