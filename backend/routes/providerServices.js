@@ -4,16 +4,9 @@ const express = require('express');
 const router = express.Router();
 const db = require('../db'); // ваш pool из pg
 const authenticateToken = require('../middleware/authenticateToken');
+const { TRANSPORT_SERVICE_CATEGORY_SET: TRANSPORT_CATS } = require('../utils/providerServiceCatalog');
 
 // Транспортные категории — только в них допускаем details.seats
-const TRANSPORT_CATS = new Set([
-  'city_tour_transport',
-  'mountain_tour_transport',
-  'one_way_transfer',
-  'dinner_transfer',
-  'border_transfer',
-  'hotel_transfer',
-]);
 
 function isTransportCategory(cat) {
   return TRANSPORT_CATS.has(String(cat || ''));
@@ -244,7 +237,6 @@ router.post('/api/providers/:pid/services/bulk', authenticateToken, async (req, 
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: 'items[] required' });
 
-  const TRANSPORT = new Set(['city_tour_transport','mountain_tour_transport','one_way_transfer','dinner_transfer','border_transfer','hotel_transfer']);
   const norm = (it) => {
     const category = String(it.category || '').trim();
     if (!category) return null;
@@ -255,7 +247,7 @@ router.post('/api/providers/:pid/services/bulk', authenticateToken, async (req, 
     if (it.details && typeof it.details === 'object') details = { ...it.details };
     if ('seats' in details) {
       const n = Number(details.seats);
-      if (!(TRANSPORT.has(category) && Number.isInteger(n) && n > 0)) delete details.seats;
+      if (!(TRANSPORT_CATS.has(category) && Number.isInteger(n) && n > 0)) delete details.seats;
     }
     return { category, title, price, currency, details };
   };

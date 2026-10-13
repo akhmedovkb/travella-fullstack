@@ -5,6 +5,7 @@ const jwt = require("jsonwebtoken");
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_in_env";
 const { getContactUnlockSettings } = require("../utils/contactUnlockSettings");
 const { isServiceActual } = require("../telegram/helpers/serviceActual");
+const { GUIDE_SERVICE_CATEGORIES, TRANSPORT_SERVICE_CATEGORIES } = require("../utils/providerServiceCatalog");
 if (!pg || typeof pg.query !== "function") {
   throw new Error("DB driver not available: expected node-postgres Pool with .query()");
 }
@@ -224,15 +225,8 @@ const PRICE_SQL = `COALESCE(
 )`;
 
 const CATEGORY_ALIAS = {
-  guide: ["city_tour_guide", "mountain_tour_guide"],
-  transport: [
-    "city_tour_transport",
-    "mountain_tour_transport",
-    "one_way_transfer",
-    "dinner_transfer",
-    "border_transfer",
-    "hotel_transfer",
-  ],
+  guide: GUIDE_SERVICE_CATEGORIES,
+  transport: TRANSPORT_SERVICE_CATEGORIES,
   refused_tour: ["refused_tour"],
   author_tour: ["author_tour"],
   refused_hotel: ["refused_hotel"],
