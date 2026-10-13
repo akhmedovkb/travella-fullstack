@@ -15,6 +15,7 @@ import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
 import TransportSegmentEditor from "../components/tourbuilder/TransportSegmentEditor";
+import { BusFront, Landmark, MapPin, UserRound } from "lucide-react";
 import {
   GUIDE_CATEGORY_IDS,
   TRANSPORT_CATEGORY_IDS,
@@ -2438,19 +2439,23 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 />
 
                 {expandedComponents[k] === selectedSchedule?.id && <>
-                <div className="rounded-lg border border-slate-200 bg-white">
-                  <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2.5">
-                    <strong className="mr-auto text-sm text-slate-950">{EVENT_SERVICE_CATEGORIES.find((item) => item.id === activeEventService)?.label || "Услуги компонента"}</strong>
-                    {selectedSchedule && <span className="text-xs text-slate-500">{selectedSchedule.start_time}–{selectedSchedule.end_time}</span>}
+                <div className="overflow-hidden rounded-lg border border-slate-900 bg-slate-950 text-white shadow-sm">
+                  <div className="flex flex-wrap items-center gap-3 px-4 py-3">
+                    <div className="grid h-8 w-8 place-items-center rounded-md bg-white/10 text-sm font-bold">{activeEventService === "tour" ? "ST" : activeEventService === "support" ? "SP" : activeEventService === "transfer" ? "TR" : "•"}</div>
+                    <div className="mr-auto">
+                      <strong className="block text-sm">{EVENT_SERVICE_CATEGORIES.find((item) => item.id === activeEventService)?.label || "Услуги компонента"}</strong>
+                      <span className="text-xs text-slate-300">Выберите состав компонента и подходящие услуги</span>
+                    </div>
+                    {selectedSchedule && <span className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-semibold text-slate-100">{selectedSchedule.start_time}–{selectedSchedule.end_time}</span>}
                   </div>
                 </div>
 
                 {selectedSchedule ? (<>
-                <div className="grid gap-3">
+                <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-100/70 p-3 xl:grid-cols-3">
                   {/* Guide */}
                   {["tour", "support"].includes(activeEventService) && <>
-                  {activeEventService === "tour" && <div className="rounded-md border border-slate-200 bg-white p-3">
-                    <div className="mb-2 text-xs font-semibold uppercase text-slate-500">Сценарий сити-тура</div>
+                  {activeEventService === "tour" && <div className="rounded-md border border-slate-200 bg-white p-3 xl:col-span-3">
+                    <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-slate-500"><MapPin size={15} /> Сценарий сити-тура</div>
                     <div className="flex flex-wrap gap-2">
                       {TOUR_BUILDER_TYPES.map((type) => (
                         <button
@@ -2464,8 +2469,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       ))}
                     </div>
                   </div>}
-                  {activeEventService === "support" && <div className="rounded-md border border-slate-200 bg-white p-3">
-                    <div className="mb-2 text-xs font-semibold uppercase text-slate-500">Вид сопровождения</div>
+                  {activeEventService === "support" && <div className="rounded-md border border-slate-200 bg-white p-3 xl:col-span-3">
+                    <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-slate-500"><UserRound size={15} /> Вид сопровождения</div>
                     <div className="flex flex-wrap gap-2">
                       {GUIDE_SUPPORT_BUILDER_TYPES.map((type) => (
                         <button
@@ -2479,13 +2484,14 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       ))}
                     </div>
                   </div>}
-                  <div className="rounded-md bg-slate-50 p-3">
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
-                    >
-                      {t('tb.guide')}
-                    </label>
+                  {!cityChosen && <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900 xl:col-span-3"><MapPin size={17} /> Укажите город в шапке дня — после этого появятся доступные поставщики.</div>}
+                  <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+                    <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
+                      <div className="grid h-8 w-8 place-items-center rounded-md bg-violet-100 text-violet-700"><UserRound size={17} /></div>
+                      <div><div className="text-sm font-bold text-slate-950">1. {t('tb.guide')}</div><div className="text-xs text-slate-500">Поставщик и услуга выбранного сценария</div></div>
+                    </div>
+                    <div className="p-4">
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Поставщик</label>
                     <AsyncSelect
                         key={`guide-${k}-${activeEventService}-${activeEventService === "support" ? activeSupportType.id : activeTourType.id}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}        // ⬅️ форс-ремаунт при смене условий
                         isDisabled={!cityChosen}
@@ -2530,7 +2536,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         />
                                         {/* выпадашка услуг гида */}
                     <select
-                      className="mt-2 w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
+                      className="mt-3 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50"
                       disabled={!st.guide}
                       value={activeGuideService?.id || ""}
                       onChange={(e) => {
@@ -2577,8 +2583,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           );
                         })}
                     </select>
-                    <div className="text-xs text-gray-600 mt-1">
-                      {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{activeGuideService ? calcGuideForDay(k).toFixed(2) : "0.00"}</b> {(activeGuideService?.currency || st.guide?.currency || "UZS")}
+                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+                      <span>{activeGuideService ? CATEGORY_LABELS[activeGuideService.category] || "Услуга выбрана" : "Услуга не выбрана"}</span>
+                      <strong className="text-sm text-slate-950">{activeGuideService ? calcGuideForDay(k).toFixed(2) : "0.00"} {activeGuideService?.currency || st.guide?.currency || "UZS"}</strong>
+                    </div>
                     </div>
                   </div>
                   
@@ -2592,11 +2600,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
                   {/* Transport */}
                   {(activeEventService === "transfer" || activeEventService === "tour") && <>
-                  <div className="rounded-md bg-slate-50 p-3">
-                    {activeEventService === "tour" && <div className="mb-3 text-sm font-bold text-slate-950">Транспорт: {activeTourType.label.toLowerCase()}</div>}
+                  <div className={`overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm ${activeEventService === "transfer" ? "xl:col-span-3" : ""}`}>
+                    <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
+                      <div className="grid h-8 w-8 place-items-center rounded-md bg-blue-100 text-blue-700"><BusFront size={17} /></div>
+                      <div><div className="text-sm font-bold text-slate-950">{activeEventService === "tour" ? "2. " : ""}Транспорт</div><div className="text-xs text-slate-500">{activeEventService === "tour" ? `Для сценария «${activeTourType.label}»` : "Выберите тип, поставщика и тариф"}</div></div>
+                    </div>
+                    <div className="p-4">
                     {activeEventService === "transfer" && (
                     <div className="mb-3">
-                      <div className="mb-1.5 text-xs font-semibold uppercase text-slate-500">Тип транспорта</div>
+                      <div className="mb-2 text-xs font-bold uppercase text-slate-500">Тип транспорта</div>
                       <div className="flex flex-wrap gap-2">
                         {TRANSPORT_SERVICE_TYPES.map((type) => (
                           <button
@@ -2667,7 +2679,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       />
                     )}
                     {(activeEventService === "tour" || (activeTransportSubtype && activeTransportSubtype !== "international")) && <>
-                    <label className="mb-1 block text-sm font-semibold text-slate-800">Поставщик</label>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Поставщик</label>
                     <AsyncSelect
                         key={`transport-${k}-${activeEventService === "tour" ? "city-tour" : activeTransportSubtype}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}
                         isDisabled={!cityChosen || (activeEventService === "transfer" && !activeTransportSubtype)}
@@ -2714,7 +2726,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         />
                                         {/* выпадашка услуг транспорта */}
                     <select
-                      className="mt-2 w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
+                      className="mt-3 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm disabled:bg-slate-50"
                       disabled={!st.transport}
                       value={activeTransportService?.id || ""}
                       onChange={(e) => {
@@ -2767,10 +2779,12 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           );
                         })}
                     </select>
-                    <div className="text-xs text-gray-600 mt-1">
-                     {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{activeTransportService ? calcTransportForDay(k).toFixed(2) : "0.00"}</b> {(activeTransportService?.currency || st.transport?.currency || "UZS")}
+                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+                      <span>{activeTransportService ? CATEGORY_LABELS[activeTransportService.category] || "Услуга выбрана" : "Услуга не выбрана"}</span>
+                      <strong className="text-sm text-slate-950">{activeTransportService ? calcTransportForDay(k).toFixed(2) : "0.00"} {activeTransportService?.currency || st.transport?.currency || "UZS"}</strong>
                     </div>
                     </>}
+                    </div>
                   </div>
                   {/* если услуг нет: */}
                   {st.transport && (servicesCache[st.transport.id]?.length === 0) && (
@@ -2979,15 +2993,14 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   
                   {/* Entry fees */}
                   {activeEventService === "tour" && (
-                    <div className="rounded-md bg-slate-50 p-3">
-                    <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
-                    >
-                      {t('tb.entry_fees')}
-                    </label>
+                    <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
+                    <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
+                      <div className="grid h-8 w-8 place-items-center rounded-md bg-amber-100 text-amber-700"><Landmark size={17} /></div>
+                      <div><div className="text-sm font-bold text-slate-950">3. Объекты</div><div className="text-xs text-slate-500">Достопримечательности и входные билеты</div></div>
+                    </div>
+                    <div className="p-4">
                     <input
-                      className="w-full border rounded px-3 py-2 mb-2"
+                      className="mb-3 h-10 w-full rounded-md border border-slate-300 px-3 text-sm disabled:bg-slate-50"
                       placeholder={cityChosen ? t('tb.entry_ph') : t('tb.pick_city_first')}
                       value={entryQMap[k] || ""}
                       disabled={!cityChosen}
@@ -3020,8 +3033,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       menuPortalTarget={document.body}
                       styles={RS_STYLES}
                     />
-                   <div className="text-xs text-gray-600 mt-1">
-                     {t('tb.calc_day_hint', { amount: calcEntryForDay(k).toFixed(2) })}
+                   <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
+                     <span>{(st.entrySelected || []).length ? `Выбрано объектов: ${(st.entrySelected || []).length}` : "Объекты не выбраны"}</span>
+                     <strong className="text-sm text-slate-950">{calcEntryForDay(k).toFixed(2)} UZS</strong>
+                   </div>
                    </div>
                   </div>
                   )}
