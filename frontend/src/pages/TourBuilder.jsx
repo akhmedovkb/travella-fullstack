@@ -148,7 +148,10 @@ const buildTransportSegments = (stateByDay = {}) =>
       const flights = normalizeScheduleItems(state?.schedule)
         .map((item) => item?.services?.transport?.flight)
         .filter(Boolean);
-      return [...legacy, ...flights].map((segment, index) => ({
+      const rail = normalizeScheduleItems(state?.schedule)
+        .map((item) => item?.services?.transport?.rail)
+        .filter(Boolean);
+      return [...legacy, ...flights, ...rail].map((segment, index) => ({
       id: `${date}-${index + 1}`,
       date,
       mode: String(segment?.type || "car"),
@@ -1681,7 +1684,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     const flights = normalizeScheduleItems(st.schedule)
       .map((item) => item?.services?.transport?.flight)
       .filter(Boolean);
-    const list = [...(Array.isArray(st.transfers) ? st.transfers : []), ...flights];
+    const rail = normalizeScheduleItems(st.schedule)
+      .map((item) => item?.services?.transport?.rail)
+      .filter(Boolean);
+    const list = [...(Array.isArray(st.transfers) ? st.transfers : []), ...flights, ...rail];
     let sum = 0;
     for (const tr of list) {
       const price = toNum(tr?.price, 0);
@@ -2284,6 +2290,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       : "tour");
             const activeEventService = suggestedServiceCategory;
             const activeTransportSubtype = selectedSchedule?.services?.transport?.subtype || "";
+            const activeIntercityMode = selectedSchedule?.services?.transport?.intercity_mode || "provider";
+            const activeRail = selectedSchedule?.services?.transport?.rail || {};
             const activeTransportCategories = TRANSPORT_SERVICE_TYPES.find((item) => item.id === activeTransportSubtype)?.categories || [];
             const activeTourSubtype = selectedSchedule?.services?.tour?.subtype || "city";
             const activeTourType = TOUR_BUILDER_TYPES.find((item) => item.id === activeTourSubtype) || TOUR_BUILDER_TYPES[0];
@@ -2313,6 +2321,51 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     schedule,
                   },
                 };
+              });
+            };
+            const selectIntercityMode = (mode) => {
+              setByDay((previous) => {
+                const current = previous[k] || {};
+                const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                  if (item.id !== selectedSchedule?.id) return item;
+                  const previousTransport = item.services?.transport || {};
+                  const transport = {
+                    subtype: "intercity",
+                    intercity_mode: mode,
+                    ...(mode === "rail" && previousTransport.rail ? { rail: previousTransport.rail } : {}),
+                  };
+                  return { ...item, services: { ...item.services, transport } };
+                });
+                return {
+                  ...previous,
+                  [k]: { ...current, transport: null, transportService: null, schedule },
+                };
+              });
+            };
+            const updateRailSegment = (changes) => {
+              setByDay((previous) => {
+                const current = previous[k] || {};
+                const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                  if (item.id !== selectedSchedule?.id) return item;
+                  const currentTransport = item.services?.transport || {};
+                  const rail = {
+                    type: "rail",
+                    provider: "manual",
+                    date: k,
+                    currency: "UZS",
+                    perPax: true,
+                    ...(currentTransport.rail || {}),
+                    ...changes,
+                  };
+                  return {
+                    ...item,
+                    services: {
+                      ...item.services,
+                      transport: { ...currentTransport, subtype: "intercity", intercity_mode: "rail", rail },
+                    },
+                  };
+                });
+                return { ...previous, [k]: { ...current, schedule } };
               });
             };
             const selectTourSubtype = (subtype) => {
@@ -2623,6 +2676,27 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       </div>
                     </div>
                     )}
+                    {activeEventService === "transfer" && activeTransportSubtype === "intercity" && (
+                      <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
+                        <div className="mb-2 text-xs font-bold uppercase text-slate-500">Как оформить межгород</div>
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {[
+                            { id: "provider", label: "Транспортный поставщик", hint: "Автомобиль, минивэн или автобус" },
+                            { id: "rail", label: "ЖД транспорт", hint: "Ручная стоимость билета на человека" },
+                          ].map((mode) => (
+                            <button
+                              key={mode.id}
+                              type="button"
+                              onClick={() => selectIntercityMode(mode.id)}
+                              className={`rounded-md border p-3 text-left transition ${activeIntercityMode === mode.id ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-slate-300 bg-white hover:border-slate-500"}`}
+                            >
+                              <strong className="block text-sm text-slate-950">{mode.label}</strong>
+                              <span className="mt-0.5 block text-xs text-slate-500">{mode.hint}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {activeEventService === "transfer" && activeTransportSubtype === "international" && (
                       <TransportSegmentEditor
                         value={{
@@ -2678,7 +2752,76 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         }}
                       />
                     )}
-                    {(activeEventService === "tour" || (activeTransportSubtype && activeTransportSubtype !== "international")) && <>
+                    {activeEventService === "transfer" && activeTransportSubtype === "intercity" && activeIntercityMode === "rail" && (
+                      <div className="overflow-hidden rounded-md border border-amber-200 bg-amber-50/40">
+                        <div className="border-b border-amber-200 bg-white px-4 py-3">
+                          <strong className="block text-sm text-slate-950">ЖД транспорт</strong>
+                          <span className="text-xs text-slate-500">Укажите маршрут и стоимость билета на одного человека</span>
+                        </div>
+                        <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Откуда</span>
+                            <input
+                              value={activeRail.from || ""}
+                              onChange={(event) => updateRailSegment({ from: event.target.value })}
+                              placeholder="Например, Tashkent"
+                              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Куда</span>
+                            <input
+                              value={activeRail.to || ""}
+                              onChange={(event) => updateRailSegment({ to: event.target.value })}
+                              placeholder="Например, Samarkand"
+                              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                            />
+                          </label>
+                          <label className="block">
+                            <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Поезд / рейс</span>
+                            <input
+                              value={activeRail.number || ""}
+                              onChange={(event) => updateRailSegment({ number: event.target.value })}
+                              placeholder="Например, Afrosiyob 764"
+                              className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                            />
+                          </label>
+                          <div className="grid grid-cols-[1fr_92px] gap-2">
+                            <label className="block">
+                              <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Цена / 1 чел.</span>
+                              <input
+                                type="number"
+                                min="0"
+                                step="1000"
+                                value={activeRail.price ?? ""}
+                                onChange={(event) => updateRailSegment({ price: Math.max(0, toNum(event.target.value, 0)) })}
+                                placeholder="0"
+                                className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Валюта</span>
+                              <select
+                                value={activeRail.currency || "UZS"}
+                                onChange={(event) => updateRailSegment({ currency: event.target.value })}
+                                className="h-10 w-full rounded-md border border-slate-300 bg-white px-2 text-sm font-semibold"
+                              >
+                                <option value="UZS">UZS</option>
+                                <option value="USD">USD</option>
+                              </select>
+                            </label>
+                          </div>
+                        </div>
+                        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-amber-200 bg-white px-4 py-3">
+                          <span className="text-sm text-slate-600">{Math.max(1, toNum(adt) + toNum(chd))} чел. × {toNum(activeRail.price, 0).toLocaleString("ru-RU")} {activeRail.currency || "UZS"}</span>
+                          <div className="text-right">
+                            <span className="block text-xs font-bold uppercase text-slate-500">Итого за группу</span>
+                            <strong className="text-lg text-slate-950">{(toNum(activeRail.price, 0) * Math.max(1, toNum(adt) + toNum(chd))).toLocaleString("ru-RU")} {activeRail.currency || "UZS"}</strong>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    {(activeEventService === "tour" || (activeTransportSubtype && activeTransportSubtype !== "international" && !(activeTransportSubtype === "intercity" && activeIntercityMode === "rail"))) && <>
                     <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Поставщик</label>
                     <AsyncSelect
                         key={`transport-${k}-${activeEventService === "tour" ? "city-tour" : activeTransportSubtype}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}
