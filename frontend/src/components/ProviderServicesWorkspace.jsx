@@ -20,6 +20,7 @@ const TRANSPORT_CATEGORIES = [
   ["one_way_transfer", "Трансфер в одну сторону"],
   ["dinner_transfer", "Трансфер на ужин"],
   ["border_transfer", "Междугородний трансфер"],
+  ["hotel_transfer", "Отельный трансфер"],
 ];
 const LABELS = Object.fromEntries([...GUIDE_CATEGORIES, ...TRANSPORT_CATEGORIES]);
 const transportCategory = (value) => TRANSPORT_CATEGORIES.some(([key]) => key === value);

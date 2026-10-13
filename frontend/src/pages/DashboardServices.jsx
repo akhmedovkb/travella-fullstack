@@ -1659,8 +1659,12 @@ export default function DashboardServices({ viewMode = "create" }) {
         "author_tour",
       ];
     }
-    if (type === "guide") return ["city_tour_guide", "mountain_tour_guide", "desert_tour_guide", "safari_tour_guide"];
-    if (type === "transport") return ["city_tour_transport", "mountain_tour_transport", "desert_tour_transport", "safari_tour_transport", "one_way_transfer", "dinner_transfer", "border_transfer"];
+    if (type === "guide") return [
+      "city_tour_guide", "mountain_tour_guide", "desert_tour_guide", "safari_tour_guide",
+      "city_tour_transport", "mountain_tour_transport", "desert_tour_transport", "safari_tour_transport",
+      "one_way_transfer", "dinner_transfer", "border_transfer", "hotel_transfer",
+    ];
+    if (type === "transport") return ["city_tour_transport", "mountain_tour_transport", "desert_tour_transport", "safari_tour_transport", "one_way_transfer", "dinner_transfer", "border_transfer", "hotel_transfer"];
     if (type === "hotel") return ["hotel_room", "hotel_transfer", "hall_rent"];
     return [];
   }, [profile?.type]);

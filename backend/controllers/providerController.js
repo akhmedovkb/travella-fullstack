@@ -381,6 +381,7 @@ const TRANSPORT_CATS = new Set([
   "one_way_transfer",
   "dinner_transfer",
   "border_transfer",
+  "hotel_transfer",
 ]);
 const isTransportCategory = (cat) => TRANSPORT_CATS.has(String(cat || ""));
 

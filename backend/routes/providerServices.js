@@ -12,6 +12,7 @@ const TRANSPORT_CATS = new Set([
   'one_way_transfer',
   'dinner_transfer',
   'border_transfer',
+  'hotel_transfer',
 ]);
 
 function isTransportCategory(cat) {
@@ -243,7 +244,7 @@ router.post('/api/providers/:pid/services/bulk', authenticateToken, async (req, 
   const items = Array.isArray(req.body?.items) ? req.body.items : [];
   if (!items.length) return res.status(400).json({ error: 'items[] required' });
 
-  const TRANSPORT = new Set(['city_tour_transport','mountain_tour_transport','one_way_transfer','dinner_transfer','border_transfer']);
+  const TRANSPORT = new Set(['city_tour_transport','mountain_tour_transport','one_way_transfer','dinner_transfer','border_transfer','hotel_transfer']);
   const norm = (it) => {
     const category = String(it.category || '').trim();
     if (!category) return null;
