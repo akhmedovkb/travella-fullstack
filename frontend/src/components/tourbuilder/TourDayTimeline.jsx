@@ -7,6 +7,13 @@ const COMPONENT_TYPES = [
   { value: "meal", label: "Питание", legacyType: "meal" },
 ];
 
+const TRANSPORT_SUBTYPE_LABELS = {
+  international: "Авиабилет",
+  intercity: "Междугородний трансфер",
+  hotel: "Отельный трансфер",
+  city_tour: "Транспорт сити-тура",
+};
+
 const componentMeta = (value) => COMPONENT_TYPES.find((item) => item.value === value) || COMPONENT_TYPES[0];
 
 const toMinutes = (value) => {
@@ -157,6 +164,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{component.label}</span>
                           {item.provider_name && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{item.provider_name}</span>}
                           {item.services?.guide?.provider_name && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">Гид: {item.services.guide.provider_name}</span>}
+                          {item.services?.transport?.subtype && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">{TRANSPORT_SUBTYPE_LABELS[item.services.transport.subtype] || "Транспорт"}</span>}
                           {item.services?.transport?.provider_name && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Транспорт: {item.services.transport.provider_name}</span>}
                           {item.services?.transport?.flight?.raw_offer_id && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">Авиабилет выбран</span>}
                           {item.services?.hotel?.provider_name && <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700">Отель: {item.services.hotel.provider_name}</span>}
