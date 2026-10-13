@@ -4,7 +4,6 @@ const COMPONENT_TYPES = [
   { value: "transfer", label: "Транспорт", legacyType: "transport" },
   { value: "hotel", label: "Отель", legacyType: "hotel" },
   { value: "tour", label: "Сити-тур", legacyType: "guide" },
-  { value: "support", label: "Сопровождение", legacyType: "guide" },
   { value: "meal", label: "Питание", legacyType: "meal" },
 ];
 
@@ -32,6 +31,11 @@ const TOUR_SUBTYPE_LABELS = {
   desert: "Пустынный тур",
   safari: "Сафари-тур",
   shopping: "Шопинг-сопровождение",
+  support_escort: "Сопровождение группы",
+  support_meet: "Встреча гостей",
+  support_seeoff: "Проводы гостей",
+  support_translation: "Переводчик",
+  support_coordinator: "Координатор",
 };
 
 const SUPPORT_SUBTYPE_LABELS = {
@@ -40,6 +44,14 @@ const SUPPORT_SUBTYPE_LABELS = {
   seeoff: "Проводы гостей",
   translation: "Переводчик",
   coordinator: "Координатор",
+};
+
+const SUPPORT_TO_TOUR_SUBTYPE = {
+  escort: "support_escort",
+  meet: "support_meet",
+  seeoff: "support_seeoff",
+  translation: "support_translation",
+  coordinator: "support_coordinator",
 };
 
 const componentMeta = (value) => COMPONENT_TYPES.find((item) => item.value === value) || COMPONENT_TYPES[0];
@@ -93,19 +105,35 @@ const hasOverlap = (item, items) => {
 
 export const normalizeScheduleItems = (value) =>
   (Array.isArray(value) ? value : [])
-    .map((item, index) => ({
-      id: String(item?.id || `event-${index + 1}`),
-      start_time: String(item?.start_time || item?.startTime || "10:00"),
-      end_time: String(item?.end_time || item?.endTime || "12:00"),
-      title: String(item?.title || "Компонент программы"),
-      type: String(item?.type || "activity"),
-      provider_id: item?.provider_id || null,
-      provider_name: String(item?.provider_name || ""),
-      service_id: item?.service_id || null,
-      service_title: String(item?.service_title || ""),
-      services: item?.services && typeof item.services === "object" ? item.services : {},
-      active_service_category: String(item?.active_service_category === "attractions" ? "tour" : item?.active_service_category || (item?.type === "hotel" ? "hotel" : item?.type === "guide" ? "tour" : item?.type === "meal" ? "meal" : "transfer")),
-    }))
+    .map((item, index) => {
+      const rawCategory = item?.active_service_category === "attractions"
+        ? "tour"
+        : item?.active_service_category || (item?.type === "hotel" ? "hotel" : item?.type === "guide" ? "tour" : item?.type === "meal" ? "meal" : "transfer");
+      const rawServices = item?.services && typeof item.services === "object" ? item.services : {};
+      const legacySupportSubtype = rawServices?.support?.subtype;
+      const services = rawCategory === "support"
+        ? {
+            ...rawServices,
+            tour: {
+              ...(rawServices.tour || {}),
+              subtype: SUPPORT_TO_TOUR_SUBTYPE[legacySupportSubtype] || "support_escort",
+            },
+          }
+        : rawServices;
+      return {
+        id: String(item?.id || `event-${index + 1}`),
+        start_time: String(item?.start_time || item?.startTime || "10:00"),
+        end_time: String(item?.end_time || item?.endTime || "12:00"),
+        title: String(rawCategory === "support" ? "Сити-тур" : item?.title || "Компонент программы"),
+        type: String(rawCategory === "support" ? "guide" : item?.type || "activity"),
+        provider_id: item?.provider_id || null,
+        provider_name: String(item?.provider_name || ""),
+        service_id: item?.service_id || null,
+        service_title: String(item?.service_title || ""),
+        services,
+        active_service_category: String(rawCategory === "support" ? "tour" : rawCategory),
+      };
+    })
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
 export default function TourDayTimeline({ dayKey, items, onChange, selectedId, onSelect, expandedId = null, onExpandedChange }) {

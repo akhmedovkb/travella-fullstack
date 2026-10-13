@@ -97,6 +97,11 @@ export const TOUR_BUILDER_TYPES = [
   { id: "desert", label: "Пустынный", guideCategories: ["desert_tour_guide"], transportCategories: ["desert_tour_transport"] },
   { id: "safari", label: "Сафари", guideCategories: ["safari_tour_guide"], transportCategories: ["safari_tour_transport"] },
   { id: "shopping", label: "Шопинг", guideCategories: ["shopping_assistance"], transportCategories: ["city_tour_transport"] },
+  { id: "support_escort", label: "Сопровождение группы", guideCategories: ["group_escort"], transportCategories: [], guideOnly: true },
+  { id: "support_meet", label: "Встреча гостей", guideCategories: ["meet"], transportCategories: [], guideOnly: true },
+  { id: "support_seeoff", label: "Проводы гостей", guideCategories: ["seeoff"], transportCategories: [], guideOnly: true },
+  { id: "support_translation", label: "Переводчик", guideCategories: ["translation"], transportCategories: [], guideOnly: true },
+  { id: "support_coordinator", label: "Координатор", guideCategories: ["event_coordinator"], transportCategories: [], guideOnly: true },
 ];
 
 export const GUIDE_SUPPORT_BUILDER_TYPES = [
