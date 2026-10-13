@@ -2491,7 +2491,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   }
                 />
 
-                {expandedComponents[k] === selectedSchedule?.id && <>
+                {selectedSchedule && expandedComponents[k] === selectedSchedule.id && <>
                 <div className="overflow-hidden rounded-lg border border-slate-900 bg-slate-950 text-white shadow-sm">
                   <div className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <div className="grid h-8 w-8 place-items-center rounded-md bg-white/10 text-sm font-bold">{activeEventService === "tour" ? "ST" : activeEventService === "support" ? "SP" : activeEventService === "transfer" ? "TR" : "•"}</div>
