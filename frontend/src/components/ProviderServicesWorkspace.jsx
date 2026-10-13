@@ -245,7 +245,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       }
       for (const car of fleet) {
         const vehicle = car.model || "автомобиль";
-        candidates.push({ category: "city_tour_transport", title: `Транспорт для сити-тура · ${city} · ${vehicle}`, city, car });
+        candidates.push({ category: "city_tour_transport", title: `Транспорт для городской экскурсии · ${city} · ${vehicle}`, city, car });
         candidates.push({ category: "airport_to_hotel_transfer", title: `Аэропорт → отель · ${city} · ${vehicle}`, city, car });
         candidates.push({ category: "hotel_to_airport_transfer", title: `Отель → аэропорт · ${city} · ${vehicle}`, city, car });
         candidates.push({ category: "intercity_transfer", title: `Междугородний трансфер · ${city} · ${vehicle}`, city, car });
@@ -315,13 +315,13 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         </div>
 
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <label className="text-sm font-semibold text-slate-700">Направление услуги
+          <label className="text-sm font-semibold text-slate-700">Категория услуги
             <select value={activeCategoryGroup?.id || ""} onChange={(event) => setForm((current) => ({ ...current, catalogGroup: event.target.value, category: "", title: "" }))} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal">
-              <option value="">Выберите направление</option>
+              <option value="">Выберите категорию</option>
               {categoryGroups.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
             </select>
           </label>
-          <label className="text-sm font-semibold text-slate-700">Услуга
+          <label className="text-sm font-semibold text-slate-700">Конкретная услуга
             <select value={form.category} disabled={!activeCategoryGroup} onChange={(event) => setField("category", event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal disabled:bg-slate-50">
               <option value="">Выберите услугу</option>
               {(activeCategoryGroup?.services || []).map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}
