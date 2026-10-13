@@ -401,6 +401,30 @@ const buildAutoProgramI18n = ({
   const mealsEn = (dayData?.meals || []).map((x) => mealLabelForLang(x?.type, "en")).filter(Boolean);
   const mealsUz = (dayData?.meals || []).map((x) => mealLabelForLang(x?.type, "uz")).filter(Boolean);
   const transfers = Array.isArray(dayData?.transfers) ? dayData.transfers : [];
+  const scheduleItems = normalizeScheduleItems(dayData?.schedule);
+  const scheduleTitle = (item, language) => {
+    const category = item.active_service_category;
+    const subtype = item.services?.transport?.subtype;
+    const flight = item.services?.transport?.flight;
+    const labels = {
+      ru: { transfer: "Комфортный трансфер", hotel: "Размещение в отеле", tour: "Знакомство с городом", meal: "Гастрономическая пауза", flight: "Перелёт", intercity: "Междугородний трансфер", hotelTransfer: "Встреча и трансфер в отель" },
+      en: { transfer: "Comfortable transfer", hotel: "Hotel check-in", tour: "City discovery", meal: "Dining experience", flight: "Flight", intercity: "Intercity transfer", hotelTransfer: "Meet-and-greet and hotel transfer" },
+      uz: { transfer: "Qulay transfer", hotel: "Mehmonxonaga joylashish", tour: "Shahar bilan tanishuv", meal: "Gastronomik tanaffus", flight: "Parvoz", intercity: "Shaharlararo transfer", hotelTransfer: "Kutib olish va mehmonxonaga transfer" },
+    }[language];
+    if (subtype === "international" || flight?.raw_offer_id) {
+      const route = [flight?.from, flight?.to].filter(Boolean).join(" → ");
+      return [labels.flight, route].filter(Boolean).join(": ");
+    }
+    if (subtype === "hotel") return labels.hotelTransfer;
+    if (subtype === "intercity") return labels.intercity;
+    if (category === "hotel") return item.services?.hotel?.provider_name ? `${labels.hotel}: ${item.services.hotel.provider_name}` : labels.hotel;
+    if (category === "tour") return labels.tour;
+    if (category === "meal") return labels.meal;
+    return labels.transfer;
+  };
+  const itineraryFor = (language) => scheduleItems.map((item) =>
+    `${item.start_time}–${item.end_time} — ${scheduleTitle(item, language)}`
+  );
 
   const transferRu = transfers
     .map((tr) => {
@@ -432,49 +456,43 @@ const buildAutoProgramI18n = ({
   const paxTextUz = Number(pax) > 0 ? `Guruh: ${pax} kishi.` : "";
 
   const ruLines = [
-    `${dayLabel}${datePart}. ${cityRu}`,
-    paxTextRu,
+    `${dayLabel}${datePart}. ${cityRu} — яркое начало путешествия`,
     isFirst
-      ? `Встреча группы, организационный брифинг и комфортное начало маршрута${hName ? ` с размещением в ${hName}` : ""}.`
+      ? `Первый день мягко вводит гостей в атмосферу ${cityRu}: встреча, продуманная логистика и первые впечатления без спешки после дороги.`
       : hasTransferIn
-      ? `Переезд из ${prev} в ${cityRu}. По прибытии — плавное включение в программу дня без лишней спешки.`
-      : `День посвящён глубокому и комфортному знакомству с ${cityRu}.`,
-    gName || gService
-      ? `Экскурсионная часть проходит${gName ? ` с гидом ${gName}` : ""}${gService ? `: ${gService}` : ""}. Маршрут выстроен в удобном темпе, с акцентом на атмосферу города, красивые локации и понятную подачу истории.`
-      : `Программа дня выстроена в формате премиального city experience: ключевые локации, фотопаузы, свободное время и спокойный темп без перегруза.`,
+      ? `После переезда из ${prev} гостей ждёт комфортное знакомство с ${cityRu} и насыщенная программа в удобном темпе.`
+      : `Этот день раскрывает характер ${cityRu} через его главные места, живые истории и приятный ритм путешествия.`,
+    itineraryFor("ru").length ? `Маршрут дня:\n${itineraryFor("ru").join("\n")}` : "",
     entriesRu.length
-      ? `В программе предусмотрено посещение: ${listText(entriesRu)}. Время на объектах распределяется так, чтобы группа успела осмотреть главное и сохранить комфортный ритм путешествия.`
+      ? `Главные впечатления: ${listText(entriesRu)}. На каждой локации предусмотрено достаточно времени, чтобы увидеть главное, сделать фотографии и почувствовать атмосферу места.`
       : "",
-    tName || tService || car
-      ? `Передвижение по маршруту организовано на выбранном транспорте${tName ? ` от ${tName}` : ""}${car ? ` (${car})` : ""}${tService ? ` — ${tService}` : ""}.`
+    gName || gService
+      ? `Гид поможет увидеть больше, чем обычный турист: добавит контекст, местные истории и детали, которые делают прогулку по-настоящему запоминающейся.`
       : "",
-    transferRu.length ? `Дополнительные трансферы дня: ${listText(transferRu)}.` : "",
-    hName ? `Проживание/отель по программе: ${hName}.` : "",
-    mealsRu.length ? `Питание по программе: ${listText(mealsRu)}.` : "",
+    hName ? `Для отдыха выбран ${hName} — удобная точка, чтобы восстановиться и продолжить путешествие с новыми силами.` : "",
+    mealsRu.length ? `В программу включено питание: ${listText(mealsRu)} — приятная пауза и возможность познакомиться с местной кухней.` : "",
     hasTransferOut
       ? `Во второй половине дня — подготовка к дальнейшему маршруту и переезду в ${next}.`
       : isLast
-      ? `Финальный день программы: свободное время для последних прогулок, покупок и спокойная подготовка к выезду.`
-      : `В завершение дня — свободное время для прогулки, фото, отдыха или дополнительных активностей по желанию группы.`,
+      ? `Финал путешествия оставляет время для любимых мест, покупок и последних фотографий перед спокойным выездом.`
+      : `День завершается без спешки: останется время для прогулки, отдыха и собственных открытий. Все ключевые перемещения уже продуманы.`,
   ];
 
   const enLines = [
-    `${dayLabel}${datePart}. ${cityEn}`,
-    paxTextEn,
+    `${dayLabel}${datePart}. ${cityEn} — a memorable day ahead`,
     isFirst
       ? `Meet-and-greet, short orientation briefing and a smooth start of the journey${hName ? ` with accommodation at ${hName}` : ""}.`
       : hasTransferIn
       ? `Transfer from ${prev} to ${cityEn}. Upon arrival, the day continues at a relaxed and well-paced rhythm.`
       : `The day is designed as a refined introduction to ${cityEn}, combining comfort, highlights and a balanced pace.`,
+    itineraryFor("en").length ? `Today's journey:\n${itineraryFor("en").join("\n")}` : "",
     gName || gService
       ? `The sightseeing program is arranged${gName ? ` with guide ${gName}` : ""}${gService ? `: ${gService}` : ""}. The route focuses on the city atmosphere, signature locations and clear storytelling without rushing the group.`
       : `The program is planned as a premium city experience: key locations, photo stops, free time and a comfortable travel rhythm.`,
     entriesEn.length
       ? `Included visits: ${listText(entriesEn)}. The timing is planned to keep the experience informative, elegant and comfortable.`
       : "",
-    tName || tService || car
-      ? `Transportation is arranged with the selected provider${tName ? ` ${tName}` : ""}${car ? ` (${car})` : ""}${tService ? ` — ${tService}` : ""}.`
-      : "",
+    tName || tService || car ? `All key transfers are arranged in advance, keeping the day smooth and effortless.` : "",
     transferEn.length ? `Additional transfers of the day: ${listText(transferEn)}.` : "",
     hName ? `Accommodation/program hotel: ${hName}.` : "",
     mealsEn.length ? `Meals included in the program: ${listText(mealsEn)}.` : "",
@@ -486,22 +504,20 @@ const buildAutoProgramI18n = ({
   ];
 
   const uzLines = [
-    `${dayLabel}${datePart}. ${cityUz}`,
-    paxTextUz,
+    `${dayLabel}${datePart}. ${cityUz} — yorqin taassurotlar kuni`,
     isFirst
       ? `Guruhni kutib olish, qisqa tashkiliy ma'lumot va yo'nalishni qulay boshlash${hName ? `, ${hName} mehmonxonasiga joylashish bilan` : ""}.`
       : hasTransferIn
       ? `${prev} shahridan ${cityUz} shahriga yo'l olish. Yetib kelgach, kun dasturi sokin va qulay ritmda davom etadi.`
       : `Kun ${cityUz} shahri bilan qulay va mazmunli tanishuvga bag'ishlanadi.`,
+    itineraryFor("uz").length ? `Kun yo'nalishi:\n${itineraryFor("uz").join("\n")}` : "",
     gName || gService
       ? `Ekskursiya qismi${gName ? ` gid ${gName} bilan` : ""}${gService ? `: ${gService}` : ""} tashkil etiladi. Marshrut shahar muhitini his qilish, asosiy lokatsiyalar va tushunarli hikoya qilishga qaratilgan.`
       : `Kun dasturi premium city experience formatida tuzilgan: asosiy joylar, foto-to'xtashlar, bo'sh vaqt va shoshilmasdan sayohat qilish ritmi.`,
     entriesUz.length
       ? `Dasturga tashriflar kiritilgan: ${listText(entriesUz)}. Vaqt guruh uchun qulay va mazmunli bo'lishi uchun muvozanatli rejalashtiriladi.`
       : "",
-    tName || tService || car
-      ? `Yo'nalish bo'ylab harakat tanlangan transport orqali amalga oshiriladi${tName ? `: ${tName}` : ""}${car ? ` (${car})` : ""}${tService ? ` — ${tService}` : ""}.`
-      : "",
+    tName || tService || car ? `Barcha asosiy transferlar oldindan rejalashtirilgan, shu sababli kun qulay va shoshilmasdan o'tadi.` : "",
     transferUz.length ? `Kun davomida qo'shimcha transferlar: ${listText(transferUz)}.` : "",
     hName ? `Dastur bo'yicha mehmonxona: ${hName}.` : "",
     mealsUz.length ? `Dastur bo'yicha ovqatlanish: ${listText(mealsUz)}.` : "",
@@ -1123,6 +1139,7 @@ export default function TourBuilder() {
   
   const [range, setRange] = useState(EMPTY_RANGE);
   const [collapsedDays, setCollapsedDays] = useState({});
+  const [expandedComponents, setExpandedComponents] = useState({});
 
   const [adt, setAdt] = useState(2);
   const [chd, setChd] = useState(0);
@@ -2329,6 +2346,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   dayKey={k}
                   items={st.schedule}
                   selectedId={st.selectedScheduleId}
+                  expandedId={expandedComponents[k] || null}
+                  onExpandedChange={(expandedId) =>
+                    setExpandedComponents((previous) => ({ ...previous, [k]: expandedId }))
+                  }
                   onSelect={(selectedScheduleId) =>
                     setByDay((previous) => ({
                       ...previous,
@@ -2343,6 +2364,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   }
                 />
 
+                {expandedComponents[k] === selectedSchedule?.id && <>
                 <div className="rounded-lg border border-slate-200 bg-white">
                   <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 px-3 py-2.5">
                     <strong className="mr-auto text-sm text-slate-950">{EVENT_SERVICE_CATEGORIES.find((item) => item.id === activeEventService)?.label || "Услуги компонента"}</strong>
@@ -3059,6 +3081,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     Выберите компонент дня, чтобы добавить услуги
                   </button>
                 )}
+
+                </>}
 
                 </>}
 
