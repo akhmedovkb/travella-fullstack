@@ -1,7 +1,7 @@
 export const GUIDE_SERVICE_GROUPS = [
   {
     id: "guide_tours",
-    label: "Экскурсии",
+    label: "Экскурсия",
     services: [
       { id: "city_tour_guide", label: "Обзорная экскурсия по городу" },
       { id: "thematic_tour_guide", label: "Тематическая экскурсия" },
@@ -14,13 +14,19 @@ export const GUIDE_SERVICE_GROUPS = [
   },
   {
     id: "guide_support",
-    label: "Сопровождение",
+    label: "Услуга гида",
     services: [
       { id: "group_escort", label: "Сопровождение группы" },
       { id: "meet", label: "Встреча гостей" },
       { id: "seeoff", label: "Проводы гостей" },
       { id: "translation", label: "Услуги переводчика" },
       { id: "event_coordinator", label: "Координатор мероприятия" },
+    ],
+  },
+  {
+    id: "guide_shopping",
+    label: "Шопинг",
+    services: [
       { id: "shopping_assistance", label: "Шопинг-сопровождение" },
     ],
   },
@@ -40,9 +46,9 @@ export const TRANSPORT_SERVICE_GROUPS = [
   },
   {
     id: "tour_transport",
-    label: "Транспорт для экскурсий",
+    label: "Транспорт для экскурсии / программы",
     services: [
-      { id: "city_tour_transport", label: "Транспорт для сити-тура" },
+      { id: "city_tour_transport", label: "Транспорт для городской экскурсии" },
       { id: "countryside_tour_transport", label: "Транспорт для загородного тура" },
       { id: "mountain_tour_transport", label: "Транспорт для горного маршрута" },
       { id: "desert_tour_transport", label: "Транспорт для пустынного тура" },
@@ -89,19 +95,25 @@ export const PROVIDER_SERVICE_LABELS = Object.fromEntries(
 );
 
 export const TOUR_BUILDER_TYPES = [
-  { id: "city", label: "Обзорный", guideCategories: ["city_tour_guide"], transportCategories: ["city_tour_transport"] },
-  { id: "thematic", label: "Тематический", guideCategories: ["thematic_tour_guide"], transportCategories: ["city_tour_transport"] },
-  { id: "attraction", label: "По объекту", guideCategories: ["attraction_tour_guide"], transportCategories: ["city_tour_transport"] },
-  { id: "countryside", label: "Загородный", guideCategories: ["countryside_tour_guide"], transportCategories: ["countryside_tour_transport"] },
-  { id: "mountain", label: "Горный", guideCategories: ["mountain_tour_guide"], transportCategories: ["mountain_tour_transport"] },
-  { id: "desert", label: "Пустынный", guideCategories: ["desert_tour_guide"], transportCategories: ["desert_tour_transport"] },
-  { id: "safari", label: "Сафари", guideCategories: ["safari_tour_guide"], transportCategories: ["safari_tour_transport"] },
-  { id: "shopping", label: "Шопинг", guideCategories: ["shopping_assistance"], transportCategories: ["city_tour_transport"] },
-  { id: "support_escort", label: "Сопровождение группы", guideCategories: ["group_escort"], transportCategories: [], guideOnly: true },
-  { id: "support_meet", label: "Встреча гостей", guideCategories: ["meet"], transportCategories: [], guideOnly: true },
-  { id: "support_seeoff", label: "Проводы гостей", guideCategories: ["seeoff"], transportCategories: [], guideOnly: true },
-  { id: "support_translation", label: "Переводчик", guideCategories: ["translation"], transportCategories: [], guideOnly: true },
-  { id: "support_coordinator", label: "Координатор", guideCategories: ["event_coordinator"], transportCategories: [], guideOnly: true },
+  { id: "city", family: "excursion", label: "Обзорная", guideCategories: ["city_tour_guide"], transportCategories: ["city_tour_transport"] },
+  { id: "thematic", family: "excursion", label: "Тематическая", guideCategories: ["thematic_tour_guide"], transportCategories: ["city_tour_transport"] },
+  { id: "attraction", family: "excursion", label: "По объекту", guideCategories: ["attraction_tour_guide"], transportCategories: ["city_tour_transport"] },
+  { id: "countryside", family: "excursion", label: "Загородная", guideCategories: ["countryside_tour_guide"], transportCategories: ["countryside_tour_transport"] },
+  { id: "mountain", family: "excursion", label: "Горная", guideCategories: ["mountain_tour_guide"], transportCategories: ["mountain_tour_transport"] },
+  { id: "desert", family: "excursion", label: "Пустынная", guideCategories: ["desert_tour_guide"], transportCategories: ["desert_tour_transport"] },
+  { id: "safari", family: "excursion", label: "Сафари", guideCategories: ["safari_tour_guide"], transportCategories: ["safari_tour_transport"] },
+  { id: "support_escort", family: "guide_service", label: "Сопровождение группы", guideCategories: ["group_escort"], transportCategories: [], guideOnly: true },
+  { id: "support_meet", family: "guide_service", label: "Встреча гостей", guideCategories: ["meet"], transportCategories: [], guideOnly: true },
+  { id: "support_seeoff", family: "guide_service", label: "Проводы гостей", guideCategories: ["seeoff"], transportCategories: [], guideOnly: true },
+  { id: "support_translation", family: "guide_service", label: "Переводчик", guideCategories: ["translation"], transportCategories: [], guideOnly: true },
+  { id: "support_coordinator", family: "guide_service", label: "Координатор", guideCategories: ["event_coordinator"], transportCategories: [], guideOnly: true },
+  { id: "shopping", family: "shopping", label: "Шопинг-сопровождение", guideCategories: ["shopping_assistance"], transportCategories: ["city_tour_transport"], hideAttractions: true },
+];
+
+export const TOUR_BUILDER_GROUPS = [
+  { id: "excursion", label: "Экскурсия", description: "Маршрут с гидом, транспортом и объектами" },
+  { id: "guide_service", label: "Услуга гида", description: "Сопровождение, встреча, проводы или перевод" },
+  { id: "shopping", label: "Шопинг", description: "Сопровождение по магазинам и рынкам" },
 ];
 
 export const GUIDE_SUPPORT_BUILDER_TYPES = [

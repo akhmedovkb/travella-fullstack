@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 const COMPONENT_TYPES = [
   { value: "transfer", label: "Транспорт", legacyType: "transport" },
   { value: "hotel", label: "Отель", legacyType: "hotel" },
-  { value: "tour", label: "Сити-тур", legacyType: "guide" },
+  { value: "tour", label: "Экскурсия / программа", legacyType: "guide" },
   { value: "meal", label: "Питание", legacyType: "meal" },
 ];
 
@@ -11,7 +11,7 @@ const TRANSPORT_SUBTYPE_LABELS = {
   international: "Авиабилет",
   intercity: "Междугородний трансфер",
   hotel: "Отельный трансфер",
-  city_tour: "Транспорт сити-тура",
+  city_tour: "Транспорт программы",
   hourly: "Почасовой транспорт",
   half_day: "Транспорт на полдня",
   full_day: "Транспорт на день",
@@ -124,7 +124,7 @@ export const normalizeScheduleItems = (value) =>
         id: String(item?.id || `event-${index + 1}`),
         start_time: String(item?.start_time || item?.startTime || "10:00"),
         end_time: String(item?.end_time || item?.endTime || "12:00"),
-        title: String(rawCategory === "support" ? "Сити-тур" : item?.title || "Компонент программы"),
+        title: String(rawCategory === "support" ? "Экскурсия / программа" : item?.title || "Компонент программы"),
         type: String(rawCategory === "support" ? "guide" : item?.type || "activity"),
         provider_id: item?.provider_id || null,
         provider_name: String(item?.provider_name || ""),
@@ -220,7 +220,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{component.label}</span>
                           {item.provider_name && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{item.provider_name}</span>}
                           {item.services?.guide?.provider_name && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">Гид: {item.services.guide.provider_name}</span>}
-                          {item.services?.tour?.subtype && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{TOUR_SUBTYPE_LABELS[item.services.tour.subtype] || "Сити-тур"}</span>}
+                          {item.services?.tour?.subtype && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{TOUR_SUBTYPE_LABELS[item.services.tour.subtype] || "Экскурсия / программа"}</span>}
                           {item.services?.support?.subtype && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{SUPPORT_SUBTYPE_LABELS[item.services.support.subtype] || "Сопровождение"}</span>}
                           {item.services?.transport?.subtype && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">{TRANSPORT_SUBTYPE_LABELS[item.services.transport.subtype] || "Транспорт"}</span>}
                           {item.services?.transport?.provider_name && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">Транспорт: {item.services.transport.provider_name}</span>}

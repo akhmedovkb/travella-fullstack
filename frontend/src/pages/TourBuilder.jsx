@@ -21,6 +21,7 @@ import {
   TRANSPORT_CATEGORY_IDS,
   PROVIDER_SERVICE_LABELS,
   TOUR_BUILDER_TYPES,
+  TOUR_BUILDER_GROUPS,
   TRANSPORT_BUILDER_TYPES,
 } from "../config/providerServiceCatalog";
 
@@ -50,7 +51,7 @@ const MEAL_TYPES = [
 const EVENT_SERVICE_CATEGORIES = [
   { id: "transfer", label: "Транспорт" },
   { id: "hotel", label: "Отель" },
-  { id: "tour", label: "Сити-тур" },
+  { id: "tour", label: "Экскурсия / программа" },
   { id: "meal", label: "Питание" },
 ];
 
@@ -2287,6 +2288,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             const activeTransportCategories = TRANSPORT_SERVICE_TYPES.find((item) => item.id === activeTransportSubtype)?.categories || [];
             const activeTourSubtype = selectedSchedule?.services?.tour?.subtype || "city";
             const activeTourType = TOUR_BUILDER_TYPES.find((item) => item.id === activeTourSubtype) || TOUR_BUILDER_TYPES[0];
+            const activeTourGroup = TOUR_BUILDER_GROUPS.find((item) => item.id === activeTourType.family) || TOUR_BUILDER_GROUPS[0];
+            const activeTourOptions = TOUR_BUILDER_TYPES.filter((item) => item.family === activeTourGroup.id);
             const guideComponentCategories = activeTourType.guideCategories;
             const providerTransportCategories = activeEventService === "tour" ? activeTourType.transportCategories : activeTransportCategories;
             const activeGuideService = guideComponentCategories.includes(st.guideService?.category) ? st.guideService : null;
@@ -2389,6 +2392,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 };
               });
             };
+            const selectTourFamily = (family) => {
+              const firstType = TOUR_BUILDER_TYPES.find((item) => item.family === family);
+              if (firstType) selectTourSubtype(firstType.id);
+            };
             return (
               <div
                 key={k}
@@ -2481,18 +2488,34 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   {/* Guide */}
                   {activeEventService === "tour" && <>
                   {activeEventService === "tour" && <div className="rounded-md border border-slate-200 bg-white p-3 xl:col-span-3">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-slate-500"><MapPin size={15} /> Услуга гида и сценарий</div>
-                    <div className="flex flex-wrap gap-2">
-                      {TOUR_BUILDER_TYPES.map((type) => (
+                    <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-slate-500"><MapPin size={15} /> Тип программы</div>
+                    <div className="grid gap-2 md:grid-cols-3">
+                      {TOUR_BUILDER_GROUPS.map((group) => (
                         <button
-                          key={type.id}
+                          key={group.id}
                           type="button"
-                          onClick={() => selectTourSubtype(type.id)}
-                          className={`rounded-md border px-3 py-2 text-sm font-semibold ${activeTourType.id === type.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"}`}
+                          onClick={() => selectTourFamily(group.id)}
+                          className={`rounded-md border p-3 text-left ${activeTourGroup.id === group.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"}`}
                         >
-                          {type.label}
+                          <strong className="block text-sm">{group.label}</strong>
+                          <span className={`mt-0.5 block text-xs ${activeTourGroup.id === group.id ? "text-slate-300" : "text-slate-500"}`}>{group.description}</span>
                         </button>
                       ))}
+                    </div>
+                    <div className="mt-4 border-t border-slate-200 pt-3">
+                      <div className="mb-2 text-xs font-bold uppercase text-slate-500">{activeTourGroup.label}: выберите услугу</div>
+                      <div className="flex flex-wrap gap-2">
+                        {activeTourOptions.map((type) => (
+                          <button
+                            key={type.id}
+                            type="button"
+                            onClick={() => selectTourSubtype(type.id)}
+                            className={`rounded-md border px-3 py-2 text-sm font-semibold ${activeTourType.id === type.id ? "border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"}`}
+                          >
+                            {type.label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>}
                   {!cityChosen && <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900 xl:col-span-3"><MapPin size={17} /> Укажите город в шапке дня — после этого появятся доступные поставщики.</div>}
@@ -3093,7 +3116,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   )}
                   
                   {/* Entry fees */}
-                  {activeEventService === "tour" && !activeTourType.guideOnly && (
+                  {activeEventService === "tour" && !activeTourType.guideOnly && !activeTourType.hideAttractions && (
                     <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
                     <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
                       <div className="grid h-8 w-8 place-items-center rounded-md bg-amber-100 text-amber-700"><Landmark size={17} /></div>
