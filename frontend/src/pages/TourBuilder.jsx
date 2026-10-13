@@ -49,7 +49,7 @@ const EVENT_SERVICE_CATEGORIES = [
 const TRANSPORT_SERVICE_TYPES = [
   { id: "international", label: "Авиабилеты", categories: [] },
   { id: "intercity", label: "Междугородний трансфер", categories: ["one_way_transfer", "border_transfer"] },
-  { id: "hotel", label: "Отельный трансфер", categories: ["hotel_transfer", "one_way_transfer", "dinner_transfer"] },
+  { id: "hotel", label: "Отельный трансфер", categories: ["hotel_transfer"] },
 ];
 
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
@@ -1414,28 +1414,47 @@ export default function TourBuilder() {
       const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
       let next = { ...st };
 
-            if (st.guide && servicesCache[st.guide.id]) {
-        // если транспорт не выбран — допускаем услуги “гид+транспорт”
-        const cats = st.transport ? GUIDE_ALLOWED_ARR : [...GUIDE_ALLOWED_ARR, ...TRANSPORT_ALLOWED_ARR];
-        const chosen = pickFromCache(st.guide.id, cats, citySlug, pax);
+      const selectedSchedule = normalizeScheduleItems(st.schedule)
+        .find((item) => item.id === st.selectedScheduleId);
+      const componentCategory = selectedSchedule?.active_service_category;
+      const transportSubtype = selectedSchedule?.services?.transport?.subtype || "";
+      const guideCategories = componentCategory === "tour" ? ["city_tour_guide"] : [];
+      const transportCategories = componentCategory === "tour"
+        ? ["city_tour_transport"]
+        : componentCategory === "transfer"
+          ? (TRANSPORT_SERVICE_TYPES.find((item) => item.id === transportSubtype)?.categories || [])
+          : [];
+
+      if (st.guide && servicesCache[st.guide.id]) {
+        const chosen = guideCategories.length
+          ? pickFromCache(st.guide.id, guideCategories, citySlug, pax)
+          : null;
         if (chosen && (!st.guideService || String(st.guideService.id) !== String(chosen.id))) {
           next.guideService = chosen;
         }
-            // если выбранная ранее услуга не подходит под pax/город — очищаем
-        if (next.guideService && (!fitsPax(next.guideService, pax) || !fitsCity(next.guideService, citySlug))) {
+        if (next.guideService && (
+          !guideCategories.includes(next.guideService.category)
+          || !fitsPax(next.guideService, pax)
+          || !fitsCity(next.guideService, citySlug)
+        )) {
           next.guideService = null;
         }
       }
       if (st.transport && servicesCache[st.transport.id]) {
-        const chosenT = pickFromCache(st.transport.id, TRANSPORT_ALLOWED_ARR, citySlug, pax);
+        const chosenT = transportCategories.length
+          ? pickFromCache(st.transport.id, transportCategories, citySlug, pax)
+          : null;
         if (chosenT && (!st.transportService || String(st.transportService.id) !== String(chosenT.id))) {
           next.transportService = chosenT;
         }
-                if (next.transportService && (!fitsPax(next.transportService, pax) || !fitsCity(next.transportService, citySlug))) {
+        if (next.transportService && (
+          !transportCategories.includes(next.transportService.category)
+          || !fitsPax(next.transportService, pax)
+          || !fitsCity(next.transportService, citySlug)
+        )) {
           next.transportService = null;
         }
       }
-      if (next === st) return prev; // без изменений
       return { ...prev, [dateKey]: next };
     });
   };
@@ -1493,7 +1512,7 @@ export default function TourBuilder() {
    }, [loadEntryOptionsForDay]);
   
   /* ----- loaders per day (guide / transport / hotel) ----- */
-  const makeGuideLoader = (dateKey) => async (input) => {
+  const makeGuideLoader = (dateKey, allowedCategories = ["city_tour_guide"]) => async (input) => {
   const day = byDay[dateKey] || {};
   if (!dateKey || !day.city) return [];
   const selectedSlot = normalizeScheduleItems(day.schedule).find((item) => item.id === day.selectedScheduleId);
@@ -1517,6 +1536,7 @@ export default function TourBuilder() {
         citySlug: day.city,
         pax,
         ensureServicesLoaded,
+        allowedCategories,
       })
     )
   );
@@ -1529,8 +1549,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   const day = byDay[dateKey] || {};
   if (!dateKey || !day.city) return [];
   const selectedSlot = normalizeScheduleItems(day.schedule).find((item) => item.id === day.selectedScheduleId);
-  const rows = await fetchProvidersSmart({
-    kind: "transport",
+  const providerGroups = await Promise.all(["guide", "transport"].map((kind) => fetchProvidersSmart({
+    kind,
     city: day.city,
     date: dateKey,
     startTime: selectedSlot?.start_time || "",
@@ -1538,7 +1558,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     language: lang,
     q: (input || "").trim(),
     limit: 50,
-  });
+  })));
+  const rows = Array.from(
+    new Map(providerGroups.flat().map((provider) => [String(provider.id), provider])).values()
+  );
   const pax = Math.max(1, toNum(adt) + toNum(chd));
   const okMask = await Promise.all(
     rows.map((p) =>
@@ -2266,7 +2289,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             const activeEventService = suggestedServiceCategory;
             const activeTransportSubtype = selectedSchedule?.services?.transport?.subtype || "";
             const activeTransportCategories = TRANSPORT_SERVICE_TYPES.find((item) => item.id === activeTransportSubtype)?.categories || [];
+            const guideComponentCategories = ["city_tour_guide"];
             const providerTransportCategories = activeEventService === "tour" ? ["city_tour_transport"] : activeTransportCategories;
+            const activeGuideService = guideComponentCategories.includes(st.guideService?.category) ? st.guideService : null;
+            const activeTransportService = providerTransportCategories.includes(st.transportService?.category) ? st.transportService : null;
             const selectTransportSubtype = (subtype) => {
               setByDay((previous) => {
                 const current = previous[k] || {};
@@ -2388,7 +2414,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         isDisabled={!cityChosen}
                         cacheOptions={false}                         // ⬅️ убираем кеш для надежности
                         defaultOptions
-                        loadOptions={makeGuideLoader(k)}
+                        loadOptions={makeGuideLoader(k, guideComponentCategories)}
                         filterOption={() => true}
                         components={{ Option: ProviderOption }}
                         placeholder={cityChosen ? t('tb.pick_guide') : t('tb.pick_city_first')}
@@ -2408,10 +2434,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           const list = await ensureServicesLoaded(guide);
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
                           const citySlug = (byDay[k]?.city || "").trim();
-                          const cats = (byDay[k]?.transport)
-                            ? GUIDE_ALLOWED_ARR
-                            : [...GUIDE_ALLOWED_ARR, ...TRANSPORT_ALLOWED_ARR];
-                          const picked = pickFromCache(guide.id, cats, citySlug, pax);
+                          const picked = pickFromCache(guide.id, guideComponentCategories, citySlug, pax);
                           if (picked) {
                             setByDay((p) => {
                               const current = p[k] || {};
@@ -2432,26 +2455,19 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     <select
                       className="mt-2 w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
                       disabled={!st.guide}
-                      value={st.guideService?.id || ""}
+                      value={activeGuideService?.id || ""}
                       onChange={(e) => {
                         const selId = e.target.value;
                         const list = servicesCache[st.guide?.id] || [];
                         const pax = Math.max(1, toNum(adt) + toNum(chd));
                         const citySlug = (byDay[k]?.city || "").trim();
                         // показываем обычные услуги гида + гид+транспорт, но только если вместимость >= PAX
-                        const allowed = list
-                          .filter(s =>
-                            s.price > 0 &&
-                            (
-                              GUIDE_ALLOWED.has(s.category) ||
-                              (
-                                !st.transport &&
-                                TRANSPORT_ALLOWED.has(s.category) &&
-                                fitsPax(s, pax) &&
-                                fitsCity(s, citySlug)
-                              )
-                            )
-                          );
+                        const allowed = list.filter(s =>
+                          guideComponentCategories.includes(s.category) &&
+                          s.price > 0 &&
+                          fitsPax(s, pax) &&
+                          fitsCity(s, citySlug)
+                        );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
                         setByDay((p) => {
                           const current = p[k] || {};
@@ -2469,12 +2485,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         .filter(s => {
                           const pax = Math.max(1, toNum(adt) + toNum(chd));
                           const citySlug = (byDay[k]?.city || "").trim();
-                          if (GUIDE_ALLOWED.has(s.category)) return s.price > 0;
-                          if (TRANSPORT_ALLOWED.has(s.category)) {
-                            // «гид+транспорт» показываем только если НЕ выбран отдельный транспорт
-                            return !st.transport && s.price > 0 && fitsPax(s, pax) && fitsCity(s, citySlug);
-                          }
-                          return false;
+                          return guideComponentCategories.includes(s.category) && s.price > 0 && fitsPax(s, pax) && fitsCity(s, citySlug);
                         })
                         .sort((a,b) => a.price - b.price)
                         .map(s => {
@@ -2490,7 +2501,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         })}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
-                      {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{calcGuideForDay(k).toFixed(2)}</b> {(st.guideService?.currency || st.guide?.currency || "UZS")}
+                      {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{activeGuideService ? calcGuideForDay(k).toFixed(2) : "0.00"}</b> {(activeGuideService?.currency || st.guide?.currency || "UZS")}
                     </div>
                   </div>
                   
@@ -2628,7 +2639,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     <select
                       className="mt-2 w-full h-9 border rounded px-2 text-sm disabled:bg-gray-50"
                       disabled={!st.transport}
-                      value={st.transportService?.id || ""}
+                      value={activeTransportService?.id || ""}
                       onChange={(e) => {
                         const selId = e.target.value;
                         const list = servicesCache[st.transport?.id] || [];
@@ -2680,7 +2691,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         })}
                     </select>
                     <div className="text-xs text-gray-600 mt-1">
-                     {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{calcTransportForDay(k).toFixed(2)}</b> {(st.transportService?.currency || st.transport?.currency || "UZS")}
+                     {t('tb.price_per_day')}: <b style={{ color: BRAND.primary }}>{activeTransportService ? calcTransportForDay(k).toFixed(2) : "0.00"}</b> {(activeTransportService?.currency || st.transport?.currency || "UZS")}
                     </div>
                     </>}
                   </div>

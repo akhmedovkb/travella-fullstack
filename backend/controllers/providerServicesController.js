@@ -11,6 +11,7 @@ const TRANSPORT_ALLOWED = new Set([
   "one_way_transfer",
   "dinner_transfer",
   "border_transfer",
+  "hotel_transfer",
 ]);
 
 const normStr = (v) => {
