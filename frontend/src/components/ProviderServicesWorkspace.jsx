@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { CheckCircle2, Layers3, MapPin, Plus, RefreshCw, WalletCards } from "lucide-react";
 import { tError, tSuccess } from "../shared/toast";
 import {
   GUIDE_SERVICE_GROUPS,
@@ -13,6 +14,7 @@ const transportCategory = (value) => TRANSPORT_CATEGORY_IDS.includes(value);
 const INTERCITY_CATEGORIES = new Set(["intercity_transfer", "border_transfer", "one_way_transfer"]);
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number(value));
+const cityLabel = (value) => String(value || "").trim().replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toUpperCase());
 
 async function fetchJSON(path, init = {}) {
   const base = import.meta.env.VITE_API_BASE_URL || "";
@@ -92,8 +94,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const isIntercity = INTERCITY_CATEGORIES.has(form.category);
   const preview = calculatedPreview(form);
   const serviceTitle = (current) => INTERCITY_CATEGORIES.has(current.category)
-    ? `${LABELS[current.category] || "Междугородняя услуга"} · ${current.originCity || "Откуда"} → ${current.destinationCity || "Куда"}`
-    : `${LABELS[current.category] || "Услуга"}${current.citySlug ? ` · ${current.citySlug}` : ""}`;
+    ? `${LABELS[current.category] || "Междугородняя услуга"} · ${cityLabel(current.originCity) || "Откуда"} → ${cityLabel(current.destinationCity) || "Куда"}`
+    : `${LABELS[current.category] || "Услуга"}${current.citySlug ? ` · ${cityLabel(current.citySlug)}` : ""}`;
 
   const categoryGroups = useMemo(() => {
     if (providerType === "transport") return TRANSPORT_SERVICE_GROUPS;
@@ -273,73 +275,63 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+      <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
         <div>
-          <h2 className="text-xl font-bold text-slate-950">Услуги для Tour Builder</h2>
-          <p className="mt-1 text-sm text-slate-500">Выберите услугу из каталога, локацию из профиля и укажите тариф.</p>
+          <h2 className="text-lg font-bold text-slate-950">Каталог и тарифы</h2>
+          <p className="mt-0.5 text-sm text-slate-500">{rows.length} услуг · {rows.filter((row) => row.is_active).length} доступны турагентам</p>
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button type="button" onClick={load} disabled={loading} className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">Обновить</button>
-        </div>
+        <button type="button" onClick={load} disabled={loading} title="Обновить список" className="grid h-10 w-10 place-items-center rounded-md border border-slate-300 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-50"><RefreshCw size={18} className={loading ? "animate-spin" : ""} /></button>
       </header>
 
-      <section className="border-b border-slate-200 px-5 py-5">
-        <div className="mb-4 flex items-center justify-between gap-4">
+      <section className="border-b border-slate-200 bg-slate-50 px-5 py-6">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <div>
-            <h3 className="font-bold text-slate-950">Новая услуга</h3>
-            <p className="text-sm text-slate-500">Названия и типы услуг заданы системой. Вы выбираете локацию и цену.</p>
+            <div className="text-xs font-bold uppercase text-orange-600">Новый тариф</div>
+            <h3 className="mt-1 text-xl font-bold text-slate-950">Добавьте услугу в Tour Builder</h3>
+            <p className="mt-1 text-sm text-slate-500">Три шага: услуга, зона работы и стоимость.</p>
           </div>
-          <span className="text-sm font-medium text-slate-500">Основные данные</span>
+          <div className="flex items-center gap-2 text-xs font-semibold text-slate-500"><CheckCircle2 size={16} className="text-emerald-600" />Публикуется сразу после добавления</div>
         </div>
 
-        {!cities.length && <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Сначала добавьте рабочие локации в профиле поставщика.</div>}
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <label className="text-sm font-semibold text-slate-700">Категория услуги
-            <select value={activeCategoryGroup?.id || ""} onChange={(event) => setForm((current) => ({ ...current, catalogGroup: event.target.value, category: "", title: "" }))} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal">
-              <option value="">Выберите категорию</option>
-              {categoryGroups.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
-            </select>
-          </label>
-          <label className="text-sm font-semibold text-slate-700">Конкретная услуга
-            <select value={form.category} disabled={!activeCategoryGroup} onChange={(event) => setField("category", event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal disabled:bg-slate-50">
-              <option value="">Выберите услугу</option>
-              {(activeCategoryGroup?.services || []).map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}
-            </select>
-          </label>
-          {isIntercity ? <>
-            <CitySelect label="Откуда" value={form.originCity} cities={cities} onChange={(value) => setForm((current) => ({ ...current, originCity: value, destinationCity: current.destinationCity === value ? "" : current.destinationCity }))} />
-            <CitySelect label="Куда" value={form.destinationCity} cities={cities.filter((city) => city !== form.originCity)} onChange={(value) => setField("destinationCity", value)} />
-          </> : <CitySelect label="Город услуги" value={form.citySlug} cities={cities} onChange={(value) => setField("citySlug", value)} />}
-        </div>
+        {!cities.length && <div className="mb-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Добавьте рабочие локации в профиле, чтобы создать тариф.</div>}
+        <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+            <FormStep icon={Layers3} number="1" title="Выберите услугу" description="Каталог одинаков для всех поставщиков">
+              <div className="grid gap-4 md:grid-cols-2">
+                <SelectField label="Категория" value={activeCategoryGroup?.id || ""} onChange={(value) => setForm((current) => ({ ...current, catalogGroup: value, category: "", title: "" }))} options={categoryGroups.map((group) => ({ value: group.id, label: group.label }))} placeholder="Выберите категорию" />
+                <SelectField label="Услуга" value={form.category} disabled={!activeCategoryGroup} onChange={(value) => setField("category", value)} options={(activeCategoryGroup?.services || []).map((service) => ({ value: service.id, label: service.label }))} placeholder="Выберите конкретную услугу" />
+              </div>
+            </FormStep>
 
-        {isTransport && <div className="mt-4 grid gap-4 rounded-md bg-slate-50 p-4 md:grid-cols-3">
-          {fleet.length > 0 ? <label className="text-sm font-semibold text-slate-700">Автомобиль из профиля
-            <select defaultValue="" onChange={(event) => applyVehicle(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Выберите автомобиль</option>{fleet.map((car, index) => <option key={car.id || index} value={String(car.id ?? index)}>{car.model || "Автомобиль"} · {car.seats || "?"} мест</option>)}</select>
-          </label> : <div className="md:col-span-3 text-sm text-amber-700">Добавьте автомобиль в автопарк профиля, чтобы публиковать транспортные услуги.</div>}
-          <ReadOnlyValue label="Модель" value={form.vehicleModel || "Выберите автомобиль"} />
-          <ReadOnlyValue label="Пассажирских мест" value={form.seats || "—"} />
-        </div>}
+            <FormStep icon={MapPin} number="2" title={isIntercity ? "Укажите маршрут" : "Выберите локацию"} description="Доступны только города из вашего профиля">
+              <div className={`grid gap-4 ${isIntercity ? "md:grid-cols-2" : "md:max-w-md"}`}>
+                {isIntercity ? <>
+                  <CitySelect label="Откуда" value={form.originCity} cities={cities} onChange={(value) => setForm((current) => ({ ...current, originCity: value, destinationCity: current.destinationCity === value ? "" : current.destinationCity }))} />
+                  <CitySelect label="Куда" value={form.destinationCity} cities={cities.filter((city) => city !== form.originCity)} onChange={(value) => setField("destinationCity", value)} />
+                </> : <CitySelect label="Город услуги" value={form.citySlug} cities={cities} onChange={(value) => setField("citySlug", value)} />}
+              </div>
+              {isTransport && <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-3">
+                {fleet.length > 0 ? <SelectField label="Автомобиль из профиля" value="" onChange={applyVehicle} options={fleet.map((car, index) => ({ value: String(car.id ?? index), label: `${car.model || "Автомобиль"} · ${car.seats || "?"} мест` }))} placeholder="Выберите автомобиль" /> : <div className="md:col-span-3 text-sm text-amber-700">Добавьте автомобиль в автопарк профиля.</div>}
+                <ReadOnlyValue label="Модель" value={form.vehicleModel || "Не выбрана"} />
+                <ReadOnlyValue label="Вместимость" value={form.seats ? `${form.seats} мест` : "—"} />
+              </div>}
+            </FormStep>
 
-        <div className="mt-6 border-t border-slate-200 pt-5">
-          <div className="mb-3"><h3 className="font-bold text-slate-950">Тариф</h3><p className="text-sm text-slate-500">Tour Builder рассчитает стоимость по времени события.</p></div>
-          <div className="inline-flex max-w-full flex-wrap rounded-md border border-slate-300 bg-slate-50 p-1" role="group" aria-label="Тип тарифа">
-            {[['fixed','За услугу'],['hourly','За час'],['packages','Пакеты']].map(([key,label]) => <button key={key} type="button" onClick={() => setField("pricingMode", key)} className={`h-9 rounded px-4 text-sm font-semibold ${form.pricingMode === key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-white'}`}>{label}</button>)}
-          </div>
-
-          <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)]">
-            <div>
+            <FormStep icon={WalletCards} number="3" title="Укажите стоимость" description="Tour Builder рассчитает итог по длительности">
+              <div className="mb-4 inline-flex max-w-full flex-wrap rounded-md border border-slate-300 bg-slate-50 p-1" role="group" aria-label="Тип тарифа">
+                {[['fixed','За услугу'],['hourly','За час'],['packages','Пакеты']].map(([key,label]) => <button key={key} type="button" onClick={() => setField("pricingMode", key)} className={`h-9 rounded px-4 text-sm font-semibold ${form.pricingMode === key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-white'}`}>{label}</button>)}
+              </div>
               {form.pricingMode === "fixed" && <div className="grid gap-4 sm:grid-cols-2"><MoneyField label="Цена за услугу" value={form.price} onChange={(value) => setField("price", value)} /><ReadOnlyCurrency /></div>}
               {form.pricingMode === "hourly" && <div className="grid gap-4 sm:grid-cols-3"><MoneyField label="Цена за час" value={form.price} onChange={(value) => setField("price", value)} /><NumberField label="Минимальный заказ, часов" value={form.minimumHours} onChange={(value) => setField("minimumHours", value)} /><ReadOnlyCurrency /></div>}
               {form.pricingMode === "packages" && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><NumberField label="Неполный день, часов" value={form.halfDayHours} onChange={(value) => setField("halfDayHours", value)} /><MoneyField label="Цена неполного дня" value={form.halfDayPrice} onChange={(value) => setField("halfDayPrice", value)} /><NumberField label="Полный день, часов" value={form.fullDayHours} onChange={(value) => setField("fullDayHours", value)} /><MoneyField label="Цена полного дня" value={form.fullDayPrice} onChange={(value) => setField("fullDayPrice", value)} /><MoneyField label="Дополнительный час" value={form.extraHourPrice} onChange={(value) => setField("extraHourPrice", value)} /></div>}
-            </div>
-            <aside className="border-l-4 border-orange-500 bg-orange-50 px-4 py-3">
-              <div className="text-xs font-bold uppercase text-orange-700">Как увидит турагент</div>
-              <div className="mt-1 font-semibold text-slate-950">{serviceTitle(form)}</div>
-              <div className="mt-2 text-sm text-slate-600">Пример: {preview.duration} · {preview.rule}</div>
-              <div className="mt-1 text-xl font-bold text-slate-950">{money(preview.total)} UZS</div>
-            </aside>
+            </FormStep>
           </div>
-          <div className="mt-5 flex justify-end"><button type="button" onClick={addService} disabled={saving} className="h-11 rounded-md bg-orange-600 px-6 font-semibold text-white hover:bg-orange-700 disabled:opacity-50">{saving ? "Сохранение..." : "Добавить услугу"}</button></div>
+
+          <aside className="overflow-hidden rounded-lg bg-slate-950 text-white xl:sticky xl:top-4">
+            <div className="border-b border-white/10 px-5 py-4"><div className="text-xs font-bold uppercase text-orange-400">Предпросмотр</div><div className="mt-1 text-xs text-slate-400">Так тариф увидит турагент</div></div>
+            <div className="px-5 py-5"><div className="text-lg font-bold leading-snug">{serviceTitle(form)}</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-300"><MapPin size={16} />{isIntercity ? `${cityLabel(form.originCity) || "Откуда"} → ${cityLabel(form.destinationCity) || "Куда"}` : cityLabel(form.citySlug) || "Локация не выбрана"}</div><div className="mt-6 border-t border-white/10 pt-4"><div className="text-xs uppercase text-slate-400">Расчёт для примера</div><div className="mt-1 text-sm text-slate-300">{preview.duration} · {preview.rule}</div><div className="mt-2 text-2xl font-bold">{money(preview.total)} <span className="text-base font-semibold text-slate-300">UZS</span></div></div></div>
+            <div className="px-5 pb-5"><button type="button" onClick={addService} disabled={saving || !cities.length} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-5 font-bold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={19} />{saving ? "Сохранение..." : "Добавить тариф"}</button></div>
+          </aside>
         </div>
       </section>
 
@@ -453,8 +445,14 @@ function NumberField({ label, value, onChange }) {
 function ReadOnlyCurrency() {
   return <label className="text-sm font-semibold text-slate-700">Валюта<input value="UZS" readOnly className="mt-1 h-11 w-full rounded-md border border-slate-200 bg-slate-50 px-3 font-normal text-slate-600" /></label>;
 }
+function FormStep({ icon: Icon, number, title, description, children }) {
+  return <section className="border-b border-slate-200 p-5 last:border-b-0"><div className="mb-4 flex items-start gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-white"><Icon size={18} /></div><div className="min-w-0"><div className="flex items-center gap-2"><span className="text-xs font-bold text-orange-600">ШАГ {number}</span><h4 className="font-bold text-slate-950">{title}</h4></div><p className="mt-0.5 text-sm text-slate-500">{description}</p></div></div>{children}</section>;
+}
+function SelectField({ label, value, onChange, options, placeholder, disabled = false }) {
+  return <label className="text-sm font-semibold text-slate-700">{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-100 disabled:text-slate-400"><option value="">{placeholder}</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+}
 function CitySelect({ label, value, cities, onChange, compact = false }) {
-  return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={!cities.length} className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 w-full rounded-md border border-slate-300 bg-white px-3 font-normal disabled:bg-slate-50`}><option value="">Выберите город</option>{cities.map((city) => <option key={city} value={city}>{city}</option>)}</select></label>;
+  return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={!cities.length} className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-50`}><option value="">Выберите город</option>{cities.map((city) => <option key={city} value={city}>{cityLabel(city)}</option>)}</select></label>;
 }
 function ReadOnlyValue({ label, value, compact = false }) {
   return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<div className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 flex items-center rounded-md border border-slate-200 bg-slate-100 px-3 font-normal text-slate-600`}>{value}</div></label>;
