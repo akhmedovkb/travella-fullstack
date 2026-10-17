@@ -2360,6 +2360,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     subtype: "intercity",
                     intercity_mode: mode,
                     ...(mode === "rail" && previousTransport.rail ? { rail: previousTransport.rail } : {}),
+                    ...(mode === "air" && previousTransport.flight ? { flight: previousTransport.flight } : {}),
                   };
                   return { ...item, services: { ...item.services, transport } };
                 });
@@ -2698,10 +2699,11 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     {activeEventService === "transfer" && activeTransportSubtype === "intercity" && (
                       <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                         <div className="mb-2 text-xs font-bold uppercase text-slate-500">{t("tb.ui.intercity_method")}</div>
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="grid gap-2 sm:grid-cols-3">
                           {[
                             { id: "provider", label: t("tb.ui.transport_supplier"), hint: t("tb.ui.transport_supplier_hint") },
                             { id: "rail", label: t("tb.ui.rail_transport"), hint: t("tb.ui.rail_hint") },
+                            { id: "air", label: t("tb.ui.air_transport"), hint: t("tb.ui.air_hint") },
                           ].map((mode) => (
                             <button
                               key={mode.id}
@@ -2752,6 +2754,62 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                                       },
                                     },
                                   };
+                            });
+                            return { ...previous, [k]: { ...current, transport: null, transportService: null, schedule } };
+                          });
+                        }}
+                        onRemove={() => {
+                          const scheduleId = selectedSchedule.id;
+                          setByDay((previous) => {
+                            const current = previous[k] || {};
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                              if (item.id !== scheduleId) return item;
+                              const transport = { ...(item.services?.transport || {}) };
+                              delete transport.flight;
+                              return { ...item, services: { ...item.services, transport } };
+                            });
+                            return { ...previous, [k]: { ...current, schedule } };
+                          });
+                        }}
+                      />
+                    )}
+                    {activeEventService === "transfer" && activeTransportSubtype === "intercity" && activeIntercityMode === "air" && (
+                      <TransportSegmentEditor
+                        value={{
+                          type: "air",
+                          ...(selectedSchedule?.services?.transport?.flight || {}),
+                        }}
+                        date={k}
+                        adults={Math.max(1, toNum(adt, 1))}
+                        children={Math.max(0, toNum(chd, 0))}
+                        lang={lang}
+                        lockType="air"
+                        onChange={(flight) => {
+                          const scheduleId = selectedSchedule.id;
+                          setByDay((previous) => {
+                            const current = previous[k] || {};
+                            const departureTime = timeFromFlightDateTime(flight.departure_at);
+                            const arrivalTime = timeFromFlightDateTime(flight.arrival_at);
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                              if (item.id !== scheduleId) return item;
+                              return {
+                                ...item,
+                                ...(departureTime ? { start_time: departureTime } : {}),
+                                ...(arrivalTime ? { end_time: arrivalTime } : {}),
+                                services: {
+                                  ...item.services,
+                                  transport: {
+                                    ...(item.services?.transport || {}),
+                                    subtype: "intercity",
+                                    intercity_mode: "air",
+                                    provider_id: null,
+                                    provider_name: "",
+                                    service_id: null,
+                                    service_title: flight.raw_offer_id ? t("tb.ui.air_transport") : "",
+                                    flight: { ...flight, type: "air" },
+                                  },
+                                },
+                              };
                             });
                             return { ...previous, [k]: { ...current, transport: null, transportService: null, schedule } };
                           });
@@ -2840,7 +2898,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         </div>
                       </div>
                     )}
-                    {(activeEventService === "tour" || (activeTransportSubtype && activeTransportSubtype !== "international" && !(activeTransportSubtype === "intercity" && activeIntercityMode === "rail"))) && <>
+                    {(activeEventService === "tour" || (activeTransportSubtype && activeTransportSubtype !== "international" && !(activeTransportSubtype === "intercity" && ["rail", "air"].includes(activeIntercityMode)))) && <>
                     {activeTransportSubtype === "intercity" && (
                       <div className={`mb-3 rounded-md border px-3 py-2 text-sm ${activeIntercityRoute?.from && activeIntercityRoute?.to ? "border-sky-200 bg-sky-50 text-sky-900" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
                         {activeIntercityRoute?.from && activeIntercityRoute?.to
