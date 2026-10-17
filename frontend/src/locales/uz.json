@@ -220,7 +220,11 @@
     ,
     "vehicle_model": "Avtomobil markasi va modeli", "passenger_seats_count": "{{count}} yo‘lovchi o‘rni", "external_catalog": "Tashqi katalog", "travella_catalog": "Travella katalogi", "loading_models": "Modellar yuklanmoqda", "selected_model": "Tanlandi: {{model}}", "custom_model_hint": "Istalgan marka va modelni kiritish mumkin"
     ,
-    "header": { "work": "Ish", "client_work": "Mijozlar bilan ishlash", "tools": "Asboblar" }
+    "header": { "work": "Ish", "client_work": "Mijozlar bilan ishlash", "tools": "Asboblar" },
+    "account_actions": "Akkaunt amallari",
+    "password_panel_subtitle": "Kabinetga kirish parolini yangilang.",
+    "password_minimum_hint": "Kamida 6 ta belgi",
+    "logout_confirm": "Kabinetdan chiqasizmi?"
   },
   "provider_services_tourbuilder_not_allowed": "Tour Builder tariflarini faqat gidlar, transport yetkazib beruvchilari va turagentlar tahrirlashi mumkin.",
   "provider_services": {
@@ -610,7 +614,9 @@
     "no_account": "Akkaunt yo‘qmi?",
     "password": "Parol",
     "title": "Provayder kirishi",
-    "success": "Kirish muvaffaqiyatli"
+    "success": "Kirish muvaffaqiyatli",
+    "show_password": "Parolni ko‘rsatish",
+    "hide_password": "Parolni yashirish"
   },
   "logout": "Chiqish",
   "make_cover": "Muqova qilish",

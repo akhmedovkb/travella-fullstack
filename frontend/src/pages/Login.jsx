@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
+import { Eye, EyeOff } from "lucide-react";
 import LanguageSelector from "../components/LanguageSelector";
 
 const Login = () => {
@@ -11,6 +12,7 @@ const Login = () => {
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState("");
   const [showTelegramLogin, setShowTelegramLogin] = useState(false);
 
@@ -141,13 +143,24 @@ const Login = () => {
               {t("login.password")}
             </label>
 
-            <input
-              type="password"
-              className="w-full border border-gray-300 px-4 py-3 rounded-xl focus:outline-none focus:ring-4 focus:ring-orange-100 focus:border-orange-400"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoComplete="current-password"
-            />
+            <div className="relative">
+              <input
+                type={showPassword ? "text" : "password"}
+                className="w-full rounded-xl border border-gray-300 py-3 pl-4 pr-12 focus:border-orange-400 focus:outline-none focus:ring-4 focus:ring-orange-100"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                autoComplete="current-password"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword((value) => !value)}
+                className="absolute inset-y-0 right-0 inline-flex w-12 items-center justify-center rounded-r-xl text-gray-500 transition hover:bg-gray-50 hover:text-gray-900 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500"
+                aria-label={t(showPassword ? "login.hide_password" : "login.show_password")}
+                aria-pressed={showPassword}
+              >
+                {showPassword ? <EyeOff aria-hidden="true" className="h-5 w-5" /> : <Eye aria-hidden="true" className="h-5 w-5" />}
+              </button>
+            </div>
           </div>
 
           {error && <p className="text-red-500 text-sm mb-3">{error}</p>}
