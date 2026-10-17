@@ -220,7 +220,7 @@
     ,
     "vehicle_model": "Avtomobil markasi va modeli", "passenger_seats_count": "{{count}} yo‘lovchi o‘rni", "external_catalog": "Tashqi katalog", "travella_catalog": "Travella katalogi", "loading_models": "Modellar yuklanmoqda", "selected_model": "Tanlandi: {{model}}", "custom_model_hint": "Istalgan marka va modelni kiritish mumkin"
     ,
-    "header": { "work": "Ish", "client_work": "Mijozlar bilan ishlash", "tools": "Asboblar" },
+    "header": { "work": "Ish", "client_work": "Mijozlar bilan ishlash", "tools": "Vositalar" },
     "account_actions": "Akkaunt amallari",
     "password_panel_subtitle": "Kabinetga kirish parolini yangilang.",
     "password_minimum_hint": "Kamida 6 ta belgi",
