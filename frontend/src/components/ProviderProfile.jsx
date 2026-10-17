@@ -766,6 +766,10 @@ const ProviderProfile = () => {
   const isTgReady = Boolean(profile?.telegram_chat_id || profile?.tg_chat_id || telegramDisplay);
   const certStatus = Boolean(certObjectUrl);
   const trust = getProviderTrust(profile, stats);
+  const requiresLanguages = ["guide", "transport", "agent", "tour_agent"].includes(
+    String(profile?.type || "").toLowerCase()
+  );
+  const hasLanguages = Array.isArray(profile?.languages) && profile.languages.some(Boolean);
   const contactReady = Boolean(profile?.phone && (profile?.social || profile?.telegram_username || profile?.telegram_chat_id || profile?.tg_chat_id));
   const demandStats = {
     opens: Number(stats?.contact_unlocks || stats?.unlocks || stats?.contacts_opened || 0),
@@ -860,6 +864,28 @@ const ProviderProfile = () => {
           </button>
         </div>
       </div>
+
+      {requiresLanguages && !hasLanguages && (
+        <section className="flex flex-col gap-3 rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-950 shadow-sm sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 items-start gap-3">
+            <AlertTriangle aria-hidden="true" className="mt-0.5 h-5 w-5 shrink-0 text-amber-600" />
+            <div>
+              <h2 className="text-sm font-black">{t("provider_profile_ui.languages_required_title")}</h2>
+              <p className="mt-0.5 text-sm font-semibold text-amber-800">{t("provider_profile_ui.languages_required_hint")}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setIsEditing(true);
+              scrollToProfilePart("languages");
+            }}
+            className="inline-flex h-10 shrink-0 items-center justify-center rounded-lg bg-amber-600 px-4 text-sm font-black text-white transition hover:bg-amber-700"
+          >
+            {t("provider_profile_ui.add_languages")}
+          </button>
+        </section>
+      )}
 
       {pwdOpen && <section id="password-panel" className="rounded-xl border border-orange-200 bg-white p-4 shadow-sm" aria-labelledby="password-panel-title">
         <div className="flex items-start justify-between gap-4">
