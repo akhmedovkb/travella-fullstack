@@ -1085,6 +1085,21 @@
     "my_requests": "Мои запросы"
   },
   "tb": {
+    "timeline": {
+      "title": "Компоненты дня", "subtitle": "Добавьте части программы и назначьте услуги каждому компоненту", "add": "+ Добавить компонент", "create_first": "+ Создать первый компонент дня", "check_interval": "Проверьте интервал", "set_time": "Укажите время", "hours": "{{count}} ч", "minutes": "{{count}} мин", "guide": "Гид", "flight_selected": "Авиабилет выбран", "rail": "ЖД", "person_short": "чел.", "attractions": "Объекты", "selected": "Выбрано", "done": "Готово", "configure": "Настроить", "start": "Начало", "end": "Окончание", "component": "Компонент",
+      "components": { "transfer": "Транспорт", "hotel": "Отель", "tour": "Экскурсия / программа", "meal": "Питание" },
+      "transport_types": { "international": "Авиабилет", "intercity": "Междугородний трансфер", "hotel": "Отельный трансфер", "city_tour": "Транспорт программы", "hourly": "Почасовой транспорт", "half_day": "Транспорт на полдня", "full_day": "Транспорт на день", "vip": "VIP-трансфер", "bus": "Групповой автобус", "dinner": "Трансфер в ресторан", "meet_sign": "Встреча с табличкой", "waiting": "Дополнительное ожидание" },
+      "tour_types": { "city": "Обзорный тур", "thematic": "Тематический тур", "attraction": "Экскурсия по объекту", "countryside": "Загородный тур", "mountain": "Горный тур", "desert": "Пустынный тур", "safari": "Сафари-тур", "shopping": "Шопинг-сопровождение", "support_escort": "Сопровождение группы", "support_meet": "Встреча гостей", "support_seeoff": "Проводы гостей", "support_translation": "Переводчик", "support_coordinator": "Координатор" },
+      "support_types": { "escort": "Сопровождение группы", "meet": "Встреча гостей", "seeoff": "Проводы гостей", "translation": "Переводчик", "coordinator": "Координатор" }
+    },
+    "ui": {
+      "subtitle": "Соберите маршрут по дням, назначьте услуги и проверьте итог перед отправкой.", "days": "Дней", "total": "Итого", "completed": "Заполнено {{count}} из 5", "expand": "Развернуть", "collapse": "Свернуть", "component_services": "Услуги компонента", "choose_component_services": "Выберите состав компонента и подходящие услуги", "program_type": "Тип программы", "city_required": "Укажите город в шапке дня — после этого появятся доступные поставщики.", "supplier": "Поставщик", "selected_service": "Услуга выбрана", "service_not_selected": "Услуга не выбрана", "transport_type": "Тип транспорта", "choose_transport": "Выберите тип, поставщика и тариф", "intercity_method": "Как оформить межгород", "transport_supplier": "Транспортный поставщик", "transport_supplier_hint": "Автомобиль, минивэн или автобус", "rail_transport": "ЖД транспорт", "rail_hint": "Укажите маршрут и стоимость билета на одного человека", "from": "Откуда", "to": "Куда", "train_number": "Поезд / рейс", "price_per_person": "Цена / 1 чел.", "group_total": "Итого за группу", "people_short": "чел.", "route": "Маршрут", "route_required": "Укажите разные города в соседних днях, чтобы подобрать межгородний тариф.", "attractions": "Объекты", "attractions_hint": "Достопримечательности и входные билеты", "selected_attractions": "Выбрано объектов: {{count}}", "no_attractions": "Объекты не выбраны", "open_description": "Открыть описание", "direct_hotel": "Прямой тариф", "best_price": "Лучшая доступная цена", "free_sale": "Свободная продажа", "on_request": "По запросу", "refundable": "Возвратный", "nonrefundable": "Невозвратный"
+    },
+    "program_groups": {
+      "excursion": { "label": "Экскурсия", "description": "Маршрут с гидом, транспортом и объектами" },
+      "guide_service": { "label": "Услуга гида", "description": "Сопровождение, встреча, проводы или перевод" },
+      "shopping": { "label": "Шопинг", "description": "Сопровождение по магазинам и рынкам" }
+    },
     "tpl_apply_title": "Применить шаблон",
     "tpl_select": "Шаблон",
     "tpl_select_placeholder": "Выберите шаблон…",

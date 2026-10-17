@@ -1156,6 +1156,21 @@
     "my_requests": "Mening so‘rovlarim"
   },
   "tb": {
+    "timeline": {
+      "title": "Kun komponentlari", "subtitle": "Dastur qismlarini qo‘shing va har bir komponentga xizmatlarni biriktiring", "add": "+ Komponent qo‘shish", "create_first": "+ Kunning birinchi komponentini yaratish", "check_interval": "Vaqt oralig‘ini tekshiring", "set_time": "Vaqtni kiriting", "hours": "{{count}} soat", "minutes": "{{count}} daq.", "guide": "Gid", "flight_selected": "Aviachipta tanlandi", "rail": "Temir yo‘l", "person_short": "kishi", "attractions": "Obyektlar", "selected": "Tanlandi", "done": "Tayyor", "configure": "Sozlash", "start": "Boshlanishi", "end": "Tugashi", "component": "Komponent",
+      "components": { "transfer": "Transport", "hotel": "Mehmonxona", "tour": "Ekskursiya / dastur", "meal": "Ovqatlanish" },
+      "transport_types": { "international": "Aviachipta", "intercity": "Shaharlararo transfer", "hotel": "Mehmonxona transferi", "city_tour": "Dastur transporti", "hourly": "Soatbay transport", "half_day": "Yarim kunlik transport", "full_day": "Kunlik transport", "vip": "VIP transfer", "bus": "Guruh avtobusi", "dinner": "Restoranga transfer", "meet_sign": "Tablo bilan kutib olish", "waiting": "Qo‘shimcha kutish" },
+      "tour_types": { "city": "Shahar bo‘ylab tanishuv turi", "thematic": "Mavzuli tur", "attraction": "Obyekt bo‘ylab ekskursiya", "countryside": "Shahar tashqarisidagi tur", "mountain": "Tog‘ turi", "desert": "Cho‘l turi", "safari": "Safari turi", "shopping": "Shopping hamrohligi", "support_escort": "Guruhga hamrohlik", "support_meet": "Mehmonlarni kutib olish", "support_seeoff": "Mehmonlarni kuzatish", "support_translation": "Tarjimon", "support_coordinator": "Koordinator" },
+      "support_types": { "escort": "Guruhga hamrohlik", "meet": "Mehmonlarni kutib olish", "seeoff": "Mehmonlarni kuzatish", "translation": "Tarjimon", "coordinator": "Koordinator" }
+    },
+    "ui": {
+      "subtitle": "Yo‘nalishni kunlar bo‘yicha tuzing, xizmatlarni tanlang va yuborishdan oldin yakuniy summani tekshiring.", "days": "Kunlar", "total": "Jami", "completed": "5 tadan {{count}} tasi to‘ldirildi", "expand": "Ochish", "collapse": "Yig‘ish", "component_services": "Komponent xizmatlari", "choose_component_services": "Komponent tarkibi va mos xizmatlarni tanlang", "program_type": "Dastur turi", "city_required": "Mavjud yetkazib beruvchilarni ko‘rish uchun kun sarlavhasida shaharni kiriting.", "supplier": "Yetkazib beruvchi", "selected_service": "Xizmat tanlandi", "service_not_selected": "Xizmat tanlanmagan", "transport_type": "Transport turi", "choose_transport": "Tur, yetkazib beruvchi va tarifni tanlang", "intercity_method": "Shaharlararo safar usuli", "transport_supplier": "Transport yetkazib beruvchisi", "transport_supplier_hint": "Avtomobil, miniven yoki avtobus", "rail_transport": "Temir yo‘l transporti", "rail_hint": "Bir kishi uchun chipta narxini qo‘lda kiriting", "from": "Qayerdan", "to": "Qayerga", "train_number": "Poyezd / reys", "price_per_person": "Narx / 1 kishi", "group_total": "Guruh uchun jami", "people_short": "kishi", "route": "Yo‘nalish", "route_required": "Shaharlararo tarifni topish uchun qo‘shni kunlarda turli shaharlarni kiriting.", "attractions": "Obyektlar", "attractions_hint": "Diqqatga sazovor joylar va kirish chiptalari", "selected_attractions": "Tanlangan obyektlar: {{count}}", "no_attractions": "Obyektlar tanlanmagan", "open_description": "Tavsifni ochish", "direct_hotel": "Mehmonxonaning to‘g‘ridan-to‘g‘ri tarifi", "best_price": "Eng yaxshi mavjud narx", "free_sale": "Erkin sotuv", "on_request": "So‘rov bo‘yicha", "refundable": "Qaytariladigan", "nonrefundable": "Qaytarilmaydigan"
+    },
+    "program_groups": {
+      "excursion": { "label": "Ekskursiya", "description": "Gid, transport va obyektlar bilan yo‘nalish" },
+      "guide_service": { "label": "Gid xizmati", "description": "Hamrohlik, kutib olish, kuzatish yoki tarjima" },
+      "shopping": { "label": "Shopping", "description": "Do‘kon va bozorlarda hamrohlik" }
+    },
     "tpl_apply_title": "Shablonni qo‘llash",
     "tpl_select": "Shablon",
     "tpl_select_placeholder": "Shablonni tanlang…",
