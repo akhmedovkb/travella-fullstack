@@ -24,6 +24,10 @@ const fmt = (n) => (isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFracti
 const isTourBuilderHotel = (booking) =>
   String(booking?.source || "").toLowerCase() === "tour_builder"
   && String(booking?.details?.tb_kind || booking?.attachments?.tb_kind || "").toLowerCase() === "hotel";
+const isFixedTourBuilderRate = (booking) =>
+  String(booking?.source || "").toLowerCase() === "tour_builder"
+  && Boolean(booking?.details?.fixed_catalog_rate || booking?.attachments?.fixed_catalog_rate)
+  && Number(booking?.provider_price) > 0;
 const bookingTimeSlots = (booking) => {
   const raw = booking?.details?.time_slots || booking?.attachments?.time_slots || booking?.time_slots;
   if (!Array.isArray(raw)) return [];
@@ -781,6 +785,8 @@ export default function ProviderBookings() {
           const alreadyQuoted = Number(b?.provider_price) > 0;
           const awaitingRequester = isIncoming && String(b?.status) === "quoted";
           const fixedHotelBooking = isTourBuilderHotel(b);
+          const fixedCatalogBooking = isFixedTourBuilderRate(b);
+          const fixedPriceBooking = fixedHotelBooking || fixedCatalogBooking;
 
           // подписи «кем отклонено/кем отменено»
           let rejectedByLabel = null;
@@ -806,7 +812,7 @@ export default function ProviderBookings() {
                 rejectedByLabel={rejectedByLabel}
                 cancelledByLabel={cancelledByLabel}
                 onAccept={accept}
-                onReject={isIncoming && String(b.status) === "pending" && !fixedHotelBooking ? undefined : reject}
+                onReject={isIncoming && String(b.status) === "pending" && !fixedPriceBooking ? undefined : reject}
                 onCancel={cancelOutgoing}
                 onCancelByProvider={openCancelIncoming}
                 onHoldExpired={load}
@@ -816,7 +822,7 @@ export default function ProviderBookings() {
               <BookingTimeSlots booking={b} />
 
               {/* Входящие: форма согласования цены (прячем после отправки предложения) */}
-              {isIncoming && String(b.status) === "pending" && !awaitingRequester && !fixedHotelBooking && (
+              {isIncoming && String(b.status) === "pending" && !awaitingRequester && !fixedPriceBooking && (
                 <PriceAgreementCard booking={b} onSent={load} onReject={reject} />
               )}
 

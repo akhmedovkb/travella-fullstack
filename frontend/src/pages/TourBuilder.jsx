@@ -1931,6 +1931,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             pax_adult: Number(p.pax_adult) || 0,
             pax_child: Number(p.pax_child) || 0,
             resident_type: residentType,
+            provider_service_id: p.service_id ? Number(p.service_id) : null,
             tour_program: Array.isArray(p.tour_program) ? p.tour_program : [],
             tour_program_text: p.tour_program_text || "",
             time_slots: Array.isArray(p.time_slots) ? p.time_slots : [],

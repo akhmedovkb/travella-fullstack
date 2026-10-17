@@ -429,6 +429,27 @@ const createBooking = async (req, res) => {
     const managedHotelPrice = isTourBuilder && tourBuilderKind === "hotel"
       ? quotedHotelPrice(bag, providerId)
       : null;
+    const providerServiceId = Number(bag.provider_service_id || req.body?.provider_service_id || 0);
+    let publishedTourBuilderRate = null;
+    if (isTourBuilder && tourBuilderKind !== "hotel" && Number.isInteger(providerServiceId) && providerServiceId > 0) {
+      const rateResult = await pool.query(
+        `SELECT id, title, price, currency
+           FROM provider_services
+          WHERE id=$1 AND provider_id=$2 AND is_active=TRUE AND price > 0
+          LIMIT 1`,
+        [providerServiceId, providerId]
+      );
+      const rate = rateResult.rows[0];
+      if (rate) {
+        publishedTourBuilderRate = {
+          amount: Number(rate.price),
+          currency: rate.currency || "UZS",
+          title: rate.title || null,
+        };
+        bag.provider_service_id = Number(rate.id);
+        bag.fixed_catalog_rate = true;
+      }
+    }
     const initialStatus = managedHotelPrice ? "awaiting_payment" : "pending";
 
     const insertCols = ["service_id", "provider_id", "client_id", "date", "status", "client_message", "attachments"];
@@ -446,12 +467,17 @@ const createBooking = async (req, res) => {
     // опциональная валюта
     if (cols.currency) {
       insertCols.push("currency");
-      values.push(managedHotelPrice?.currency || currency || null);
+      values.push(managedHotelPrice?.currency || publishedTourBuilderRate?.currency || currency || null);
     }
-    if (managedHotelPrice) {
+    if (managedHotelPrice || publishedTourBuilderRate) {
       insertCols.push("provider_price", "provider_note");
-      values.push(managedHotelPrice.amount, "Цена зафиксирована по опубликованному тарифу Tour Builder");
-      if (cols.hold_until) {
+      values.push(
+        managedHotelPrice?.amount || publishedTourBuilderRate.amount,
+        publishedTourBuilderRate?.title
+          ? `Опубликованный тариф Tour Builder: ${publishedTourBuilderRate.title}`
+          : "Цена зафиксирована по опубликованному тарифу Tour Builder"
+      );
+      if (managedHotelPrice && cols.hold_until) {
         insertCols.push("hold_until");
         values.push(new Date(Date.now() + 30 * 60 * 1000));
       }
@@ -538,7 +564,10 @@ const createBooking = async (req, res) => {
       dates: days,
       time_slots: timeSlots,
       inventory: inventoryReservation,
-      ...(managedHotelPrice ? { price: managedHotelPrice.amount, currency: managedHotelPrice.currency } : {}),
+      ...((managedHotelPrice || publishedTourBuilderRate) ? {
+        price: managedHotelPrice?.amount || publishedTourBuilderRate.amount,
+        currency: managedHotelPrice?.currency || publishedTourBuilderRate.currency,
+      } : {}),
     });
 
     const bkg = {
