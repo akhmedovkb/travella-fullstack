@@ -135,7 +135,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
   const detailsFrom = (current, existing = {}) => ({
     ...existing,
-    ...(current.citySlug ? { city_slug: current.citySlug } : {}),
+    city_slug: String(current.citySlug || "").trim() || null,
     ...(transportCategory(current.category)
       ? { seats: Math.max(1, number(current.seats) || 1), vehicle_model: String(current.vehicleModel || "" ).trim(), max_guests: null }
       : { seats: null, vehicle_model: null, max_guests: number(current.seats) > 0 ? number(current.seats) : null }),
@@ -188,8 +188,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
   function beginEdit(row) {
     const details = row.details || {};
+    const group = findServiceGroup(row.category, categoryGroups);
     setEditingId(row.id);
     setDraft({
+      catalogGroup: group?.id || "",
       category: row.category,
       title: row.title || "",
       citySlug: details.city_slug || "",
@@ -212,9 +214,11 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     setSaving(true);
     try {
       await patchService(row.id, {
-        title: draft.title.trim() || LABELS[row.category],
+        category: draft.category,
+        title: draft.title.trim() || LABELS[draft.category],
         price: draft.pricingMode === "packages" ? number(draft.halfDayPrice) : number(draft.price),
         details: detailsFrom(draft, row.details || {}),
+        vehicle_model: transportCategory(draft.category) ? String(draft.vehicleModel || "").trim() : null,
       });
       setEditingId(null);
       setDraft(null);
@@ -382,6 +386,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
           {loading ? <div className="py-8 text-center text-slate-500">Загрузка...</div> : filtered.length === 0 ? <div className="py-8 text-center text-slate-500">Услуги не найдены</div> : filtered.map((row) => {
             const expanded = editingId === row.id;
+            const draftCategoryGroup = expanded && draft
+              ? categoryGroups.find((group) => group.id === draft.catalogGroup) || findServiceGroup(draft.category, categoryGroups)
+              : null;
+            const draftIsTransport = Boolean(expanded && draft && transportCategory(draft.category));
             return <div key={row.id} className="py-4">
               <div className="grid items-center gap-4 md:grid-cols-[minmax(240px,1.5fr)_minmax(220px,1fr)_120px_auto]">
                 <div><div className="font-semibold text-slate-950">{row.title || LABELS[row.category] || row.category}</div><div className="mt-1 text-sm text-slate-500">{LABELS[row.category] || row.category}{row.details?.city_slug ? ` · ${row.details.city_slug}` : ""}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${row.details.seats} мест` : ""}</div></div>
@@ -389,7 +397,93 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                 <div className={`text-sm font-semibold ${row.is_active ? 'text-emerald-700' : 'text-slate-400'}`}>{row.is_active ? "Включена" : "Выключена"}</div>
                 <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? "Закрыть" : "Редактировать"}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? "Выключить" : "Включить"}</button></div>
               </div>
-              {expanded && draft && <div className="mt-4 border-l-4 border-slate-300 bg-slate-50 p-4"><div className="grid gap-3 md:grid-cols-3"><label className="text-xs font-semibold text-slate-600">Название<input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" /></label>{draft.pricingMode !== 'packages' && <MoneyField label={draft.pricingMode === 'hourly' ? 'Цена за час' : 'Цена услуги'} value={draft.price} onChange={(value) => setDraft({ ...draft, price: value })} />}<label className="text-xs font-semibold text-slate-600">Тип тарифа<select value={draft.pricingMode} onChange={(event) => setDraft({ ...draft, pricingMode: event.target.value })} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal"><option value="fixed">За услугу</option><option value="hourly">За час</option><option value="packages">Пакеты</option></select></label></div>{draft.pricingMode === 'packages' && <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><NumberField label="Неполный день, часов" value={draft.halfDayHours} onChange={(value) => setDraft({ ...draft, halfDayHours: value })} /><MoneyField label="Цена неполного дня" value={draft.halfDayPrice} onChange={(value) => setDraft({ ...draft, halfDayPrice: value })} /><NumberField label="Полный день, часов" value={draft.fullDayHours} onChange={(value) => setDraft({ ...draft, fullDayHours: value })} /><MoneyField label="Цена полного дня" value={draft.fullDayPrice} onChange={(value) => setDraft({ ...draft, fullDayPrice: value })} /><MoneyField label="Дополнительный час" value={draft.extraHourPrice} onChange={(value) => setDraft({ ...draft, extraHourPrice: value })} /></div>}<div className="mt-4 flex justify-between gap-3"><button type="button" onClick={() => removeService(row)} className="h-10 rounded-md border border-rose-200 px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50">Удалить</button><button type="button" onClick={() => saveEdit(row)} disabled={saving} className="h-10 rounded-md bg-slate-950 px-5 text-sm font-semibold text-white disabled:opacity-50">Сохранить изменения</button></div></div>}
+              {expanded && draft && (
+                <div className="mt-4 border-l-4 border-slate-400 bg-slate-50 p-4">
+                  <div className="mb-4">
+                    <h4 className="font-bold text-slate-950">Основные данные</h4>
+                    <p className="text-xs text-slate-500">Все поля доступны так же, как при создании услуги.</p>
+                  </div>
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                    <label className="text-xs font-semibold text-slate-600">Категория услуги
+                      <select
+                        value={draftCategoryGroup?.id || ""}
+                        onChange={(event) => setDraft({ ...draft, catalogGroup: event.target.value, category: "", title: "" })}
+                        className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal"
+                      >
+                        <option value="">Выберите категорию</option>
+                        {categoryGroups.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600">Конкретная услуга
+                      <select
+                        value={draft.category}
+                        disabled={!draftCategoryGroup}
+                        onChange={(event) => setDraft({ ...draft, category: event.target.value })}
+                        className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal disabled:bg-slate-100"
+                      >
+                        <option value="">Выберите услугу</option>
+                        {(draftCategoryGroup?.services || []).map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}
+                      </select>
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600">Название
+                      <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder={draft.category ? LABELS[draft.category] : "Название услуги"} className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
+                    </label>
+                    <label className="text-xs font-semibold text-slate-600">Город
+                      {cities.length ? (
+                        <select value={draft.citySlug} onChange={(event) => setDraft({ ...draft, citySlug: event.target.value })} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal">
+                          <option value="">Все города профиля</option>
+                          {cities.map((city) => <option key={city} value={city}>{city}</option>)}
+                        </select>
+                      ) : (
+                        <input value={draft.citySlug} onChange={(event) => setDraft({ ...draft, citySlug: event.target.value })} placeholder="Город услуги" className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
+                      )}
+                    </label>
+                    {!draftIsTransport && <label className="text-xs font-semibold text-slate-600">Максимум гостей
+                      <input inputMode="numeric" value={draft.seats} onChange={(event) => setDraft({ ...draft, seats: event.target.value })} placeholder="Без ограничения" className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
+                    </label>}
+                  </div>
+
+                  {draftIsTransport && (
+                    <div className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 md:grid-cols-3">
+                      {fleet.length > 0 && <label className="text-xs font-semibold text-slate-600">Автомобиль из профиля
+                        <select defaultValue="" onChange={(event) => {
+                          const car = fleet.find((item, index) => String(item.id ?? index) === event.target.value);
+                          if (car) setDraft({ ...draft, vehicleModel: String(car.model || ""), seats: car.seats ? String(car.seats) : "" });
+                        }} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal">
+                          <option value="">Выберите автомобиль</option>
+                          {fleet.map((car, index) => <option key={car.id || index} value={String(car.id ?? index)}>{car.model || "Автомобиль"} · {car.seats || "?"} мест</option>)}
+                        </select>
+                      </label>}
+                      <label className="text-xs font-semibold text-slate-600">Модель автомобиля
+                        <VehicleModelInput value={draft.vehicleModel} onChange={(vehicleModel) => setDraft({ ...draft, vehicleModel })} onModelSelect={({ model, seats }) => setDraft({ ...draft, vehicleModel: model, ...(seats ? { seats: String(seats) } : {}) })} placeholder="Марка или модель" className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
+                      </label>
+                      <label className="text-xs font-semibold text-slate-600">Пассажирских мест
+                        <input type="number" min="1" value={draft.seats} onChange={(event) => setDraft({ ...draft, seats: event.target.value })} className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
+                      </label>
+                    </div>
+                  )}
+
+                  <div className="mt-5 border-t border-slate-200 pt-4">
+                    <h4 className="mb-3 font-bold text-slate-950">Тариф</h4>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <label className="text-xs font-semibold text-slate-600">Тип тарифа
+                        <select value={draft.pricingMode} onChange={(event) => setDraft({ ...draft, pricingMode: event.target.value })} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal">
+                          <option value="fixed">За услугу</option>
+                          <option value="hourly">За час</option>
+                          <option value="packages">Пакеты</option>
+                        </select>
+                      </label>
+                      {draft.pricingMode !== "packages" && <MoneyField label={draft.pricingMode === "hourly" ? "Цена за час" : "Цена услуги"} value={draft.price} onChange={(value) => setDraft({ ...draft, price: value })} />}
+                      {draft.pricingMode === "hourly" && <NumberField label="Минимальный заказ, часов" value={draft.minimumHours} onChange={(value) => setDraft({ ...draft, minimumHours: value })} />}
+                    </div>
+                    {draft.pricingMode === "packages" && <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><NumberField label="Неполный день, часов" value={draft.halfDayHours} onChange={(value) => setDraft({ ...draft, halfDayHours: value })} /><MoneyField label="Цена неполного дня" value={draft.halfDayPrice} onChange={(value) => setDraft({ ...draft, halfDayPrice: value })} /><NumberField label="Полный день, часов" value={draft.fullDayHours} onChange={(value) => setDraft({ ...draft, fullDayHours: value })} /><MoneyField label="Цена полного дня" value={draft.fullDayPrice} onChange={(value) => setDraft({ ...draft, fullDayPrice: value })} /><MoneyField label="Дополнительный час" value={draft.extraHourPrice} onChange={(value) => setDraft({ ...draft, extraHourPrice: value })} /></div>}
+                  </div>
+                  <div className="mt-5 flex justify-between gap-3 border-t border-slate-200 pt-4">
+                    <button type="button" onClick={() => removeService(row)} className="h-10 rounded-md border border-rose-200 px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50">Удалить</button>
+                    <button type="button" onClick={() => saveEdit(row)} disabled={saving} className="h-10 rounded-md bg-slate-950 px-5 text-sm font-semibold text-white disabled:opacity-50">Сохранить изменения</button>
+                  </div>
+                </div>
+              )}
             </div>;
           })}
         </div>
