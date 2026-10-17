@@ -202,6 +202,21 @@ const fitsCity = (s, citySlug) => {
   const v = svcCity(s);
   return !v || !cs ? true : v === cs;
 };
+const svcRoute = (s) => {
+  const details = s?.raw?.details || s?.details || {};
+  return {
+    from: String(details.origin_city || "").trim().toLowerCase(),
+    to: String(details.destination_city || "").trim().toLowerCase(),
+  };
+};
+const fitsRoute = (s, fromCity, toCity) => {
+  const from = String(fromCity || "").trim().toLowerCase();
+  const to = String(toCity || "").trim().toLowerCase();
+  if (!from || !to) return false;
+  const route = svcRoute(s);
+  if (!route.from && !route.to) return fitsCity(s, fromCity);
+  return route.from === from && route.to === to;
+};
 
 // Человеческая подпись услуги: добавляем модель и места (pax)
 const labelForService = (s) => {
@@ -222,6 +237,8 @@ const providerMatchesByPaxCity = async ({
   provider,
   kind,
   citySlug,
+  fromCity,
+  toCity,
   pax,
   ensureServicesLoaded,
   allowedCategories,
@@ -235,7 +252,9 @@ const providerMatchesByPaxCity = async ({
     const raw = s?.raw || s;
     const category = raw?.category || s?.category;
     if (!allowedSet.has(category)) return false;
-    if (!fitsCity(raw, citySlug)) return false;
+    if (fromCity || toCity) {
+      if (!fitsRoute(raw, fromCity, toCity)) return false;
+    } else if (!fitsCity(raw, citySlug)) return false;
     return fitsPax(raw, pax);
   });
 };
@@ -1220,11 +1239,24 @@ export default function TourBuilder() {
   };
 
     // вспомогательная: выбрать услугу по rules и вернуть НОРМАЛИЗОВАННЫЙ объект из кеша
-  const pickFromCache = (providerId, categoriesArr, citySlug, pax) => {
+  const intercityRouteForDay = (dateKey) => {
+    const keys = sortedDayKeys(byDay);
+    const index = keys.indexOf(dateKey);
+    const current = String(byDay[dateKey]?.city || "").trim();
+    const previous = index > 0 ? String(byDay[keys[index - 1]]?.city || "").trim() : "";
+    const next = index >= 0 && index < keys.length - 1 ? String(byDay[keys[index + 1]]?.city || "").trim() : "";
+    if (previous && current && previous.toLowerCase() !== current.toLowerCase()) return { from: previous, to: current };
+    if (current && next && current.toLowerCase() !== next.toLowerCase()) return { from: current, to: next };
+    return { from: "", to: "" };
+  };
+
+  const pickFromCache = (providerId, categoriesArr, citySlug, pax, route = null) => {
     const list = servicesCache[providerId] || [];
     if (!list.length) return null;
     // pickProviderService ожидает "сырые" услуги с details; мы сохранили их в .raw
-    const rawPool = list.map((x) => x.raw || x);
+    const rawPool = list
+      .map((x) => x.raw || x)
+      .filter((service) => route ? fitsRoute(service, route.from, route.to) : fitsCity(service, citySlug));
     const picked = pickProviderService(rawPool, {
       citySlug,
       pax,
@@ -1541,6 +1573,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   const day = byDay[dateKey] || {};
   if (!dateKey || !day.city) return [];
   const selectedSlot = normalizeScheduleItems(day.schedule).find((item) => item.id === day.selectedScheduleId);
+  const isIntercity = selectedSlot?.services?.transport?.subtype === "intercity";
+  const route = isIntercity ? intercityRouteForDay(dateKey) : null;
+  if (isIntercity && (!route?.from || !route?.to)) return [];
   const providerGroups = await Promise.all(["guide", "transport"].map((kind) => fetchProvidersSmart({
     kind,
     city: day.city,
@@ -1561,6 +1596,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         provider: p,
         kind: "transport",
         citySlug: day.city,
+        fromCity: route?.from,
+        toCity: route?.to,
         pax,
         ensureServicesLoaded,
         allowedCategories,
@@ -2284,6 +2321,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             const activeEventService = suggestedServiceCategory;
             const activeTransportSubtype = selectedSchedule?.services?.transport?.subtype || "";
             const activeIntercityMode = selectedSchedule?.services?.transport?.intercity_mode || "provider";
+            const activeIntercityRoute = activeTransportSubtype === "intercity" ? intercityRouteForDay(k) : null;
             const activeRail = selectedSchedule?.services?.transport?.rail || {};
             const activeTransportCategories = TRANSPORT_SERVICE_TYPES.find((item) => item.id === activeTransportSubtype)?.categories || [];
             const activeTourSubtype = selectedSchedule?.services?.tour?.subtype || "city";
@@ -2293,7 +2331,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             const guideComponentCategories = activeTourType.guideCategories;
             const providerTransportCategories = activeEventService === "tour" ? activeTourType.transportCategories : activeTransportCategories;
             const activeGuideService = guideComponentCategories.includes(st.guideService?.category) ? st.guideService : null;
-            const activeTransportService = providerTransportCategories.includes(st.transportService?.category) ? st.transportService : null;
+            const activeTransportService = providerTransportCategories.includes(st.transportService?.category)
+              && (activeTransportSubtype !== "intercity" || fitsRoute(st.transportService, activeIntercityRoute?.from, activeIntercityRoute?.to))
+              ? st.transportService
+              : null;
             const selectTransportSubtype = (subtype) => {
               setByDay((previous) => {
                 const current = previous[k] || {};
@@ -2409,7 +2450,11 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     value={st.city || ""}
                     onChange={(e) => {
                       const city = (e.target.value || "").trim();
-                      setByDay((p) => ({ ...p, [k]: { ...p[k], city, guide: null, transport: null, hotel: null, entrySelected: [] } }));
+                      setByDay((previous) => Object.fromEntries(Object.entries(previous).map(([dayKey, dayValue]) => {
+                        const hasIntercity = normalizeScheduleItems(dayValue.schedule).some((item) => item.services?.transport?.subtype === "intercity");
+                        if (dayKey === k) return [dayKey, { ...dayValue, city, guide: null, guideService: null, transport: null, transportService: null, hotel: null, entrySelected: [] }];
+                        return [dayKey, hasIntercity ? { ...dayValue, transport: null, transportService: null } : dayValue];
+                      })));
                       // обновим опции билетов под новый city
                       setEntryQMap((m) => ({ ...m, [k]: "" }));
                       loadEntryOptionsForDay(k, city, "");
@@ -2803,10 +2848,17 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       </div>
                     )}
                     {(activeEventService === "tour" || (activeTransportSubtype && activeTransportSubtype !== "international" && !(activeTransportSubtype === "intercity" && activeIntercityMode === "rail"))) && <>
+                    {activeTransportSubtype === "intercity" && (
+                      <div className={`mb-3 rounded-md border px-3 py-2 text-sm ${activeIntercityRoute?.from && activeIntercityRoute?.to ? "border-sky-200 bg-sky-50 text-sky-900" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
+                        {activeIntercityRoute?.from && activeIntercityRoute?.to
+                          ? <>Маршрут: <strong>{activeIntercityRoute.from} → {activeIntercityRoute.to}</strong></>
+                          : "Укажите разные города в соседних днях, чтобы подобрать межгородний тариф."}
+                      </div>
+                    )}
                     <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Поставщик</label>
                     <AsyncSelect
-                        key={`transport-${k}-${activeEventService === "tour" ? "city-tour" : activeTransportSubtype}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}
-                        isDisabled={!cityChosen || (activeEventService === "transfer" && !activeTransportSubtype)}
+                        key={`transport-${k}-${activeEventService === "tour" ? "city-tour" : activeTransportSubtype}-${st.city}-${activeIntercityRoute?.from || ""}-${activeIntercityRoute?.to || ""}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}
+                        isDisabled={!cityChosen || (activeEventService === "transfer" && !activeTransportSubtype) || (activeTransportSubtype === "intercity" && (!activeIntercityRoute?.from || !activeIntercityRoute?.to))}
                         cacheOptions={false}                         // ⬅️ отключаем кеш
                         defaultOptions
                         loadOptions={makeTransportLoader(k, providerTransportCategories)}
@@ -2830,7 +2882,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             await ensureServicesLoaded(transport); // прогреем кеш
                             const pax = Math.max(1, toNum(adt) + toNum(chd));
                             const citySlug = (byDay[k]?.city || "").trim();
-                            const picked = pickFromCache(transport.id, providerTransportCategories, citySlug, pax);
+                            const picked = pickFromCache(transport.id, providerTransportCategories, citySlug, pax, activeTransportSubtype === "intercity" ? activeIntercityRoute : null);
                             if (picked) {
                               setByDay((p) => {
                                 const current = p[k] || {};
@@ -2864,7 +2916,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             allowedSet.has(s.category) &&
                             s.price > 0 &&
                             fitsPax(s, pax) &&
-                            fitsCity(s, citySlug)
+                            (activeTransportSubtype === "intercity" ? fitsRoute(s, activeIntercityRoute?.from, activeIntercityRoute?.to) : fitsCity(s, citySlug))
                         );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
                         setByDay((p) => {
@@ -2887,7 +2939,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             providerTransportCategories.includes(s.category) &&
                             s.price > 0 &&
                             fitsPax(s, pax) &&
-                            fitsCity(s, citySlug)
+                            (activeTransportSubtype === "intercity" ? fitsRoute(s, activeIntercityRoute?.from, activeIntercityRoute?.to) : fitsCity(s, citySlug))
                           );
                         })
                         .sort((a,b) => a.price - b.price)

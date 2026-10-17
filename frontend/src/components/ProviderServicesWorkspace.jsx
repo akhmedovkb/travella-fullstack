@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { tError, tInfo, tSuccess } from "../shared/toast";
-import VehicleModelInput from "./VehicleModelInput";
+import { tError, tSuccess } from "../shared/toast";
 import {
   GUIDE_SERVICE_GROUPS,
   TRANSPORT_SERVICE_GROUPS,
@@ -11,6 +10,7 @@ import {
 } from "../config/providerServiceCatalog";
 
 const transportCategory = (value) => TRANSPORT_CATEGORY_IDS.includes(value);
+const INTERCITY_CATEGORIES = new Set(["intercity_transfer", "border_transfer", "one_way_transfer"]);
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number(value));
 
@@ -34,6 +34,8 @@ const blankForm = () => ({
   category: "",
   title: "",
   citySlug: "",
+  originCity: "",
+  destinationCity: "",
   seats: "",
   vehicleModel: "",
   pricingMode: "fixed",
@@ -83,13 +85,15 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const [statusFilter, setStatusFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [draft, setDraft] = useState(null);
-  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
-  const [suggestions, setSuggestions] = useState([]);
 
   const fleet = useMemo(() => (Array.isArray(profile?.car_fleet) ? profile.car_fleet.filter((car) => car && car.is_active !== false) : []), [profile]);
   const cities = useMemo(() => (Array.isArray(profile?.city_slugs) ? profile.city_slugs : []), [profile]);
   const isTransport = transportCategory(form.category);
+  const isIntercity = INTERCITY_CATEGORIES.has(form.category);
   const preview = calculatedPreview(form);
+  const serviceTitle = (current) => INTERCITY_CATEGORIES.has(current.category)
+    ? `${LABELS[current.category] || "Междугородняя услуга"} · ${current.originCity || "Откуда"} → ${current.destinationCity || "Куда"}`
+    : `${LABELS[current.category] || "Услуга"}${current.citySlug ? ` · ${current.citySlug}` : ""}`;
 
   const categoryGroups = useMemo(() => {
     if (providerType === "transport") return TRANSPORT_SERVICE_GROUPS;
@@ -127,6 +131,11 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
   function validate(current) {
     if (!current.category) return "Выберите категорию услуги";
+    if (!cities.length) return "Сначала добавьте города в профиле";
+    if (INTERCITY_CATEGORIES.has(current.category)) {
+      if (!current.originCity || !current.destinationCity) return "Выберите города отправления и назначения";
+      if (current.originCity === current.destinationCity) return "Города отправления и назначения должны отличаться";
+    } else if (!current.citySlug) return "Выберите город услуги";
     if (transportCategory(current.category) && !String(current.vehicleModel || "").trim()) return "Укажите автомобиль";
     if (current.pricingMode === "packages" && (number(current.halfDayPrice) <= 0 || number(current.fullDayPrice) <= 0)) return "Укажите стоимость неполного и полного дня";
     if (current.pricingMode !== "packages" && number(current.price) <= 0) return current.pricingMode === "hourly" ? "Укажите цену за час" : "Укажите цену услуги";
@@ -135,7 +144,11 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
   const detailsFrom = (current, existing = {}) => ({
     ...existing,
-    city_slug: String(current.citySlug || "").trim() || null,
+    city_slug: INTERCITY_CATEGORIES.has(current.category)
+      ? String(current.originCity || "").trim() || null
+      : String(current.citySlug || "").trim() || null,
+    origin_city: INTERCITY_CATEGORIES.has(current.category) ? String(current.originCity || "").trim() || null : null,
+    destination_city: INTERCITY_CATEGORIES.has(current.category) ? String(current.destinationCity || "").trim() || null : null,
     ...(transportCategory(current.category)
       ? { seats: Math.max(1, number(current.seats) || 1), vehicle_model: String(current.vehicleModel || "" ).trim(), max_guests: null }
       : { seats: null, vehicle_model: null, max_guests: number(current.seats) > 0 ? number(current.seats) : null }),
@@ -153,13 +166,21 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   async function addService() {
     const error = validate(form);
     if (error) return tError(error);
+    const duplicate = rows.some((row) => {
+      const details = row.details || {};
+      return row.category === form.category
+        && String(details.city_slug || "") === String(isIntercity ? form.originCity : form.citySlug)
+        && String(details.destination_city || "") === String(isIntercity ? form.destinationCity : "")
+        && String(details.vehicle_model || row.vehicle_model || "") === String(form.vehicleModel || "");
+    });
+    if (duplicate) return tError("Такой тариф уже создан. Измените существующую услугу.");
     setSaving(true);
     try {
       const created = await fetchJSON(`/api/providers/${pid}/services`, {
         method: "POST",
         body: JSON.stringify({
           category: form.category,
-          title: form.title.trim() || LABELS[form.category],
+          title: serviceTitle(form),
           price: form.pricingMode === "packages" ? number(form.halfDayPrice) : number(form.price),
           currency: "UZS",
           details: detailsFrom(form),
@@ -195,6 +216,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       category: row.category,
       title: row.title || "",
       citySlug: details.city_slug || "",
+      originCity: details.origin_city || details.city_slug || "",
+      destinationCity: details.destination_city || "",
       seats: details.seats || "",
       vehicleModel: details.vehicle_model || "",
       pricingMode: details.pricing_mode || "fixed",
@@ -215,7 +238,9 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     try {
       await patchService(row.id, {
         category: draft.category,
-        title: draft.title.trim() || LABELS[draft.category],
+        title: INTERCITY_CATEGORIES.has(draft.category)
+          ? `${LABELS[draft.category]} · ${draft.originCity} → ${draft.destinationCity}`
+          : `${LABELS[draft.category]} · ${draft.citySlug}`,
         price: draft.pricingMode === "packages" ? number(draft.halfDayPrice) : number(draft.price),
         details: detailsFrom(draft, row.details || {}),
         vehicle_model: transportCategory(draft.category) ? String(draft.vehicleModel || "").trim() : null,
@@ -239,56 +264,6 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     }
   }
 
-  function openSuggestions() {
-    const existing = new Set(rows.map((row) => `${row.category}:${row.details?.city_slug || ""}:${row.details?.vehicle_model || ""}`));
-    const candidates = [];
-    for (const city of cities) {
-      if (providerType !== "transport") {
-        candidates.push({ category: "city_tour_guide", title: `Обзорная экскурсия · ${city}`, city });
-        candidates.push({ category: "group_escort", title: `Сопровождение группы · ${city}`, city });
-      }
-      for (const car of fleet) {
-        const vehicle = car.model || "автомобиль";
-        candidates.push({ category: "city_tour_transport", title: `Транспорт для городской экскурсии · ${city} · ${vehicle}`, city, car });
-        candidates.push({ category: "airport_to_hotel_transfer", title: `Аэропорт → отель · ${city} · ${vehicle}`, city, car });
-        candidates.push({ category: "hotel_to_airport_transfer", title: `Отель → аэропорт · ${city} · ${vehicle}`, city, car });
-        candidates.push({ category: "intercity_transfer", title: `Междугородний трансфер · ${city} · ${vehicle}`, city, car });
-        candidates.push({ category: "hourly_driver", title: `Автомобиль с водителем · ${city} · ${vehicle}`, city, car });
-        candidates.push({ category: "full_day_driver", title: `Автомобиль на день · ${city} · ${vehicle}`, city, car });
-      }
-    }
-    const unique = candidates.filter((item) => !existing.has(`${item.category}:${item.city}:${item.car?.model || ""}`));
-    setSuggestions(unique.map((item, index) => ({ ...item, id: index, selected: true })));
-    setSuggestionsOpen(true);
-  }
-
-  async function createSuggestions() {
-    const selected = suggestions.filter((item) => item.selected);
-    if (!selected.length) return tInfo("Выберите хотя бы одну услугу");
-    setSaving(true);
-    try {
-      const body = { items: selected.map((item) => ({
-        category: item.category,
-        title: item.title,
-        price: 0,
-        currency: "UZS",
-        details: {
-          city_slug: item.city,
-          ...(item.car ? { seats: number(item.car.seats) || undefined, vehicle_model: item.car.model || "" } : {}),
-          pricing_mode: "fixed",
-        },
-      })) };
-      await fetchJSON(`/api/providers/${pid}/services/bulk`, { method: "POST", body: JSON.stringify(body) });
-      setSuggestionsOpen(false);
-      await load();
-      tSuccess("Черновики услуг созданы. Укажите тарифы перед публикацией.");
-    } catch (error) {
-      tError(`Не удалось создать услуги: ${error.message}`);
-    } finally {
-      setSaving(false);
-    }
-  }
-
   const filtered = useMemo(() => rows.filter((row) => {
     const text = `${row.title || ""} ${LABELS[row.category] || ""}`.toLowerCase();
     const matchesText = text.includes(query.toLowerCase());
@@ -301,11 +276,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       <header className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
         <div>
           <h2 className="text-xl font-bold text-slate-950">Услуги для Tour Builder</h2>
-          <p className="mt-1 text-sm text-slate-500">Настройте услуги и правила расчёта цены для турагентов.</p>
+          <p className="mt-1 text-sm text-slate-500">Выберите услугу из каталога, локацию из профиля и укажите тариф.</p>
         </div>
         <div className="flex flex-wrap gap-2">
           <button type="button" onClick={load} disabled={loading} className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50">Обновить</button>
-          <button type="button" onClick={openSuggestions} className="h-10 rounded-md border border-orange-200 bg-orange-50 px-4 text-sm font-semibold text-orange-700 hover:bg-orange-100">Предложить из профиля</button>
         </div>
       </header>
 
@@ -313,12 +287,13 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         <div className="mb-4 flex items-center justify-between gap-4">
           <div>
             <h3 className="font-bold text-slate-950">Новая услуга</h3>
-            <p className="text-sm text-slate-500">Что вы оказываете, где, на каких условиях и по какой цене.</p>
+            <p className="text-sm text-slate-500">Названия и типы услуг заданы системой. Вы выбираете локацию и цену.</p>
           </div>
           <span className="text-sm font-medium text-slate-500">Основные данные</span>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+        {!cities.length && <div className="mb-4 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">Сначала добавьте рабочие локации в профиле поставщика.</div>}
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
           <label className="text-sm font-semibold text-slate-700">Категория услуги
             <select value={activeCategoryGroup?.id || ""} onChange={(event) => setForm((current) => ({ ...current, catalogGroup: event.target.value, category: "", title: "" }))} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal">
               <option value="">Выберите категорию</option>
@@ -331,27 +306,18 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
               {(activeCategoryGroup?.services || []).map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}
             </select>
           </label>
-          <label className="text-sm font-semibold text-slate-700">Название
-            <input value={form.title} onChange={(event) => setField("title", event.target.value)} placeholder={form.category ? LABELS[form.category] : "Например, вечерняя экскурсия"} className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" />
-          </label>
-          <label className="text-sm font-semibold text-slate-700">Город
-            {cities.length ? <select value={form.citySlug} onChange={(event) => setField("citySlug", event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Все города профиля</option>{cities.map((city) => <option key={city} value={city}>{city}</option>)}</select> : <input value={form.citySlug} onChange={(event) => setField("citySlug", event.target.value)} placeholder="Город услуги" className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" />}
-          </label>
-          {!isTransport && <label className="text-sm font-semibold text-slate-700">Максимум гостей
-            <input inputMode="numeric" value={form.seats} onChange={(event) => setField("seats", event.target.value)} placeholder="Без ограничения" className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" />
-          </label>}
+          {isIntercity ? <>
+            <CitySelect label="Откуда" value={form.originCity} cities={cities} onChange={(value) => setForm((current) => ({ ...current, originCity: value, destinationCity: current.destinationCity === value ? "" : current.destinationCity }))} />
+            <CitySelect label="Куда" value={form.destinationCity} cities={cities.filter((city) => city !== form.originCity)} onChange={(value) => setField("destinationCity", value)} />
+          </> : <CitySelect label="Город услуги" value={form.citySlug} cities={cities} onChange={(value) => setField("citySlug", value)} />}
         </div>
 
         {isTransport && <div className="mt-4 grid gap-4 rounded-md bg-slate-50 p-4 md:grid-cols-3">
-          {fleet.length > 0 && <label className="text-sm font-semibold text-slate-700">Автомобиль из профиля
+          {fleet.length > 0 ? <label className="text-sm font-semibold text-slate-700">Автомобиль из профиля
             <select defaultValue="" onChange={(event) => applyVehicle(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal"><option value="">Выберите автомобиль</option>{fleet.map((car, index) => <option key={car.id || index} value={String(car.id ?? index)}>{car.model || "Автомобиль"} · {car.seats || "?"} мест</option>)}</select>
-          </label>}
-          <label className="text-sm font-semibold text-slate-700">Модель автомобиля
-            <VehicleModelInput value={form.vehicleModel} onChange={(vehicleModel) => setField("vehicleModel", vehicleModel)} onModelSelect={({ model, seats }) => setForm((current) => ({ ...current, vehicleModel: model, ...(seats ? { seats: String(seats) } : {}) }))} placeholder="Начните вводить марку или модель" className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" />
-          </label>
-          <label className="text-sm font-semibold text-slate-700">Пассажирских мест
-            <input type="number" min="1" value={form.seats} onChange={(event) => setField("seats", event.target.value)} placeholder="7" className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" />
-          </label>
+          </label> : <div className="md:col-span-3 text-sm text-amber-700">Добавьте автомобиль в автопарк профиля, чтобы публиковать транспортные услуги.</div>}
+          <ReadOnlyValue label="Модель" value={form.vehicleModel || "Выберите автомобиль"} />
+          <ReadOnlyValue label="Пассажирских мест" value={form.seats || "—"} />
         </div>}
 
         <div className="mt-6 border-t border-slate-200 pt-5">
@@ -368,7 +334,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
             </div>
             <aside className="border-l-4 border-orange-500 bg-orange-50 px-4 py-3">
               <div className="text-xs font-bold uppercase text-orange-700">Как увидит турагент</div>
-              <div className="mt-1 font-semibold text-slate-950">{form.title || LABELS[form.category] || "Название услуги"}</div>
+              <div className="mt-1 font-semibold text-slate-950">{serviceTitle(form)}</div>
               <div className="mt-2 text-sm text-slate-600">Пример: {preview.duration} · {preview.rule}</div>
               <div className="mt-1 text-xl font-bold text-slate-950">{money(preview.total)} UZS</div>
             </aside>
@@ -390,9 +356,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
               ? categoryGroups.find((group) => group.id === draft.catalogGroup) || findServiceGroup(draft.category, categoryGroups)
               : null;
             const draftIsTransport = Boolean(expanded && draft && transportCategory(draft.category));
+            const draftIsIntercity = Boolean(expanded && draft && INTERCITY_CATEGORIES.has(draft.category));
             return <div key={row.id} className="py-4">
               <div className="grid items-center gap-4 md:grid-cols-[minmax(240px,1.5fr)_minmax(220px,1fr)_120px_auto]">
-                <div><div className="font-semibold text-slate-950">{row.title || LABELS[row.category] || row.category}</div><div className="mt-1 text-sm text-slate-500">{LABELS[row.category] || row.category}{row.details?.city_slug ? ` · ${row.details.city_slug}` : ""}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${row.details.seats} мест` : ""}</div></div>
+                <div><div className="font-semibold text-slate-950">{row.title || LABELS[row.category] || row.category}</div><div className="mt-1 text-sm text-slate-500">{LABELS[row.category] || row.category}{row.details?.destination_city ? ` · ${row.details.origin_city || row.details.city_slug} → ${row.details.destination_city}` : row.details?.city_slug ? ` · ${row.details.city_slug}` : ""}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${row.details.seats} мест` : ""}</div></div>
                 <div><div className="font-semibold text-slate-900">{pricingLabel(row)}</div><div className="text-xs text-slate-500">Тариф Tour Builder</div></div>
                 <div className={`text-sm font-semibold ${row.is_active ? 'text-emerald-700' : 'text-slate-400'}`}>{row.is_active ? "Включена" : "Выключена"}</div>
                 <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? "Закрыть" : "Редактировать"}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? "Выключить" : "Включить"}</button></div>
@@ -403,7 +370,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                     <h4 className="font-bold text-slate-950">Основные данные</h4>
                     <p className="text-xs text-slate-500">Все поля доступны так же, как при создании услуги.</p>
                   </div>
-                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+                  <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                     <label className="text-xs font-semibold text-slate-600">Категория услуги
                       <select
                         value={draftCategoryGroup?.id || ""}
@@ -425,22 +392,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                         {(draftCategoryGroup?.services || []).map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}
                       </select>
                     </label>
-                    <label className="text-xs font-semibold text-slate-600">Название
-                      <input value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} placeholder={draft.category ? LABELS[draft.category] : "Название услуги"} className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
-                    </label>
-                    <label className="text-xs font-semibold text-slate-600">Город
-                      {cities.length ? (
-                        <select value={draft.citySlug} onChange={(event) => setDraft({ ...draft, citySlug: event.target.value })} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal">
-                          <option value="">Все города профиля</option>
-                          {cities.map((city) => <option key={city} value={city}>{city}</option>)}
-                        </select>
-                      ) : (
-                        <input value={draft.citySlug} onChange={(event) => setDraft({ ...draft, citySlug: event.target.value })} placeholder="Город услуги" className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
-                      )}
-                    </label>
-                    {!draftIsTransport && <label className="text-xs font-semibold text-slate-600">Максимум гостей
-                      <input inputMode="numeric" value={draft.seats} onChange={(event) => setDraft({ ...draft, seats: event.target.value })} placeholder="Без ограничения" className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
-                    </label>}
+                    {draftIsIntercity ? <>
+                      <CitySelect compact label="Откуда" value={draft.originCity} cities={cities} onChange={(value) => setDraft({ ...draft, originCity: value, destinationCity: draft.destinationCity === value ? "" : draft.destinationCity })} />
+                      <CitySelect compact label="Куда" value={draft.destinationCity} cities={cities.filter((city) => city !== draft.originCity)} onChange={(value) => setDraft({ ...draft, destinationCity: value })} />
+                    </> : <CitySelect compact label="Город услуги" value={draft.citySlug} cities={cities} onChange={(value) => setDraft({ ...draft, citySlug: value })} />}
                   </div>
 
                   {draftIsTransport && (
@@ -454,12 +409,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                           {fleet.map((car, index) => <option key={car.id || index} value={String(car.id ?? index)}>{car.model || "Автомобиль"} · {car.seats || "?"} мест</option>)}
                         </select>
                       </label>}
-                      <label className="text-xs font-semibold text-slate-600">Модель автомобиля
-                        <VehicleModelInput value={draft.vehicleModel} onChange={(vehicleModel) => setDraft({ ...draft, vehicleModel })} onModelSelect={({ model, seats }) => setDraft({ ...draft, vehicleModel: model, ...(seats ? { seats: String(seats) } : {}) })} placeholder="Марка или модель" className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
-                      </label>
-                      <label className="text-xs font-semibold text-slate-600">Пассажирских мест
-                        <input type="number" min="1" value={draft.seats} onChange={(event) => setDraft({ ...draft, seats: event.target.value })} className="mt-1 h-10 w-full rounded border border-slate-300 px-3 text-sm font-normal" />
-                      </label>
+                      <ReadOnlyValue compact label="Модель" value={draft.vehicleModel || "Выберите автомобиль"} />
+                      <ReadOnlyValue compact label="Пассажирских мест" value={draft.seats || "—"} />
                     </div>
                   )}
 
@@ -489,7 +440,6 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         </div>
       </section>
 
-      {suggestionsOpen && <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" role="dialog" aria-modal="true"><div className="w-full max-w-2xl rounded-lg bg-white shadow-xl"><div className="border-b border-slate-200 px-5 py-4"><h3 className="text-lg font-bold text-slate-950">Предложения из профиля</h3><p className="mt-1 text-sm text-slate-500">Выберите черновики услуг. Дубликаты уже исключены.</p></div><div className="max-h-[55vh] overflow-auto p-5">{suggestions.length ? <div className="space-y-2">{suggestions.map((item) => <label key={item.id} className="flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 p-3 hover:bg-slate-50"><input type="checkbox" checked={item.selected} onChange={(event) => setSuggestions((current) => current.map((candidate) => candidate.id === item.id ? { ...candidate, selected: event.target.checked } : candidate))} className="mt-1" /><div><div className="font-semibold text-slate-900">{item.title}</div><div className="text-sm text-slate-500">Тариф потребуется заполнить после создания</div></div></label>)}</div> : <div className="py-8 text-center text-slate-500">Новых предложений нет. Проверьте города и автомобили в профиле.</div>}</div><div className="flex justify-end gap-2 border-t border-slate-200 px-5 py-4"><button type="button" onClick={() => setSuggestionsOpen(false)} className="h-10 rounded-md border border-slate-300 px-4 text-sm font-semibold">Отмена</button><button type="button" onClick={createSuggestions} disabled={saving || !suggestions.some((item) => item.selected)} className="h-10 rounded-md bg-orange-600 px-5 text-sm font-semibold text-white disabled:opacity-50">Создать выбранные</button></div></div></div>}
     </div>
   );
 }
@@ -502,4 +452,10 @@ function NumberField({ label, value, onChange }) {
 }
 function ReadOnlyCurrency() {
   return <label className="text-sm font-semibold text-slate-700">Валюта<input value="UZS" readOnly className="mt-1 h-11 w-full rounded-md border border-slate-200 bg-slate-50 px-3 font-normal text-slate-600" /></label>;
+}
+function CitySelect({ label, value, cities, onChange, compact = false }) {
+  return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={!cities.length} className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 w-full rounded-md border border-slate-300 bg-white px-3 font-normal disabled:bg-slate-50`}><option value="">Выберите город</option>{cities.map((city) => <option key={city} value={city}>{city}</option>)}</select></label>;
+}
+function ReadOnlyValue({ label, value, compact = false }) {
+  return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<div className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 flex items-center rounded-md border border-slate-200 bg-slate-100 px-3 font-normal text-slate-600`}>{value}</div></label>;
 }
