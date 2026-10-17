@@ -1488,11 +1488,28 @@ export default function TourBuilder() {
       setHotelOptionsMap((m) => ({ ...m, [dateKey]: [] }));
       return;
     }
-    // пробуем серверный фильтр, плюс страхуемся клиентским
-    const items = await fetchHotelsByCity(cityNorm, hotelStars); // → [{value,label,raw}]
-    const filtered = items.filter(o => matchStars(o?.raw?.stars, hotelStars));
-    setHotelOptionsMap((m) => ({ ...m, [dateKey]: filtered }));
+    try {
+      // Пробуем серверный фильтр, плюс страхуемся клиентским.
+      const items = await fetchHotelsByCity(cityNorm, hotelStars);
+      const filtered = items.filter(o => matchStars(o?.raw?.stars, hotelStars));
+      setHotelOptionsMap((m) => ({ ...m, [dateKey]: filtered }));
+    } catch {
+      setHotelOptionsMap((m) => ({ ...m, [dateKey]: [] }));
+    }
   };
+
+  const hotelCitySignature = Object.entries(byDay)
+    .map(([dateKey, day]) => `${dateKey}:${String(day?.city || "").trim().toLowerCase()}`)
+    .sort()
+    .join("|");
+
+  // Загружаем отели и при восстановлении сохранённого тура, когда город уже заполнен.
+  useEffect(() => {
+    Object.entries(byDay).forEach(([dateKey, day]) => {
+      if (String(day?.city || "").trim()) loadHotelOptionsForDay(dateKey, day.city);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelCitySignature, hotelStars]);
 
     // при смене фильтра звёзд — обновляем списки по всем дням и сбрасываем неподходящие выборы
   useEffect(() => {
