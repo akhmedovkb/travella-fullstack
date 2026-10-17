@@ -1157,6 +1157,21 @@
     "my_requests": "My requests"
   },
   "tb": {
+    "timeline": {
+      "title": "Day components", "subtitle": "Add parts of the itinerary and assign services to each component", "add": "+ Add component", "create_first": "+ Create the first day component", "check_interval": "Check the time interval", "set_time": "Set the time", "hours_one": "{{count}} hr", "hours_other": "{{count}} hrs", "minutes": "{{count}} min", "guide": "Guide", "flight_selected": "Flight selected", "rail": "Rail", "person_short": "person", "attractions": "Attractions", "selected": "Selected", "done": "Done", "configure": "Configure", "start": "Start", "end": "End", "component": "Component",
+      "components": { "transfer": "Transport", "hotel": "Hotel", "tour": "Tour / program", "meal": "Meals" },
+      "transport_types": { "international": "Flight", "intercity": "Intercity transfer", "hotel": "Hotel transfer", "city_tour": "Program transport", "hourly": "Hourly transport", "half_day": "Half-day transport", "full_day": "Full-day transport", "vip": "VIP transfer", "bus": "Group bus", "dinner": "Restaurant transfer", "meet_sign": "Meet with a sign", "waiting": "Additional waiting" },
+      "tour_types": { "city": "City sightseeing tour", "thematic": "Themed tour", "attraction": "Attraction tour", "countryside": "Countryside tour", "mountain": "Mountain tour", "desert": "Desert tour", "safari": "Safari tour", "shopping": "Shopping assistance", "support_escort": "Group escort", "support_meet": "Guest meet and greet", "support_seeoff": "Departure assistance", "support_translation": "Interpreter", "support_coordinator": "Coordinator" },
+      "support_types": { "escort": "Group escort", "meet": "Guest meet and greet", "seeoff": "Departure assistance", "translation": "Interpreter", "coordinator": "Coordinator" }
+    },
+    "ui": {
+      "subtitle": "Build the itinerary by day, assign services and review the total before submitting.", "days": "Days", "total": "Total", "completed": "Completed {{count}} of 5", "expand": "Expand", "collapse": "Collapse", "component_services": "Component services", "choose_component_services": "Choose the component setup and matching services", "program_type": "Program type", "city_required": "Enter the city in the day header to see available suppliers.", "supplier": "Supplier", "selected_service": "Service selected", "service_not_selected": "Service not selected", "transport_type": "Transport type", "choose_transport": "Choose type, supplier and tariff", "intercity_method": "Intercity travel method", "transport_supplier": "Transport supplier", "transport_supplier_hint": "Car, minivan or bus", "rail_transport": "Rail transport", "rail_hint": "Enter the ticket price per person manually", "from": "From", "to": "To", "train_number": "Train / service", "price_per_person": "Price / person", "group_total": "Group total", "people_short": "people", "route": "Route", "route_required": "Use different cities on adjacent days to find an intercity tariff.", "attractions": "Attractions", "attractions_hint": "Sights and admission tickets", "selected_attractions": "Attractions selected: {{count}}", "no_attractions": "No attractions selected", "open_description": "Open description", "direct_hotel": "Direct hotel rate", "best_price": "Best available price", "free_sale": "Free sale", "on_request": "On request", "refundable": "Refundable", "nonrefundable": "Non-refundable"
+    },
+    "program_groups": {
+      "excursion": { "label": "Tour", "description": "Itinerary with a guide, transport and attractions" },
+      "guide_service": { "label": "Guide service", "description": "Escort, meet and greet, departure assistance or interpretation" },
+      "shopping": { "label": "Shopping", "description": "Assistance at shops and markets" }
+    },
     "tpl_apply_title": "Apply template",
     "tpl_select": "Template",
     "tpl_select_placeholder": "Select a template…",

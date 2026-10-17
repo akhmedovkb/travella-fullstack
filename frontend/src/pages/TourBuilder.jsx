@@ -48,13 +48,6 @@ const MEAL_TYPES = [
   { id: "gala" },   // tb.meal_types.gala
 ];
 
-const EVENT_SERVICE_CATEGORIES = [
-  { id: "transfer", label: "Транспорт" },
-  { id: "hotel", label: "Отель" },
-  { id: "tour", label: "Экскурсия / программа" },
-  { id: "meal", label: "Питание" },
-];
-
 const TRANSPORT_SERVICE_TYPES = TRANSPORT_BUILDER_TYPES;
 
 /* ---------------- react-select styles (белый фон выпадашки) --------------- */
@@ -2112,12 +2105,12 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-950">{t('tb.title')}</h1>
-            <p className="mt-1 text-sm text-slate-500">Соберите маршрут по дням, назначьте услуги и проверьте итог перед отправкой.</p>
+            <p className="mt-1 text-sm text-slate-500">{t("tb.ui.subtitle")}</p>
           </div>
           <div className="flex items-center gap-5 text-sm">
-            <div><span className="text-slate-500">Дней</span><strong className="ml-2 text-slate-950">{days.length}</strong></div>
+            <div><span className="text-slate-500">{t("tb.ui.days")}</span><strong className="ml-2 text-slate-950">{days.length}</strong></div>
             <div><span className="text-slate-500">PAX</span><strong className="ml-2 text-slate-950">{Math.max(0, toNum(adt) + toNum(chd))}</strong></div>
-            <div className="rounded-md bg-slate-950 px-3 py-2 text-white"><span className="text-slate-300">Итого</span><strong className="ml-2">{totals.net.toLocaleString("ru-RU")} UZS</strong></div>
+            <div className="rounded-md bg-slate-950 px-3 py-2 text-white"><span className="text-slate-300">{t("tb.ui.total")}</span><strong className="ml-2">{totals.net.toLocaleString()} UZS</strong></div>
           </div>
         </div>
         {/* [TPL] панель шаблонов — аккордеон по странам */}
@@ -2465,10 +2458,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   />
                   <div className="text-sm font-medium text-slate-600">{k}</div>
                   <div className="min-w-[130px] text-right">
-                    <div className="text-xs text-slate-500">Заполнено {completedSections} из 5</div>
+                    <div className="text-xs text-slate-500">{t("tb.ui.completed", { count: completedSections })}</div>
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${completedSections * 20}%` }} /></div>
                   </div>
-                  <div className="min-w-[140px] text-right"><div className="text-xs text-slate-500">Итого за день</div><strong className="text-sm text-slate-950">{dayTotal.toLocaleString("ru-RU")} UZS</strong></div>
+                  <div className="min-w-[140px] text-right"><div className="text-xs text-slate-500">{t("tb.day_total")}</div><strong className="text-sm text-slate-950">{dayTotal.toLocaleString()} UZS</strong></div>
                   <button
                     type="button"
                     className="rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
@@ -2489,7 +2482,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
                     onClick={() => setCollapsedDays((previous) => ({ ...previous, [k]: !previous[k] }))}
                   >
-                    {collapsed ? "Развернуть" : "Свернуть"}
+                    {collapsed ? t("tb.ui.expand") : t("tb.ui.collapse")}
                   </button>
                 </div>
 
@@ -2521,8 +2514,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   <div className="flex flex-wrap items-center gap-3 px-4 py-3">
                     <div className="grid h-8 w-8 place-items-center rounded-md bg-white/10 text-sm font-bold">{activeEventService === "tour" ? "ST" : activeEventService === "transfer" ? "TR" : "•"}</div>
                     <div className="mr-auto">
-                      <strong className="block text-sm">{EVENT_SERVICE_CATEGORIES.find((item) => item.id === activeEventService)?.label || "Услуги компонента"}</strong>
-                      <span className="text-xs text-slate-300">Выберите состав компонента и подходящие услуги</span>
+                      <strong className="block text-sm">{t(`tb.timeline.components.${activeEventService}`, { defaultValue: t("tb.ui.component_services") })}</strong>
+                      <span className="text-xs text-slate-300">{t("tb.ui.choose_component_services")}</span>
                     </div>
                     {selectedSchedule && <span className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-semibold text-slate-100">{selectedSchedule.start_time}–{selectedSchedule.end_time}</span>}
                   </div>
@@ -2533,7 +2526,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   {/* Guide */}
                   {activeEventService === "tour" && <>
                   {activeEventService === "tour" && <div className="rounded-md border border-slate-200 bg-white p-3 xl:col-span-3">
-                    <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-slate-500"><MapPin size={15} /> Тип программы</div>
+                    <div className="mb-2 flex items-center gap-2 text-xs font-bold uppercase text-slate-500"><MapPin size={15} /> {t("tb.ui.program_type")}</div>
                     <div className="grid gap-2 md:grid-cols-3">
                       {TOUR_BUILDER_GROUPS.map((group) => (
                         <button
@@ -2542,13 +2535,13 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           onClick={() => selectTourFamily(group.id)}
                           className={`rounded-md border p-3 text-left ${activeTourGroup.id === group.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"}`}
                         >
-                          <strong className="block text-sm">{group.label}</strong>
-                          <span className={`mt-0.5 block text-xs ${activeTourGroup.id === group.id ? "text-slate-300" : "text-slate-500"}`}>{group.description}</span>
+                          <strong className="block text-sm">{t(`tb.program_groups.${group.id}.label`, { defaultValue: group.label })}</strong>
+                          <span className={`mt-0.5 block text-xs ${activeTourGroup.id === group.id ? "text-slate-300" : "text-slate-500"}`}>{t(`tb.program_groups.${group.id}.description`, { defaultValue: group.description })}</span>
                         </button>
                       ))}
                     </div>
                     <div className="mt-4 border-t border-slate-200 pt-3">
-                      <div className="mb-2 text-xs font-bold uppercase text-slate-500">{activeTourGroup.label}: выберите услугу</div>
+                      <div className="mb-2 text-xs font-bold uppercase text-slate-500">{t(`tb.program_groups.${activeTourGroup.id}.label`, { defaultValue: activeTourGroup.label })}: {t("tb.ui.choose_component_services")}</div>
                       <div className="flex flex-wrap gap-2">
                         {activeTourOptions.map((type) => (
                           <button
@@ -2557,20 +2550,20 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             onClick={() => selectTourSubtype(type.id)}
                             className={`rounded-md border px-3 py-2 text-sm font-semibold ${activeTourType.id === type.id ? "border-blue-600 bg-blue-50 text-blue-800 ring-1 ring-blue-600" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"}`}
                           >
-                            {type.label}
+                            {t(`tb.timeline.tour_types.${type.id}`, { defaultValue: type.label })}
                           </button>
                         ))}
                       </div>
                     </div>
                   </div>}
-                  {!cityChosen && <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900 xl:col-span-3"><MapPin size={17} /> Укажите город в шапке дня — после этого появятся доступные поставщики.</div>}
+                  {!cityChosen && <div className="flex items-center gap-2 rounded-md border border-amber-200 bg-amber-50 px-3 py-2.5 text-sm font-semibold text-amber-900 xl:col-span-3"><MapPin size={17} /> {t("tb.ui.city_required")}</div>}
                   <div className="overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm">
                     <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
                       <div className="grid h-8 w-8 place-items-center rounded-md bg-violet-100 text-violet-700"><UserRound size={17} /></div>
-                      <div><div className="text-sm font-bold text-slate-950">1. {t('tb.guide')}</div><div className="text-xs text-slate-500">Поставщик и услуга выбранного сценария</div></div>
+                      <div><div className="text-sm font-bold text-slate-950">1. {t('tb.guide')}</div><div className="text-xs text-slate-500">{t("tb.ui.choose_component_services")}</div></div>
                     </div>
                     <div className="p-4">
-                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Поставщик</label>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">{t("tb.ui.supplier")}</label>
                     <AsyncSelect
                         key={`guide-${k}-${activeEventService}-${activeTourType.id}-${st.city}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}        // ⬅️ форс-ремаунт при смене условий
                         isDisabled={!cityChosen}
@@ -2653,7 +2646,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         .map(s => {
                           const seats = svcSeats(s); // берёт из s.raw.details.seats
                           const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
-                          const base = (s.title || CATEGORY_LABELS[s.category] || "Услуга");
+                           const base = t(`provider_services.items.${s.category}`, { defaultValue: s.title || CATEGORY_LABELS[s.category] || "Service" });
                           const parts = [base, seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
                             .filter(Boolean)
                             .join(" — ");
@@ -2663,7 +2656,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         })}
                     </select>
                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
-                      <span>{activeGuideService ? CATEGORY_LABELS[activeGuideService.category] || "Услуга выбрана" : "Услуга не выбрана"}</span>
+                      <span>{activeGuideService ? t(`provider_services.items.${activeGuideService.category}`, { defaultValue: t("tb.ui.selected_service") }) : t("tb.ui.service_not_selected")}</span>
                       <strong className="text-sm text-slate-950">{activeGuideService ? calcGuideForDay(k).toFixed(2) : "0.00"} {activeGuideService?.currency || st.guide?.currency || "UZS"}</strong>
                     </div>
                     </div>
@@ -2682,12 +2675,12 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   <div className={`overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm ${activeEventService === "transfer" ? "xl:col-span-3" : ""}`}>
                     <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
                       <div className="grid h-8 w-8 place-items-center rounded-md bg-blue-100 text-blue-700"><BusFront size={17} /></div>
-                      <div><div className="text-sm font-bold text-slate-950">{activeEventService === "tour" ? "2. " : ""}Транспорт</div><div className="text-xs text-slate-500">{activeEventService === "tour" ? `Для сценария «${activeTourType.label}»` : "Выберите тип, поставщика и тариф"}</div></div>
+                      <div><div className="text-sm font-bold text-slate-950">{activeEventService === "tour" ? "2. " : ""}{t("tb.transport")}</div><div className="text-xs text-slate-500">{t("tb.ui.choose_transport")}</div></div>
                     </div>
                     <div className="p-4">
                     {activeEventService === "transfer" && (
                     <div className="mb-3">
-                      <div className="mb-2 text-xs font-bold uppercase text-slate-500">Тип транспорта</div>
+                      <div className="mb-2 text-xs font-bold uppercase text-slate-500">{t("tb.ui.transport_type")}</div>
                       <div className="flex flex-wrap gap-2">
                         {TRANSPORT_SERVICE_TYPES.map((type) => (
                           <button
@@ -2696,7 +2689,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             onClick={() => selectTransportSubtype(type.id)}
                             className={`rounded-md border px-3 py-2 text-sm font-semibold ${activeTransportSubtype === type.id ? "border-slate-950 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-700 hover:border-slate-500"}`}
                           >
-                            {type.label}
+                            {t(`tb.timeline.transport_types.${type.id}`, { defaultValue: type.label })}
                           </button>
                         ))}
                       </div>
@@ -2704,11 +2697,11 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     )}
                     {activeEventService === "transfer" && activeTransportSubtype === "intercity" && (
                       <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
-                        <div className="mb-2 text-xs font-bold uppercase text-slate-500">Как оформить межгород</div>
+                        <div className="mb-2 text-xs font-bold uppercase text-slate-500">{t("tb.ui.intercity_method")}</div>
                         <div className="grid gap-2 sm:grid-cols-2">
                           {[
-                            { id: "provider", label: "Транспортный поставщик", hint: "Автомобиль, минивэн или автобус" },
-                            { id: "rail", label: "ЖД транспорт", hint: "Ручная стоимость билета на человека" },
+                            { id: "provider", label: t("tb.ui.transport_supplier"), hint: t("tb.ui.transport_supplier_hint") },
+                            { id: "rail", label: t("tb.ui.rail_transport"), hint: t("tb.ui.rail_hint") },
                           ].map((mode) => (
                             <button
                               key={mode.id}
@@ -2781,12 +2774,12 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     {activeEventService === "transfer" && activeTransportSubtype === "intercity" && activeIntercityMode === "rail" && (
                       <div className="overflow-hidden rounded-md border border-amber-200 bg-amber-50/40">
                         <div className="border-b border-amber-200 bg-white px-4 py-3">
-                          <strong className="block text-sm text-slate-950">ЖД транспорт</strong>
-                          <span className="text-xs text-slate-500">Укажите маршрут и стоимость билета на одного человека</span>
+                          <strong className="block text-sm text-slate-950">{t("tb.ui.rail_transport")}</strong>
+                          <span className="text-xs text-slate-500">{t("tb.ui.rail_hint")}</span>
                         </div>
                         <div className="grid gap-3 p-4 md:grid-cols-2 xl:grid-cols-4">
                           <label className="block">
-                            <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Откуда</span>
+                            <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">{t("tb.ui.from")}</span>
                             <input
                               value={activeRail.from || ""}
                               onChange={(event) => updateRailSegment({ from: event.target.value })}
@@ -2795,7 +2788,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             />
                           </label>
                           <label className="block">
-                            <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Куда</span>
+                            <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">{t("tb.ui.to")}</span>
                             <input
                               value={activeRail.to || ""}
                               onChange={(event) => updateRailSegment({ to: event.target.value })}
@@ -2804,7 +2797,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             />
                           </label>
                           <label className="block">
-                            <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Поезд / рейс</span>
+                            <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">{t("tb.ui.train_number")}</span>
                             <input
                               value={activeRail.number || ""}
                               onChange={(event) => updateRailSegment({ number: event.target.value })}
@@ -2814,7 +2807,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           </label>
                           <div className="grid grid-cols-[1fr_92px] gap-2">
                             <label className="block">
-                              <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Цена / 1 чел.</span>
+                              <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">{t("tb.ui.price_per_person")}</span>
                               <input
                                 type="number"
                                 min="0"
@@ -2826,7 +2819,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                               />
                             </label>
                             <label className="block">
-                              <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Валюта</span>
+                              <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">{t("tb.currency")}</span>
                               <select
                                 value={activeRail.currency || "UZS"}
                                 onChange={(event) => updateRailSegment({ currency: event.target.value })}
@@ -2839,9 +2832,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           </div>
                         </div>
                         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-amber-200 bg-white px-4 py-3">
-                          <span className="text-sm text-slate-600">{Math.max(1, toNum(adt) + toNum(chd))} чел. × {toNum(activeRail.price, 0).toLocaleString("ru-RU")} {activeRail.currency || "UZS"}</span>
+                          <span className="text-sm text-slate-600">{Math.max(1, toNum(adt) + toNum(chd))} {t("tb.ui.people_short")} × {toNum(activeRail.price, 0).toLocaleString()} {activeRail.currency || "UZS"}</span>
                           <div className="text-right">
-                            <span className="block text-xs font-bold uppercase text-slate-500">Итого за группу</span>
+                            <span className="block text-xs font-bold uppercase text-slate-500">{t("tb.ui.group_total")}</span>
                             <strong className="text-lg text-slate-950">{(toNum(activeRail.price, 0) * Math.max(1, toNum(adt) + toNum(chd))).toLocaleString("ru-RU")} {activeRail.currency || "UZS"}</strong>
                           </div>
                         </div>
@@ -2851,11 +2844,11 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     {activeTransportSubtype === "intercity" && (
                       <div className={`mb-3 rounded-md border px-3 py-2 text-sm ${activeIntercityRoute?.from && activeIntercityRoute?.to ? "border-sky-200 bg-sky-50 text-sky-900" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
                         {activeIntercityRoute?.from && activeIntercityRoute?.to
-                          ? <>Маршрут: <strong>{activeIntercityRoute.from} → {activeIntercityRoute.to}</strong></>
-                          : "Укажите разные города в соседних днях, чтобы подобрать межгородний тариф."}
+                          ? <>{t("tb.ui.route")}: <strong>{activeIntercityRoute.from} → {activeIntercityRoute.to}</strong></>
+                          : t("tb.ui.route_required")}
                       </div>
                     )}
-                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">Поставщик</label>
+                    <label className="mb-1.5 block text-xs font-bold uppercase text-slate-500">{t("tb.ui.supplier")}</label>
                     <AsyncSelect
                         key={`transport-${k}-${activeEventService === "tour" ? "city-tour" : activeTransportSubtype}-${st.city}-${activeIntercityRoute?.from || ""}-${activeIntercityRoute?.to || ""}-${lang}-${st.selectedScheduleId || "none"}-${selectedSchedule?.start_time || ""}-${selectedSchedule?.end_time || ""}`}
                         isDisabled={!cityChosen || (activeEventService === "transfer" && !activeTransportSubtype) || (activeTransportSubtype === "intercity" && (!activeIntercityRoute?.from || !activeIntercityRoute?.to))}
@@ -2946,7 +2939,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         .map(s => {
                           const seats = svcSeats(s);
                           const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
-                          const base = (s.title || CATEGORY_LABELS[s.category] || "Услуга");
+                           const base = t(`provider_services.items.${s.category}`, { defaultValue: s.title || CATEGORY_LABELS[s.category] || "Service" });
                           const parts = [base, seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
                             .filter(Boolean)
                             .join(" — ");
@@ -2956,7 +2949,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         })}
                     </select>
                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
-                      <span>{activeTransportService ? CATEGORY_LABELS[activeTransportService.category] || "Услуга выбрана" : "Услуга не выбрана"}</span>
+                      <span>{activeTransportService ? t(`provider_services.items.${activeTransportService.category}`, { defaultValue: t("tb.ui.selected_service") }) : t("tb.ui.service_not_selected")}</span>
                       <strong className="text-sm text-slate-950">{activeTransportService ? calcTransportForDay(k).toFixed(2) : "0.00"} {activeTransportService?.currency || st.transport?.currency || "UZS"}</strong>
                     </div>
                     </>}
