@@ -93,9 +93,14 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const isTransport = transportCategory(form.category);
   const isIntercity = INTERCITY_CATEGORIES.has(form.category);
   const preview = calculatedPreview(form);
+  const serviceLabel = (category) => t(`provider_services.items.${category}`, { defaultValue: LABELS[category] || category || "Услуга" });
+  const groupLabel = (group) => t(`provider_services.groups.${group.id}`, { defaultValue: group.label });
   const serviceTitle = (current) => INTERCITY_CATEGORIES.has(current.category)
-    ? `${LABELS[current.category] || "Междугородняя услуга"} · ${cityLabel(current.originCity) || "Откуда"} → ${cityLabel(current.destinationCity) || "Куда"}`
-    : `${LABELS[current.category] || "Услуга"}${current.citySlug ? ` · ${cityLabel(current.citySlug)}` : ""}`;
+    ? `${serviceLabel(current.category)} · ${cityLabel(current.originCity) || t("provider_services.from", "Откуда")} → ${cityLabel(current.destinationCity) || t("provider_services.to", "Куда")}`
+    : `${serviceLabel(current.category)}${current.citySlug ? ` · ${cityLabel(current.citySlug)}` : ""}`;
+  const storedServiceTitle = (row) => row.details?.destination_city
+    ? `${serviceLabel(row.category)} · ${cityLabel(row.details.origin_city || row.details.city_slug)} → ${cityLabel(row.details.destination_city)}`
+    : `${serviceLabel(row.category)}${row.details?.city_slug ? ` · ${cityLabel(row.details.city_slug)}` : ""}`;
 
   const categoryGroups = useMemo(() => {
     if (providerType === "transport") return TRANSPORT_SERVICE_GROUPS;
@@ -241,8 +246,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       await patchService(row.id, {
         category: draft.category,
         title: INTERCITY_CATEGORIES.has(draft.category)
-          ? `${LABELS[draft.category]} · ${draft.originCity} → ${draft.destinationCity}`
-          : `${LABELS[draft.category]} · ${draft.citySlug}`,
+          ? `${serviceLabel(draft.category)} · ${draft.originCity} → ${draft.destinationCity}`
+          : `${serviceLabel(draft.category)} · ${draft.citySlug}`,
         price: draft.pricingMode === "packages" ? number(draft.halfDayPrice) : number(draft.price),
         details: detailsFrom(draft, row.details || {}),
         vehicle_model: transportCategory(draft.category) ? String(draft.vehicleModel || "").trim() : null,
@@ -256,7 +261,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   }
 
   async function removeService(row) {
-    if (!confirm(`Удалить услугу «${row.title || LABELS[row.category]}»?`)) return;
+    if (!confirm(`Удалить услугу «${storedServiceTitle(row)}»?`)) return;
     try {
       await fetchJSON(`/api/providers/${pid}/services/${row.id}`, { method: "DELETE" });
       setRows((current) => current.filter((item) => item.id !== row.id));
@@ -267,7 +272,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   }
 
   const filtered = useMemo(() => rows.filter((row) => {
-    const text = `${row.title || ""} ${LABELS[row.category] || ""}`.toLowerCase();
+    const text = `${row.title || ""} ${serviceLabel(row.category)}`.toLowerCase();
     const matchesText = text.includes(query.toLowerCase());
     const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? row.is_active : !row.is_active);
     return matchesText && matchesStatus;
@@ -298,8 +303,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
             <FormStep icon={Layers3} number="1" title="Выберите услугу" description="Каталог одинаков для всех поставщиков">
               <div className="grid gap-4 md:grid-cols-2">
-                <SelectField label="Категория" value={activeCategoryGroup?.id || ""} onChange={(value) => setForm((current) => ({ ...current, catalogGroup: value, category: "", title: "" }))} options={categoryGroups.map((group) => ({ value: group.id, label: group.label }))} placeholder="Выберите категорию" />
-                <SelectField label="Услуга" value={form.category} disabled={!activeCategoryGroup} onChange={(value) => setField("category", value)} options={(activeCategoryGroup?.services || []).map((service) => ({ value: service.id, label: service.label }))} placeholder="Выберите конкретную услугу" />
+                <SelectField label="Категория" value={activeCategoryGroup?.id || ""} onChange={(value) => setForm((current) => ({ ...current, catalogGroup: value, category: "", title: "" }))} options={categoryGroups.map((group) => ({ value: group.id, label: groupLabel(group) }))} placeholder="Выберите категорию" />
+                <SelectField label="Услуга" value={form.category} disabled={!activeCategoryGroup} onChange={(value) => setField("category", value)} options={(activeCategoryGroup?.services || []).map((service) => ({ value: service.id, label: serviceLabel(service.id) }))} placeholder="Выберите конкретную услугу" />
               </div>
             </FormStep>
 
@@ -351,7 +356,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
             const draftIsIntercity = Boolean(expanded && draft && INTERCITY_CATEGORIES.has(draft.category));
             return <div key={row.id} className="py-4">
               <div className="grid items-center gap-4 md:grid-cols-[minmax(240px,1.5fr)_minmax(220px,1fr)_120px_auto]">
-                <div><div className="font-semibold text-slate-950">{row.title || LABELS[row.category] || row.category}</div><div className="mt-1 text-sm text-slate-500">{LABELS[row.category] || row.category}{row.details?.destination_city ? ` · ${row.details.origin_city || row.details.city_slug} → ${row.details.destination_city}` : row.details?.city_slug ? ` · ${row.details.city_slug}` : ""}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${row.details.seats} мест` : ""}</div></div>
+                <div><div className="font-semibold text-slate-950">{storedServiceTitle(row)}</div><div className="mt-1 text-sm text-slate-500">{serviceLabel(row.category)}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${row.details.seats} мест` : ""}</div></div>
                 <div><div className="font-semibold text-slate-900">{pricingLabel(row)}</div><div className="text-xs text-slate-500">Тариф Tour Builder</div></div>
                 <div className={`text-sm font-semibold ${row.is_active ? 'text-emerald-700' : 'text-slate-400'}`}>{row.is_active ? "Включена" : "Выключена"}</div>
                 <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? "Закрыть" : "Редактировать"}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? "Выключить" : "Включить"}</button></div>
@@ -370,7 +375,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                         className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal"
                       >
                         <option value="">Выберите категорию</option>
-                        {categoryGroups.map((group) => <option key={group.id} value={group.id}>{group.label}</option>)}
+                        {categoryGroups.map((group) => <option key={group.id} value={group.id}>{groupLabel(group)}</option>)}
                       </select>
                     </label>
                     <label className="text-xs font-semibold text-slate-600">Конкретная услуга
@@ -381,7 +386,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                         className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal disabled:bg-slate-100"
                       >
                         <option value="">Выберите услугу</option>
-                        {(draftCategoryGroup?.services || []).map((service) => <option key={service.id} value={service.id}>{service.label}</option>)}
+                        {(draftCategoryGroup?.services || []).map((service) => <option key={service.id} value={service.id}>{serviceLabel(service.id)}</option>)}
                       </select>
                     </label>
                     {draftIsIntercity ? <>
