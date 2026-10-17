@@ -20,10 +20,12 @@ import {
   Circle,
   Compass,
   Eye,
+  EyeOff,
   FileText,
   Globe2,
   LayoutDashboard,
   LockKeyhole,
+  LoaderCircle,
   LogOut,
   Mail,
   MapPin,
@@ -500,6 +502,11 @@ const ProviderProfile = () => {
   const [newPhone, setNewPhone] = useState("");
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [hasPassword, setHasPassword] = useState(true);
+  const [passwordStatusLoading, setPasswordStatusLoading] = useState(true);
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [showPasswords, setShowPasswords] = useState(false);
   const [pwdOpen, setPwdOpen] = useState(false);
   const [stats, setStats] = useState(null);
 
@@ -619,6 +626,18 @@ const ProviderProfile = () => {
       c2.abort();
     };
   }, [api, t]);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    api
+      .get("/api/providers/password/status", { signal: controller.signal })
+      .then((res) => setHasPassword(res.data?.hasPassword !== false))
+      .catch((err) => {
+        if (err?.code !== "ERR_CANCELED") console.error("Ошибка загрузки статуса пароля", err);
+      })
+      .finally(() => setPasswordStatusLoading(false));
+    return () => controller.abort();
+  }, [api]);
 
   // сохраняем provider_id в localStorage
   useEffect(() => {
@@ -767,43 +786,48 @@ const ProviderProfile = () => {
       });
   };
 
-  const handleChangePassword = () => {
-    if (!oldPassword) {
+  const handleChangePassword = async () => {
+    if (hasPassword && !oldPassword) {
       tWarn(
         t("enter_current_password") ||
           "Введите текущий пароль"
       );
       return;
     }
-    if (!newPassword || newPassword.length < 6) {
+    if (!newPassword || newPassword.length < 8) {
       tWarn(
         t("password_too_short") ||
-          "Минимум 6 символов"
+          "Минимум 8 символов"
       );
       return;
     }
+    if (newPassword.length > 128) {
+      tWarn("Максимум 128 символов");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      tWarn("Пароли не совпадают");
+      return;
+    }
 
-    api
-      .put(`/api/providers/password`, {
+    setPasswordSaving(true);
+    try {
+      await api.put(`/api/providers/password`, {
         oldPassword,
         newPassword,
-      })
-      .then(() => {
-        setOldPassword("");
-        setNewPassword("");
-        tSuccess(
-          t("password_changed") || "Пароль обновлён"
-        );
-        setPwdOpen(false);
-      })
-      .catch((err) => {
-        console.error("Ошибка смены пароля", err);
-        tError(
-          extractApiErrorText(err) ||
-            t("password_error") ||
-            "Ошибка смены пароля"
-        );
       });
+      setOldPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setHasPassword(true);
+      tSuccess(hasPassword ? (t("password_changed") || "Пароль обновлён") : "Пароль установлен");
+      setPwdOpen(false);
+    } catch (err) {
+      console.error("Ошибка смены пароля", err);
+      tError(extractApiErrorText(err) || t("password_error") || "Ошибка смены пароля");
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   // ---------- RENDER ----------
@@ -1018,9 +1042,18 @@ const ProviderProfile = () => {
             {isEditing ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600"><Upload aria-hidden="true" className="h-4 w-4" />{t("choose_files", { defaultValue: "Выбрать файл" })}<input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="hidden" /></label><div className="mt-3 text-sm font-semibold text-slate-500">{newCertificate ? <span className="inline-flex items-center gap-1.5"><FileText aria-hidden="true" className="h-4 w-4" />{t("file_chosen", { defaultValue: "Файл выбран" })}</span> : t("no_files_selected", { defaultValue: "Файл не выбран" })}</div>{newCertificate?.startsWith("data:image") ? <img src={newCertificate} alt="Certificate preview" className="mt-3 h-32 w-32 rounded-2xl border object-cover" /> : null}</div> : certObjectUrl ? <a href={certObjectUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800"><Eye aria-hidden="true" className="h-4 w-4" />{t("view_certificate", { defaultValue: "Посмотреть сертификат" })}</a> : <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified", { defaultValue: "Не указан" })}</div>}
           </ProfileCard>}
 
-          {activeSection === "security" && <ProfileCard title="Безопасность" subtitle="Пароль и выход из кабинета.">
-            <button type="button" onClick={() => setPwdOpen((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:bg-slate-100" aria-expanded={pwdOpen} aria-controls="pwd-collapse"><span className="inline-flex items-center gap-2"><LockKeyhole aria-hidden="true" className="h-4 w-4 text-slate-500" />{t("change_password", { defaultValue: "Сменить пароль" })}</span><ChevronDown aria-hidden="true" className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`} /></button>
-            <div id="pwd-collapse" className={`grid overflow-hidden transition-all duration-300 ease-in-out ${pwdOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]"}`}><div className="min-h-0 space-y-2"><input type="password" placeholder={t("current_password", { defaultValue: "Текущий пароль" })} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><input type="password" placeholder={t("new_password", { defaultValue: "Новый пароль" })} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><button type="button" onClick={handleChangePassword} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-2.5 font-black text-white transition hover:bg-orange-600"><Save aria-hidden="true" className="h-4 w-4" />{t("change", { defaultValue: "Изменить" })}</button></div></div>
+          {activeSection === "security" && <ProfileCard title="Безопасность" subtitle="Управление паролем и активным сеансом.">
+            <button type="button" onClick={() => setPwdOpen((v) => !v)} disabled={passwordStatusLoading} className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:bg-slate-100 disabled:cursor-wait disabled:opacity-60" aria-expanded={pwdOpen} aria-controls="pwd-collapse"><span className="inline-flex items-center gap-2"><LockKeyhole aria-hidden="true" className="h-4 w-4 text-slate-500" />{hasPassword ? t("change_password", { defaultValue: "Сменить пароль" }) : "Установить пароль"}</span>{passwordStatusLoading ? <LoaderCircle aria-hidden="true" className="h-5 w-5 animate-spin text-slate-400" /> : <ChevronDown aria-hidden="true" className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`} />}</button>
+            <div id="pwd-collapse" className={`grid overflow-hidden transition-all duration-300 ease-in-out ${pwdOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]"}`}>
+              <div className="min-h-0 space-y-3">
+                {!hasPassword && <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-900">Вы вошли через Telegram. Установите пароль для дополнительного способа входа в кабинет.</div>}
+                {hasPassword && <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-700">Текущий пароль</span><input type={showPasswords ? "text" : "password"} autoComplete="current-password" value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /></label>}
+                <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-700">Новый пароль</span><input type={showPasswords ? "text" : "password"} autoComplete="new-password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><span className="mt-1.5 block text-xs font-semibold text-slate-500">От 8 до 128 символов.</span></label>
+                <label className="block"><span className="mb-1.5 block text-sm font-bold text-slate-700">Повторите новый пароль</span><input type={showPasswords ? "text" : "password"} autoComplete="new-password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !passwordSaving) handleChangePassword(); }} className="w-full rounded-xl border border-slate-200 px-3 py-2.5 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /></label>
+                <button type="button" onClick={() => setShowPasswords((value) => !value)} className="inline-flex items-center gap-2 text-sm font-bold text-slate-600 transition hover:text-slate-950">{showPasswords ? <EyeOff aria-hidden="true" className="h-4 w-4" /> : <Eye aria-hidden="true" className="h-4 w-4" />}{showPasswords ? "Скрыть пароли" : "Показать пароли"}</button>
+                <button type="button" onClick={handleChangePassword} disabled={passwordSaving} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-2.5 font-black text-white transition hover:bg-orange-600 disabled:cursor-wait disabled:opacity-60">{passwordSaving ? <LoaderCircle aria-hidden="true" className="h-4 w-4 animate-spin" /> : <Save aria-hidden="true" className="h-4 w-4" />}{passwordSaving ? "Сохраняем..." : hasPassword ? "Изменить пароль" : "Установить пароль"}</button>
+              </div>
+            </div>
             <button type="button" onClick={() => { if (typeof localStorage !== "undefined") { localStorage.removeItem("token"); localStorage.removeItem("provider_id"); } window.location.href = "/login"; }} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 font-black text-white transition hover:bg-red-700"><LogOut aria-hidden="true" className="h-4 w-4" />{t("logout", { defaultValue: "Выйти" })}</button>
           </ProfileCard>}
         </aside>

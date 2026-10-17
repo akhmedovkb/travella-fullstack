@@ -192,6 +192,7 @@ module.exports = async function authenticateToken(req, res, next) {
     is_admin,
     is_moderator,
     permissions: (pFlags && pFlags.permissions) || payload.permissions || [],
+    telegram_id: payload.telegram_id != null ? String(payload.telegram_id) : null,
   
     iat: payload.iat,
     exp: payload.exp,
