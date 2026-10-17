@@ -6,6 +6,7 @@ import Select from "react-select";
 import AsyncSelect from "react-select/async";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import axios from "axios";
+import useProviderTelegramLink from "../hooks/useProviderTelegramLink";
 import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo, tWarn } from "../shared/toast";
 import ProviderLanguages from "../components/ProviderLanguages";
@@ -707,10 +708,10 @@ const scrollToProfilePart = useCallback((key) => {
   const botUser = import.meta.env.VITE_TG_BOT_USERNAME || "";
   const isTgLinked = Boolean(profile?.telegram_chat_id || profile?.tg_chat_id); // поле придёт из backend профиля
   
-  const tgDeepLink = useMemo(() => {
-    if (!botUser || !hasProviderId) return null;
-    return `https://t.me/${botUser}?start=p_${providerId}`;
-  }, [botUser, hasProviderId, providerId]);
+  const tgDeepLink = useProviderTelegramLink({
+    botUser,
+    enabled: hasProviderId && !isTgLinked,
+  });
 
 
   // Services

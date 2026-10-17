@@ -23,15 +23,6 @@ const activeFleet = (profile) =>
   );
 
 const roleProfileCheck = (profile, providerType) => {
-  if (["guide", "agent", "tour_agent"].includes(providerType)) {
-    return {
-      key: "languages",
-      label: "Владение языками",
-      ok: hasAny(profile.languages, profile.langs, profile.languageSkills),
-      fixKey: "languages",
-    };
-  }
-
   if (providerType === "transport") {
     return {
       key: "transport",
@@ -81,6 +72,24 @@ export function getProviderTrust(profile = {}, stats = {}) {
     profile.telegramChatId,
     profile.social
   );
+
+  const languageRequired = ["guide", "transport", "agent", "tour_agent"].includes(providerType);
+  const roleCheck = roleProfileCheck(profile, providerType);
+  const roleChecks = [];
+  if (languageRequired) {
+    roleChecks.push({
+      key: "languages",
+      label: "Владение языками",
+      ok: hasAny(profile.languages, profile.langs, profile.languageSkills),
+      weight: providerType === "transport" ? 5 : 10,
+      fixKey: "languages",
+    });
+  }
+  if (providerType === "transport") {
+    roleChecks.push({ ...roleCheck, weight: 5 });
+  } else if (!languageRequired) {
+    roleChecks.push({ ...roleCheck, weight: 10 });
+  }
 
   const checks = [
     {
@@ -133,7 +142,7 @@ export function getProviderTrust(profile = {}, stats = {}) {
       weight: 10,
       fixKey: "location",
     },
-    { ...roleProfileCheck(profile, providerType), weight: 10 },
+    ...roleChecks,
     {
       key: "activity",
       label: "Активность",

@@ -22,6 +22,7 @@ const {
   GUIDE_SERVICE_CATEGORIES,
   TRANSPORT_SERVICE_CATEGORIES,
   TRANSPORT_SERVICE_CATEGORY_SET,
+  isProviderServiceCategoryAllowed,
 } = require("../utils/providerServiceCatalog");
 
 require("../utils/refusedPriceDropBroadcast");
@@ -603,15 +604,75 @@ function normalizeProviderServicePayload(body = {}, fallbackCategory = null) {
     }
   }
 
-  // vehicle_model приходит отдельным полем; только для транспортных категорий
+  // При создании UI хранит модель и в details; поддерживаем оба формата.
   const vehicle_model = isTransportCategory(category)
-    ? String(body.vehicle_model || "").trim() || null
+    ? String(body.vehicle_model || details.vehicle_model || "").trim() || null
     : null;
 
   // is_active
   const is_active = body.is_active === false ? false : true;
 
   return { category, title, price, currency, details, vehicle_model, is_active };
+}
+
+async function getProviderType(providerId) {
+  const result = await pool.query(`SELECT type FROM providers WHERE id = $1 LIMIT 1`, [providerId]);
+  return result.rows[0]?.type || null;
+}
+
+function sendInvalidProviderServiceCategory(res, providerType, category) {
+  return res.status(400).json({
+    code: "invalid_provider_service_category",
+    message: "Эта услуга недоступна для типа поставщика",
+    providerType: String(providerType || ""),
+    category: String(category || ""),
+  });
+}
+
+function providerServiceIdentity(service = {}) {
+  const details = service.details && typeof service.details === "object" ? service.details : {};
+  const normalize = (value) => String(value || "").trim().toLowerCase();
+  return {
+    category: normalize(service.category),
+    city: normalize(details.city_slug),
+    origin: normalize(details.origin_city),
+    destination: normalize(details.destination_city),
+    vehicle: normalize(details.vehicle_model || service.vehicle_model),
+  };
+}
+
+async function findProviderServiceDuplicate(providerId, service, excludeId = null) {
+  const identity = providerServiceIdentity(service);
+  const result = await pool.query(
+    `SELECT id
+       FROM provider_services
+      WHERE provider_id = $1
+        AND LOWER(TRIM(category)) = $2
+        AND LOWER(TRIM(COALESCE(details->>'city_slug', ''))) = $3
+        AND LOWER(TRIM(COALESCE(details->>'origin_city', ''))) = $4
+        AND LOWER(TRIM(COALESCE(details->>'destination_city', ''))) = $5
+        AND LOWER(TRIM(COALESCE(details->>'vehicle_model', vehicle_model, ''))) = $6
+        AND ($7::bigint IS NULL OR id <> $7::bigint)
+      LIMIT 1`,
+    [
+      providerId,
+      identity.category,
+      identity.city,
+      identity.origin,
+      identity.destination,
+      identity.vehicle,
+      excludeId,
+    ]
+  );
+  return result.rows[0]?.id || null;
+}
+
+function sendDuplicateProviderService(res, duplicateId) {
+  return res.status(409).json({
+    code: "duplicate_provider_service",
+    message: "Такая услуга уже создана. Измените существующий тариф.",
+    duplicateId,
+  });
 }
 
 // ---------- Auth ----------
@@ -2066,6 +2127,19 @@ const createProviderService = async (req, res) => {
       return res.status(400).json({ message: "category обязателен" });
     }
 
+    const providerType = await getProviderType(providerId);
+    if (!providerType) return res.status(404).json({ message: "Поставщик не найден" });
+    if (!isProviderServiceCategoryAllowed(providerType, category)) {
+      return sendInvalidProviderServiceCategory(res, providerType, category);
+    }
+
+    const duplicateId = await findProviderServiceDuplicate(providerId, {
+      category,
+      details,
+      vehicle_model,
+    });
+    if (duplicateId) return sendDuplicateProviderService(res, duplicateId);
+
     const ins = await pool.query(
       `INSERT INTO provider_services
          (provider_id, category, title, price, currency, is_active, details, vehicle_model)
@@ -2103,9 +2177,28 @@ const patchProviderService = async (req, res) => {
         ? String(req.body.category).trim()
         : String(current.category || "").trim();
 
+    const providerType = await getProviderType(providerId);
+    if (!providerType) return res.status(404).json({ message: "Поставщик не найден" });
+    if (!isProviderServiceCategoryAllowed(providerType, effectiveCategory)) {
+      return sendInvalidProviderServiceCategory(res, providerType, effectiveCategory);
+    }
+
     // 2) применяем только присланные поля; подставляем текущую категорию, если её не прислали
     const currentCategory = cur.rows[0].category;
     const patch = normalizeProviderServicePayload(req.body, currentCategory);
+
+    const nextDetails = Object.prototype.hasOwnProperty.call(req.body, "details")
+      ? patch.details
+      : current.details || {};
+    const nextVehicle = isTransportCategory(effectiveCategory)
+      ? String(req.body.vehicle_model || nextDetails.vehicle_model || current.vehicle_model || "").trim() || null
+      : null;
+    const duplicateId = await findProviderServiceDuplicate(
+      providerId,
+      { category: effectiveCategory, details: nextDetails, vehicle_model: nextVehicle },
+      id
+    );
+    if (duplicateId) return sendDuplicateProviderService(res, duplicateId);
 
     const sets = [];
     const vals = [];
@@ -2130,10 +2223,25 @@ const patchProviderService = async (req, res) => {
       push(`category = $${vals.length + 1}`, patch.category);
     }
 
+    // При смене типа услуги нормализуем зависимые поля даже для частичного PATCH.
+    if (
+      effectiveCategory !== currentCategory &&
+      !Object.prototype.hasOwnProperty.call(req.body, "details")
+    ) {
+      const normalized = normalizeProviderServicePayload(
+        { details: current.details || {} },
+        effectiveCategory
+      );
+      push(`details = $${vals.length + 1}::jsonb`, JSON.stringify(normalized.details));
+    }
+
     // 4) vehicle_model — можно менять и без category в body.
     //    Если эффективная категория не транспортная — обнуляем.
-    if (Object.prototype.hasOwnProperty.call(req.body, "vehicle_model")) {
-      const vm = String(req.body.vehicle_model || "").trim() || null;
+    if (
+      Object.prototype.hasOwnProperty.call(req.body, "vehicle_model") ||
+      effectiveCategory !== currentCategory
+    ) {
+      const vm = String(req.body.vehicle_model || current.vehicle_model || "").trim() || null;
       const vmToSave = isTransportCategory(effectiveCategory) ? vm : null;
       push(`vehicle_model = $${vals.length + 1}`, vmToSave);
     }
@@ -2169,10 +2277,23 @@ const bulkCreateProviderServices = async (req, res) => {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length) return res.json({ items: [] });
 
+    const providerType = await getProviderType(providerId);
+    if (!providerType) return res.status(404).json({ message: "Поставщик не найден" });
+
     const rows = [];
+    const batchIdentities = new Set();
     for (const it of items) {
       const p = normalizeProviderServicePayload(it);
       if (!p.category) continue;
+      if (!isProviderServiceCategoryAllowed(providerType, p.category)) {
+        return sendInvalidProviderServiceCategory(res, providerType, p.category);
+      }
+      const identity = providerServiceIdentity(p);
+      const identityKey = Object.values(identity).join("\u001f");
+      if (batchIdentities.has(identityKey)) return sendDuplicateProviderService(res, null);
+      const duplicateId = await findProviderServiceDuplicate(providerId, p);
+      if (duplicateId) return sendDuplicateProviderService(res, duplicateId);
+      batchIdentities.add(identityKey);
       rows.push(p);
       if (rows.length >= 200) break; // защитимся от перегруза
     }
