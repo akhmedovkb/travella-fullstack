@@ -1320,6 +1320,16 @@
       "entry": "Entry fees (net)",
       "total": "TOTAL"
     },
+    "summary": {
+      "title": "Cost summary",
+      "subtitle": "Review the tour breakdown and total before booking.",
+      "currency": "Display currency",
+      "exchange_rate": "USD exchange rate",
+      "exchange_rate_hint": "UZS per 1 USD",
+      "group_total": "Group total",
+      "per_person": "Per guest",
+      "booking_hint": "Requests will be sent to the selected providers at the listed rates."
+    },
     "title": "Tour builder",
     "dates": "Tour dates",
     "pick_dates": "Select start and end dates",

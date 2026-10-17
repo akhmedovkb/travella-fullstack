@@ -15,7 +15,7 @@ import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
 import TransportSegmentEditor from "../components/tourbuilder/TransportSegmentEditor";
-import { BusFront, Landmark, MapPin, UserRound } from "lucide-react";
+import { ArrowRight, BedDouble, BusFront, Landmark, MapPin, ReceiptText, Utensils, UserRound } from "lucide-react";
 import {
   GUIDE_CATEGORY_IDS,
   TRANSPORT_CATEGORY_IDS,
@@ -1162,6 +1162,7 @@ export default function TourBuilder() {
    // курс USD (UZS за 1 USD), для конвертации итогов вниз страницы
  const [usdRate, setUsdRate] = useState(Number(import.meta.env.VITE_USD_RATE || 0) || 0);
  const toUSD = (vUZS) => (Number(usdRate) > 0 ? Number(vUZS) / Number(usdRate) : 0);
+ const [summaryCurrency, setSummaryCurrency] = useState("UZS");
 
   const [byDay, setByDay] = useState({});
   useEffect(() => {
@@ -3508,101 +3509,85 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         servicesCache={servicesCache}
         onRecalc={autoPickForDay}
       />
-        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')}</div><div>{totals.guide.toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')}</div><div>{(totals.transport + totals.transfers).toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.meals')}</div>
-            <div>{totals.meals.toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-semibold" style={{ color: BRAND.primary }}>{t('tb.totals.total')}</div>
-            <div className="flex justify-between"><span>NET</span><span style={{ color: BRAND.primary, fontWeight: 700 }}>{totals.net.toFixed(2)} UZS</span></div>
-            <div className="flex justify-between mt-1"><span>/ pax</span><span>{totals.perPax.toFixed(2)} UZS</span></div>
-          </div>
-        </div>
-              {/* ===== Курс и итоги в USD ===== */}
-      <div className="mt-3 p-3 border rounded-lg bg-white">
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-medium">
-            USD rate (UZS for 1 USD)
-          </label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            className="h-9 w-52 border rounded px-2 text-sm"
-            placeholder="например, 12600"
-            value={usdRate}
-            onChange={(e) => setUsdRate(Number(e.target.value) || 0)}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')} (USD)</div>
-          <div>{toUSD(totals.guide).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')} (USD)</div>
-          <div>{toUSD(totals.transport + totals.transfers).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')} (USD)</div>
-          <div>{toUSD(totals.hotel).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.meals')} (USD)</div>
-          <div>{toUSD(totals.meals).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')} (USD)</div>
-          <div>{toUSD(totals.entries).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-semibold" style={{ color: BRAND.primary }}>Total (USD)</div>
-          <div className="flex justify-between">
-            <span>NET</span>
-            <span style={{ color: BRAND.primary, fontWeight: 700 }}>{toUSD(totals.net).toFixed(2)} USD</span>
-          </div>
-          <div className="flex justify-between mt-1">
-            <span>/ pax</span>
-            <span>{toUSD(totals.perPax).toFixed(2)} USD</span>
-          </div>
-          {Number(usdRate) <= 0 && (
-            <div className="text-xs text-amber-600 mt-2">
-              {t('tb.usd_enter_valid_rate')}
+      <section className="mb-8 mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="grid xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">{t("tb.summary.title")}</h2>
+                <p className="mt-1 text-sm text-slate-500">{t("tb.summary.subtitle")}</p>
+              </div>
+              <div className="flex rounded-md bg-slate-100 p-1" aria-label={t("tb.summary.currency")}>
+                {["UZS", "USD"].map((currency) => (
+                  <button
+                    key={currency}
+                    type="button"
+                    onClick={() => setSummaryCurrency(currency)}
+                    className={`h-8 min-w-14 rounded px-3 text-xs font-bold transition ${summaryCurrency === currency ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    {currency}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
+
+            {summaryCurrency === "USD" && (
+              <div className="mt-5 flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">{t("tb.summary.exchange_rate")}</div>
+                  <div className="text-xs text-slate-500">{t("tb.summary.exchange_rate_hint")}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="number" min="0" step="0.01" className="h-9 w-36 rounded border border-slate-300 bg-white px-3 text-right text-sm font-semibold" placeholder="12600" value={usdRate} onChange={(e) => setUsdRate(Number(e.target.value) || 0)} />
+                  <span className="text-xs font-bold text-slate-500">UZS</span>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 grid gap-x-8 sm:grid-cols-2">
+              {[
+                { label: t("tb.totals.guide"), value: totals.guide, Icon: UserRound },
+                { label: t("tb.totals.transport"), value: totals.transport + totals.transfers, Icon: BusFront },
+                { label: t("tb.totals.hotels"), value: totals.hotel, Icon: BedDouble },
+                { label: t("tb.meals"), value: totals.meals, Icon: Utensils },
+                { label: t("tb.totals.entry"), value: totals.entries, Icon: Landmark },
+              ].map(({ label, value, Icon }) => {
+                const amount = summaryCurrency === "USD" ? toUSD(value) : value;
+                return (
+                  <div key={label} className="flex min-h-14 items-center justify-between gap-3 border-b border-slate-100 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-orange-50 text-orange-600"><Icon size={16} /></span>
+                      <span className="truncate text-sm font-medium text-slate-600">{label}</span>
+                    </div>
+                    <span className="whitespace-nowrap text-sm font-bold text-slate-950">{summaryCurrency === "USD" ? amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(amount).toLocaleString("ru-RU")} {summaryCurrency}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {summaryCurrency === "USD" && Number(usdRate) <= 0 && <p className="mt-3 text-xs font-medium text-amber-700">{t("tb.usd_enter_valid_rate")}</p>}
+          </div>
+
+          <aside className="flex flex-col justify-between bg-slate-950 p-5 text-white sm:p-6">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold uppercase text-orange-400"><ReceiptText size={16} />{t("tb.summary.group_total")}</div>
+              <div className="mt-3 text-3xl font-bold">
+                {summaryCurrency === "USD" ? toUSD(totals.net).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(totals.net).toLocaleString("ru-RU")} <span className="text-base text-slate-400">{summaryCurrency}</span>
+              </div>
+              <div className="mt-5 flex items-center justify-between border-t border-slate-800 pt-4 text-sm">
+                <span className="text-slate-400">{t("tb.summary.per_person")}</span>
+                <strong>{summaryCurrency === "USD" ? toUSD(totals.perPax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(totals.perPax).toLocaleString("ru-RU")} {summaryCurrency}</strong>
+              </div>
+            </div>
+            <div className="mt-8">
+              <button type="button" onClick={handleSendRequests} disabled={sending || (summaryCurrency === "USD" && Number(usdRate) <= 0)} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-4 font-bold text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" title={t("tourBuilder.book")}>
+                {sending ? t("tourBuilder.booking_in_progress") : t("tourBuilder.book")}
+                {!sending && <ArrowRight size={18} />}
+              </button>
+              <p className="mt-3 text-xs leading-5 text-slate-400">{t("tb.summary.booking_hint")}</p>
+            </div>
+          </aside>
         </div>
-      </div>
-      {/* ===== Кнопка «Бронировать» → создаём ЗАПРОСЫ поставщикам ===== */}
-      <div className="max-w-6xl mx-auto mt-4 mb-8">
-      <button
-        type="button"
-        onClick={handleSendRequests}
-        disabled={sending}
-        className="px-4 py-2 rounded-lg text-white"
-        style={{ background: sending ? '#D1D5DB' : BRAND.primary }}
-        title={t("tourBuilder.book")}
-      >
-        {sending ? t("tourBuilder.booking_in_progress") : t("tourBuilder.book")}
-      </button>
-        <div className="text-xs text-gray-500 mt-1">
-          {t("tourBuilder.booking_note")}
-        </div>
-      </div>
+      </section>
       </div>
             {/* [TPL] Модал применения шаблона */}
       {applyOpen && (

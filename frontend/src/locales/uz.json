@@ -1319,6 +1319,16 @@
       "entry": "Entry fees (netto)",
       "total": "JAMI"
     },
+    "summary": {
+      "title": "Narxlar xulosasi",
+      "subtitle": "Bron qilishdan oldin tur tarkibi va umumiy narxni tekshiring.",
+      "currency": "Hisob-kitob valyutasi",
+      "exchange_rate": "Dollar kursi",
+      "exchange_rate_hint": "1 USD uchun UZS miqdori",
+      "group_total": "Guruh uchun jami",
+      "per_person": "Bir mehmon uchun",
+      "booking_hint": "So‘rovlar tanlangan yetkazib beruvchilarga ko‘rsatilgan tariflar bo‘yicha yuboriladi."
+    },
     "title": "Tur konstruktori",
     "dates": "Tur sanalari",
     "pick_dates": "Boshlanish va tugash sanalarini tanlang",
