@@ -604,7 +604,7 @@ export default function Header() {
                     active={workspaceOpen}
                     open={workspaceOpen}
                     icon={<IconDashboard />}
-                    label="Работа"
+                    label={t("provider_profile_ui.header.work")}
                     onClick={() => setWorkspaceOpen((v) => !v)}
                   />
                   
@@ -612,7 +612,7 @@ export default function Header() {
                     <DropdownPanel align="right" width="w-80">
                   
                       <DropdownCaption
-                        title="Работа с клиентами"
+                        title={t("provider_profile_ui.header.client_work")}
                       />
                   
                       <DropdownItem
@@ -668,7 +668,7 @@ export default function Header() {
                     active={toolsOpen || toolsActive}
                     open={toolsOpen}
                     icon={<IconDoc />}
-                    label={t("nav.tools", "Инструменты")}
+                    label={t("provider_profile_ui.header.tools")}
                     onClick={() => setToolsOpen((v) => !v)}
                   />
                   {toolsOpen && (
@@ -805,7 +805,7 @@ export default function Header() {
                   )}
                 </RowGroupDark>
 
-                <RowGroupDark title="Работа с клиентами">
+                <RowGroupDark title={t("provider_profile_ui.header.client_work")}>
                   <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
                   <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings", "Бронирования")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
                   <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
@@ -813,7 +813,7 @@ export default function Header() {
                   <NavItemMobileDark to="/dashboard/social" label="Публикации" icon={<IconDoc />} />
                 </RowGroupDark>
 
-                <RowGroupDark title="Инструменты">
+                <RowGroupDark title={t("provider_profile_ui.header.tools")}>
                   <NavItemMobileDark to="/dashboard/passport-parser" label="Распознавание паспорта" icon={<IconDoc />} />
                 </RowGroupDark>
               </>

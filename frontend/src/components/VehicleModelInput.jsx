@@ -1,4 +1,5 @@
 import React, { useEffect, useId, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 export const VEHICLE_MODELS = [
   ["Chevrolet Cobalt", 4], ["Chevrolet Gentra", 4], ["Chevrolet Lacetti", 4], ["Chevrolet Nexia 3", 4],
@@ -32,6 +33,7 @@ const normalize = (value) => String(value || "").trim().replace(/\s+/g, " ").toL
 const apiUrl = (path) => `${String(import.meta.env.VITE_API_BASE_URL || "").replace(/\/$/, "")}${path}`;
 
 export default function VehicleModelInput({ value, onChange, onModelSelect, className = "", placeholder = "Начните вводить марку или модель" }) {
+  const { t } = useTranslation();
   const generatedId = useId();
   const listId = `vehicle-models-${generatedId.replace(/:/g, "")}`;
   const [remoteItems, setRemoteItems] = useState([]);
@@ -112,16 +114,16 @@ export default function VehicleModelInput({ value, onChange, onModelSelect, clas
         placeholder={placeholder}
         autoComplete="off"
         className={className}
-        aria-label="Марка и модель автомобиля"
+        aria-label={t("provider_profile_ui.vehicle_model")}
         aria-describedby={`${listId}-status`}
       />
       <datalist id={listId}>
         {suggestions.map(({ model, seats, source }) => (
-          <option key={model} value={model} label={seats ? `${seats} пассажирских мест` : source === "nhtsa" ? "Внешний каталог" : "Каталог Travella"} />
+          <option key={model} value={model} label={seats ? t("provider_profile_ui.passenger_seats_count", { count: seats }) : source === "nhtsa" ? t("provider_profile_ui.external_catalog") : t("provider_profile_ui.travella_catalog")} />
         ))}
       </datalist>
       <span id={`${listId}-status`} className="sr-only">
-        {loading ? "Загрузка моделей" : selected ? `Выбрано: ${selected.model}` : "Можно ввести любую марку и модель"}
+        {loading ? t("provider_profile_ui.loading_models") : selected ? t("provider_profile_ui.selected_model", { model: selected.model }) : t("provider_profile_ui.custom_model_hint")}
       </span>
     </>
   );
