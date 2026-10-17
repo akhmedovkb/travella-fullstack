@@ -1868,7 +1868,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   
   const handleSendRequests = async () => {
   if (!range?.from || !range?.to)
-    return alert("Выберите даты маршрута."); // можно потом тоже перевести/заменить
+    return alert(t("tb.select_route_dates"));
 
   const hotelDays = Object.entries(byDay).filter(([, state]) => state?.hotel?.id);
   const invalidHotelDay = hotelDays.find(([, state]) => state?.hotelBreakdown?.quoteValid !== true);
@@ -2283,8 +2283,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/50 px-3 py-2">
             <div className="text-sm text-gray-700">
               {days.length
-                ? t('tb.days_count_hint', { count: days.length, defaultValue: `Дней в программе: ${days.length}` })
-                : t('tb.no_days_hint', { defaultValue: 'Выберите даты или добавьте первый день программы.' })}
+                ? t('tb.days_count_hint', { count: days.length })
+                : t('tb.no_days_hint')}
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -2292,7 +2292,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 className="px-3 py-1.5 text-sm border rounded bg-white hover:bg-orange-50"
                 onClick={addTourDayAtEnd}
               >
-                {t('tb.add_day', { defaultValue: '+ Добавить день' })}
+                {t('tb.add_day')}
               </button>
               {!!days.length && (
                 <button
@@ -2300,7 +2300,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   className="px-3 py-1.5 text-sm border rounded bg-white hover:bg-orange-50"
                   onClick={() => generateProgramForAllDays({ overwrite: true })}
                 >
-                  {t('tb.generate_all_program', { defaultValue: 'Сгенерировать все' })}
+                  {t('tb.generate_all_program')}
                 </button>
               )}
             </div>
