@@ -214,6 +214,14 @@
     "desert_tour_transport": "Cho‘l safari (transport)",
     "safari_tour_transport": "Safari turi (transport)"
   },
+  "provider_profile_ui": {
+    "contacts_ready": "Kontaktlar tayyor", "check_contacts": "Kontaktlarni tekshiring", "trust_profile": "Ishonch profili", "view_as_client": "Mijoz sifatida ko‘rish", "demand_and_clients": "Talab va mijozlar", "profile_sections": "Profil bo‘limlari", "tabs": { "overview": "Umumiy", "profile": "Ma’lumotlar", "fleet": "Avtopark", "documents": "Hujjatlar", "security": "Xavfsizlik", "reviews": "Sharhlar" }, "client_view_title": "Kontaktlar ochilgandan keyin mijoz sizni qanday ko‘radi", "client_view_subtitle": "Telefon, Telegram va brend ma’lumotlari to‘g‘ri ko‘rinishini tekshiring.", "status": "Holat", "high_trust": "Yuqori ishonch", "can_improve": "Yaxshilash mumkin", "geography": "Hududlar", "fleet_subtitle": "Tour Builder xizmatlarida ishlatish uchun avtomobillarni qo‘shing.", "add_transport": "Transport qo‘shish", "add_another_vehicle": "Yana avtomobil qo‘shish", "vehicle_model_placeholder": "Avtomobil markasi yoki modeli", "seats_placeholder": "O‘rinlar", "seats_count": "{{count}} o‘rin", "no_transport": "Transport hali qo‘shilmagan",
+    "fields": { "common": { "contacts_title": "Kontakt ma’lumotlari", "contacts_subtitle": "Kontaktlar ochilgandan keyin mijozga ko‘rinadigan telefon, email va manzil.", "photo_label": "Logotip / profil rasmi", "details_title": "Yetkazib beruvchi ma’lumotlari", "details_subtitle": "Asosiy ma’lumotlar, ish hududlari va Telegram.", "name_label": "Nom / ism", "location_label": "Ish shaharlari", "location_hint": "Shahar nomlarini ingliz tilida kiriting.", "location_placeholder": "Shahar nomini kirita boshlang", "address_label": "Manzil", "telegram_label": "Telegram" }, "transport": { "contacts_title": "Transport yetkazib beruvchisi kontaktlari", "details_title": "Transport yetkazib beruvchisi ma’lumotlari", "details_subtitle": "Nom, xizmat ko‘rsatish shaharlari va Telegram.", "name_label": "Kompaniya nomi / ism", "location_label": "Xizmat ko‘rsatish shaharlari" }, "guide": { "contacts_title": "Gid kontaktlari", "details_title": "Gid ma’lumotlari", "details_subtitle": "Ism, ish shaharlari va Telegram.", "name_label": "Ism va familiya" } }
+    ,
+    "vehicle_model": "Avtomobil markasi va modeli", "passenger_seats_count": "{{count}} yo‘lovchi o‘rni", "external_catalog": "Tashqi katalog", "travella_catalog": "Travella katalogi", "loading_models": "Modellar yuklanmoqda", "selected_model": "Tanlandi: {{model}}", "custom_model_hint": "Istalgan marka va modelni kiritish mumkin"
+    ,
+    "header": { "work": "Ish", "client_work": "Mijozlar bilan ishlash", "tools": "Asboblar" }
+  },
   "provider_services_tourbuilder_not_allowed": "Tour Builder tariflarini faqat gidlar, transport yetkazib beruvchilari va turagentlar tahrirlashi mumkin.",
   "provider_services": {
     "from": "Qayerdan",

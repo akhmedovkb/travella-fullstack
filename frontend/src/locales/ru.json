@@ -214,6 +214,14 @@
     "desert_tour_transport": "Пустынный тур (транспорт)",
     "safari_tour_transport": "Сафари-тур (транспорт)"
   },
+  "provider_profile_ui": {
+    "contacts_ready": "Контакты готовы", "check_contacts": "Проверьте контакты", "trust_profile": "Профиль доверия", "view_as_client": "Посмотреть как клиент", "demand_and_clients": "Спрос и клиенты", "profile_sections": "Разделы профиля", "tabs": { "overview": "Обзор", "profile": "Данные", "fleet": "Автопарк", "documents": "Документы", "security": "Безопасность", "reviews": "Отзывы" }, "client_view_title": "Как клиент увидит вас после открытия контакта", "client_view_subtitle": "Проверьте, что телефон, Telegram и бренд выглядят правильно.", "status": "Статус", "high_trust": "Высокое доверие", "can_improve": "Можно усилить", "geography": "География", "fleet_subtitle": "Добавьте автомобили, чтобы использовать их в услугах Tour Builder.", "add_transport": "Добавить транспорт", "add_another_vehicle": "Добавить ещё автомобиль", "vehicle_model_placeholder": "Марка или модель автомобиля", "seats_placeholder": "Мест", "seats_count": "{{count}} мест", "no_transport": "Транспорт пока не добавлен",
+    "fields": { "common": { "contacts_title": "Контактные данные", "contacts_subtitle": "Телефон, email и адрес, доступные клиенту после открытия контактов.", "photo_label": "Логотип / фото профиля", "details_title": "Данные поставщика", "details_subtitle": "Основная информация, география работы и Telegram.", "name_label": "Название / имя", "location_label": "Города работы", "location_hint": "Введите названия городов на английском языке.", "location_placeholder": "Начните вводить название города", "address_label": "Адрес", "telegram_label": "Telegram" }, "transport": { "contacts_title": "Контакты транспортного поставщика", "details_title": "Данные транспортного поставщика", "details_subtitle": "Название, города обслуживания и Telegram.", "name_label": "Название компании / имя", "location_label": "Города обслуживания" }, "guide": { "contacts_title": "Контактные данные гида", "details_title": "Данные гида", "details_subtitle": "Имя, города работы и Telegram гида.", "name_label": "Имя и фамилия" } }
+    ,
+    "vehicle_model": "Марка и модель автомобиля", "passenger_seats_count": "{{count}} пассажирских мест", "external_catalog": "Внешний каталог", "travella_catalog": "Каталог Travella", "loading_models": "Загрузка моделей", "selected_model": "Выбрано: {{model}}", "custom_model_hint": "Можно ввести любую марку и модель"
+    ,
+    "header": { "work": "Работа", "client_work": "Работа с клиентами", "tools": "Инструменты" }
+  },
   "provider_services_tourbuilder_title": "Услуги для Tour Builder",
   "provider_services_tourbuilder_not_allowed": "Редактирование прайс-листа Tour Builder доступно только для гидов, транспорта и турагентов.",
   "provider_services": {
