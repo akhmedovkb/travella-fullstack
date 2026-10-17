@@ -46,6 +46,14 @@ const plusHours = (value, hours = 2) => {
   return `${String(Math.floor(next / 60)).padStart(2, "0")}:${String(next % 60).padStart(2, "0")}`;
 };
 
+const addDays = (dateValue, days = 1) => {
+  const match = String(dateValue || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return "";
+  const date = new Date(Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])));
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+};
+
 const hasOverlap = (item, items) => {
   // Размещение описывает период проживания, а не занятость туриста:
   // оно может пересекаться с экскурсиями, питанием и трансферами.
@@ -94,12 +102,13 @@ export const normalizeScheduleItems = (value) =>
         service_title: String(item?.service_title || ""),
         services,
         active_service_category: String(rawCategory === "support" ? "tour" : rawCategory),
+        end_day_offset: rawCategory === "hotel" ? Math.max(1, Number(item?.end_day_offset || item?.endDayOffset || 1)) : 0,
       };
     })
     .sort((a, b) => a.start_time.localeCompare(b.start_time));
 
 export default function TourDayTimeline({ dayKey, items, onChange, selectedId, onSelect, expandedId = null, onExpandedChange }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const normalized = useMemo(() => normalizeScheduleItems(items), [items]);
   const [draftId, setDraftId] = useState(selectedId || normalized[0]?.id || null);
   const activeId = selectedId || draftId;
@@ -165,12 +174,19 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
             const active = item.id === activeId;
             const invalid = hasOverlap(item, normalized);
             const component = componentMeta(item.active_service_category);
+            const isHotel = component.value === "hotel";
+            const checkoutDate = isHotel ? addDays(dayKey, item.end_day_offset || 1) : "";
+            const checkoutLabel = checkoutDate
+              ? new Intl.DateTimeFormat(i18n.language || "ru", { day: "2-digit", month: "2-digit" }).format(new Date(`${checkoutDate}T12:00:00`))
+              : "";
             return (
               <div key={item.id} className="grid grid-cols-[96px_1fr] gap-3 py-2.5">
                 <div className="pt-2">
-                  <div className="text-sm font-bold text-slate-900">{item.start_time}–{item.end_time}</div>
+                  <div className="text-sm font-bold text-slate-900">
+                    {isHotel ? `${item.start_time} → ${checkoutLabel} ${item.end_time}` : `${item.start_time}–${item.end_time}`}
+                  </div>
                   <div className={`mt-1 text-xs font-medium ${invalid ? "text-rose-600" : "text-slate-500"}`}>
-                    {invalid ? t("tb.timeline.check_interval") : durationText(item.start_time, item.end_time, t)}
+                    {isHotel ? t("tb.timeline.nights", { count: item.end_day_offset || 1 }) : invalid ? t("tb.timeline.check_interval") : durationText(item.start_time, item.end_time, t)}
                   </div>
                 </div>
                 <div className={`rounded-md border px-3 py-2.5 transition ${active ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white hover:border-slate-400"}`}>
@@ -212,9 +228,9 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
 
                   {expandedId === item.id && (
                     <div className="mt-3 grid gap-3 border-t border-slate-200 pt-3 md:grid-cols-[110px_110px_1fr_auto]">
-                      <label className="text-xs font-semibold text-slate-500">{t("tb.timeline.start")}<input type="time" value={item.start_time} onChange={(e) => patch(item.id, { start_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
-                      <label className="text-xs font-semibold text-slate-500">{t("tb.timeline.end")}<input type="time" value={item.end_time} onChange={(e) => patch(item.id, { end_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
-                      <label className="text-xs font-semibold text-slate-500">{t("tb.timeline.component")}<select value={component.value} onChange={(e) => { const next = componentMeta(e.target.value); patch(item.id, { active_service_category: next.value, type: next.legacyType, title: next.label }); }} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900">{COMPONENT_TYPES.map((option) => <option key={option.value} value={option.value}>{t(`tb.timeline.components.${option.value}`)}</option>)}</select></label>
+                      <label className="text-xs font-semibold text-slate-500">{t(isHotel ? "tb.timeline.checkin" : "tb.timeline.start")}<input type="time" value={item.start_time} onChange={(e) => patch(item.id, { start_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
+                      <label className="text-xs font-semibold text-slate-500">{t(isHotel ? "tb.timeline.checkout_next_day" : "tb.timeline.end")}<input type="time" value={item.end_time} onChange={(e) => patch(item.id, { end_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
+                      <label className="text-xs font-semibold text-slate-500">{t("tb.timeline.component")}<select value={component.value} onChange={(e) => { const next = componentMeta(e.target.value); const hotelDefaults = next.value === "hotel" && component.value !== "hotel" ? { start_time: "14:00", end_time: "12:00", end_day_offset: 1 } : { end_day_offset: 0 }; patch(item.id, { active_service_category: next.value, type: next.legacyType, title: next.label, ...hotelDefaults }); }} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900">{COMPONENT_TYPES.map((option) => <option key={option.value} value={option.value}>{t(`tb.timeline.components.${option.value}`)}</option>)}</select></label>
                       <button type="button" onClick={() => remove(item.id)} className="self-end rounded-md border border-rose-200 px-3 py-2 text-sm font-semibold text-rose-700 hover:bg-rose-50">{t("tb.remove")}</button>
                     </div>
                   )}
