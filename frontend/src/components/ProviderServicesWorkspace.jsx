@@ -93,6 +93,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const fleet = useMemo(() => (Array.isArray(profile?.car_fleet) ? profile.car_fleet.filter((car) => car && car.is_active !== false) : []), [profile]);
   const cities = useMemo(() => (Array.isArray(profile?.city_slugs) ? profile.city_slugs : []), [profile]);
   const isTransport = transportCategory(form.category);
+  const isIntercity = INTERCITY_CATEGORIES.has(form.category);
   const preview = calculatedPreview(form, w);
   const serviceLabel = (category) => t(`provider_services.items.${category}`, { defaultValue: LABELS[category] || category || "Услуга" });
   const groupLabel = (group) => t(`provider_services.groups.${group.id}`, { defaultValue: group.label });
