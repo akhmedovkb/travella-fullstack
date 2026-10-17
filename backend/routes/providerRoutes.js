@@ -53,6 +53,7 @@ const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 const { buildRefusedQuality } = require("../utils/refusedQuality");
 const { ensureProviderLeadCrmTable } = require("../utils/providerLeadCrm");
+const { createProviderTelegramLinkPayload } = require("../utils/providerTelegramLink");
 
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
@@ -78,6 +79,15 @@ router.post("/telegram-login", loginProviderWithTelegram);
 router.get("/profile", authenticateToken, requireProvider, getProviderProfile);
 router.put("/profile", authenticateToken, requireProvider, updateProviderProfile);
 router.put("/password", authenticateToken, requireProvider, changeProviderPassword);
+router.get("/telegram-link", authenticateToken, requireProvider, (req, res) => {
+  try {
+    const payload = createProviderTelegramLinkPayload(req.user.id);
+    return res.json({ success: true, payload, expires_in: 15 * 60 });
+  } catch (error) {
+    console.error("GET /api/providers/telegram-link error:", error);
+    return res.status(500).json({ success: false, message: "Не удалось создать ссылку Telegram" });
+  }
+});
 
 router.get("/stats", authenticateToken, requireProvider, getProviderStats);
 

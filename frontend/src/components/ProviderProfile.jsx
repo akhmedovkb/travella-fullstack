@@ -8,6 +8,7 @@ import React, {
   useState,
 } from "react";
 import axios from "axios";
+import useProviderTelegramLink from "../hooks/useProviderTelegramLink";
 import { useTranslation } from "react-i18next";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import {
@@ -477,10 +478,10 @@ const ProviderProfile = () => {
   const isTgLinked = Boolean(
     profile?.telegram_chat_id || profile?.tg_chat_id
   );
-  const tgDeepLink = useMemo(() => {
-    if (!botUser || !hasProviderId) return null;
-    return `https://t.me/${botUser}?start=p_${providerId}`;
-  }, [botUser, hasProviderId, providerId]);
+  const tgDeepLink = useProviderTelegramLink({
+    botUser,
+    enabled: hasProviderId && !isTgLinked,
+  });
 
   // ---------- ЗАГРУЗКА ГОРОДОВ ДЛЯ РЕГИОНОВ ----------
   const loadCitiesRaw = useCallback(

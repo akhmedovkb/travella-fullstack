@@ -45,6 +45,7 @@ const {
   resolveProviderByTelegramActorId,
   ProviderTelegramResolutionError,
 } = require("../utils/providerTelegramResolver");
+const { verifyProviderTelegramLinkPayload } = require("../utils/providerTelegramLink");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -8559,6 +8560,59 @@ bot.start(async (ctx) => {
 
   try {
     let role = null;
+
+    if (startPayloadRaw.startsWith("pl_")) {
+      const link = verifyProviderTelegramLinkPayload(startPayloadRaw);
+      if (!link) {
+        await ctx.reply("⚠️ Ссылка привязки устарела или недействительна. Вернитесь в кабинет и нажмите «Подключить Telegram» ещё раз.");
+        return;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const providerResult = await client.query(
+          "SELECT id, name FROM providers WHERE id = $1 FOR UPDATE",
+          [link.providerId]
+        );
+        if (!providerResult.rowCount) {
+          await client.query("ROLLBACK");
+          await ctx.reply("⚠️ Профиль поставщика не найден.");
+          return;
+        }
+
+        const conflict = await client.query(
+          "SELECT id FROM providers WHERE telegram_chat_id::text = $1 AND id <> $2 LIMIT 1",
+          [String(actorId), link.providerId]
+        );
+        if (conflict.rowCount) {
+          await client.query("ROLLBACK");
+          await ctx.reply("⚠️ Этот Telegram уже привязан к другому профилю поставщика. Обратитесь в поддержку.");
+          return;
+        }
+
+        await client.query(
+          "UPDATE providers SET telegram_chat_id = $1, social = COALESCE($2, social) WHERE id = $3",
+          [String(actorId), ctx.from?.username ? `@${ctx.from.username}` : null, link.providerId]
+        );
+        await client.query("COMMIT");
+
+        if (!ctx.session) ctx.session = {};
+        ctx.session.role = "provider";
+        ctx.session.linked = true;
+        ctx.session.pending = false;
+        await ctx.reply(
+          `✅ Telegram привязан к профилю поставщика «${providerResult.rows[0].name || "Travella"}».`,
+          getMainMenuKeyboard("provider")
+        );
+        return;
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
 
     // Public channel deep-link: operator_<serviceId> opens a lightweight contact flow
     // before account binding, so new clients can ask an operator without friction.
