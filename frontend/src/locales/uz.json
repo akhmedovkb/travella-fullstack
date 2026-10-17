@@ -614,7 +614,9 @@
     "no_account": "Akkaunt yo‘qmi?",
     "password": "Parol",
     "title": "Provayder kirishi",
-    "success": "Kirish muvaffaqiyatli"
+    "success": "Kirish muvaffaqiyatli",
+    "show_password": "Parolni ko‘rsatish",
+    "hide_password": "Parolni yashirish"
   },
   "logout": "Chiqish",
   "make_cover": "Muqova qilish",

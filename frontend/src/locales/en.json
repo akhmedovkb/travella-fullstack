@@ -614,7 +614,9 @@
     "no_account": "No account?",
     "password": "Password",
     "title": "Provider login",
-    "success": "Login successful"
+    "success": "Login successful",
+    "show_password": "Show password",
+    "hide_password": "Hide password"
   },
   "logout": "Logout",
   "make_cover": "Make cover",
