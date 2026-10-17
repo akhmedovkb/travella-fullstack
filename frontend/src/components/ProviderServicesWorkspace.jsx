@@ -92,7 +92,6 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const fleet = useMemo(() => (Array.isArray(profile?.car_fleet) ? profile.car_fleet.filter((car) => car && car.is_active !== false) : []), [profile]);
   const cities = useMemo(() => (Array.isArray(profile?.city_slugs) ? profile.city_slugs : []), [profile]);
   const isTransport = transportCategory(form.category);
-  const isIntercity = INTERCITY_CATEGORIES.has(form.category);
   const preview = calculatedPreview(form, w);
   const serviceLabel = (category) => t(`provider_services.items.${category}`, { defaultValue: LABELS[category] || category || "Услуга" });
   const groupLabel = (group) => t(`provider_services.groups.${group.id}`, { defaultValue: group.label });
@@ -102,6 +101,22 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const storedServiceTitle = (row) => row.details?.destination_city
     ? `${serviceLabel(row.category)} · ${cityLabel(row.details.origin_city || row.details.city_slug)} → ${cityLabel(row.details.destination_city)}`
     : `${serviceLabel(row.category)}${row.details?.city_slug ? ` · ${cityLabel(row.details.city_slug)}` : ""}`;
+  const duplicateKey = (service) => {
+    const details = service.details || {};
+    const normalize = (value) => String(value || "").trim().toLowerCase();
+    return [
+      normalize(service.category),
+      normalize(details.city_slug),
+      normalize(details.origin_city),
+      normalize(details.destination_city),
+      normalize(details.vehicle_model || service.vehicle_model),
+    ].join("\u001f");
+  };
+  const formDuplicateKey = (current) => duplicateKey({
+    category: current.category,
+    details: detailsFrom(current),
+    vehicle_model: current.vehicleModel,
+  });
 
   const categoryGroups = useMemo(() => {
     if (providerType === "transport") return TRANSPORT_SERVICE_GROUPS;
@@ -174,13 +189,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   async function addService() {
     const error = validate(form);
     if (error) return tError(error);
-    const duplicate = rows.some((row) => {
-      const details = row.details || {};
-      return row.category === form.category
-        && String(details.city_slug || "") === String(isIntercity ? form.originCity : form.citySlug)
-        && String(details.destination_city || "") === String(isIntercity ? form.destinationCity : "")
-        && String(details.vehicle_model || row.vehicle_model || "") === String(form.vehicleModel || "");
-    });
+    const duplicate = rows.some((row) => duplicateKey(row) === formDuplicateKey(form));
     if (duplicate) return tError(w("duplicate"));
     setSaving(true);
     try {
@@ -242,6 +251,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   async function saveEdit(row) {
     const error = validate(draft);
     if (error) return tError(error);
+    const duplicate = rows.some(
+      (item) => item.id !== row.id && duplicateKey(item) === formDuplicateKey(draft)
+    );
+    if (duplicate) return tError(w("duplicate"));
     setSaving(true);
     try {
       await patchService(row.id, {
