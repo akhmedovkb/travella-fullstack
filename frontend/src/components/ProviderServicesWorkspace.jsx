@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Layers3, MapPin, Plus, RefreshCw, WalletCards } from "lucide-react";
+import { CheckCircle2, Layers3, MapPin, Plus, RefreshCw, Trash2, WalletCards } from "lucide-react";
 import { tError, tSuccess } from "../shared/toast";
 import {
   GUIDE_SERVICE_GROUPS,
@@ -87,6 +87,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
   const [draft, setDraft] = useState(null);
 
   const fleet = useMemo(() => (Array.isArray(profile?.car_fleet) ? profile.car_fleet.filter((car) => car && car.is_active !== false) : []), [profile]);
@@ -276,12 +277,19 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
   async function removeService(row) {
     if (!confirm(w("delete_confirm", { service: storedServiceTitle(row) }))) return;
+    setDeletingId(row.id);
     try {
       await fetchJSON(`/api/providers/${pid}/services/${row.id}`, { method: "DELETE" });
       setRows((current) => current.filter((item) => item.id !== row.id));
+      if (editingId === row.id) {
+        setEditingId(null);
+        setDraft(null);
+      }
       tSuccess(w("deleted"));
     } catch (error) {
       tError(w("delete_error", { error: error.message }));
+    } finally {
+      setDeletingId(null);
     }
   }
 
@@ -373,7 +381,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                 <div><div className="font-semibold text-slate-950">{storedServiceTitle(row)}</div><div className="mt-1 text-sm text-slate-500">{serviceLabel(row.category)}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${w("seats_count", { count: row.details.seats })}` : ""}</div></div>
                 <div><div className="font-semibold text-slate-900">{pricingLabel(row, w)}</div><div className="text-xs text-slate-500">{w("tour_builder_rate")}</div></div>
                 <div className={`text-sm font-semibold ${row.is_active ? 'text-emerald-700' : 'text-slate-400'}`}>{row.is_active ? w("enabled") : w("disabled")}</div>
-                <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? w("close") : w("edit")}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? w("disable") : w("enable")}</button></div>
+                <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? w("close") : w("edit")}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? w("disable") : w("enable")}</button><button type="button" onClick={() => removeService(row)} disabled={deletingId === row.id} title={w("delete")} aria-label={w("delete")} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"><Trash2 size={16} aria-hidden="true" /></button></div>
               </div>
               {expanded && draft && (
                 <div className="mt-4 border-l-4 border-slate-400 bg-slate-50 p-4">
