@@ -220,7 +220,11 @@
     ,
     "vehicle_model": "Vehicle make and model", "passenger_seats_count": "{{count}} passenger seats", "external_catalog": "External catalog", "travella_catalog": "Travella catalog", "loading_models": "Loading models", "selected_model": "Selected: {{model}}", "custom_model_hint": "You can enter any make and model"
     ,
-    "header": { "work": "Work", "client_work": "Client work", "tools": "Tools" }
+    "header": { "work": "Work", "client_work": "Client work", "tools": "Tools" },
+    "account_actions": "Account actions",
+    "password_panel_subtitle": "Update the password used to sign in to your account.",
+    "password_minimum_hint": "At least 6 characters",
+    "logout_confirm": "Sign out of your account?"
   },
   "provider_services_tourbuilder_not_allowed": "Tour Builder rates can only be edited by guides, transport providers and travel agents.",
   "provider_services": {

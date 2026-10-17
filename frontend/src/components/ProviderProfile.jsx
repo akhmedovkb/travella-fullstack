@@ -16,7 +16,6 @@ import {
   Building2,
   CarFront,
   CheckCircle2,
-  ChevronDown,
   Circle,
   Compass,
   Eye,
@@ -745,6 +744,15 @@ const ProviderProfile = () => {
       });
   };
 
+  const handleLogout = () => {
+    if (!window.confirm(t("provider_profile_ui.logout_confirm"))) return;
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem("token");
+      localStorage.removeItem("provider_id");
+    }
+    window.location.href = "/login";
+  };
+
   // ---------- RENDER ----------
 
   const publicName = profile?.name || "Travella";
@@ -829,20 +837,54 @@ const ProviderProfile = () => {
         </div>
       </section>
 
-      <nav className="flex gap-1 overflow-x-auto rounded-xl border border-slate-200 bg-white p-1 shadow-sm" aria-label={t("provider_profile_ui.profile_sections")}>
-        {[
-          ["overview", t("provider_profile_ui.tabs.overview"), LayoutDashboard],
-          ["profile", t("provider_profile_ui.tabs.profile"), UserRound],
-          ...(["guide", "transport"].includes(profile.type) ? [["fleet", t("provider_profile_ui.tabs.fleet"), CarFront]] : []),
-          ["documents", t("provider_profile_ui.tabs.documents"), FileText],
-          ["security", t("provider_profile_ui.tabs.security"), ShieldCheck],
-          ["reviews", t("provider_profile_ui.tabs.reviews"), Star],
-        ].map(([key, label, Icon]) => (
-          <button key={key} type="button" onClick={() => setActiveSection(key)} className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-4 text-sm font-bold transition ${activeSection === key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"}`} aria-current={activeSection === key ? "page" : undefined}>
-            <Icon aria-hidden="true" className="h-4 w-4" strokeWidth={2} />{label}
+      <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white p-1.5 shadow-sm">
+        <nav className="flex min-w-0 flex-1 gap-1 overflow-x-auto" aria-label={t("provider_profile_ui.profile_sections")}>
+          {[
+            ["overview", t("provider_profile_ui.tabs.overview"), LayoutDashboard],
+            ["profile", t("provider_profile_ui.tabs.profile"), UserRound],
+            ...(["guide", "transport"].includes(profile.type) ? [["fleet", t("provider_profile_ui.tabs.fleet"), CarFront]] : []),
+            ["documents", t("provider_profile_ui.tabs.documents"), FileText],
+            ["reviews", t("provider_profile_ui.tabs.reviews"), Star],
+          ].map(([key, label, Icon]) => (
+            <button key={key} type="button" onClick={() => setActiveSection(key)} className={`inline-flex h-9 shrink-0 items-center gap-2 rounded-lg px-3 text-sm font-bold transition sm:px-4 ${activeSection === key ? "bg-slate-950 text-white" : "text-slate-600 hover:bg-slate-100"}`} aria-current={activeSection === key ? "page" : undefined}>
+              <Icon aria-hidden="true" className="h-4 w-4" strokeWidth={2} />{label}
+            </button>
+          ))}
+        </nav>
+        <div className="flex shrink-0 items-center gap-1 border-l border-slate-200 pl-2" aria-label={t("provider_profile_ui.account_actions")}>
+          <button type="button" onClick={() => setPwdOpen((value) => !value)} className={`inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-bold transition sm:px-3 ${pwdOpen ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200" : "text-slate-600 hover:bg-slate-100"}`} aria-expanded={pwdOpen} aria-controls="password-panel" aria-label={t("change_password")}>
+            <LockKeyhole aria-hidden="true" className="h-4 w-4" /><span className="hidden xl:inline">{t("change_password")}</span>
           </button>
-        ))}
-      </nav>
+          <button type="button" onClick={handleLogout} className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-bold text-red-600 transition hover:bg-red-50 sm:px-3" aria-label={t("logout")}>
+            <LogOut aria-hidden="true" className="h-4 w-4" /><span className="hidden xl:inline">{t("logout")}</span>
+          </button>
+        </div>
+      </div>
+
+      {pwdOpen && <section id="password-panel" className="rounded-xl border border-orange-200 bg-white p-4 shadow-sm" aria-labelledby="password-panel-title">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 id="password-panel-title" className="font-black text-slate-950">{t("change_password")}</h2>
+            <p className="mt-1 text-sm font-medium text-slate-500">{t("provider_profile_ui.password_panel_subtitle")}</p>
+          </div>
+          <button type="button" onClick={() => setPwdOpen(false)} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950" aria-label={t("close", { defaultValue: "Закрыть" })}>
+            <X aria-hidden="true" className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
+          <label className="grid gap-1.5 text-sm font-bold text-slate-700">
+            {t("current_password")}
+            <input type="password" autoComplete="current-password" placeholder={t("current_password")} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+          </label>
+          <label className="grid gap-1.5 text-sm font-bold text-slate-700">
+            {t("new_password")}
+            <input type="password" autoComplete="new-password" placeholder={t("provider_profile_ui.password_minimum_hint")} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
+          </label>
+          <button type="button" onClick={handleChangePassword} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-black text-white transition hover:bg-slate-800">
+            <Save aria-hidden="true" className="h-4 w-4" />{t("change")}
+          </button>
+        </div>
+      </section>}
 
       <div className={`grid grid-cols-1 gap-3 ${activeSection === "overview" ? "xl:grid-cols-[1.1fr_0.9fr]" : activeSection === "profile" ? "xl:grid-cols-[minmax(0,2fr)_minmax(280px,0.7fr)]" : ""}`}>
         <main className="space-y-3">
@@ -961,11 +1003,6 @@ const ProviderProfile = () => {
             {isEditing ? <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 p-4"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-orange-500 px-4 py-2 text-sm font-black text-white transition hover:bg-orange-600"><Upload aria-hidden="true" className="h-4 w-4" />{t("choose_files", { defaultValue: "Выбрать файл" })}<input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={handleCertificateChange} className="hidden" /></label><div className="mt-3 text-sm font-semibold text-slate-500">{newCertificate ? <span className="inline-flex items-center gap-1.5"><FileText aria-hidden="true" className="h-4 w-4" />{t("file_chosen", { defaultValue: "Файл выбран" })}</span> : t("no_files_selected", { defaultValue: "Файл не выбран" })}</div>{newCertificate?.startsWith("data:image") ? <img src={newCertificate} alt="Certificate preview" className="mt-3 h-32 w-32 rounded-2xl border object-cover" /> : null}</div> : certObjectUrl ? <a href={certObjectUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 rounded-xl bg-slate-950 px-4 py-2 text-sm font-black text-white transition hover:bg-slate-800"><Eye aria-hidden="true" className="h-4 w-4" />{t("view_certificate", { defaultValue: "Посмотреть сертификат" })}</a> : <div className="rounded-2xl border border-dashed border-slate-200 p-5 text-center text-sm font-semibold text-slate-400">{t("not_specified", { defaultValue: "Не указан" })}</div>}
           </ProfileCard>}
 
-          {activeSection === "security" && <ProfileCard title="Безопасность" subtitle="Пароль и выход из кабинета.">
-            <button type="button" onClick={() => setPwdOpen((v) => !v)} className="flex w-full items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-left font-black text-slate-950 transition hover:bg-slate-100" aria-expanded={pwdOpen} aria-controls="pwd-collapse"><span className="inline-flex items-center gap-2"><LockKeyhole aria-hidden="true" className="h-4 w-4 text-slate-500" />{t("change_password", { defaultValue: "Сменить пароль" })}</span><ChevronDown aria-hidden="true" className={`h-5 w-5 transition-transform ${pwdOpen ? "rotate-180" : ""}`} /></button>
-            <div id="pwd-collapse" className={`grid overflow-hidden transition-all duration-300 ease-in-out ${pwdOpen ? "mt-3 grid-rows-[1fr]" : "grid-rows-[0fr]"}`}><div className="min-h-0 space-y-2"><input type="password" placeholder={t("current_password", { defaultValue: "Текущий пароль" })} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><input type="password" placeholder={t("new_password", { defaultValue: "Новый пароль" })} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="w-full rounded-xl border border-slate-200 px-3 py-2 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /><button type="button" onClick={handleChangePassword} className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-orange-500 py-2.5 font-black text-white transition hover:bg-orange-600"><Save aria-hidden="true" className="h-4 w-4" />{t("change", { defaultValue: "Изменить" })}</button></div></div>
-            <button type="button" onClick={() => { if (typeof localStorage !== "undefined") { localStorage.removeItem("token"); localStorage.removeItem("provider_id"); } window.location.href = "/login"; }} className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-2xl bg-red-600 px-4 py-3 font-black text-white transition hover:bg-red-700"><LogOut aria-hidden="true" className="h-4 w-4" />{t("logout", { defaultValue: "Выйти" })}</button>
-          </ProfileCard>}
         </aside>
       </div>
 

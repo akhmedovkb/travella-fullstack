@@ -220,7 +220,11 @@
     ,
     "vehicle_model": "Марка и модель автомобиля", "passenger_seats_count": "{{count}} пассажирских мест", "external_catalog": "Внешний каталог", "travella_catalog": "Каталог Travella", "loading_models": "Загрузка моделей", "selected_model": "Выбрано: {{model}}", "custom_model_hint": "Можно ввести любую марку и модель"
     ,
-    "header": { "work": "Работа", "client_work": "Работа с клиентами", "tools": "Инструменты" }
+    "header": { "work": "Работа", "client_work": "Работа с клиентами", "tools": "Инструменты" },
+    "account_actions": "Действия аккаунта",
+    "password_panel_subtitle": "Обновите пароль для входа в кабинет.",
+    "password_minimum_hint": "Минимум 6 символов",
+    "logout_confirm": "Выйти из кабинета?"
   },
   "provider_services_tourbuilder_title": "Услуги для Tour Builder",
   "provider_services_tourbuilder_not_allowed": "Редактирование прайс-листа Tour Builder доступно только для гидов, транспорта и турагентов.",
