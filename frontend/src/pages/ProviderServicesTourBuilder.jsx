@@ -83,16 +83,14 @@ export default function ProviderServicesTourBuilder() {
       <div className="w-full max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-md">
         <div className="flex items-center justify-between mb-4">
           <h1 className="text-2xl md:text-3xl font-bold">
-            {t("services_tourbuilder_title", {
-              defaultValue: "Услуги для Tour Builder",
-            })}
+            {t("provider_services_tourbuilder_title")}
           </h1>
           {profile?.name && (
             <div className="text-sm text-gray-500">
               {profile.name}
               {profile.type && (
                 <span className="ml-1 text-gray-400">
-                  ({profile.type})
+                  ({t(`provider.types.${profile.type}`, { defaultValue: profile.type })})
                 </span>
               )}
             </div>
@@ -101,10 +99,7 @@ export default function ProviderServicesTourBuilder() {
 
         {!isAllowed ? (
           <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 text-sm text-yellow-800">
-            {t("services_tourbuilder_not_allowed", {
-              defaultValue:
-                "Редактирование прайс-листа Tour Builder доступно только для гидов, транспорта и турагентов.",
-            })}
+            {t("provider_services_tourbuilder_not_allowed")}
           </div>
         ) : (
           <div className="mb-2">
