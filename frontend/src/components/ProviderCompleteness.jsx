@@ -11,14 +11,15 @@ export default function ProviderCompleteness({ profile = {}, stats = {}, trust, 
   const items = model.checks;
   const percent = model.score;
   const missing = items.filter((item) => !item.ok);
+  const itemLabel = (item) => t(`profile.completeness.items.${item.key}`, { defaultValue: item.label });
 
   const level = percent >= 90 ? "high" : percent >= 70 ? "mid" : "low";
   const levelText =
     level === "high"
-      ? t("profile.trust.high", "Высокое доверие")
+      ? t("profile_trust.high", "Высокое доверие")
       : level === "mid"
-      ? t("profile.trust.mid", "Хорошая база")
-      : t("profile.trust.low", "Нужно усилить");
+      ? t("profile_trust.mid", "Хорошая база")
+      : t("profile_trust.low", "Нужно усилить");
 
   return (
     <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
@@ -31,12 +32,12 @@ export default function ProviderCompleteness({ profile = {}, stats = {}, trust, 
             {t("profile.completeness.title", "Профиль доверия")}
           </h2>
           <p className="mt-1 text-sm font-semibold leading-6 text-slate-500">
-            Чем выше доверие, тем увереннее клиент открывает контакты и отправляет запрос.
+            {t("profile.completeness.description")}
           </p>
         </div>
         <div className="shrink-0 text-right">
           <div className="text-3xl font-black tracking-[-0.05em] text-slate-950">{percent}</div>
-          <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">из 100</div>
+          <div className="text-xs font-black uppercase tracking-[0.14em] text-slate-400">{t("profile.completeness.out_of_100")}</div>
         </div>
       </div>
 
@@ -54,8 +55,8 @@ export default function ProviderCompleteness({ profile = {}, stats = {}, trust, 
 
       {missing.length > 0 && (
         <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-semibold leading-6 text-amber-900">
-          Осталось усилить: {missing.slice(0, 3).map((x) => x.label).join(", ")}
-          {missing.length > 3 ? ` и ещё ${missing.length - 3}` : ""}.
+          {t("profile.completeness.missing_prefix")} {missing.slice(0, 3).map(itemLabel).join(", ")}
+          {missing.length > 3 ? ` ${t("profile.completeness.and_more", { count: missing.length - 3 })}` : ""}.
         </div>
       )}
 
@@ -65,7 +66,7 @@ export default function ProviderCompleteness({ profile = {}, stats = {}, trust, 
             <div className="flex min-w-0 items-center gap-2">
               {it.ok ? <CheckCircle2 aria-hidden="true" className="h-4 w-4 shrink-0 text-emerald-600" /> : <Circle aria-hidden="true" className="h-4 w-4 shrink-0 text-slate-300" />}
               <span className="truncate text-sm font-bold text-slate-700">
-                {it.label}
+                {itemLabel(it)}
               </span>
             </div>
             {!it.ok ? (

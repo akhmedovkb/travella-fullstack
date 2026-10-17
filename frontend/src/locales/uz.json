@@ -224,7 +224,8 @@
     "account_actions": "Akkaunt amallari",
     "password_panel_subtitle": "Kabinetga kirish parolini yangilang.",
     "password_minimum_hint": "Kamida 6 ta belgi",
-    "logout_confirm": "Kabinetdan chiqasizmi?"
+    "logout_confirm": "Kabinetdan chiqasizmi?",
+    "crm": { "title": "CRM xulosasi", "subtitle": "Profil faolligining qisqacha ko‘rinishi.", "opens": "Ochilgan", "hot": "Qiziqqanlar", "requests": "So‘rovlar", "bookings": "Bronlar" }
   },
   "provider_services_tourbuilder_not_allowed": "Tour Builder tariflarini faqat gidlar, transport yetkazib beruvchilari va turagentlar tahrirlashi mumkin.",
   "provider_services": {
@@ -935,9 +936,15 @@
       "logo": "Logo yuklash",
       "telegram": "Telegram ulash",
       "optional": "(ixtiyoriy)",
-      "fill": "To‘ldirish"
+      "fill": "To‘ldirish",
+      "description": "Ishonch darajasi oshgani sari mijoz kontaktlarni ochib, so‘rov yuborishga ko‘proq ishonadi.",
+      "out_of_100": "100 dan",
+      "missing_prefix": "Yaxshilash kerak:",
+      "and_more": "yana {{count}} ta",
+      "items": { "contacts": "Mijozlar uchun kontaktlar", "logo": "Logo / foto", "certificate": "Sertifikat", "telegram": "Telegram", "location": "Xizmat hududi", "languages": "Til bilish", "transport": "Avtopark", "details": "Profil ma’lumotlari", "activity": "Faollik" }
     }
   },
+  "profile_trust": { "high": "Yuqori ishonch", "mid": "Yaxshi asos", "low": "Yaxshilash kerak" },
   "profile_load_error": "Profilni yuklab bo‘lmadi",
   "profile_updated": "Profil yangilandi",
   "provider": {

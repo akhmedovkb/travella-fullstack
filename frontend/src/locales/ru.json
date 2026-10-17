@@ -224,7 +224,8 @@
     "account_actions": "Действия аккаунта",
     "password_panel_subtitle": "Обновите пароль для входа в кабинет.",
     "password_minimum_hint": "Минимум 6 символов",
-    "logout_confirm": "Выйти из кабинета?"
+    "logout_confirm": "Выйти из кабинета?",
+    "crm": { "title": "CRM-сводка", "subtitle": "Короткий срез активности по профилю.", "opens": "Открытий", "hot": "Горячих", "requests": "Запросов", "bookings": "Броней" }
   },
   "provider_services_tourbuilder_title": "Услуги для Tour Builder",
   "provider_services_tourbuilder_not_allowed": "Редактирование прайс-листа Tour Builder доступно только для гидов, транспорта и турагентов.",
@@ -865,9 +866,15 @@
       "logo": "Загрузка лого",
       "telegram": "Подключение Telegram",
       "optional": "(необязательно)",
-      "fill": "Заполнить"
+      "fill": "Заполнить",
+      "description": "Чем выше доверие, тем увереннее клиент открывает контакты и отправляет запрос.",
+      "out_of_100": "из 100",
+      "missing_prefix": "Осталось усилить:",
+      "and_more": "и ещё {{count}}",
+      "items": { "contacts": "Контакты для клиентов", "logo": "Логотип / фото", "certificate": "Сертификат", "telegram": "Telegram", "location": "География работы", "languages": "Владение языками", "transport": "Автопарк", "details": "Данные профиля", "activity": "Активность" }
     }
   },
+  "profile_trust": { "high": "Высокое доверие", "mid": "Хорошая база", "low": "Нужно усилить" },
   "profile_load_error": "Не удалось загрузить профиль",
   "profile_updated": "Профиль обновлён",
   "provider": {
