@@ -4,6 +4,7 @@ export const GUIDE_SERVICE_GROUPS = [
     label: "Экскурсия",
     services: [
       { id: "city_tour_guide", label: "Обзорная экскурсия по городу" },
+      { id: "city_tour_guide_with_transport", label: "Обзорная экскурсия по городу с транспортом" },
       { id: "thematic_tour_guide", label: "Тематическая экскурсия" },
       { id: "attraction_tour_guide", label: "Экскурсия по достопримечательности" },
       { id: "countryside_tour_guide", label: "Загородная экскурсия" },
@@ -95,7 +96,7 @@ export const PROVIDER_SERVICE_LABELS = Object.fromEntries(
 );
 
 export const TOUR_BUILDER_TYPES = [
-  { id: "city", family: "excursion", label: "Обзорная", guideCategories: ["city_tour_guide"], transportCategories: ["city_tour_transport"] },
+  { id: "city", family: "excursion", label: "Обзорная", guideCategories: ["city_tour_guide", "city_tour_guide_with_transport"], transportCategories: ["city_tour_transport"] },
   { id: "thematic", family: "excursion", label: "Тематическая", guideCategories: ["thematic_tour_guide"], transportCategories: ["city_tour_transport"] },
   { id: "attraction", family: "excursion", label: "По объекту", guideCategories: ["attraction_tour_guide"], transportCategories: ["city_tour_transport"] },
   { id: "countryside", family: "excursion", label: "Загородная", guideCategories: ["countryside_tour_guide"], transportCategories: ["countryside_tour_transport"] },

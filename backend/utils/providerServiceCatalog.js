@@ -1,5 +1,6 @@
 const GUIDE_SERVICE_CATEGORIES = [
   "city_tour_guide",
+  "city_tour_guide_with_transport",
   "thematic_tour_guide",
   "attraction_tour_guide",
   "countryside_tour_guide",

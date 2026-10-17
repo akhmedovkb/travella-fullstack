@@ -244,6 +244,7 @@
     },
     "items": {
       "city_tour_guide": "Обзорная экскурсия по городу",
+      "city_tour_guide_with_transport": "Обзорная экскурсия по городу с транспортом",
       "thematic_tour_guide": "Тематическая экскурсия",
       "attraction_tour_guide": "Экскурсия по достопримечательности",
       "countryside_tour_guide": "Загородная экскурсия",

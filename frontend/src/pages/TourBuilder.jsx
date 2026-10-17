@@ -1696,6 +1696,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   };
   const calcTransportForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
+    if (st?.guideService?.category === "city_tour_guide_with_transport" || st?.guideService?.raw?.details?.transport_included) return 0;
     const hours = durationHoursForProvider(st, "transport", st?.transport?.id);
     return priceForDuration(st?.transportService, hours, st?.transport?.price_per_day);
   };
@@ -2341,6 +2342,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             const guideComponentCategories = activeTourType.guideCategories;
             const providerTransportCategories = activeEventService === "tour" ? activeTourType.transportCategories : activeTransportCategories;
             const activeGuideService = guideComponentCategories.includes(st.guideService?.category) ? st.guideService : null;
+            const activeGuideIncludesTransport = Boolean(activeGuideService && (activeGuideService.category === "city_tour_guide_with_transport" || activeGuideService.raw?.details?.transport_included));
             const activeTransportService = providerTransportCategories.includes(st.transportService?.category)
               && (activeTransportSubtype !== "intercity" || fitsRoute(st.transportService, activeIntercityRoute?.from, activeIntercityRoute?.to))
               ? st.transportService
@@ -2609,14 +2611,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           const citySlug = (byDay[k]?.city || "").trim();
                           const picked = pickFromCache(guide.id, guideComponentCategories, citySlug, pax);
                           if (picked) {
+                            const includesTransport = picked.category === "city_tour_guide_with_transport" || picked.raw?.details?.transport_included;
                             setByDay((p) => {
                               const current = p[k] || {};
                               const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                                 item.id === current.selectedScheduleId
-                                  ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: guide.id, provider_name: guide.name || "", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Услуга гида" } } }
+                                  ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: guide.id, provider_name: guide.name || "", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Услуга гида", transport_included: Boolean(includesTransport) }, ...(includesTransport ? { transport: {} } : {}) } }
                                   : item
                               );
-                              return { ...p, [k]: { ...current, guideService: picked, schedule } };
+                              return { ...p, [k]: { ...current, guideService: picked, ...(includesTransport ? { transport: null, transportService: null } : {}), schedule } };
                             });
                           }
                         }}
@@ -2642,14 +2645,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           fitsCity(s, citySlug)
                         );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
+                        const includesTransport = chosen?.category === "city_tour_guide_with_transport" || chosen?.raw?.details?.transport_included;
                         setByDay((p) => {
                           const current = p[k] || {};
                           const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                             item.id === current.selectedScheduleId
-                              ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: current.guide?.id || null, provider_name: current.guide?.name || "", service_id: chosen?.id || null, service_title: chosen?.title || "" } } }
+                              ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: current.guide?.id || null, provider_name: current.guide?.name || "", service_id: chosen?.id || null, service_title: chosen?.title || "", transport_included: Boolean(includesTransport) }, ...(includesTransport ? { transport: {} } : {}) } }
                               : item
                           );
-                          return { ...p, [k]: { ...current, guideService: chosen, schedule } };
+                          return { ...p, [k]: { ...current, guideService: chosen, ...(includesTransport ? { transport: null, transportService: null } : {}), schedule } };
                         });
                       }}
                     >
@@ -2689,7 +2693,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   </>}
 
                   {/* Transport */}
-                  {(activeEventService === "transfer" || (activeEventService === "tour" && !activeTourType.guideOnly)) && <>
+                   {(activeEventService === "transfer" || (activeEventService === "tour" && !activeTourType.guideOnly && !activeGuideIncludesTransport)) && <>
                   <div className={`overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm ${activeEventService === "transfer" ? "xl:col-span-3" : ""}`}>
                     <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
                       <div className="grid h-8 w-8 place-items-center rounded-md bg-blue-100 text-blue-700"><BusFront size={17} /></div>

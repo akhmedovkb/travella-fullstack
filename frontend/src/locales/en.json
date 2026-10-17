@@ -243,6 +243,7 @@
     },
     "items": {
       "city_tour_guide": "City sightseeing tour",
+      "city_tour_guide_with_transport": "City sightseeing tour with transport",
       "thematic_tour_guide": "Themed tour",
       "attraction_tour_guide": "Attraction tour",
       "countryside_tour_guide": "Countryside tour",

@@ -13,6 +13,7 @@ import {
 
 const transportCategory = (value) => TRANSPORT_CATEGORY_IDS.includes(value);
 const INTERCITY_CATEGORIES = new Set(["intercity_transfer", "border_transfer", "one_way_transfer"]);
+const VEHICLE_INCLUDED_GUIDE_CATEGORIES = new Set(["city_tour_guide_with_transport"]);
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number(value));
 const cityLabel = (value) => String(value || "").trim().replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toUpperCase());
@@ -95,6 +96,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const fleet = useMemo(() => (Array.isArray(profile?.car_fleet) ? profile.car_fleet.filter((car) => car && car.is_active !== false) : []), [profile]);
   const cities = useMemo(() => (Array.isArray(profile?.city_slugs) ? profile.city_slugs : []), [profile]);
   const isTransport = transportCategory(form.category);
+  const usesVehicle = isTransport || VEHICLE_INCLUDED_GUIDE_CATEGORIES.has(form.category);
   const isIntercity = INTERCITY_CATEGORIES.has(form.category);
   const preview = calculatedPreview(form, w);
   const serviceLabel = (category) => t(`provider_services.items.${category}`, { defaultValue: LABELS[category] || category || "Услуга" });
@@ -163,7 +165,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       if (!current.originCity || !current.destinationCity) return w("validation_route");
       if (current.originCity === current.destinationCity) return w("validation_different_cities");
     } else if (!current.citySlug) return w("validation_city");
-    if (transportCategory(current.category) && !String(current.vehicleModel || "").trim()) return w("validation_vehicle");
+    if ((transportCategory(current.category) || VEHICLE_INCLUDED_GUIDE_CATEGORIES.has(current.category)) && !String(current.vehicleModel || "").trim()) return w("validation_vehicle");
     if (current.pricingMode === "packages" && (number(current.halfDayPrice) <= 0 || number(current.fullDayPrice) <= 0)) return w("validation_package_prices");
     if (current.pricingMode !== "packages" && number(current.price) <= 0) return current.pricingMode === "hourly" ? w("validation_hourly_price") : w("validation_price");
     return "";
@@ -176,8 +178,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       : String(current.citySlug || "").trim() || null,
     origin_city: INTERCITY_CATEGORIES.has(current.category) ? String(current.originCity || "").trim() || null : null,
     destination_city: INTERCITY_CATEGORIES.has(current.category) ? String(current.destinationCity || "").trim() || null : null,
-    ...(transportCategory(current.category)
-      ? { seats: Math.max(1, number(current.seats) || 1), vehicle_model: String(current.vehicleModel || "" ).trim(), max_guests: null }
+    ...(transportCategory(current.category) || VEHICLE_INCLUDED_GUIDE_CATEGORIES.has(current.category)
+      ? { seats: Math.max(1, number(current.seats) || 1), vehicle_model: String(current.vehicleModel || "" ).trim(), max_guests: null, transport_included: VEHICLE_INCLUDED_GUIDE_CATEGORIES.has(current.category) }
       : { seats: null, vehicle_model: null, max_guests: number(current.seats) > 0 ? number(current.seats) : null }),
     pricing_mode: current.pricingMode,
     minimum_hours: Math.max(1, number(current.minimumHours) || 1),
@@ -268,7 +270,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
           : `${serviceLabel(draft.category)} · ${draft.citySlug}`,
         price: draft.pricingMode === "packages" ? number(draft.halfDayPrice) : number(draft.price),
         details: detailsFrom(draft, row.details || {}),
-        vehicle_model: transportCategory(draft.category) ? String(draft.vehicleModel || "").trim() : null,
+        vehicle_model: (transportCategory(draft.category) || VEHICLE_INCLUDED_GUIDE_CATEGORIES.has(draft.category)) ? String(draft.vehicleModel || "").trim() : null,
       });
       setEditingId(null);
       setDraft(null);
@@ -340,7 +342,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                   <CitySelect label={w("to")} value={form.destinationCity} cities={cities.filter((city) => city !== form.originCity)} onChange={(value) => setField("destinationCity", value)} placeholder={w("choose_city")} />
                 </> : <CitySelect label={w("service_city")} value={form.citySlug} cities={cities} onChange={(value) => setField("citySlug", value)} placeholder={w("choose_city")} />}
               </div>
-              {isTransport && <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-3">
+              {usesVehicle && <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-3">
                 {fleet.length > 0 ? <SelectField label={w("profile_vehicle")} value="" onChange={applyVehicle} options={fleet.map((car, index) => ({ value: String(car.id ?? index), label: `${car.model || w("vehicle")} · ${w("seats_count", { count: car.seats || "?" })}` }))} placeholder={w("choose_vehicle")} /> : <div className="md:col-span-3 text-sm text-amber-700">{w("add_vehicle")}</div>}
                 <ReadOnlyValue label={w("model")} value={form.vehicleModel || w("not_selected")} />
                 <ReadOnlyValue label={w("capacity")} value={form.seats ? w("seats_count", { count: form.seats }) : "—"} />
@@ -377,7 +379,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
             const draftCategoryGroup = expanded && draft
               ? categoryGroups.find((group) => group.id === draft.catalogGroup) || findServiceGroup(draft.category, categoryGroups)
               : null;
-            const draftIsTransport = Boolean(expanded && draft && transportCategory(draft.category));
+            const draftIsTransport = Boolean(expanded && draft && (transportCategory(draft.category) || VEHICLE_INCLUDED_GUIDE_CATEGORIES.has(draft.category)));
             const draftIsIntercity = Boolean(expanded && draft && INTERCITY_CATEGORIES.has(draft.category));
             return <div key={row.id} className="py-4">
               <div className="grid items-center gap-4 md:grid-cols-[minmax(240px,1.5fr)_minmax(220px,1fr)_120px_auto]">

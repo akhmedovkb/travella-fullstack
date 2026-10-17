@@ -2,6 +2,7 @@
 
 const pool = require("../db");
 const { TRANSPORT_SERVICE_CATEGORY_SET: TRANSPORT_ALLOWED } = require("../utils/providerServiceCatalog");
+const VEHICLE_INCLUDED_GUIDE_CATEGORIES = new Set(["city_tour_guide_with_transport"]);
 
 // транспортные категории — только для них разрешаем seats
 
@@ -30,7 +31,7 @@ function normDetails(input, category) {
       Number.isFinite(n) &&
       n > 0 &&
       Number.isInteger(n) &&
-      TRANSPORT_ALLOWED.has(String(category))
+      (TRANSPORT_ALLOWED.has(String(category)) || VEHICLE_INCLUDED_GUIDE_CATEGORIES.has(String(category)))
     ) {
       obj.seats = n;
     } else {

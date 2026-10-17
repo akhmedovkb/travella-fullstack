@@ -243,6 +243,7 @@
     },
     "items": {
       "city_tour_guide": "Shahar bo‘ylab tanishuv ekskursiyasi",
+      "city_tour_guide_with_transport": "Transport bilan shahar bo‘ylab tanishuv ekskursiyasi",
       "thematic_tour_guide": "Mavzuli ekskursiya",
       "attraction_tour_guide": "Diqqatga sazovor joy bo‘ylab ekskursiya",
       "countryside_tour_guide": "Shahar tashqarisidagi ekskursiya",
