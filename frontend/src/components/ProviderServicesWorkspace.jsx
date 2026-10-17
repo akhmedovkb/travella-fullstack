@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { CheckCircle2, Layers3, MapPin, Plus, RefreshCw, Trash2, WalletCards } from "lucide-react";
 import { tError, tSuccess } from "../shared/toast";
+import ConfirmModal from "./ConfirmModal";
 import {
   GUIDE_SERVICE_GROUPS,
   TRANSPORT_SERVICE_GROUPS,
@@ -88,6 +89,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const [statusFilter, setStatusFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const [draft, setDraft] = useState(null);
 
   const fleet = useMemo(() => (Array.isArray(profile?.car_fleet) ? profile.car_fleet.filter((car) => car && car.is_active !== false) : []), [profile]);
@@ -277,7 +279,6 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   }
 
   async function removeService(row) {
-    if (!confirm(w("delete_confirm", { service: storedServiceTitle(row) }))) return;
     setDeletingId(row.id);
     try {
       await fetchJSON(`/api/providers/${pid}/services/${row.id}`, { method: "DELETE" });
@@ -286,6 +287,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         setEditingId(null);
         setDraft(null);
       }
+      setPendingDelete(null);
       tSuccess(w("deleted"));
     } catch (error) {
       tError(w("delete_error", { error: error.message }));
@@ -382,7 +384,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                 <div><div className="font-semibold text-slate-950">{storedServiceTitle(row)}</div><div className="mt-1 text-sm text-slate-500">{serviceLabel(row.category)}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${w("seats_count", { count: row.details.seats })}` : ""}</div></div>
                 <div><div className="font-semibold text-slate-900">{pricingLabel(row, w)}</div><div className="text-xs text-slate-500">{w("tour_builder_rate")}</div></div>
                 <div className={`text-sm font-semibold ${row.is_active ? 'text-emerald-700' : 'text-slate-400'}`}>{row.is_active ? w("enabled") : w("disabled")}</div>
-                <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? w("close") : w("edit")}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? w("disable") : w("enable")}</button><button type="button" onClick={() => removeService(row)} disabled={deletingId === row.id} title={w("delete")} aria-label={w("delete")} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"><Trash2 size={16} aria-hidden="true" /></button></div>
+                <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? w("close") : w("edit")}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? w("disable") : w("enable")}</button><button type="button" onClick={() => setPendingDelete(row)} disabled={deletingId === row.id} title={w("delete")} aria-label={w("delete")} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"><Trash2 size={16} aria-hidden="true" /></button></div>
               </div>
               {expanded && draft && (
                 <div className="mt-4 border-l-4 border-slate-400 bg-slate-50 p-4">
@@ -450,7 +452,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                     {draft.pricingMode === "packages" && <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={draft.halfDayHours} onChange={(value) => setDraft({ ...draft, halfDayHours: value })} /><MoneyField label={w("half_day_price")} value={draft.halfDayPrice} onChange={(value) => setDraft({ ...draft, halfDayPrice: value })} /><NumberField label={w("full_day_hours")} value={draft.fullDayHours} onChange={(value) => setDraft({ ...draft, fullDayHours: value })} /><MoneyField label={w("full_day_price")} value={draft.fullDayPrice} onChange={(value) => setDraft({ ...draft, fullDayPrice: value })} /><MoneyField label={w("extra_hour")} value={draft.extraHourPrice} onChange={(value) => setDraft({ ...draft, extraHourPrice: value })} /></div>}
                   </div>
                   <div className="mt-5 flex justify-between gap-3 border-t border-slate-200 pt-4">
-                    <button type="button" onClick={() => removeService(row)} className="h-10 rounded-md border border-rose-200 px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50">{w("delete")}</button>
+                    <button type="button" onClick={() => setPendingDelete(row)} className="h-10 rounded-md border border-rose-200 px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50">{w("delete")}</button>
                     <button type="button" onClick={() => saveEdit(row)} disabled={saving} className="h-10 rounded-md bg-slate-950 px-5 text-sm font-semibold text-white disabled:opacity-50">{w("save_changes")}</button>
                   </div>
                 </div>
@@ -459,6 +461,21 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
           })}
         </div>
       </section>
+
+      <ConfirmModal
+        open={Boolean(pendingDelete)}
+        title={w("delete")}
+        message={pendingDelete ? w("delete_confirm", { service: storedServiceTitle(pendingDelete) }) : ""}
+        confirmLabel={w("delete")}
+        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+        busyLabel={`${w("delete")}...`}
+        danger
+        busy={Boolean(pendingDelete && deletingId === pendingDelete.id)}
+        onConfirm={() => pendingDelete && removeService(pendingDelete)}
+        onClose={() => {
+          if (!deletingId) setPendingDelete(null);
+        }}
+      />
 
     </div>
   );
