@@ -38,8 +38,35 @@ const TRANSPORT_SERVICE_CATEGORIES = [
   "extra_waiting",
 ];
 
+const PROVIDER_SERVICE_CATEGORIES = [
+  ...GUIDE_SERVICE_CATEGORIES,
+  ...TRANSPORT_SERVICE_CATEGORIES,
+];
+
+const GUIDE_SERVICE_CATEGORY_SET = new Set(GUIDE_SERVICE_CATEGORIES);
+const TRANSPORT_SERVICE_CATEGORY_SET = new Set(TRANSPORT_SERVICE_CATEGORIES);
+const PROVIDER_SERVICE_CATEGORY_SET = new Set(PROVIDER_SERVICE_CATEGORIES);
+
+function getAllowedProviderServiceCategories(providerType) {
+  const type = String(providerType || "").trim().toLowerCase();
+  if (type === "transport") return TRANSPORT_SERVICE_CATEGORIES;
+  if (type === "guide" || type === "agent" || type === "tour_agent") {
+    return PROVIDER_SERVICE_CATEGORIES;
+  }
+  return [];
+}
+
+function isProviderServiceCategoryAllowed(providerType, category) {
+  return getAllowedProviderServiceCategories(providerType).includes(String(category || ""));
+}
+
 module.exports = {
   GUIDE_SERVICE_CATEGORIES,
   TRANSPORT_SERVICE_CATEGORIES,
-  TRANSPORT_SERVICE_CATEGORY_SET: new Set(TRANSPORT_SERVICE_CATEGORIES),
+  PROVIDER_SERVICE_CATEGORIES,
+  GUIDE_SERVICE_CATEGORY_SET,
+  TRANSPORT_SERVICE_CATEGORY_SET,
+  PROVIDER_SERVICE_CATEGORY_SET,
+  getAllowedProviderServiceCategories,
+  isProviderServiceCategoryAllowed,
 };
