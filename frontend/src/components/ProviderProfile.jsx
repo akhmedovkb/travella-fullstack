@@ -984,12 +984,12 @@ const ProviderProfile = () => {
 
         <aside className="space-y-3">
           <div className={activeSection === "overview" ? "space-y-3" : "hidden"}>
-          <ProfileCard title="CRM-сводка" subtitle="Короткий срез активности по профилю.">
+          <ProfileCard title={t("provider_profile_ui.crm.title")} subtitle={t("provider_profile_ui.crm.subtitle")}>
             <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-2xl bg-orange-50 p-4 ring-1 ring-orange-100"><div className="text-2xl font-black text-slate-950">{demandStats.opens}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-orange-700">Открытий</div></div>
-              <div className="rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100"><div className="text-2xl font-black text-slate-950">{demandStats.hot}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-700">Горячих</div></div>
-              <div className="rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100"><div className="text-2xl font-black text-slate-950">{demandStats.requests}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-blue-700">Запросов</div></div>
-              <div className="rounded-2xl bg-violet-50 p-4 ring-1 ring-violet-100"><div className="text-2xl font-black text-slate-950">{demandStats.bookings}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-violet-700">Броней</div></div>
+              <div className="rounded-2xl bg-orange-50 p-4 ring-1 ring-orange-100"><div className="text-2xl font-black text-slate-950">{demandStats.opens}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-orange-700">{t("provider_profile_ui.crm.opens")}</div></div>
+              <div className="rounded-2xl bg-emerald-50 p-4 ring-1 ring-emerald-100"><div className="text-2xl font-black text-slate-950">{demandStats.hot}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-emerald-700">{t("provider_profile_ui.crm.hot")}</div></div>
+              <div className="rounded-2xl bg-blue-50 p-4 ring-1 ring-blue-100"><div className="text-2xl font-black text-slate-950">{demandStats.requests}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-blue-700">{t("provider_profile_ui.crm.requests")}</div></div>
+              <div className="rounded-2xl bg-violet-50 p-4 ring-1 ring-violet-100"><div className="text-2xl font-black text-slate-950">{demandStats.bookings}</div><div className="mt-1 text-xs font-black uppercase tracking-[0.12em] text-violet-700">{t("provider_profile_ui.crm.bookings")}</div></div>
             </div>
           </ProfileCard>
 

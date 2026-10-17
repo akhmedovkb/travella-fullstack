@@ -224,7 +224,8 @@
     "account_actions": "Account actions",
     "password_panel_subtitle": "Update the password used to sign in to your account.",
     "password_minimum_hint": "At least 6 characters",
-    "logout_confirm": "Sign out of your account?"
+    "logout_confirm": "Sign out of your account?",
+    "crm": { "title": "CRM overview", "subtitle": "A quick snapshot of profile activity.", "opens": "Opens", "hot": "Hot leads", "requests": "Requests", "bookings": "Bookings" }
   },
   "provider_services_tourbuilder_not_allowed": "Tour Builder rates can only be edited by guides, transport providers and travel agents.",
   "provider_services": {
@@ -936,9 +937,15 @@
       "logo": "Upload logo",
       "telegram": "Connect Telegram",
       "optional": "(optional)",
-      "fill": "Fill in"
+      "fill": "Fill in",
+      "description": "A stronger trust profile helps clients unlock your contacts and send requests with confidence.",
+      "out_of_100": "out of 100",
+      "missing_prefix": "Still to improve:",
+      "and_more": "and {{count}} more",
+      "items": { "contacts": "Client contact details", "logo": "Logo / photo", "certificate": "Certificate", "telegram": "Telegram", "location": "Service coverage", "languages": "Languages", "transport": "Fleet", "details": "Profile details", "activity": "Activity" }
     }
   },
+  "profile_trust": { "high": "High trust", "mid": "Strong foundation", "low": "Needs improvement" },
   "profile_load_error": "Failed to load profile",
   "profile_updated": "Profile updated",
   "provider": {
