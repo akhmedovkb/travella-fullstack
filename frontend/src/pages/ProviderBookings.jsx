@@ -1085,7 +1085,7 @@ export default function ProviderBookings() {
         </div>
       </header>
 
-      <div className="mb-4 grid overflow-hidden rounded-lg border border-gray-200 bg-white md:grid-cols-2" role="tablist" aria-label={t("bookings.direction", { defaultValue: "Направление бронирований" })}>
+      <div className="mb-4 grid border-b border-gray-200 bg-white md:grid-cols-2" role="tablist" aria-label={t("bookings.direction", { defaultValue: "Направление бронирований" })}>
         {[
           {
             key: "incoming",
@@ -1110,10 +1110,10 @@ export default function ProviderBookings() {
               role="tab"
               aria-selected={active}
               onClick={() => { setTab(item.key); setFilter("all"); }}
-              className={`min-h-[72px] border-l-4 px-4 py-3 text-left transition ${
+              className={`min-h-[72px] border-b-2 px-4 py-3 text-left transition ${
                 active
-                  ? "border-l-orange-500 bg-gray-50 text-gray-950"
-                  : "border-l-transparent bg-white text-gray-700 hover:bg-gray-50"
+                  ? "border-b-orange-500 bg-orange-50/40 text-gray-950"
+                  : "border-b-transparent bg-white text-gray-600 hover:bg-gray-50"
               }`}
             >
               <span className="flex items-start justify-between gap-4">
@@ -1121,7 +1121,7 @@ export default function ProviderBookings() {
                   <span className="block font-bold">{item.title}</span>
                   <span className="mt-0.5 block text-sm text-gray-500">{item.description}</span>
                 </span>
-                <span className="min-w-9 rounded-md bg-gray-100 px-2 py-1 text-center text-sm font-bold text-gray-800">
+                <span className="min-w-8 text-center text-sm font-bold text-gray-500">
                   {item.total}
                 </span>
               </span>
@@ -1135,27 +1135,27 @@ export default function ProviderBookings() {
         })}
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-white p-1.5">
-        <span className="mx-2 text-xs font-semibold text-gray-400">
+      <div className="mb-0 flex flex-wrap items-center gap-5 border-b border-gray-200 bg-white px-1">
+        <span className="py-3 text-xs font-semibold text-gray-400">
           {t("bookings.source", { defaultValue: "Источник" })}
         </span>
         <button
           type="button"
           onClick={() => { setActiveSubTab("tb"); setFilter("all"); }}
-          className={`rounded-md px-3 py-2 text-sm font-semibold ${activeSubTab === "tb" ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-gray-100"}`}
+          className={`border-b-2 px-1 py-3 text-sm font-semibold ${activeSubTab === "tb" ? "border-orange-500 text-gray-950" : "border-transparent text-gray-500 hover:text-gray-800"}`}
         >
           Tour Builder <span className="ml-1 opacity-75">{tourBuilderCount}</span>
         </button>
         <button
           type="button"
           onClick={() => { setActiveSubTab("rest"); setFilter("all"); }}
-          className={`rounded-md px-3 py-2 text-sm font-semibold ${activeSubTab === "rest" ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-gray-100"}`}
+          className={`border-b-2 px-1 py-3 text-sm font-semibold ${activeSubTab === "rest" ? "border-orange-500 text-gray-950" : "border-transparent text-gray-500 hover:text-gray-800"}`}
         >
           {t("bookings.other", { defaultValue: "Другие бронирования" })} <span className="ml-1 opacity-75">{otherCount}</span>
         </button>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-1.5">
+      <div className="mb-5 flex flex-wrap items-center gap-5 border-b border-gray-200 bg-white px-1">
         {[
           { key: "all", label: t("filter.all", { defaultValue: "Все" }), count: counts.all },
           { key: "pending", label: t("filter.pending", { defaultValue: "Ожидает" }), count: counts.pending },
@@ -1167,10 +1167,10 @@ export default function ProviderBookings() {
           <button
             key={key}
             onClick={() => setFilter(key)}
-            className={"rounded-md px-3 py-1.5 text-sm " + (filter === key ? "bg-orange-50 font-semibold text-orange-800 ring-1 ring-orange-200" : "text-gray-600 hover:bg-gray-100")}
+            className={"border-b-2 px-1 py-3 text-sm " + (filter === key ? "border-orange-500 font-semibold text-gray-950" : "border-transparent text-gray-500 hover:text-gray-800")}
           >
             {label}
-            <span className="ml-1.5 text-xs text-gray-400">
+            <span className="ml-1.5 text-xs tabular-nums text-gray-400">
               {count}
             </span>
           </button>

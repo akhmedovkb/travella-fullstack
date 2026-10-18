@@ -81,20 +81,21 @@ const resolveFile = (raw) => {
 const statusKey = (s) => String(s || "").toLowerCase();
 const StatusPill = ({ status, text, className = "" }) => {
   const map = {
-    pending:   "bg-amber-50  text-amber-700  ring-amber-200",
-    quoted:    "bg-blue-50   text-blue-700   ring-blue-200",
-    awaiting_payment: "bg-violet-50 text-violet-700 ring-violet-200",
-    confirmed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    active:    "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    paid:      "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    rejected:  "bg-rose-50   text-rose-700   ring-rose-200",
-    cancelled: "bg-rose-50   text-rose-700   ring-rose-200",
-    cancelled_unpaid: "bg-gray-100 text-gray-700 ring-gray-200",
-    expired:   "bg-gray-100 text-gray-700 ring-gray-200",
+    pending:   ["bg-amber-500", "text-amber-700"],
+    quoted:    ["bg-blue-500", "text-blue-700"],
+    awaiting_payment: ["bg-violet-500", "text-violet-700"],
+    confirmed: ["bg-emerald-500", "text-emerald-700"],
+    active:    ["bg-emerald-500", "text-emerald-700"],
+    paid:      ["bg-emerald-500", "text-emerald-700"],
+    rejected:  ["bg-rose-500", "text-rose-700"],
+    cancelled: ["bg-rose-500", "text-rose-700"],
+    cancelled_unpaid: ["bg-gray-400", "text-gray-600"],
+    expired:   ["bg-gray-400", "text-gray-600"],
   };
-  const cls = map[statusKey(status)] || "bg-gray-100 text-gray-700 ring-gray-200";
+  const [dotClass, textClass] = map[statusKey(status)] || ["bg-gray-400", "text-gray-600"];
   return (
-    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ${cls} ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${textClass} ${className}`}>
+      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
       {text ?? status}
     </span>
   );
