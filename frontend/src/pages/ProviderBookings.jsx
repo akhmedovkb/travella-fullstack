@@ -26,7 +26,11 @@ const isTourBuilderHotel = (booking) =>
   && String(booking?.details?.tb_kind || booking?.attachments?.tb_kind || "").toLowerCase() === "hotel";
 const isFixedTourBuilderRate = (booking) =>
   String(booking?.source || "").toLowerCase() === "tour_builder"
-  && Boolean(booking?.details?.fixed_catalog_rate || booking?.attachments?.fixed_catalog_rate)
+  && Boolean(
+    booking?.details?.fixed_catalog_rate
+    || booking?.attachments?.fixed_catalog_rate
+    || /^Опубликованный тариф Tour Builder:/i.test(String(booking?.provider_note || "").trim())
+  )
   && Number(booking?.provider_price) > 0;
 const bookingTimeSlots = (booking) => {
   const raw = booking?.details?.time_slots || booking?.attachments?.time_slots || booking?.time_slots;
@@ -1001,7 +1005,9 @@ export default function ProviderBookings() {
     if (!groupedIncoming.length)
       return <div className="text-gray-500">{t("bookings.tb_empty", { defaultValue: "Пакетов TourBuilder пока нет." })}</div>;
     // используем тот же renderRow (он реагирует на tab === "incoming")
-    const renderRow = (b) => (
+    const renderRow = (b) => {
+      const fixedPriceBooking = isTourBuilderHotel(b) || isFixedTourBuilderRate(b);
+      return (
       <div key={b.id} className="p-4">
         <BookingRow
           booking={b}
@@ -1012,15 +1018,16 @@ export default function ProviderBookings() {
           onAccept={accept}
           onHoldExpired={load}
           onPay={payBooking}
-          onReject={String(b.status) === "pending" && !isTourBuilderHotel(b) ? undefined : reject}
+          onReject={String(b.status) === "pending" && !fixedPriceBooking ? undefined : reject}
           onCancelByProvider={openCancelIncoming}
         />
         <BookingTimeSlots booking={b} />
-        {String(b.status) === "pending" && !isTourBuilderHotel(b) && (
+        {String(b.status) === "pending" && !fixedPriceBooking && (
           <PriceAgreementCard booking={b} onSent={load} onReject={reject} />
         )}
       </div>
-    );
+      );
+    };
     return (
       <div className="space-y-6">
         {groupedIncoming.map((g) => (
