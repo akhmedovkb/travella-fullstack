@@ -6,7 +6,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 import { enUS, ru, uz } from "date-fns/locale";
-import { CalendarDays, Check, CircleAlert, LockKeyhole, Save } from "lucide-react";
+import { CalendarDays, Check, CircleAlert, LockKeyhole, MapPin, Save, UserRound } from "lucide-react";
 
 const CALENDAR_PROVIDER_TYPES = new Set(["guide", "transport"]);
 
@@ -57,8 +57,7 @@ const ProviderCalendar = ({ token }) => {
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // для tooltip
-  const [hoveredYmd, setHoveredYmd] = useState(null);
+  const [activeYmd, setActiveYmd] = useState("");
 
   const cfg = useMemo(() => {
     const stored =
@@ -267,103 +266,53 @@ const ProviderCalendar = ({ token }) => {
   // только прошлые запрещаем (booked НЕ дизейблим, чтобы работал hover)
   const disabledMatchers = useMemo(() => [pastMatcher], [pastMatcher]);
 
-  // показывать подсказку только гиду/транспортнику
-  const isGuideOrTransport = useMemo(() => {
-    const tp = (providerType || "").toLowerCase();
-    return tp === "guide" || tp === "transport";
-  }, [providerType]);
-
   const hasChanges = useMemo(() => {
     const current = [...new Set(manual)].sort().join(",");
     const saved = [...new Set(manualInitial)].sort().join(",");
     return current !== saved;
   }, [manual, manualInitial]);
 
+  const changedDatesCount = useMemo(() => {
+    const allDates = new Set([...manual, ...manualInitial]);
+    return [...allDates].filter((date) => manual.includes(date) !== manualInitial.includes(date)).length;
+  }, [manual, manualInitial]);
+
+  const activeDate = activeYmd ? ymdToLocalDate(activeYmd) : null;
+  const activeBookedDetails = activeYmd ? bookedDetails[activeYmd] || [] : [];
+  const activeIsBooked = activeYmd ? booked.includes(activeYmd) : false;
+  const activeIsManual = activeYmd ? manual.includes(activeYmd) : false;
+  const activeIsChanged = activeYmd ? manual.includes(activeYmd) !== manualInitial.includes(activeYmd) : false;
+  const activeIsPast = activeDate ? activeDate < startOfToday : false;
+  const activeDateLabel = activeDate
+    ? new Intl.DateTimeFormat(i18n.language || "en", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(activeDate)
+    : "";
+
+  const toggleActiveDate = () => {
+    if (!activeYmd || activeIsBooked || activeIsPast) return;
+    setManual((current) => current.includes(activeYmd) ? current.filter((date) => date !== activeYmd) : [...current, activeYmd]);
+  };
+
   const typeLabel = String(providerType || "").toLowerCase() === "guide"
     ? t("calendar.provider_guide")
     : t("calendar.provider_transport");
 
-  // Кастомный контент ячейки дня с tooltip
-    const DayCell = (dayProps) => {
+  const DayCell = (dayProps) => {
     const dateYmd = toYMD(dayProps.date);
-    const infoList = bookedDetails[dateYmd] || [];
     const isBookedDay = booked.includes(dateYmd);
     const isSavedManual = manualSavedYmd.includes(dateYmd);
-    const isNewManual = manualNewYmd.includes(dateYmd);
-    const showTooltip = isGuideOrTransport && isBookedDay && hoveredYmd === dateYmd;
+    const isChanged = manual.includes(dateYmd) !== manualInitial.includes(dateYmd);
+    const isActive = activeYmd === dateYmd;
 
     const dayNum = dayProps.date.getDate();
 
     return (
-      <div className="relative flex h-full w-full flex-col items-start justify-between p-2 text-left">
+      <div className={`relative flex h-full w-full flex-col items-start justify-between p-2 text-left ${isActive ? "ring-2 ring-inset ring-orange-500" : ""}`}>
         <span className="text-sm font-black">{dayNum}</span>
-        {isBookedDay ? <span className="max-w-full truncate rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{t("calendar.booked_short")}</span> : null}
-        {isSavedManual ? <span className="max-w-full truncate rounded bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{t("calendar.closed_short")}</span> : null}
-        {isNewManual ? <span className="max-w-full truncate rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{t("calendar.unsaved_short")}</span> : null}
-
-        {showTooltip && (
-          <div
-            role="tooltip"
-            className="absolute z-50 -top-2 left-1/2 -translate-x-1/2 -translate-y-full bg-white border border-gray-200 rounded-lg shadow-xl p-2 w-64 text-xs text-gray-800"
-            onMouseEnter={() => setHoveredYmd(dateYmd)}
-            onMouseLeave={() => setHoveredYmd(null)}
-          >
-            <div className="max-h-48 overflow-auto space-y-2">
-              {infoList.length ? (
-                infoList.map((it, idx) => {
-                  const profileHref =
-                    it?.profileUrl ||
-                    (it?.profileId ? `/profile/${it.profileId}` : null);
-                  const name =
-                    it?.name ||
-                    t("calendar.unknown_name", { defaultValue: "Noma'lum foydalanuvchi" });
-
-                  return (
-                    <div key={idx} className="border-b last:border-b-0 pb-2 last:pb-0">
-                      <div className="font-semibold truncate">
-                        {profileHref ? (
-                          <a href={profileHref} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-                            {name}
-                          </a>
-                        ) : (
-                          <span>{name}</span>
-                        )}
-                      </div>
-
-                      {it?.phone && (
-                        <div className="mt-1">
-                          {t("calendar.phone", { defaultValue: "Telefon" })}:{" "}
-                          <a href={`tel:${it.phone}`} className="text-blue-600 hover:underline">
-                            {it.phone}
-                          </a>
-                        </div>
-                      )}
-
-                      {it?.telegram && (
-                        <div className="mt-1">
-                          Telegram:{" "}
-                          <a
-                            href={`https://t.me/${String(it.telegram).replace(/^@/, "")}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-600 hover:underline"
-                          >
-                            @{String(it.telegram).replace(/^@/, "")}
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-gray-600">
-                  {t("calendar.booked", { defaultValue: "Забронировано" })}
-                </div>
-              )}
-            </div>
-            <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-white border-r border-b border-gray-200" />
-          </div>
-        )}
+        <span className="flex min-h-4 items-center gap-1 text-[10px] font-bold">
+          {isBookedDay ? <><span className="h-1.5 w-1.5 rounded-full bg-slate-700" /><span className="hidden sm:inline">{t("calendar.booked_short")}</span></> : null}
+          {isSavedManual ? <><span className="h-1.5 w-1.5 rounded-full bg-sky-600" /><span className="hidden sm:inline">{t("calendar.closed_short")}</span></> : null}
+          {isChanged ? <><span className="h-1.5 w-1.5 rounded-full bg-orange-600" /><span className="hidden sm:inline">{t("calendar.unsaved_short")}</span></> : null}
+        </span>
       </div>
     );
   };
@@ -385,102 +334,110 @@ const ProviderCalendar = ({ token }) => {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-3 py-6 sm:px-6">
-      <section className="overflow-visible rounded-lg border border-slate-200 bg-white shadow-sm">
-        <header className="border-b border-slate-200 px-5 py-6 sm:px-8">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+    <main className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-7">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <header className="px-5 py-5 sm:px-7 sm:py-6">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
             <div>
-              <div className="flex items-center gap-2 text-xs font-black uppercase text-orange-600"><CalendarDays size={15} />{typeLabel} · {t("calendar.availability")}</div>
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase text-orange-600"><CalendarDays size={15} />{typeLabel} · {t("calendar.availability")}</div>
               <h1 className="mt-2 text-2xl font-black text-slate-950">{t("calendar.blocking_title")}</h1>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{t("calendar.workspace_description")}</p>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{t("calendar.workspace_description")}</p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              <div className="min-w-28 rounded-md bg-slate-100 px-4 py-3"><div className="text-xl font-black text-slate-950">{booked.length}</div><div className="text-xs font-bold text-slate-500">{t("calendar.by_bookings")}</div></div>
-              <div className="min-w-28 rounded-md bg-sky-50 px-4 py-3"><div className="text-xl font-black text-sky-700">{manualSavedYmd.length}</div><div className="text-xs font-bold text-slate-500">{t("calendar.closed_by_you")}</div></div>
-              <div className="min-w-28 rounded-md bg-orange-50 px-4 py-3"><div className="text-xl font-black text-orange-700">{manualNewYmd.length}</div><div className="text-xs font-bold text-slate-500">{t("calendar.unsaved")}</div></div>
+            <div className="grid grid-cols-3 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
+              <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-slate-950">{booked.length}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.by_bookings")}</div></div>
+              <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-sky-700">{manualSavedYmd.length}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.closed_by_you")}</div></div>
+              <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-orange-700">{changedDatesCount}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.unsaved")}</div></div>
             </div>
           </div>
         </header>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-bold text-slate-600 sm:px-8">
-          <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-700" />{t("calendar.booked")}</span>
-          <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-600" />{t("calendar.closed_by_you")}</span>
-          <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-orange-600" />{t("calendar.unsaved")}</span>
-          <span className="ml-auto flex items-center gap-2 text-slate-500"><LockKeyhole size={14} />{t("calendar.click_hint")}</span>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-slate-200 bg-slate-50 px-5 py-3 text-xs font-bold text-slate-600 sm:px-7">
+          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-slate-700" />{t("calendar.booked")}</span>
+          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-sky-600" />{t("calendar.closed_by_you")}</span>
+          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-600" />{t("calendar.unsaved")}</span>
+          <span className="ml-auto hidden items-center gap-2 text-slate-400 sm:flex"><LockKeyhole size={14} />{t("calendar.click_hint")}</span>
         </div>
 
-      {/* overflow-visible + сброс hover */}
-      <div className="relative overflow-visible px-3 py-5 sm:px-8 sm:py-7" onMouseLeave={() => setHoveredYmd(null)}>
-        {calendarLoading ? <div className="py-20 text-center text-sm font-semibold text-slate-500">{t("calendar.loading_availability")}</div> : (
-        <DayPicker
-            locale={dpLocale}
-            weekStartsOn={weekStartsOn}
-            mode="multiple"
-            selected={manualAsDates}
-            onSelect={handleSelect}
-            disabled={disabledMatchers} // только прошлое запрещаем
-            modifiers={{
-              past: pastMatcher,
-              booked: bookedAsDates,
-              manualSaved: manualSavedAsDates, // сохранённые с бэка
-              manualNew: manualNewAsDates,     // новые, ещё не сохранённые
-            }}
-            /* ВАЖНО: НЕТ stylings для "selected", чтобы не красить всё в оранжевый */
-            modifiersClassNames={{
-              booked: "bg-slate-100 text-slate-950 cursor-help",
-              past: "text-gray-400 cursor-not-allowed",
-            }}
-            modifiersStyles={{
-              manualSaved: { backgroundColor: "#f0f9ff", color: "#0f172a" },
-              manualNew:   { backgroundColor: "#fff7ed", color: "#0f172a" },
-              booked:      { backgroundColor: "#f1f5f9", color: "#0f172a", opacity: 1 },
-            }}
-            components={{ DayContent: DayCell }}
-            /* Растянуть календарь и зафиксировать сетку таблицы */
-            className="rdp w-full !m-0 text-slate-900"
-            classNames={{
-              months: "w-full",
-              month: "w-full",
-              table: "w-full table-fixed",
-              caption: "relative mb-4 flex h-10 items-center justify-center",
-              caption_label: "text-lg font-black capitalize text-slate-950",
-              nav: "absolute right-0 top-0 flex gap-2",
-              nav_button: "h-9 w-9 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-              head_row: "grid grid-cols-7 border-b border-slate-100",
-              head_cell: "py-3 text-center text-xs font-black uppercase text-slate-400",
-              row: "grid grid-cols-7 border-b border-slate-100 last:border-b-0",
-              cell: "overflow-visible relative h-20 border-r border-slate-100 last:border-r-0 sm:h-24",
-              day: "rdp-day overflow-visible relative h-full w-full text-sm font-bold transition hover:bg-orange-50",
-            }}
-            styles={{
-              months: { width: "100%" },
-              month: { width: "100%" },
-              table: { width: "100%" },
-              cell: { overflow: "visible" },
-              day: { overflow: "visible" },
-            }}
-            onDayMouseEnter={(date) => {
-              const ymd = toYMD(date);
-              if (isGuideOrTransport && (bookedDetails[ymd]?.length || 0) > 0) {
-                setHoveredYmd(ymd);
-              }
-            }}
-          />
-        )}
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_300px]">
+          <div className="relative min-w-0 px-2 py-4 sm:px-6 sm:py-6">
+            {calendarLoading ? <div className="py-20 text-center text-sm font-semibold text-slate-500">{t("calendar.loading_availability")}</div> : (
+              <DayPicker
+                locale={dpLocale}
+                weekStartsOn={weekStartsOn}
+                mode="multiple"
+                selected={manualAsDates}
+                onSelect={handleSelect}
+                disabled={disabledMatchers}
+                modifiers={{ past: pastMatcher, booked: bookedAsDates, manualSaved: manualSavedAsDates, manualNew: manualNewAsDates }}
+                modifiersClassNames={{ booked: "bg-slate-100 text-slate-950", past: "text-gray-400 cursor-not-allowed" }}
+                modifiersStyles={{
+                  manualSaved: { backgroundColor: "#f0f9ff", color: "#0f172a" },
+                  manualNew: { backgroundColor: "#fff7ed", color: "#0f172a" },
+                  booked: { backgroundColor: "#f1f5f9", color: "#0f172a", opacity: 1 },
+                }}
+                components={{ DayContent: DayCell }}
+                className="rdp w-full !m-0 text-slate-900"
+                classNames={{
+                  months: "w-full", month: "w-full", table: "w-full table-fixed",
+                  caption: "relative mb-3 flex h-10 items-center justify-center",
+                  caption_label: "text-base font-black capitalize text-slate-950 sm:text-lg",
+                  nav: "absolute right-0 top-0 flex gap-2",
+                  nav_button: "h-9 w-9 rounded-md border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50",
+                  head_row: "grid grid-cols-7 border-b border-slate-100",
+                  head_cell: "py-2.5 text-center text-[10px] font-black uppercase text-slate-400 sm:text-[11px]",
+                  row: "grid grid-cols-7 border-b border-slate-100 last:border-b-0",
+                  cell: "relative h-16 border-r border-slate-100 last:border-r-0 sm:h-20",
+                  day: "rdp-day relative h-full w-full text-sm font-bold transition hover:bg-orange-50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500",
+                }}
+                styles={{ months: { width: "100%" }, month: { width: "100%" }, table: { width: "100%" } }}
+                onDayClick={(date) => setActiveYmd(toYMD(date))}
+              />
+            )}
+          </div>
 
-      </div>
+          <aside className="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0 lg:p-6">
+            {!activeYmd ? (
+              <div className="flex min-h-44 flex-col items-center justify-center text-center lg:min-h-full">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200"><CalendarDays size={20} /></div>
+                <div className="mt-3 text-sm font-black text-slate-800">{t("calendar.select_day_title")}</div>
+                <div className="mt-1 max-w-52 text-xs leading-5 text-slate-500">{t("calendar.select_day_hint")}</div>
+              </div>
+            ) : (
+              <div>
+                <div className="text-[11px] font-black uppercase text-slate-400">{t("calendar.selected_day")}</div>
+                <div className="mt-1 text-lg font-black capitalize text-slate-950">{activeDateLabel}</div>
+                <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-black ${activeIsBooked ? "bg-slate-200 text-slate-800" : activeIsChanged ? "bg-orange-100 text-orange-800" : activeIsManual ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"}`}>
+                  <span className={`h-2 w-2 rounded-full ${activeIsBooked ? "bg-slate-700" : activeIsChanged ? "bg-orange-600" : activeIsManual ? "bg-sky-600" : "bg-emerald-600"}`} />
+                  {activeIsBooked ? t("calendar.booked") : activeIsChanged ? t("calendar.unsaved") : activeIsManual ? t("calendar.closed_by_you") : t("calendar.available")}
+                </div>
+                {activeIsBooked && (
+                  <div className="mt-5 space-y-3">
+                    <div className="text-xs font-black uppercase text-slate-400">{t("calendar.booking_details")}</div>
+                    {activeBookedDetails.length ? activeBookedDetails.map((item, index) => (
+                      <div key={index} className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
+                        <div className="flex items-center gap-2 text-sm font-black text-slate-900"><UserRound size={15} className="text-slate-400" />{item.name || t("calendar.unknown_name")}</div>
+                        {item.phone ? <a className="mt-2 block text-sm font-bold text-slate-600 hover:text-orange-600" href={`tel:${item.phone}`}>{item.phone}</a> : null}
+                        {item.telegram ? <a className="mt-1 block text-sm font-bold text-slate-600 hover:text-orange-600" href={`https://t.me/${String(item.telegram).replace(/^@/, "")}`} target="_blank" rel="noreferrer">@{String(item.telegram).replace(/^@/, "")}</a> : null}
+                      </div>
+                    )) : <div className="flex items-center gap-2 text-sm text-slate-500"><MapPin size={15} />{t("calendar.booking_without_contacts")}</div>}
+                  </div>
+                )}
+                {!activeIsBooked && !activeIsPast && (
+                  <button type="button" onClick={toggleActiveDate} className={`mt-6 flex h-10 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-black transition ${activeIsManual ? "border border-slate-300 bg-white text-slate-800 hover:bg-slate-100" : "bg-slate-950 text-white hover:bg-slate-800"}`}>
+                    <LockKeyhole size={15} />{activeIsManual ? t("calendar.open_day") : t("calendar.close_day")}
+                  </button>
+                )}
+              </div>
+            )}
+          </aside>
+        </div>
 
-        <footer className="flex flex-col gap-4 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+        <footer className="flex flex-col gap-4 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
           <div className={`flex items-center gap-2 text-sm font-bold ${hasChanges ? "text-orange-700" : "text-emerald-700"}`}>
             {hasChanges ? <CircleAlert size={17} /> : <Check size={17} />}
-            {hasChanges ? t("calendar.unsaved_changes", { count: manualNewYmd.length }) : t("calendar.all_saved")}
+            {hasChanges ? t("calendar.unsaved_changes", { count: changedDatesCount }) : t("calendar.all_saved")}
           </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!hasChanges || saving}
-            className="flex h-11 items-center justify-center gap-2 rounded-md bg-orange-600 px-6 text-sm font-black text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
+          <button type="button" onClick={handleSave} disabled={!hasChanges || saving} className="flex h-11 items-center justify-center gap-2 rounded-md bg-orange-600 px-6 text-sm font-black text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
             <Save size={17} />{saving ? t("calendar.saving") : t("calendar.save_blocked_dates")}
           </button>
         </footer>
