@@ -136,7 +136,7 @@ const initials = (name) =>
     .map((w) => w[0]?.toUpperCase())
     .join("");
 
-const tourBuilderDetails = (booking) => {
+const tourBuilderDetails = (booking, t) => {
   const details = booking?.details && typeof booking.details === "object"
     ? booking.details
     : booking?.attachments && typeof booking.attachments === "object"
@@ -152,11 +152,19 @@ const tourBuilderDetails = (booking) => {
     : null;
   const guests = structuredGuests ?? (legacy?.[2] ? Number(legacy[2]) : null);
   const residency = String(details.resident_type || legacy?.[3] || "").trim().toLowerCase();
-  const kindLabel = kind === "hotel" ? "Гостиница" : kind === "guide" ? "Гид" : kind === "transport" ? "Транспорт" : kind === "entry" ? "Входные билеты" : "";
+  const kindLabel = kind === "hotel"
+    ? t("bookings.types.hotel", { defaultValue: "Гостиница" })
+    : kind === "guide"
+      ? t("bookings.types.guide", { defaultValue: "Гид" })
+      : kind === "transport"
+        ? t("bookings.types.transport", { defaultValue: "Транспорт" })
+        : kind === "entry"
+          ? t("bookings.types.entry", { defaultValue: "Входные билеты" })
+          : "";
   const parts = [kindLabel];
-  if (Number.isFinite(guests)) parts.push(`Гостей: ${guests}`);
-  if (residency === "nrs") parts.push("Тариф: для нерезидентов");
-  if (residency === "res") parts.push("Тариф: для резидентов");
+  if (Number.isFinite(guests)) parts.push(t("bookings.guests_count", { count: guests, defaultValue: `Гостей: ${guests}` }));
+  if (residency === "nrs") parts.push(t("bookings.tariff_non_residents", { defaultValue: "Тариф: для нерезидентов" }));
+  if (residency === "res") parts.push(t("bookings.tariff_residents", { defaultValue: "Тариф: для резидентов" }));
   return { kind, text: parts.filter(Boolean).join(" · ") || message || "—" };
 };
 
@@ -303,6 +311,18 @@ const profileHref = useMemo(() => {
     ? createdAt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
     : null;
   const alreadyQuoted = Number(booking?.provider_price) > 0;
+  const providerNote = useMemo(() => {
+    const note = String(booking?.provider_note || "").trim();
+    if (!note) return "";
+    const fixedRateTitle = note.replace(/^Опубликованный тариф Tour Builder:\s*/i, "");
+    if (fixedRateTitle !== note) {
+      return t("bookings.published_tour_builder_rate", {
+        title: fixedRateTitle,
+        defaultValue: `Опубликованный тариф Tour Builder: ${fixedRateTitle}`,
+      });
+    }
+    return note;
+  }, [booking?.provider_note, t]);
   const canAccept =
     (viewerRole !== "provider" || allowProviderAccept) &&
     String(booking?.status) === "pending" &&
@@ -327,7 +347,7 @@ const profileHref = useMemo(() => {
   };
 
   const dates = Array.isArray(booking?.dates) ? booking.dates : [];
-  const tbDetails = useMemo(() => tourBuilderDetails(booking), [booking]);
+  const tbDetails = useMemo(() => tourBuilderDetails(booking, t), [booking, t]);
   const isIncoming = viewerRole === "provider";
   const isHotelBooking = tbDetails.kind === "hotel";
   const attachments = useMemo(
@@ -367,7 +387,7 @@ const profileHref = useMemo(() => {
         {Number(booking?.provider_price) > 0 ? (
           <span className="ml-auto inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-700 ring-1 ring-emerald-200">
             <b>{fmtPrice(booking.provider_price)} {booking.currency || "USD"}</b>
-            {booking.provider_note ? <span className="opacity-70">· {booking.provider_note}</span> : null}
+            {providerNote ? <span className="opacity-70">· {providerNote}</span> : null}
           </span>
         ) : null}
       </div>
