@@ -312,12 +312,12 @@ const collectImages = (...vals) => {
   return out;
 };
 
-/* Тип провайдера/категории: гид/транспорт? */
+/* Тип провайдера/категории: услуга с потоком бронирования. */
 const isGuideOrTransport = (raw) => {
   if (raw == null) return false;
   const s = String(raw).trim().toLowerCase();
-  if (s === "guide" || s === "transport") return true;
-  return /(гид|экскур|трансфер|transport|driver|taxi|car|bus|авто|транспорт)/i.test(s);
+  if (s === "guide" || s === "transport" || s === "hotel") return true;
+  return /(гид|экскур|трансфер|transport|driver|taxi|car|bus|авто|транспорт|hotel|отел|гостиниц)/i.test(s);
 };
 
 /* стикер на карточку - "отказной" */
@@ -919,6 +919,7 @@ export default function ServiceCard({
   favActive,
   onToggleFavorite,
   onQuickRequest,
+  onBook,
   now = Date.now(),
   className = "",
 }) {
@@ -2333,13 +2334,19 @@ return (
               )}
 
               {showBookButton ? (
-                <a
-                  href={`/profile/provider/${providerId}?service=${id}#book`}
+                <button
+                  type="button"
                   className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-white/80 px-2.5 py-1.5 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200 hover:shadow-sm"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onBook?.(id, providerId, title, {
+                      providerType: prov?.type || prov?.provider_type || prov?.category,
+                      category: svc.category || details?.category || item?.category,
+                    });
+                  }}
                 >
                   {t("actions.book", { defaultValue: "Бронировать" })}
-                </a>
+                </button>
               ) : (
                 <button
                   type="button"

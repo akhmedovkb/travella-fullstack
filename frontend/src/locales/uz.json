@@ -677,6 +677,12 @@
   "make_cover": "Muqova qilish",
   "marketplace": {
     "accommodation": "Joylashuv",
+    "booking": {
+      "eyebrow": "Xizmatni bron qilish", "hint": "Ta’minotchi mavjudlikni tasdiqlaydi. Shundan so‘ng to‘lov uchun 30 daqiqa beriladi.",
+      "service_date": "Xizmat sanasi", "check_in": "Kirish", "check_out": "Chiqish", "adults": "Kattalar", "children": "Bolalar",
+      "comment": "Ta’minotchiga izoh", "comment_placeholder": "Vaqt, yo‘nalish yoki maxsus istaklar", "send": "Bron so‘rovini yuborish",
+      "created": "Bron so‘rovi ta’minotchiga yuborildi", "error": "Bron yaratib bo‘lmadi"
+    },
     "address": "Manzil",
     "adults": "Kattalar (12+)",
     "already_opened": "Allaqachon ochilgan",

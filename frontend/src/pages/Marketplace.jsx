@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
+import MarketplaceBookingModal from "../components/MarketplaceBookingModal";
 import ServiceCard from "../components/ServiceCard";
 import { apiProviderFavorites, apiToggleProviderFavorite } from "../api/providerFavorites";
 import { tSuccess, tInfo, tError } from "../shared/toast";
@@ -563,12 +564,51 @@ export default function Marketplace() {
   const [qrServiceId, setQrServiceId] = useState(null);
   const [qrProviderId, setQrProviderId] = useState(null);
   const [qrServiceTitle, setQrServiceTitle] = useState("");
+  const [bookingService, setBookingService] = useState(null);
+  const [bookingBusy, setBookingBusy] = useState(false);
 
   const openQuickRequest = (serviceId, providerId, serviceTitle) => {
     setQrServiceId(serviceId);
     setQrProviderId(providerId || null);
     setQrServiceTitle(serviceTitle || "");
     setQrOpen(true);
+  };
+
+  const openBooking = (serviceId, providerId, serviceTitle, meta = {}) => {
+    if (role !== "client" && role !== "provider") {
+      tInfo(t("auth.login_required", { defaultValue: "Войдите, чтобы забронировать услугу" }));
+      return;
+    }
+    setBookingService({ serviceId, providerId, title: serviceTitle, ...meta });
+  };
+
+  const submitBooking = async ({ dates, start, end, adults, children, message, isHotel }) => {
+    if (!bookingService?.serviceId || !bookingService?.providerId) return;
+    setBookingBusy(true);
+    try {
+      await apiPost("/api/bookings", {
+        service_id: Number(bookingService.serviceId),
+        provider_id: Number(bookingService.providerId),
+        dates,
+        currency: "UZS",
+        message: message || undefined,
+        source: "marketplace",
+        type: isHotel ? "hotel" : String(bookingService.providerType || bookingService.category || "service"),
+        details: {
+          fixed_marketplace_rate: true,
+          pax_adult: adults,
+          pax_child: children,
+          check_in: start,
+          check_out: end,
+        },
+      }, role);
+      tSuccess(t("marketplace.booking.created", { defaultValue: "Запрос на бронирование отправлен поставщику" }));
+      setBookingService(null);
+    } catch (error) {
+      tError(error?.response?.data?.message || error?.data?.message || error?.message || t("marketplace.booking.error", { defaultValue: "Не удалось создать бронирование" }));
+    } finally {
+      setBookingBusy(false);
+    }
   };
 
   function getMyProviderId() {
@@ -1302,6 +1342,7 @@ const search = async (opts = {}) => {
               onQuickRequest={(serviceId, providerId, title) =>
                 openQuickRequest(serviceId ?? sid, providerId, title)
               }
+              onBook={openBooking}
             />
           </div>
         )}
@@ -1371,6 +1412,7 @@ const search = async (opts = {}) => {
                       onQuickRequest={(serviceId, providerId, title) =>
                         openQuickRequest(serviceId ?? sid, providerId, title)
                       }
+                      onBook={openBooking}
                     />
                   );
                 })}
@@ -1545,6 +1587,7 @@ const search = async (opts = {}) => {
                     onQuickRequest={(serviceId, providerId, title) =>
                       openQuickRequest(serviceId ?? sid, providerId, title)
                     }
+                    onBook={openBooking}
                   />
                 );
               })}
@@ -1560,6 +1603,13 @@ const search = async (opts = {}) => {
       )}
      {/* Модалка быстрого запроса */}
       <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
+      <MarketplaceBookingModal
+        open={Boolean(bookingService)}
+        service={bookingService}
+        busy={bookingBusy}
+        onClose={() => !bookingBusy && setBookingService(null)}
+        onSubmit={submitBooking}
+      />
     </div>
   );
 }

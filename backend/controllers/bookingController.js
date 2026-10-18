@@ -434,6 +434,43 @@ const createBooking = async (req, res) => {
     const managedHotelPrice = isTourBuilder && tourBuilderKind === "hotel"
       ? quotedHotelPrice(bag, providerId)
       : null;
+    const isMarketplace = req.body?.source === "marketplace";
+    let publishedMarketplaceRate = null;
+    if (isMarketplace) {
+      const marketplaceServiceId = Number(service_id || 0);
+      if (!Number.isInteger(marketplaceServiceId) || marketplaceServiceId <= 0) {
+        return res.status(400).json({ message: "Не указана услуга Marketplace", error: "marketplace_service_required" });
+      }
+      const serviceResult = await pool.query(
+        `SELECT id, provider_id, title, category, price, currency, details
+           FROM services
+          WHERE id=$1 AND provider_id=$2
+            AND deleted_at IS NULL
+            AND status IN ('published','approved','active')
+            AND COALESCE(LOWER(moderation_status), 'approved') IN ('approved','published','active')
+            AND (expiration_at IS NULL OR expiration_at > NOW())
+          LIMIT 1`,
+        [marketplaceServiceId, providerId]
+      );
+      const service = serviceResult.rows[0];
+      if (!service) {
+        return res.status(409).json({ message: "Услуга больше недоступна для бронирования.", error: "marketplace_service_unavailable" });
+      }
+      const detailPrice = Number(service.details?.netPrice ?? service.details?.price ?? 0);
+      const amount = Number(service.price) > 0 ? Number(service.price) : detailPrice;
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(409).json({ message: "У поставщика не указана актуальная цена услуги.", error: "marketplace_service_price_missing" });
+      }
+      publishedMarketplaceRate = {
+        amount,
+        currency: String(service.currency || "UZS").toUpperCase(),
+        title: service.title || null,
+      };
+      bag.fixed_marketplace_rate = true;
+      bag.marketplace_service_id = marketplaceServiceId;
+      bag.published_price = amount;
+      bag.published_currency = publishedMarketplaceRate.currency;
+    }
     const providerServiceId = Number(bag.provider_service_id || req.body?.provider_service_id || 0);
     let publishedTourBuilderRate = null;
     if (isTourBuilder && tourBuilderKind !== "hotel" && Number.isInteger(providerServiceId) && providerServiceId > 0) {
@@ -487,13 +524,15 @@ const createBooking = async (req, res) => {
     // опциональная валюта
     if (cols.currency) {
       insertCols.push("currency");
-      values.push(managedHotelPrice?.currency || publishedTourBuilderRate?.currency || currency || null);
+      values.push(managedHotelPrice?.currency || publishedTourBuilderRate?.currency || publishedMarketplaceRate?.currency || currency || null);
     }
-    if (managedHotelPrice || publishedTourBuilderRate) {
+    if (managedHotelPrice || publishedTourBuilderRate || publishedMarketplaceRate) {
       insertCols.push("provider_price", "provider_note");
       values.push(
-        managedHotelPrice?.amount || publishedTourBuilderRate.amount,
-        publishedTourBuilderRate?.title
+        managedHotelPrice?.amount || publishedTourBuilderRate?.amount || publishedMarketplaceRate.amount,
+        publishedMarketplaceRate?.title
+          ? `Опубликованная цена Marketplace: ${publishedMarketplaceRate.title}`
+          : publishedTourBuilderRate?.title
           ? `Опубликованный тариф Tour Builder: ${publishedTourBuilderRate.title} (${publishedTourBuilderRate.unitAmount} × ${publishedTourBuilderRate.units} дн.)`
           : "Цена зафиксирована по опубликованному тарифу Tour Builder"
       );
@@ -584,9 +623,9 @@ const createBooking = async (req, res) => {
       dates: days,
       time_slots: timeSlots,
       inventory: inventoryReservation,
-      ...((managedHotelPrice || publishedTourBuilderRate) ? {
-        price: managedHotelPrice?.amount || publishedTourBuilderRate.amount,
-        currency: managedHotelPrice?.currency || publishedTourBuilderRate.currency,
+      ...((managedHotelPrice || publishedTourBuilderRate || publishedMarketplaceRate) ? {
+        price: managedHotelPrice?.amount || publishedTourBuilderRate?.amount || publishedMarketplaceRate.amount,
+        currency: managedHotelPrice?.currency || publishedTourBuilderRate?.currency || publishedMarketplaceRate.currency,
       } : {}),
     });
 
@@ -1321,7 +1360,7 @@ const confirmBooking = async (req, res) => {
 
     // проверим владение и текущий статус
     const bQ = await pool.query(
-      `SELECT id, provider_id, client_id, status
+      `SELECT id, provider_id, client_id, status, provider_price, currency
          FROM bookings WHERE id=$1`,
       [id]
     );
@@ -1332,6 +1371,9 @@ const confirmBooking = async (req, res) => {
     // подтверждать можно из состояний "quoted" (и на всякий случай "pending")
     if (!canConfirmBookingStatus(b.status)) {
       return res.status(409).json({ message: "Подтверждение недоступно для текущего статуса" });
+    }
+    if (!Number.isFinite(Number(b.provider_price)) || Number(b.provider_price) <= 0) {
+      return res.status(409).json({ message: "Поставщик ещё не указал цену" });
     }
 
     // собрать даты
@@ -1353,13 +1395,13 @@ const confirmBooking = async (req, res) => {
       if (!free) return res.status(409).json({ message: "Даты уже заняты" });
     }
 
-    // подтверждаем
+    // Клиент согласовал цену: удерживаем дату и ждём оплату.
     const cols = await getExistingColumns("bookings", ["hold_until"]);
-    const clearHold = cols.hold_until ? `, hold_until = NULL` : ``;
+    const paymentHold = cols.hold_until ? `, hold_until = NOW() + INTERVAL '30 minutes'` : ``;
     const up = await pool.query(
       `UPDATE bookings
-          SET status='confirmed',
-              updated_at = NOW()${clearHold}
+          SET status='awaiting_payment',
+              updated_at = NOW()${paymentHold}
         WHERE id=$1 AND client_id=$2 AND status IN ('pending','quoted')
       RETURNING *`,
       [id, clientId]
@@ -1371,7 +1413,7 @@ const confirmBooking = async (req, res) => {
 
     // TG
     try {
-      (tg.notifyConfirmed || tg.notifyBookingPaidConfirmed)?.({ booking, by: "client" });
+      tg.notifyBookingAcceptedAwaitingPayment?.({ booking });
     } catch {}
 
     return res.json(booking);
@@ -1400,7 +1442,7 @@ const confirmBookingByRequester = async (req, res) => {
     }
 
     const bQ = await pool.query(
-      `SELECT id, provider_id, requester_provider_id, status
+      `SELECT id, provider_id, requester_provider_id, status, provider_price, currency
          FROM bookings WHERE id=$1`,
       [id]
     );
@@ -1411,6 +1453,9 @@ const confirmBookingByRequester = async (req, res) => {
     }
     if (!canConfirmBookingStatus(b.status)) {
       return res.status(409).json({ message: "Подтверждение недоступно для текущего статуса" });
+    }
+    if (!Number.isFinite(Number(b.provider_price)) || Number(b.provider_price) <= 0) {
+      return res.status(409).json({ message: "Поставщик ещё не указал цену" });
     }
 
     // даты
@@ -1425,10 +1470,10 @@ const confirmBookingByRequester = async (req, res) => {
       if (!free) return res.status(409).json({ message: "Даты уже заняты" });
     }
 
-    const clearHold = support.hold_until ? `, hold_until = NULL` : ``;
+    const paymentHold = support.hold_until ? `, hold_until = NOW() + INTERVAL '30 minutes'` : ``;
     const up = await pool.query(
       `UPDATE bookings
-          SET status='confirmed', updated_at=NOW()${clearHold}
+          SET status='awaiting_payment', updated_at=NOW()${paymentHold}
         WHERE id=$1 AND requester_provider_id=$2 AND status IN ('pending','quoted')
       RETURNING *`,
       [id, requesterId]
@@ -1437,7 +1482,7 @@ const confirmBookingByRequester = async (req, res) => {
       return res.status(409).json({ message: "Статус брони изменился. Обновите список и повторите действие." });
     }
     const booking = up.rows[0];
-    try { (tg.notifyConfirmed || tg.notifyBookingPaidConfirmed)?.({ booking, by: "requester" }); } catch {}
+    try { tg.notifyBookingAcceptedAwaitingPayment?.({ booking }); } catch {}
     return res.json(booking);
   } catch (err) {
     console.error("confirmBookingByRequester error:", err);

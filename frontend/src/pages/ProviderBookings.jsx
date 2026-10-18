@@ -32,6 +32,14 @@ const isFixedTourBuilderRate = (booking) =>
     || /^Опубликованный тариф Tour Builder:/i.test(String(booking?.provider_note || "").trim())
   )
   && Number(booking?.provider_price) > 0;
+const isFixedMarketplaceRate = (booking) =>
+  String(booking?.source || "").toLowerCase() === "marketplace"
+  && Boolean(
+    booking?.details?.fixed_marketplace_rate
+    || booking?.attachments?.fixed_marketplace_rate
+    || /^Опубликованная цена Marketplace:/i.test(String(booking?.provider_note || "").trim())
+  )
+  && Number(booking?.provider_price) > 0;
 const bookingTimeSlots = (booking) => {
   const raw = booking?.details?.time_slots || booking?.attachments?.time_slots || booking?.time_slots;
   if (!Array.isArray(raw)) return [];
@@ -791,7 +799,8 @@ export default function ProviderBookings() {
           const awaitingRequester = isIncoming && String(b?.status) === "quoted";
           const fixedHotelBooking = isTourBuilderHotel(b);
           const fixedCatalogBooking = isFixedTourBuilderRate(b);
-          const fixedPriceBooking = fixedHotelBooking || fixedCatalogBooking;
+          const fixedMarketplaceBooking = isFixedMarketplaceRate(b);
+          const fixedPriceBooking = fixedHotelBooking || fixedCatalogBooking || fixedMarketplaceBooking;
 
           // подписи «кем отклонено/кем отменено»
           let rejectedByLabel = null;
@@ -828,7 +837,7 @@ export default function ProviderBookings() {
               <BookingTimeSlots booking={b} />
 
               {/* Входящие: форма согласования цены (прячем после отправки предложения) */}
-              {isIncoming && String(b.status) === "pending" && !awaitingRequester && !fixedPriceBooking && (
+              {isIncoming && String(b.status) === "pending" && !awaitingRequester && (!fixedPriceBooking || fixedMarketplaceBooking) && (
                 <PriceAgreementCard booking={b} onSent={load} onReject={reject} />
               )}
 
@@ -1008,7 +1017,7 @@ export default function ProviderBookings() {
       return <div className="text-gray-500">{t("bookings.tb_empty", { defaultValue: "Пакетов TourBuilder пока нет." })}</div>;
     // используем тот же renderRow (он реагирует на tab === "incoming")
     const renderRow = (b) => {
-      const fixedPriceBooking = isTourBuilderHotel(b) || isFixedTourBuilderRate(b);
+      const fixedPriceBooking = isTourBuilderHotel(b) || isFixedTourBuilderRate(b) || isFixedMarketplaceRate(b);
       return (
       <div key={b.id} className="p-4">
         <BookingRow
