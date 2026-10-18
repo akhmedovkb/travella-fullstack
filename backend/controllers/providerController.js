@@ -1860,8 +1860,7 @@ const getBookedDates = async (req, res) => {
          FROM booking_dates bd
          JOIN bookings b ON b.id = bd.booking_id
         WHERE b.provider_id = $1
-          AND b.status IN ('pending','confirmed','active')
-          AND bd.date >= CURRENT_DATE
+          AND b.status IN ('awaiting_payment','confirmed','active','accepted')
         ORDER BY 1`,
       [providerId]
     );
@@ -1935,7 +1934,6 @@ const getCalendarPublic = async (req, res) => {
            JOIN bookings b ON b.id = bd.booking_id
           WHERE b.provider_id = $1
             AND b.status IN ('awaiting_payment','confirmed','active','accepted')
-            AND bd.date >= CURRENT_DATE
           ORDER BY 1`,
         [providerId]
       ),
