@@ -94,7 +94,7 @@ const StatusPill = ({ status, text, className = "" }) => {
   };
   const cls = map[statusKey(status)] || "bg-gray-100 text-gray-700 ring-gray-200";
   return (
-    <span className={`ml-1 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ring-1 ${cls} ${className}`}>
+    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ${cls} ${className}`}>
       {text ?? status}
     </span>
   );
@@ -356,10 +356,10 @@ const profileHref = useMemo(() => {
   );
 
   return (
-    <div className={embedded ? "bg-transparent" : "rounded-lg border border-gray-200 bg-white p-4"}>
+    <div className={embedded ? "bg-transparent" : "rounded-lg border border-gray-200 bg-white p-5"}>
       {/* Верхняя строка: #id · услуга · статус · дата создания */}
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-gray-700">
-        <span className="text-gray-500">#{booking.id}</span>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-gray-700">
+        <span className="font-mono text-xs text-gray-400">#{booking.id}</span>
         {booking.service_title ? <span className="text-gray-700">· {booking.service_title}</span> : null}
         {booking.status ? (
           <StatusPill
@@ -371,36 +371,36 @@ const profileHref = useMemo(() => {
           <BookingHoldCountdown holdUntil={booking.hold_until} onExpired={onHoldExpired} />
         ) : null}
         {String(booking.payment_status || "").toLowerCase() === "paid" ? (
-          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
             {t("bookings.paid_via_payme", { defaultValue: "Оплачено через Payme" })}
           </span>
         ) : null}
 
         {/* добавлено: дата создания */}
         {createdAtLabel ? (
-          <span className="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-0.5 text-xs text-gray-500">
+          <span className="text-xs text-gray-400">
             {createdAtLabel}
           </span>
         ) : null}
 
         {/* цена/комментарий поставщика — бейдж справа, если есть */}
         {Number(booking?.provider_price) > 0 ? (
-          <span className="ml-auto inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-700 ring-1 ring-emerald-200">
-            <b>{fmtPrice(booking.provider_price)} {booking.currency || "USD"}</b>
-            {providerNote ? <span className="opacity-70">· {providerNote}</span> : null}
-          </span>
+          <div className="ml-auto min-w-0 text-right">
+            <div className="font-semibold text-gray-950">{fmtPrice(booking.provider_price)} {booking.currency || "USD"}</div>
+            {providerNote ? <div className="max-w-[440px] truncate text-xs text-gray-400" title={providerNote}>{providerNote}</div> : null}
+          </div>
         ) : null}
       </div>
 
-      <div className="grid gap-x-6 gap-y-4 border-t border-gray-100 pt-3 sm:grid-cols-2 xl:grid-cols-[1.35fr,1fr,0.8fr,1.5fr]">
+      <div className="grid gap-x-8 gap-y-4 border-t border-gray-100 pt-4 sm:grid-cols-2 xl:grid-cols-[1.2fr,1fr,0.8fr,1.35fr]">
         <div className="min-w-0">
-          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+          <div className="mb-1.5 text-xs font-medium text-gray-400">
             {isIncoming
               ? t("bookings.customer", { defaultValue: "Заказчик" })
               : t("bookings.provider", { defaultValue: "Поставщик" })}
           </div>
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200">
+            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-gray-100 text-gray-700">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -415,10 +415,10 @@ const profileHref = useMemo(() => {
                   {counterpart.title}
                 </Link>
               ) : (
-                <div className="truncate font-semibold">{counterpart.title}</div>
+                <div className="truncate font-semibold text-gray-950">{counterpart.title}</div>
               )}
               {counterpart.extra ? (
-                <span className="mt-1 inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 ring-1 ring-indigo-200">
+                <span className="mt-0.5 inline-flex text-xs text-gray-500">
                   {counterpart.extra}
                 </span>
               ) : null}
@@ -427,7 +427,7 @@ const profileHref = useMemo(() => {
         </div>
 
         <div className="min-w-0">
-          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+          <div className="mb-1.5 text-xs font-medium text-gray-400">
             {isIncoming
               ? t("bookings.customer_contacts", { defaultValue: "Контакты заказчика" })
               : t("bookings.provider_contacts", { defaultValue: "Контакты поставщика" })}
@@ -450,7 +450,7 @@ const profileHref = useMemo(() => {
         </div>
 
         <div className="min-w-0">
-          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+          <div className="mb-1.5 text-xs font-medium text-gray-400">
             {isHotelBooking
               ? t("bookings.stay_date", { defaultValue: "Дата проживания" })
               : t("bookings.service_date", { defaultValue: "Дата услуги" })}
@@ -467,7 +467,7 @@ const profileHref = useMemo(() => {
         </div>
 
         <div className="min-w-0">
-          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+          <div className="mb-1.5 text-xs font-medium text-gray-400">
             {isHotelBooking
               ? t("bookings.accommodation", { defaultValue: "Размещение" })
               : t("bookings.request_details", { defaultValue: "Детали заявки" })}

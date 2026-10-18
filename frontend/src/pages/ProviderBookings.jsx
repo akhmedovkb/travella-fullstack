@@ -603,35 +603,35 @@ export default function ProviderBookings() {
     const rows = buildDailyMatrix(group.items);
     const reference = String(group.group_id || "").split("-")[0].toUpperCase();
     return (
-      <div className="border-b border-gray-200 bg-gray-50/70 p-4 md:p-5">
+      <div className="border-b border-gray-200 bg-white px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold uppercase text-orange-600">Tour Builder</div>
+            <div className="text-xs font-semibold text-orange-600">Tour Builder</div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-bold text-gray-950">
                 {t("bookings.request", { defaultValue: "Заявка" })} {reference ? `№ ${reference}` : ""}
               </h2>
-              <span className="rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-200">
+              <span className="text-xs text-gray-500">
                 {group.items.length} {t("bookings.services_count", { defaultValue: "услуг" })}
               </span>
             </div>
           </div>
-          <div className="text-right text-xs text-gray-500">
-            <div>{t("bookings.full_reference", { defaultValue: "Номер пакета" })}</div>
-            <div className="mt-0.5 font-mono">{group.group_id}</div>
+          <div className="max-w-[280px] text-right text-xs text-gray-400">
+            <div className="truncate font-mono" title={group.group_id}>{group.group_id}</div>
           </div>
         </div>
 
         {rows.length ? (
-          <div className="mt-4 grid gap-2 md:grid-cols-2">
+          <div className="mt-4 grid gap-x-6 gap-y-2 border-t border-gray-100 pt-3 md:grid-cols-2">
             {rows.map((row) => (
-              <div key={row.date} className="rounded-lg border border-gray-200 bg-white p-3">
-                <div className="flex items-start gap-3">
-                  <span className="rounded-md bg-gray-950 px-2 py-1 text-xs font-bold text-white">{row.label}</span>
+              <div key={row.date} className="flex min-w-0 items-start gap-3 py-1.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-950 text-xs font-bold text-white">{row.label}</span>
                   <div className="min-w-0">
-                    <div className="font-semibold text-gray-950">{row.city || t("bookings.city_unknown", { defaultValue: "Город не указан" })}</div>
-                    <div className="text-sm text-gray-500">{row.dateLabel || fmtShort(row.date)}</div>
-                    <div className="mt-2 space-y-1 text-sm text-gray-700">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-semibold text-gray-950">{row.city || t("bookings.city_unknown", { defaultValue: "Город не указан" })}</span>
+                      <span className="text-sm text-gray-500">{row.dateLabel || fmtShort(row.date)}</span>
+                    </div>
+                    <div className="mt-1 space-y-0.5 text-sm text-gray-600">
                       {row.sections.map(([klass, names]) =>
                         names.length ? (
                           <div key={klass}>
@@ -641,7 +641,6 @@ export default function ProviderBookings() {
                       )}
                     </div>
                   </div>
-                </div>
               </div>
             ))}
           </div>
@@ -959,7 +958,7 @@ export default function ProviderBookings() {
     return (
       <div className="space-y-6">
         {groupedOutgoing.groups.map((g) => (
-          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
             {renderPackageOverview(g)}
             <div className="divide-y">
               {g.items.map((b) => (
@@ -1035,7 +1034,7 @@ export default function ProviderBookings() {
     return (
       <div className="space-y-6">
         {groupedIncoming.map((g) => (
-          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
             {renderPackageOverview(g)}
             <div className="divide-y">{g.items.map(renderRow)}</div>
           </div>
@@ -1059,13 +1058,13 @@ export default function ProviderBookings() {
 
   return (
     <div className="mx-auto max-w-7xl p-4 md:p-6">
-      <header className="mb-5 border-b border-gray-200 pb-5">
+      <header className="mb-4 pb-2">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="mb-1 text-xs font-semibold uppercase text-orange-600">
+            <div className="mb-1 text-xs font-semibold text-orange-600">
               {t("bookings.workspace", { defaultValue: "Управление заявками" })}
             </div>
-            <h1 className="text-2xl font-bold text-gray-950 md:text-3xl">
+            <h1 className="text-2xl font-bold text-gray-950">
               {t("bookings.title", { defaultValue: "Бронирования" })}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-gray-600">
@@ -1086,7 +1085,7 @@ export default function ProviderBookings() {
         </div>
       </header>
 
-      <div className="mb-5 grid gap-3 md:grid-cols-2" role="tablist" aria-label={t("bookings.direction", { defaultValue: "Направление бронирований" })}>
+      <div className="mb-4 grid overflow-hidden rounded-lg border border-gray-200 bg-white md:grid-cols-2" role="tablist" aria-label={t("bookings.direction", { defaultValue: "Направление бронирований" })}>
         {[
           {
             key: "incoming",
@@ -1111,22 +1110,22 @@ export default function ProviderBookings() {
               role="tab"
               aria-selected={active}
               onClick={() => { setTab(item.key); setFilter("all"); }}
-              className={`min-h-[92px] rounded-lg border px-4 py-3 text-left transition ${
+              className={`min-h-[72px] border-l-4 px-4 py-3 text-left transition ${
                 active
-                  ? "border-gray-950 bg-gray-950 text-white shadow-sm"
-                  : "border-gray-200 bg-white text-gray-950 hover:border-gray-400"
+                  ? "border-l-orange-500 bg-gray-50 text-gray-950"
+                  : "border-l-transparent bg-white text-gray-700 hover:bg-gray-50"
               }`}
             >
               <span className="flex items-start justify-between gap-4">
                 <span>
-                  <span className="block text-lg font-bold">{item.title}</span>
-                  <span className={`mt-1 block text-sm ${active ? "text-white/70" : "text-gray-500"}`}>{item.description}</span>
+                  <span className="block font-bold">{item.title}</span>
+                  <span className="mt-0.5 block text-sm text-gray-500">{item.description}</span>
                 </span>
-                <span className={`min-w-10 rounded-md px-2.5 py-1 text-center text-lg font-bold ${active ? "bg-white/10" : "bg-gray-100"}`}>
+                <span className="min-w-9 rounded-md bg-gray-100 px-2 py-1 text-center text-sm font-bold text-gray-800">
                   {item.total}
                 </span>
               </span>
-              <span className={`mt-2 block text-xs font-medium ${active ? "text-orange-300" : "text-orange-700"}`}>
+              <span className={`mt-1.5 block text-xs font-medium ${item.attention > 0 ? "text-orange-700" : "text-gray-400"}`}>
                 {item.attention > 0
                   ? t("bookings.need_action", { count: item.attention, defaultValue: `Требуют действия: ${item.attention}` })
                   : t("bookings.no_action", { defaultValue: "Нет заявок, требующих действия" })}
@@ -1136,27 +1135,27 @@ export default function ProviderBookings() {
         })}
       </div>
 
-      <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
-        <span className="mr-2 text-xs font-semibold uppercase text-gray-500">
+      <div className="mb-4 flex flex-wrap items-center gap-1 rounded-lg border border-gray-200 bg-white p-1.5">
+        <span className="mx-2 text-xs font-semibold text-gray-400">
           {t("bookings.source", { defaultValue: "Источник" })}
         </span>
         <button
           type="button"
           onClick={() => { setActiveSubTab("tb"); setFilter("all"); }}
-          className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSubTab === "tb" ? "bg-orange-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
+          className={`rounded-md px-3 py-2 text-sm font-semibold ${activeSubTab === "tb" ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-gray-100"}`}
         >
           Tour Builder <span className="ml-1 opacity-75">{tourBuilderCount}</span>
         </button>
         <button
           type="button"
           onClick={() => { setActiveSubTab("rest"); setFilter("all"); }}
-          className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSubTab === "rest" ? "bg-orange-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
+          className={`rounded-md px-3 py-2 text-sm font-semibold ${activeSubTab === "rest" ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-gray-100"}`}
         >
           {t("bookings.other", { defaultValue: "Другие бронирования" })} <span className="ml-1 opacity-75">{otherCount}</span>
         </button>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-4 flex flex-wrap items-center gap-1.5">
         {[
           { key: "all", label: t("filter.all", { defaultValue: "Все" }), count: counts.all },
           { key: "pending", label: t("filter.pending", { defaultValue: "Ожидает" }), count: counts.pending },
@@ -1168,10 +1167,10 @@ export default function ProviderBookings() {
           <button
             key={key}
             onClick={() => setFilter(key)}
-            className={"rounded-full px-3 py-1.5 text-sm ring-1 " + (filter === key ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
+            className={"rounded-md px-3 py-1.5 text-sm " + (filter === key ? "bg-orange-50 font-semibold text-orange-800 ring-1 ring-orange-200" : "text-gray-600 hover:bg-gray-100")}
           >
             {label}
-            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (filter === key ? "bg-white/20" : "bg-gray-100")}>
+            <span className="ml-1.5 text-xs text-gray-400">
               {count}
             </span>
           </button>
