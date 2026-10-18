@@ -628,7 +628,7 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
         LEFT JOIN clients   c  ON c.id = b.client_id
         LEFT JOIN providers rp ON rp.id = b.requester_provider_id
         WHERE b.provider_id = $1
-          AND b.status IN ('confirmed','active')
+          AND b.status IN ('awaiting_payment','confirmed','active','accepted')
           AND bd.date >= CURRENT_DATE
         ORDER BY bd.date, name
       `,
@@ -651,7 +651,7 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
           FROM booking_dates bd
           JOIN bookings b ON b.id = bd.booking_id
           WHERE b.provider_id = $1
-            AND b.status IN ('confirmed','active')
+            AND b.status IN ('awaiting_payment','confirmed','active','accepted')
             AND bd.date >= CURRENT_DATE
           ORDER BY 1
         `,
@@ -684,7 +684,7 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
           LEFT JOIN clients   c  ON c.id = b.client_id
           LEFT JOIN providers rp ON rp.id = b.requester_provider_id
           WHERE b.provider_id = $1
-            AND b.status IN ('confirmed','active')
+            AND b.status IN ('awaiting_payment','confirmed','active','accepted')
             AND bd.date >= CURRENT_DATE
           ORDER BY bd.date, name
         `,

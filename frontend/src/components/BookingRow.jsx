@@ -188,6 +188,7 @@ export default function BookingRow({
   booking,
   viewerRole,            // 'provider' (входящие) | 'client' (исходящие у провайдера и кабинет клиента)
   needPriceForAccept,    // показать «Подтвердить» только при наличии provider_price
+  allowProviderAccept = false,
   hideAcceptIfQuoted = false, // скрыть «Подтвердить», если цена уже отправлена (ожидаем подтверждение заявителя)
   hideClientCancel,      // спрятать кнопку «Отмена» (когда надо)
   onAccept,
@@ -302,9 +303,8 @@ const profileHref = useMemo(() => {
     ? createdAt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
     : null;
   const alreadyQuoted = Number(booking?.provider_price) > 0;
-  // Поставщик больше НЕ подтверждает входящие: блокируем всегда
   const canAccept =
-    viewerRole !== "provider" &&
+    (viewerRole !== "provider" || allowProviderAccept) &&
     String(booking?.status) === "pending" &&
     (!needPriceForAccept || alreadyQuoted) &&
     !hideAcceptIfQuoted;

@@ -1934,7 +1934,7 @@ const getCalendarPublic = async (req, res) => {
            FROM booking_dates bd
            JOIN bookings b ON b.id = bd.booking_id
           WHERE b.provider_id = $1
-            AND b.status IN ('confirmed','active')
+            AND b.status IN ('awaiting_payment','confirmed','active','accepted')
             AND bd.date >= CURRENT_DATE
           ORDER BY 1`,
         [providerId]
@@ -2648,7 +2648,7 @@ async function baseSearchFromServices({
         FROM bookings b
         JOIN booking_dates bd ON bd.booking_id = b.id
         WHERE b.provider_id = p.id
-          AND b.status IN ('confirmed','active')
+          AND b.status IN ('awaiting_payment','confirmed','active','accepted')
           AND bd.date = $${i}::date
       )
       AND NOT EXISTS (
@@ -2669,7 +2669,7 @@ async function baseSearchFromServices({
         FROM bookings b
         JOIN booking_dates bd ON bd.booking_id = b.id
         WHERE b.provider_id = p.id
-          AND b.status IN ('confirmed','active')
+          AND b.status IN ('awaiting_payment','confirmed','active','accepted')
           AND bd.date BETWEEN $${is}::date AND $${ie}::date
       )
       AND NOT EXISTS (
