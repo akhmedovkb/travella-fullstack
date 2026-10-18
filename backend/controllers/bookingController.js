@@ -7,6 +7,10 @@ const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
 const { HotelInventoryError, quotedHotelPrice, reserveHotelInventory } = require("../utils/hotelInventory");
 const { ensureHotelOfferTables } = require("../utils/hotelOffersSchema");
+const {
+  GUIDE_SERVICE_CATEGORY_SET,
+  TRANSPORT_SERVICE_CATEGORY_SET,
+} = require("../utils/providerServiceCatalog");
 
 function buildPaymeCheckoutUrl({ orderId, amountTiyin, redirectUrl }) {
   const merchantId = process.env.PAYME_MERCHANT_ID || process.env.PAYME_CHECKOUT_ID || "";
@@ -434,22 +438,37 @@ const createBooking = async (req, res) => {
     let publishedTourBuilderRate = null;
     if (isTourBuilder && tourBuilderKind !== "hotel" && Number.isInteger(providerServiceId) && providerServiceId > 0) {
       const rateResult = await pool.query(
-        `SELECT id, title, price, currency
+        `SELECT id, title, price, currency, category
            FROM provider_services
           WHERE id=$1 AND provider_id=$2 AND is_active=TRUE AND price > 0
           LIMIT 1`,
         [providerServiceId, providerId]
       );
       const rate = rateResult.rows[0];
-      if (rate) {
-        publishedTourBuilderRate = {
-          amount: Number(rate.price),
-          currency: rate.currency || "UZS",
-          title: rate.title || null,
-        };
-        bag.provider_service_id = Number(rate.id);
-        bag.fixed_catalog_rate = true;
+      if (!rate) {
+        return res.status(409).json({
+          message: "Выбранный тариф больше недоступен. Обновите список услуг поставщика.",
+          error: "provider_service_unavailable",
+        });
       }
+      const categorySet = tourBuilderKind === "transport"
+        ? TRANSPORT_SERVICE_CATEGORY_SET
+        : GUIDE_SERVICE_CATEGORY_SET;
+      if (!categorySet.has(String(rate.category || ""))) {
+        return res.status(409).json({
+          message: "Выбранный тариф не соответствует типу компонента Tour Builder.",
+          error: "provider_service_type_mismatch",
+        });
+      }
+      publishedTourBuilderRate = {
+        amount: Number(rate.price) * new Set(days).size,
+        unitAmount: Number(rate.price),
+        units: new Set(days).size,
+        currency: rate.currency || "UZS",
+        title: rate.title || null,
+      };
+      bag.provider_service_id = Number(rate.id);
+      bag.fixed_catalog_rate = true;
     }
     const initialStatus = managedHotelPrice ? "awaiting_payment" : "pending";
 
@@ -475,7 +494,7 @@ const createBooking = async (req, res) => {
       values.push(
         managedHotelPrice?.amount || publishedTourBuilderRate.amount,
         publishedTourBuilderRate?.title
-          ? `Опубликованный тариф Tour Builder: ${publishedTourBuilderRate.title}`
+          ? `Опубликованный тариф Tour Builder: ${publishedTourBuilderRate.title} (${publishedTourBuilderRate.unitAmount} × ${publishedTourBuilderRate.units} дн.)`
           : "Цена зафиксирована по опубликованному тарифу Tour Builder"
       );
       if (managedHotelPrice && cols.hold_until) {
@@ -1985,7 +2004,7 @@ const markPaid = async (req, res) => {
   }
 };
 
-/** POST /api/bookings/:id/payment-order — создаёт оплату Payme для действующего hotel hold. */
+/** POST /api/bookings/:id/payment-order — создаёт оплату Payme для действующей брони. */
 const createPaymentOrder = async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid booking id" });
@@ -1997,7 +2016,7 @@ const createPaymentOrder = async (req, res) => {
       return res.status(403).json({ message: "Оплатить бронь может только её заявитель" });
     }
     await db.query("BEGIN");
-    await db.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`hotel-payment:${id}`]);
+    await db.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`booking-payment:${id}`]);
     const bookingResult = await db.query(
       `SELECT id,status,provider_price,currency,hold_until,client_id,
               NULLIF(to_jsonb(bookings)->>'requester_provider_id','')::bigint AS requester_provider_id
@@ -2017,7 +2036,7 @@ const createPaymentOrder = async (req, res) => {
     const currency = String(booking.currency || "UZS").toUpperCase();
     if (currency !== "UZS") {
       await db.query("ROLLBACK");
-      return res.status(409).json({ message: "Онлайн-оплата гостиничной брони доступна только в UZS" });
+      return res.status(409).json({ message: "Онлайн-оплата брони доступна только в UZS" });
     }
     const amountTiyin = Math.round(Number(booking.provider_price || 0) * 100);
     if (!Number.isSafeInteger(amountTiyin) || amountTiyin <= 0) {
@@ -2037,7 +2056,7 @@ const createPaymentOrder = async (req, res) => {
     `);
     const existing = await db.query(
       `SELECT * FROM topup_orders
-        WHERE booking_id=$1 AND order_type='hotel_booking'
+        WHERE booking_id=$1 AND order_type IN ('booking','hotel_booking')
           AND status IN ('created','pending') AND expires_at > NOW()
         ORDER BY id DESC LIMIT 1`,
       [id]
@@ -2055,7 +2074,7 @@ const createPaymentOrder = async (req, res) => {
     const inserted = await db.query(
       `INSERT INTO topup_orders
         (client_id,amount,amount_tiyin,provider,status,purpose,order_type,booking_id,actor_role,actor_id,redirect_url,expires_at,meta)
-       VALUES ($1,$2,$2,'payme','created','hotel_booking','hotel_booking',$3,$4,$5,$6,$7,$8)
+       VALUES ($1,$2,$2,'payme','created','booking','booking',$3,$4,$5,$6,$7,$8)
        RETURNING *`,
       [booking.client_id || null, amountTiyin, id, role, actorId, redirectUrl, booking.hold_until, { booking_id: id }]
     );

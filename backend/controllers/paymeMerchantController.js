@@ -233,7 +233,7 @@ function isUnlockContactOrder(order) {
 }
 
 function isHotelBookingOrder(order) {
-  return order?.order_type === "hotel_booking";
+  return order?.order_type === "hotel_booking" || order?.order_type === "booking";
 }
 
 async function isHotelBookingPayable(client, order) {

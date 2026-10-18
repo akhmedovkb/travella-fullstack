@@ -9,8 +9,9 @@ const {
   cancelTransaction,
 } = require("../controllers/paymeMerchantController");
 
-test("recognizes only hotel booking Payme orders", () => {
+test("recognizes legacy hotel and generic booking Payme orders", () => {
   assert.equal(isHotelBookingOrder({ order_type: "hotel_booking" }), true);
+  assert.equal(isHotelBookingOrder({ order_type: "booking" }), true);
   assert.equal(isHotelBookingOrder({ order_type: "balance_topup" }), false);
 });
 

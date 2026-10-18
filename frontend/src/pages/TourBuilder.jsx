@@ -1798,7 +1798,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     const kindForGuide =
       svc && TRANSPORT_ALLOWED.has(svc.category) ? "transport" : "guide";
 
-    const key = `${kindForGuide}:${pid}`;
+    const key = `${kindForGuide}:${pid}:${svcId || "quote"}`;
     if (!buckets.has(key)) {
       buckets.set(key, { kind: kindForGuide, provider_id: pid, service_id: null, dates: [], time_slots: [] });
     }
@@ -1812,8 +1812,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
       // транспорт
       if (st?.transport?.id) {
         const pid = String(st.transport.id);
-        const key = `transport:${pid}`;
         const svcId = (st?.transportService?.raw?.id ?? st?.transportService?.id) || null; // ← real
+        const key = `transport:${pid}:${svcId || "quote"}`;
         if (!buckets.has(key)) buckets.set(key, { kind: "transport", provider_id: pid, service_id: null, dates: [], time_slots: [] });
         const b = buckets.get(key);
         if (svcId && !b.service_id) b.service_id = String(svcId);
