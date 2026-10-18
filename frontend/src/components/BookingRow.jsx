@@ -80,6 +80,7 @@ const resolveFile = (raw) => {
 // СТАТУСЫ "confirmed", "Отклонено: поставщиком услуги", "Отменено: вами"
 const statusKey = (s) => String(s || "").toLowerCase();
 const StatusPill = ({ status, text, className = "" }) => {
+  const normalizedStatus = statusKey(status);
   const map = {
     pending:   ["bg-amber-500", "text-amber-700"],
     quoted:    ["bg-blue-500", "text-blue-700"],
@@ -92,10 +93,14 @@ const StatusPill = ({ status, text, className = "" }) => {
     cancelled_unpaid: ["bg-gray-400", "text-gray-600"],
     expired:   ["bg-gray-400", "text-gray-600"],
   };
-  const [dotClass, textClass] = map[statusKey(status)] || ["bg-gray-400", "text-gray-600"];
+  const [dotClass, textClass] = map[normalizedStatus] || ["bg-gray-400", "text-gray-600"];
+  const needsAttention = ["pending", "quoted", "awaiting_payment"].includes(normalizedStatus);
   return (
     <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${textClass} ${className}`}>
-      <span className={`h-1.5 w-1.5 rounded-full ${dotClass}`} aria-hidden="true" />
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${dotClass} ${needsAttention ? "motion-safe:animate-pulse" : ""}`}
+        aria-hidden="true"
+      />
       {text ?? status}
     </span>
   );
