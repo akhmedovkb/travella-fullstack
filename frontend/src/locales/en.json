@@ -95,6 +95,7 @@
     "payment_processing": "The payment is still processing. The status will update automatically.",
     "online_payment_uzs_only": "Payme online payment is available only for bookings in UZS. Contact the provider for another payment method.",
     "paid_via_payme": "Paid via Payme",
+    "accepted_awaiting_payment": "Request accepted. Waiting for the requester to pay.",
     "provider_cancel_reason": "Specify cancellation reason",
     "waiting_for_requester": "Offer sent. Waiting for client confirmation.",
     "empty": "No bookings yet.",

@@ -95,6 +95,7 @@
     "payment_processing": "To‘lov hali qayta ishlanmoqda. Holat avtomatik yangilanadi.",
     "online_payment_uzs_only": "Payme orqali onlayn to‘lov faqat UZS bronlari uchun mavjud. Boshqa to‘lov usuli uchun ta’minotchi bilan bog‘laning.",
     "paid_via_payme": "Payme orqali to‘langan",
+    "accepted_awaiting_payment": "So‘rov qabul qilindi. Buyurtmachining to‘lovi kutilmoqda.",
     "provider_cancel_reason": "Bekor qilish sababini ko‘rsating",
     "waiting_for_requester": "Taklif yuborildi. Mijoz tasdig‘i kutilmoqda.",
     "empty": "Hozircha bronlar yo‘q.",

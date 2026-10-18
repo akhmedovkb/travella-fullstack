@@ -341,7 +341,7 @@ const profileHref = useMemo(() => {
       <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-gray-700">
         <span className="text-gray-500">#{booking.id}</span>
         {booking.service_title ? <span className="text-gray-700">· {booking.service_title}</span> : null}
-        {booking.status && booking.source !== "tour_builder" ? (
+        {booking.status ? (
           <StatusPill
             status={booking.status}
             text={statusText ?? t(`status.${booking.status}`, { defaultValue: booking.status })}

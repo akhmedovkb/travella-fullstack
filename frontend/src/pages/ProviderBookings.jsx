@@ -308,7 +308,9 @@ export default function ProviderBookings() {
     }
     try {
       await axios.post(`${API_BASE}/api/bookings/${b.id}/accept`, {}, cfg());
-      tSuccess(t("bookings.accepted", { defaultValue: "Бронь подтверждена" }));
+      tSuccess(t("bookings.accepted_awaiting_payment", {
+        defaultValue: "Заявка принята. Ожидаем оплату от заказчика.",
+      }));
     } catch (e) {
       tError(e?.response?.data?.message || t("bookings.accept_error", { defaultValue: "Ошибка подтверждения" }));
     } finally {
