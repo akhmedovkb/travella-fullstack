@@ -36,10 +36,12 @@ exports.getAvailability = async (req, res) => {
 
     // брони: pending/active блокируют даты
     const bookedQ = await pool.query(
-      `SELECT bd.date::date AS d
-       FROM booking_dates bd
-       JOIN bookings b ON b.id = bd.booking_id
-       WHERE b.provider_id = $1 AND b.status IN ('awaiting_payment','confirmed','active','accepted')`,
+      `SELECT DISTINCT COALESCE(bd.date, b.date)::date AS d
+       FROM bookings b
+       LEFT JOIN booking_dates bd ON bd.booking_id = b.id
+       WHERE b.provider_id = $1
+         AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+         AND COALESCE(bd.date, b.date) IS NOT NULL`,
       [pid]
     );
     const blockedQ = await pool.query(

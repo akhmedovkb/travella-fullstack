@@ -1856,11 +1856,12 @@ const getBookedDates = async (req, res) => {
   try {
     const providerId = req.user.id;
     const q = await pool.query(
-      `SELECT DISTINCT bd.date::text AS date
-         FROM booking_dates bd
-         JOIN bookings b ON b.id = bd.booking_id
+      `SELECT DISTINCT COALESCE(bd.date, b.date)::text AS date
+         FROM bookings b
+         LEFT JOIN booking_dates bd ON bd.booking_id = b.id
         WHERE b.provider_id = $1
           AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+          AND COALESCE(bd.date, b.date) IS NOT NULL
         ORDER BY 1`,
       [providerId]
     );
@@ -1929,11 +1930,12 @@ const getCalendarPublic = async (req, res) => {
 
     const [booked, blocked] = await Promise.all([
       pool.query(
-        `SELECT DISTINCT bd.date::text AS date
-           FROM booking_dates bd
-           JOIN bookings b ON b.id = bd.booking_id
+        `SELECT DISTINCT COALESCE(bd.date, b.date)::text AS date
+           FROM bookings b
+           LEFT JOIN booking_dates bd ON bd.booking_id = b.id
           WHERE b.provider_id = $1
             AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+            AND COALESCE(bd.date, b.date) IS NOT NULL
           ORDER BY 1`,
         [providerId]
       ),

@@ -277,11 +277,11 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null, propose
   if (!slots.length) {
     let sql =
       `SELECT 1
-         FROM booking_dates bd
-         JOIN bookings b ON b.id = bd.booking_id
+         FROM bookings b
+         LEFT JOIN booking_dates bd ON bd.booking_id = b.id
         WHERE b.provider_id=$1
           AND b.status IN ('awaiting_payment','confirmed','active','accepted')
-          AND bd.date = ANY($2::date[])`;
+          AND COALESCE(bd.date, b.date) = ANY($2::date[])`;
     const params = [providerId, list];
     if (excludeBookingId) {
       sql += ` AND b.id <> $3`;
@@ -296,10 +296,11 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null, propose
     const conflict = await pool.query(
       `SELECT 1
          FROM bookings b
-         JOIN booking_dates bd ON bd.booking_id=b.id AND bd.date=$2::date
+         LEFT JOIN booking_dates bd ON bd.booking_id=b.id
          LEFT JOIN booking_time_slots existing ON existing.booking_id=b.id AND existing.slot_date=$2::date
         WHERE b.provider_id=$1
           AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+          AND COALESCE(bd.date, b.date)=$2::date
           AND ($5::bigint IS NULL OR b.id <> $5::bigint)
           AND (
             existing.id IS NULL

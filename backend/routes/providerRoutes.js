@@ -613,7 +613,7 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
     const q = await pool.query(
       `
         SELECT
-           bd.date::text AS date,
+           COALESCE(bd.date, b.date)::text AS date,
            COALESCE(rp.name, c.name)   AS name,
            COALESCE(rp.phone, c.phone) AS phone,
            CASE WHEN rp.id IS NOT NULL THEN rp.social ELSE c.telegram END AS telegram,
@@ -623,13 +623,14 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
              WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
              ELSE '/profile/client/'   || c.id
            END AS "profileUrl"
-        FROM booking_dates bd
-        JOIN bookings b   ON b.id = bd.booking_id
+        FROM bookings b
+        LEFT JOIN booking_dates bd ON bd.booking_id = b.id
         LEFT JOIN clients   c  ON c.id = b.client_id
         LEFT JOIN providers rp ON rp.id = b.requester_provider_id
         WHERE b.provider_id = $1
           AND b.status IN ('awaiting_payment','confirmed','active','accepted')
-        ORDER BY bd.date, name
+          AND COALESCE(bd.date, b.date) IS NOT NULL
+        ORDER BY COALESCE(bd.date, b.date), name
       `,
       [providerId]
     );
@@ -646,11 +647,12 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
     const [booked, blocked, details] = await Promise.all([
       pool.query(
         `
-          SELECT DISTINCT bd.date::text AS date
-          FROM booking_dates bd
-          JOIN bookings b ON b.id = bd.booking_id
+          SELECT DISTINCT COALESCE(bd.date, b.date)::text AS date
+          FROM bookings b
+          LEFT JOIN booking_dates bd ON bd.booking_id = b.id
           WHERE b.provider_id = $1
             AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+            AND COALESCE(bd.date, b.date) IS NOT NULL
           ORDER BY 1
         `,
         [providerId]
@@ -667,7 +669,7 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
       pool.query(
         `
           SELECT
-             bd.date::text AS date,
+             COALESCE(bd.date, b.date)::text AS date,
              COALESCE(rp.name, c.name)   AS name,
              COALESCE(rp.phone, c.phone) AS phone,
              CASE WHEN rp.id IS NOT NULL THEN rp.social ELSE c.telegram END AS telegram,
@@ -677,13 +679,14 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
                WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
                ELSE '/profile/client/' || c.id
              END AS "profileUrl"
-          FROM booking_dates bd
-          JOIN bookings b   ON b.id = bd.booking_id
+          FROM bookings b
+          LEFT JOIN booking_dates bd ON bd.booking_id = b.id
           LEFT JOIN clients   c  ON c.id = b.client_id
           LEFT JOIN providers rp ON rp.id = b.requester_provider_id
           WHERE b.provider_id = $1
             AND b.status IN ('awaiting_payment','confirmed','active','accepted')
-          ORDER BY bd.date, name
+            AND COALESCE(bd.date, b.date) IS NOT NULL
+          ORDER BY COALESCE(bd.date, b.date), name
         `,
         [providerId]
       ),
