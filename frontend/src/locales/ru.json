@@ -186,6 +186,26 @@
     "save_button": "Сохранить занятые даты",
     "save_error": "Ошибка сохранения дат",
     "saved_successfully": "Даты сохранены"
+    ,"provider_guide": "Гид"
+    ,"provider_transport": "Транспорт"
+    ,"availability": "доступность"
+    ,"workspace_description": "Управляйте рабочими днями и бронированиями. Нажмите свободную дату, чтобы закрыть её для новых заказов."
+    ,"by_bookings": "по броням"
+    ,"closed_by_you": "закрыто вами"
+    ,"unsaved": "не сохранено"
+    ,"click_hint": "Нажмите дату, чтобы закрыть или открыть её"
+    ,"booked_short": "Бронь"
+    ,"closed_short": "Закрыто"
+    ,"unsaved_short": "Черновик"
+    ,"loading": "Загружаем календарь..."
+    ,"loading_availability": "Загружаем занятость..."
+    ,"saving": "Сохраняем..."
+    ,"all_saved": "Все изменения сохранены"
+    ,"unsaved_changes_one": "{{count}} новая дата не сохранена"
+    ,"unsaved_changes_few": "{{count}} новые даты не сохранены"
+    ,"unsaved_changes_many": "{{count}} новых дат не сохранено"
+    ,"unavailable_title": "Этот раздел доступен гидам и транспортникам"
+    ,"unavailable_description": "Отели управляют остатками и stop-sale внутри «Мои отели», а турагенты работают с бронированиями в разделе «Активность»."
   },
   "cancel": "Отмена",
   "car_fleet": "Транспорт в наличии",

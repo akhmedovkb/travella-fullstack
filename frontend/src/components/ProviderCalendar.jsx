@@ -6,6 +6,7 @@ import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
 import { enUS, ru, uz } from "date-fns/locale";
+import { CalendarDays, Check, CircleAlert, LockKeyhole, Save } from "lucide-react";
 
 const CALENDAR_PROVIDER_TYPES = new Set(["guide", "transport"]);
 
@@ -278,20 +279,27 @@ const ProviderCalendar = ({ token }) => {
     return current !== saved;
   }, [manual, manualInitial]);
 
-  const typeLabel = String(providerType || "").toLowerCase() === "guide" ? "Гид" : "Транспорт";
+  const typeLabel = String(providerType || "").toLowerCase() === "guide"
+    ? t("calendar.provider_guide")
+    : t("calendar.provider_transport");
 
   // Кастомный контент ячейки дня с tooltip
     const DayCell = (dayProps) => {
     const dateYmd = toYMD(dayProps.date);
     const infoList = bookedDetails[dateYmd] || [];
     const isBookedDay = booked.includes(dateYmd);
+    const isSavedManual = manualSavedYmd.includes(dateYmd);
+    const isNewManual = manualNewYmd.includes(dateYmd);
     const showTooltip = isGuideOrTransport && isBookedDay && hoveredYmd === dateYmd;
 
     const dayNum = dayProps.date.getDate();
 
     return (
-      <div className="relative flex items-center justify-center w-full h-full">
-        <span>{dayNum}</span>
+      <div className="relative flex h-full w-full flex-col items-start justify-between p-2 text-left">
+        <span className="text-sm font-black">{dayNum}</span>
+        {isBookedDay ? <span className="max-w-full truncate rounded bg-slate-700 px-1.5 py-0.5 text-[10px] font-bold text-white">{t("calendar.booked_short")}</span> : null}
+        {isSavedManual ? <span className="max-w-full truncate rounded bg-sky-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{t("calendar.closed_short")}</span> : null}
+        {isNewManual ? <span className="max-w-full truncate rounded bg-orange-600 px-1.5 py-0.5 text-[10px] font-bold text-white">{t("calendar.unsaved_short")}</span> : null}
 
         {showTooltip && (
           <div
@@ -361,49 +369,49 @@ const ProviderCalendar = ({ token }) => {
   };
 
   if (!profileResolved) {
-    return <div className="mx-auto mt-6 max-w-6xl px-4 py-16 text-center text-sm font-semibold text-slate-500">Загружаем календарь...</div>;
+    return <div className="mx-auto max-w-7xl px-4 py-16 text-center text-sm font-semibold text-slate-500">{t("calendar.loading")}</div>;
   }
 
   if (!calendarEnabled) {
     return (
       <div className="mx-auto mt-6 max-w-4xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
-        <div className="text-xs font-black uppercase text-orange-600">Календарь занятости</div>
-        <h1 className="mt-3 text-2xl font-black text-slate-950">Этот раздел доступен гидам и транспортникам</h1>
+        <div className="text-xs font-black uppercase text-orange-600">{t("calendar.blocking_title")}</div>
+        <h1 className="mt-3 text-2xl font-black text-slate-950">{t("calendar.unavailable_title")}</h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-          Отели управляют остатками и stop-sale внутри «Мои отели», а турагенты работают с созданными бронированиями в разделе «Активность».
+          {t("calendar.unavailable_description")}
         </p>
       </div>
     );
   }
 
   return (
-    <main className="mx-auto mt-6 max-w-6xl px-3 pb-10 sm:px-5">
-      <section className="overflow-visible border border-slate-200 bg-white shadow-sm">
-        <header className="border-b border-slate-200 px-5 py-5 sm:px-7">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <main className="mx-auto max-w-7xl px-3 py-6 sm:px-6">
+      <section className="overflow-visible rounded-lg border border-slate-200 bg-white shadow-sm">
+        <header className="border-b border-slate-200 px-5 py-6 sm:px-8">
+          <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="text-xs font-black uppercase text-orange-600">{typeLabel} · доступность</div>
-              <h1 className="mt-1 text-2xl font-black text-slate-950">Календарь занятости</h1>
-              <p className="mt-1 text-sm text-slate-600">Отметьте дни, когда вы не принимаете новые заказы. Дни с бронями изменять нельзя.</p>
+              <div className="flex items-center gap-2 text-xs font-black uppercase text-orange-600"><CalendarDays size={15} />{typeLabel} · {t("calendar.availability")}</div>
+              <h1 className="mt-2 text-2xl font-black text-slate-950">{t("calendar.blocking_title")}</h1>
+              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-600">{t("calendar.workspace_description")}</p>
             </div>
-            <div className="grid grid-cols-3 gap-px overflow-hidden border border-slate-200 bg-slate-200 text-center">
-              <div className="bg-white px-4 py-2"><div className="text-xl font-black text-slate-950">{booked.length}</div><div className="text-xs font-bold text-slate-500">по броням</div></div>
-              <div className="bg-white px-4 py-2"><div className="text-xl font-black text-sky-600">{manualSavedYmd.length}</div><div className="text-xs font-bold text-slate-500">закрыто вами</div></div>
-              <div className="bg-white px-4 py-2"><div className="text-xl font-black text-orange-600">{manualNewYmd.length}</div><div className="text-xs font-bold text-slate-500">новых</div></div>
+            <div className="flex flex-wrap gap-2">
+              <div className="min-w-28 rounded-md bg-slate-100 px-4 py-3"><div className="text-xl font-black text-slate-950">{booked.length}</div><div className="text-xs font-bold text-slate-500">{t("calendar.by_bookings")}</div></div>
+              <div className="min-w-28 rounded-md bg-sky-50 px-4 py-3"><div className="text-xl font-black text-sky-700">{manualSavedYmd.length}</div><div className="text-xs font-bold text-slate-500">{t("calendar.closed_by_you")}</div></div>
+              <div className="min-w-28 rounded-md bg-orange-50 px-4 py-3"><div className="text-xl font-black text-orange-700">{manualNewYmd.length}</div><div className="text-xs font-bold text-slate-500">{t("calendar.unsaved")}</div></div>
             </div>
           </div>
         </header>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 px-5 py-3 text-xs font-bold text-slate-600 sm:px-7">
-          <span className="flex items-center gap-2"><span className="h-3 w-3 bg-slate-300" /> Бронь</span>
-          <span className="flex items-center gap-2"><span className="h-3 w-3 bg-sky-500" /> Закрыто вами</span>
-          <span className="flex items-center gap-2"><span className="h-3 w-3 bg-orange-500" /> Не сохранено</span>
-          <span className="ml-auto text-slate-400">Нажмите дату, чтобы закрыть или открыть её</span>
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-bold text-slate-600 sm:px-8">
+          <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-slate-700" />{t("calendar.booked")}</span>
+          <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-sky-600" />{t("calendar.closed_by_you")}</span>
+          <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-orange-600" />{t("calendar.unsaved")}</span>
+          <span className="ml-auto flex items-center gap-2 text-slate-500"><LockKeyhole size={14} />{t("calendar.click_hint")}</span>
         </div>
 
       {/* overflow-visible + сброс hover */}
-      <div className="relative overflow-visible px-3 py-5 sm:px-7" onMouseLeave={() => setHoveredYmd(null)}>
-        {calendarLoading ? <div className="py-20 text-center text-sm font-semibold text-slate-500">Загружаем занятость...</div> : (
+      <div className="relative overflow-visible px-3 py-5 sm:px-8 sm:py-7" onMouseLeave={() => setHoveredYmd(null)}>
+        {calendarLoading ? <div className="py-20 text-center text-sm font-semibold text-slate-500">{t("calendar.loading_availability")}</div> : (
         <DayPicker
             locale={dpLocale}
             weekStartsOn={weekStartsOn}
@@ -419,13 +427,13 @@ const ProviderCalendar = ({ token }) => {
             }}
             /* ВАЖНО: НЕТ stylings для "selected", чтобы не красить всё в оранжевый */
             modifiersClassNames={{
-              booked: "bg-gray-300 text-white cursor-help",
+              booked: "bg-slate-100 text-slate-950 cursor-help",
               past: "text-gray-400 cursor-not-allowed",
             }}
             modifiersStyles={{
-              manualSaved: { backgroundColor: "#0ea5e9", color: "#fff" }, // синие — сохранено
-              manualNew:   { backgroundColor: "#f97316", color: "#fff" }, // оранжевые — черновик
-              booked:      { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
+              manualSaved: { backgroundColor: "#f0f9ff", color: "#0f172a" },
+              manualNew:   { backgroundColor: "#fff7ed", color: "#0f172a" },
+              booked:      { backgroundColor: "#f1f5f9", color: "#0f172a", opacity: 1 },
             }}
             components={{ DayContent: DayCell }}
             /* Растянуть календарь и зафиксировать сетку таблицы */
@@ -434,15 +442,15 @@ const ProviderCalendar = ({ token }) => {
               months: "w-full",
               month: "w-full",
               table: "w-full table-fixed",
-              caption: "relative mb-5 flex h-10 items-center justify-center",
+              caption: "relative mb-4 flex h-10 items-center justify-center",
               caption_label: "text-lg font-black capitalize text-slate-950",
               nav: "absolute right-0 top-0 flex gap-2",
               nav_button: "h-9 w-9 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
               head_row: "grid grid-cols-7 border-b border-slate-100",
               head_cell: "py-3 text-center text-xs font-black uppercase text-slate-400",
               row: "grid grid-cols-7 border-b border-slate-100 last:border-b-0",
-              cell: "overflow-visible relative h-16 border-r border-slate-100 last:border-r-0 sm:h-20",
-              day: "rdp-day overflow-visible relative h-full w-full flex items-center justify-center text-sm font-bold transition hover:bg-orange-50",
+              cell: "overflow-visible relative h-20 border-r border-slate-100 last:border-r-0 sm:h-24",
+              day: "rdp-day overflow-visible relative h-full w-full text-sm font-bold transition hover:bg-orange-50",
             }}
             styles={{
               months: { width: "100%" },
@@ -462,17 +470,18 @@ const ProviderCalendar = ({ token }) => {
 
       </div>
 
-        <footer className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
-          <div className={`text-sm font-bold ${hasChanges ? "text-orange-700" : "text-slate-500"}`}>
-            {hasChanges ? `Есть несохранённые изменения: ${manualNewYmd.length || "изменён список дат"}` : "Все изменения сохранены"}
+        <footer className="flex flex-col gap-4 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-8">
+          <div className={`flex items-center gap-2 text-sm font-bold ${hasChanges ? "text-orange-700" : "text-emerald-700"}`}>
+            {hasChanges ? <CircleAlert size={17} /> : <Check size={17} />}
+            {hasChanges ? t("calendar.unsaved_changes", { count: manualNewYmd.length }) : t("calendar.all_saved")}
           </div>
           <button
             type="button"
             onClick={handleSave}
             disabled={!hasChanges || saving}
-            className="h-11 bg-orange-600 px-6 text-sm font-black text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
+            className="flex h-11 items-center justify-center gap-2 rounded-md bg-orange-600 px-6 text-sm font-black text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
           >
-            {saving ? "Сохраняем..." : (t("calendar.save_blocked_dates") || "Сохранить занятые даты")}
+            <Save size={17} />{saving ? t("calendar.saving") : t("calendar.save_blocked_dates")}
           </button>
         </footer>
       </section>

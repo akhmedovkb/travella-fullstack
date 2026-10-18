@@ -186,6 +186,25 @@
     "save_button": "Save blocked dates",
     "save_error": "Error saving dates",
     "saved_successfully": "Dates saved"
+    ,"provider_guide": "Guide"
+    ,"provider_transport": "Transport"
+    ,"availability": "availability"
+    ,"workspace_description": "Manage working days and bookings. Select an available date to close it to new requests."
+    ,"by_bookings": "booked"
+    ,"closed_by_you": "closed by you"
+    ,"unsaved": "unsaved"
+    ,"click_hint": "Select a date to close or reopen it"
+    ,"booked_short": "Booked"
+    ,"closed_short": "Closed"
+    ,"unsaved_short": "Draft"
+    ,"loading": "Loading calendar..."
+    ,"loading_availability": "Loading availability..."
+    ,"saving": "Saving..."
+    ,"all_saved": "All changes saved"
+    ,"unsaved_changes_one": "{{count}} new date is not saved"
+    ,"unsaved_changes_other": "{{count}} new dates are not saved"
+    ,"unavailable_title": "This section is available to guides and transport providers"
+    ,"unavailable_description": "Hotels manage inventory and stop-sales under My hotels, while travel agents manage bookings under Activity."
   },
   "cancel": "Cancel",
   "car_fleet": "Available transport",

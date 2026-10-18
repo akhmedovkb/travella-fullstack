@@ -186,6 +186,24 @@
     "save_button": "Band sanalarni saqlash",
     "save_error": "Sanalarni saqlashda xatolik",
     "saved_successfully": "Sanalar saqlandi"
+    ,"provider_guide": "Gid"
+    ,"provider_transport": "Transport"
+    ,"availability": "mavjudlik"
+    ,"workspace_description": "Ish kunlari va bronlarni boshqaring. Yangi buyurtmalar uchun sanani yopish maqsadida bo‘sh sanani tanlang."
+    ,"by_bookings": "bron qilingan"
+    ,"closed_by_you": "siz yopgansiz"
+    ,"unsaved": "saqlanmagan"
+    ,"click_hint": "Sanani yopish yoki ochish uchun uni tanlang"
+    ,"booked_short": "Bron"
+    ,"closed_short": "Yopiq"
+    ,"unsaved_short": "Qoralama"
+    ,"loading": "Kalendar yuklanmoqda..."
+    ,"loading_availability": "Bandlik yuklanmoqda..."
+    ,"saving": "Saqlanmoqda..."
+    ,"all_saved": "Barcha o‘zgarishlar saqlandi"
+    ,"unsaved_changes": "{{count}} ta yangi sana saqlanmagan"
+    ,"unavailable_title": "Bu bo‘lim gidlar va transport yetkazib beruvchilari uchun mavjud"
+    ,"unavailable_description": "Mehmonxonalar qoldiq va stop-sale holatini «Mening mehmonxonalarim» bo‘limida, turagentlar esa bronlarni «Faollik» bo‘limida boshqaradi."
   },
   "cancel": "Bekor qilish",
   "car_fleet": "Mavjud transport",
