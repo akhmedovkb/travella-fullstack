@@ -676,6 +676,18 @@
   },
   "logout": "Logout",
   "make_cover": "Make cover",
+  "marketplace_form": {
+    "meeting_hotel": "Customer's hotel",
+    "meeting_airport": "Airport",
+    "meeting_city_center": "City center",
+    "pickup_point": "Pickup point",
+    "meeting_point": "Meeting point",
+    "meeting_point_hint": "Choose from the list or enter an exact address",
+    "meeting_point_placeholder": "Choose a place or start typing an address",
+    "languages": "Service languages",
+    "languages_hint": "You can select multiple languages from your profile",
+    "languages_empty": "Select at least one language"
+  },
   "marketplace": {
     "accommodation": "Accommodation",
     "booking": {

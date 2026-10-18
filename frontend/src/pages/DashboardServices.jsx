@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
+import ISO6391 from "iso-639-1";
 import { useTranslation } from "react-i18next";
 import ConfirmModal from "../components/ConfirmModal";
 import { tSuccess, tError, tWarn } from "../shared/toast";
@@ -73,6 +74,7 @@ const DEFAULT_DETAILS = {
   notIncludedText: "",
   minPax: "",
   maxPax: "",
+  guideLanguages: [],
   guideLanguage: "",
   meetingPoint: "",
   cancellationPolicy: "",
@@ -1181,6 +1183,37 @@ function OptionTextInput({ value, onChange, options = [], placeholder, listId, c
   );
 }
 
+const LANGUAGE_ALIASES = {
+  russian: "ru", "русский": "ru", ru: "ru",
+  english: "en", "английский": "en", en: "en",
+  uzbek: "uz", "узбекский": "uz", "o‘zbek": "uz", "o'zbek": "uz", uz: "uz",
+  german: "de", "немецкий": "de", de: "de",
+  french: "fr", "французский": "fr", fr: "fr",
+  spanish: "es", "испанский": "es", es: "es",
+  turkish: "tr", "турецкий": "tr", tr: "tr",
+  arabic: "ar", "арабский": "ar", ar: "ar",
+  chinese: "zh", "китайский": "zh", zh: "zh",
+};
+
+function normalizeLanguageCodes(details) {
+  if (Array.isArray(details?.guideLanguages) && details.guideLanguages.length) {
+    return [...new Set(details.guideLanguages.map((code) => String(code || "").trim().toLowerCase()).filter(Boolean))];
+  }
+  return [...new Set(
+    String(details?.guideLanguage || "")
+      .split(/[,;/]+/)
+      .map((value) => LANGUAGE_ALIASES[value.trim().toLowerCase()] || "")
+      .filter(Boolean)
+  )];
+}
+
+function languageLabel(code, uiLanguage) {
+  const normalized = String(code || "").toLowerCase();
+  const russianNames = { ru: "Русский", en: "Английский", uz: "Узбекский", de: "Немецкий", fr: "Французский", es: "Испанский", tr: "Турецкий", ar: "Арабский", zh: "Китайский" };
+  if (String(uiLanguage || "").startsWith("ru") && russianNames[normalized]) return russianNames[normalized];
+  return ISO6391.getNativeName(normalized) || ISO6391.getName(normalized) || normalized.toUpperCase();
+}
+
 function TextArea(props) {
   return (
     <textarea
@@ -1594,7 +1627,7 @@ function AuthorProgramDaysEditor({ value, activeIndex, setActiveIndex, onChange,
 }
 
 export default function DashboardServices({ viewMode = "create" }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const api = useMemo(() => {
@@ -1635,6 +1668,27 @@ export default function DashboardServices({ viewMode = "create" }) {
   const isGuide = profile?.type === "guide";
   const isTransport = profile?.type === "transport";
   const isExtended = isAgent && EXTENDED_AGENT_CATEGORIES.includes(category);
+
+  const availableGuideLanguages = useMemo(() => {
+    const profileCodes = Array.isArray(profile?.languages) ? profile.languages : [];
+    const selectedCodes = normalizeLanguageCodes(details);
+    return [...new Set([...profileCodes, ...selectedCodes, ...(profileCodes.length ? [] : ["ru", "uz", "en"])])]
+      .map((code) => String(code || "").trim().toLowerCase())
+      .filter(Boolean);
+  }, [profile?.languages, details.guideLanguages, details.guideLanguage]);
+
+  const meetingPointOptions = useMemo(() => {
+    const standard = [
+      t("marketplace_form.meeting_hotel", { defaultValue: "Отель клиента" }),
+      t("marketplace_form.meeting_airport", { defaultValue: "Аэропорт" }),
+      t("marketplace_form.meeting_city_center", { defaultValue: "Центр города" }),
+    ];
+    const saved = services
+      .map((service) => service?.details?.meetingPoint || service?.details?.meeting_point || "")
+      .filter(Boolean);
+    const profileAddress = String(profile?.address || "").trim();
+    return [...new Set([...standard, ...(profileAddress ? [profileAddress] : []), ...saved])];
+  }, [services, profile?.address, t]);
 
   const steps = useMemo(
     () => [
@@ -1707,6 +1761,15 @@ export default function DashboardServices({ viewMode = "create" }) {
   };
 
   const patchDetails = (patch) => setDetails((prev) => ({ ...prev, ...patch }));
+
+  const toggleGuideLanguage = (code) => {
+    const current = normalizeLanguageCodes(details);
+    const next = current.includes(code) ? current.filter((item) => item !== code) : [...current, code];
+    patchDetails({
+      guideLanguages: next,
+      guideLanguage: next.map((item) => languageLabel(item, i18n.language)).join(", "),
+    });
+  };
 
   const patchAuthorProgramDays = (nextDays) => {
     const draftDays = normalizeAuthorProgramDaysDraft(nextDays);
@@ -2631,16 +2694,53 @@ export default function DashboardServices({ viewMode = "create" }) {
                         </Field>
 
                         {(isGuide || isTransport) && (
-                          <Field label={isTransport ? "Место подачи" : "Место встречи"}>
-                            <TextInput value={details.meetingPoint} onChange={(e) => patchDetails({ meetingPoint: e.target.value })} placeholder="Адрес или ориентир" />
+                          <Field
+                            label={isTransport ? t("marketplace_form.pickup_point", { defaultValue: "Место подачи" }) : t("marketplace_form.meeting_point", { defaultValue: "Место встречи" })}
+                            hint={t("marketplace_form.meeting_point_hint", { defaultValue: "Выберите вариант из списка или укажите точный адрес" })}
+                          >
+                            <OptionTextInput
+                              listId="marketplace-meeting-point-options"
+                              options={meetingPointOptions}
+                              value={details.meetingPoint}
+                              onChange={(e) => patchDetails({ meetingPoint: e.target.value })}
+                              placeholder={t("marketplace_form.meeting_point_placeholder", { defaultValue: "Выберите место или начните вводить адрес" })}
+                            />
                           </Field>
                         )}
 
                         {isGuide && (
-                          <Field label="Язык проведения">
-                            <div className="relative">
-                              <Languages aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                              <TextInput className="pl-9" value={details.guideLanguage} onChange={(e) => patchDetails({ guideLanguage: e.target.value })} placeholder="Русский, English" />
+                          <Field
+                            label={t("marketplace_form.languages", { defaultValue: "Языки проведения" })}
+                            hint={t("marketplace_form.languages_hint", { defaultValue: "Можно выбрать несколько языков из профиля" })}
+                          >
+                            <div className="rounded-lg border border-slate-200 bg-white p-2.5 focus-within:border-orange-400 focus-within:ring-4 focus-within:ring-orange-100">
+                              <div className="flex flex-wrap gap-2">
+                                {availableGuideLanguages.map((code) => {
+                                  const selected = normalizeLanguageCodes(details).includes(code);
+                                  return (
+                                    <button
+                                      key={code}
+                                      type="button"
+                                      aria-pressed={selected}
+                                      onClick={() => toggleGuideLanguage(code)}
+                                      className={cx(
+                                        "inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black transition",
+                                        selected
+                                          ? "bg-slate-950 text-white ring-1 ring-slate-950"
+                                          : "bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-orange-50 hover:text-orange-700 hover:ring-orange-200"
+                                      )}
+                                    >
+                                      <Languages aria-hidden="true" className="h-3.5 w-3.5" />
+                                      {languageLabel(code, i18n.language)}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              {!normalizeLanguageCodes(details).length && (
+                                <div className="mt-2 text-xs font-semibold text-slate-400">
+                                  {t("marketplace_form.languages_empty", { defaultValue: "Выберите хотя бы один язык" })}
+                                </div>
+                              )}
                             </div>
                           </Field>
                         )}

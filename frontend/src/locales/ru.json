@@ -673,6 +673,18 @@
   },
   "logout": "Выйти",
   "make_cover": "Сделать обложкой",
+  "marketplace_form": {
+    "meeting_hotel": "Отель клиента",
+    "meeting_airport": "Аэропорт",
+    "meeting_city_center": "Центр города",
+    "pickup_point": "Место подачи",
+    "meeting_point": "Место встречи",
+    "meeting_point_hint": "Выберите вариант из списка или укажите точный адрес",
+    "meeting_point_placeholder": "Выберите место или начните вводить адрес",
+    "languages": "Языки проведения",
+    "languages_hint": "Можно выбрать несколько языков из профиля",
+    "languages_empty": "Выберите хотя бы один язык"
+  },
   "marketplace": {
     "accommodation": "Размещение",
     "booking": {

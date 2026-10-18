@@ -675,6 +675,18 @@
   },
   "logout": "Chiqish",
   "make_cover": "Muqova qilish",
+  "marketplace_form": {
+    "meeting_hotel": "Mijoz mehmonxonasi",
+    "meeting_airport": "Aeroport",
+    "meeting_city_center": "Shahar markazi",
+    "pickup_point": "Olib ketish joyi",
+    "meeting_point": "Uchrashuv joyi",
+    "meeting_point_hint": "Ro‘yxatdan tanlang yoki aniq manzilni kiriting",
+    "meeting_point_placeholder": "Joyni tanlang yoki manzilni yozishni boshlang",
+    "languages": "Xizmat tillari",
+    "languages_hint": "Profilingizdan bir nechta tilni tanlashingiz mumkin",
+    "languages_empty": "Kamida bitta tilni tanlang"
+  },
   "marketplace": {
     "accommodation": "Joylashuv",
     "booking": {
