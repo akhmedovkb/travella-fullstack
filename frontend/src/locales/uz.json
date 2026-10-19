@@ -260,6 +260,9 @@
     ,"booking_price": "Narxi"
     ,"customer_comment": "Buyurtmachi izohi"
     ,"open_booking": "Bronni ochish"
+    ,"open_customer_profile": "Profilni ochish"
+    ,"customer_provider": "Ta’minotchi"
+    ,"customer_client": "Mijoz"
     ,"unavailable_title": "Bu bo‘lim gidlar va transport yetkazib beruvchilari uchun mavjud"
     ,"unavailable_description": "Mehmonxonalar qoldiq va stop-sale holatini «Mening mehmonxonalarim» bo‘limida, turagentlar esa bronlarni «Faollik» bo‘limida boshqaradi."
   },

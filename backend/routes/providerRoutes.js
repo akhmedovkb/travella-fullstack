@@ -711,7 +711,14 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
             COALESCE(rp.name, c.name) AS customer_name,
             COALESCE(rp.phone, c.phone) AS customer_phone,
             COALESCE(rp.social, c.telegram) AS customer_telegram,
-            COALESCE(rp.photo, c.avatar_url) AS customer_photo
+            COALESCE(rp.photo, c.avatar_url) AS customer_photo,
+            CASE WHEN rp.id IS NOT NULL THEN 'provider' ELSE 'client' END AS customer_role,
+            COALESCE(rp.id, c.id) AS customer_profile_id,
+            CASE
+              WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
+              WHEN c.id IS NOT NULL THEN '/profile/client/' || c.id
+              ELSE NULL
+            END AS customer_profile_url
           FROM bookings b
           LEFT JOIN clients c ON c.id = b.client_id
           LEFT JOIN providers rp ON rp.id = b.requester_provider_id

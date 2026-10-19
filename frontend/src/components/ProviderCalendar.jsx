@@ -1,5 +1,6 @@
 // frontend/src/components/ProviderCalendar.jsx
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
@@ -60,7 +61,10 @@ const ProviderCalendar = ({ token }) => {
     const today = new Date();
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
+  const [timelineMonth, setTimelineMonth] = useState(visibleMonth);
+  const [bookingPreview, setBookingPreview] = useState(null);
   const timelineRef = useRef(null);
+  const previewCloseTimerRef = useRef(null);
   const dragSelectionRef = useRef({ active: false, mode: "add", touched: new Set() });
 
   const cfg = useMemo(() => {
@@ -288,19 +292,37 @@ const ProviderCalendar = ({ token }) => {
     : t("calendar.provider_transport");
 
   const monthDays = useMemo(() => {
-    const year = visibleMonth.getFullYear();
-    const month = visibleMonth.getMonth();
-    const count = new Date(year, month + 1, 0).getDate();
-    return Array.from({ length: count }, (_, index) => new Date(year, month, index + 1));
+    const start = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1);
+    const end = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 13, 0);
+    const days = [];
+    for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) days.push(new Date(day));
+    return days;
   }, [visibleMonth]);
-  const monthInputValue = `${visibleMonth.getFullYear()}-${String(visibleMonth.getMonth() + 1).padStart(2, "0")}`;
-  const monthTitle = new Intl.DateTimeFormat(i18n.language || "en", { month: "long", year: "numeric" }).format(visibleMonth);
+  const monthInputValue = `${timelineMonth.getFullYear()}-${String(timelineMonth.getMonth() + 1).padStart(2, "0")}`;
+  const monthTitle = new Intl.DateTimeFormat(i18n.language || "en", { month: "long", year: "numeric" }).format(timelineMonth);
 
-  const moveMonth = (delta) => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  const jumpToMonth = (month) => {
+    const target = new Date(month.getFullYear(), month.getMonth(), 1);
+    setTimelineMonth(target);
+    setVisibleMonth(target);
+  };
+  const moveMonth = (delta) => jumpToMonth(new Date(timelineMonth.getFullYear(), timelineMonth.getMonth() + delta, 1));
   const goToday = () => {
     const today = getStartOfToday();
-    setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    jumpToMonth(new Date(today.getFullYear(), today.getMonth(), 1));
     setActiveYmd(toYMD(today));
+  };
+
+  const openBookingPreview = (event, booking) => {
+    if (previewCloseTimerRef.current) window.clearTimeout(previewCloseTimerRef.current);
+    const rect = event.currentTarget.getBoundingClientRect();
+    setBookingPreview({ booking, left: Math.min(rect.left, window.innerWidth - 300), top: rect.bottom + 8 });
+  };
+  const scheduleBookingPreviewClose = () => {
+    previewCloseTimerRef.current = window.setTimeout(() => setBookingPreview(null), 140);
+  };
+  const keepBookingPreviewOpen = () => {
+    if (previewCloseTimerRef.current) window.clearTimeout(previewCloseTimerRef.current);
   };
   const updateTimelineDate = (dateYmd, mode) => {
     setActiveYmd(dateYmd);
@@ -343,22 +365,24 @@ const ProviderCalendar = ({ token }) => {
   }, []);
 
   useEffect(() => {
-    if (calendarLoading || !timelineRef.current) return undefined;
-    const today = getStartOfToday();
-    if (visibleMonth.getFullYear() !== today.getFullYear() || visibleMonth.getMonth() !== today.getMonth()) return undefined;
-
+    if (calendarLoading || !timelineRef.current || !monthDays.length) return undefined;
     const frame = window.requestAnimationFrame(() => {
       const viewport = timelineRef.current;
       if (!viewport) return;
       const dayWidth = 56;
-      const target = (today.getDate() - 1) * dayWidth;
+      const today = getStartOfToday();
+      const targetYmd = visibleMonth.getFullYear() === today.getFullYear() && visibleMonth.getMonth() === today.getMonth()
+        ? toYMD(today)
+        : toYMD(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1));
+      const targetIndex = Math.max(0, monthDays.findIndex((day) => toYMD(day) === targetYmd));
+      const target = targetIndex * dayWidth;
       viewport.scrollTo({
         left: Math.max(0, target - (viewport.clientWidth / 2) + (dayWidth / 2)),
         behavior: "auto",
       });
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [calendarLoading, visibleMonth]);
+  }, [calendarLoading, monthDays, visibleMonth]);
 
   if (!profileResolved) {
     return <div className="mx-auto max-w-7xl px-4 py-16 text-center text-sm font-semibold text-slate-500">{t("calendar.loading")}</div>;
@@ -377,6 +401,7 @@ const ProviderCalendar = ({ token }) => {
   }
 
   return (
+    <>
     <main className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6">
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <header className="px-5 py-5 sm:px-6">
@@ -413,7 +438,7 @@ const ProviderCalendar = ({ token }) => {
                   value={monthInputValue}
                   onChange={(event) => {
                     const [year, month] = event.target.value.split("-").map(Number);
-                    if (year && month) setVisibleMonth(new Date(year, month - 1, 1));
+                    if (year && month) jumpToMonth(new Date(year, month - 1, 1));
                   }}
                   className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                 />
@@ -437,6 +462,15 @@ const ProviderCalendar = ({ token }) => {
 
                 <div
                   ref={timelineRef}
+                  onScroll={(event) => {
+                    const viewport = event.currentTarget;
+                    const centerIndex = Math.min(monthDays.length - 1, Math.max(0, Math.floor((viewport.scrollLeft + viewport.clientWidth / 2) / 56)));
+                    const centerDate = monthDays[centerIndex];
+                    if (!centerDate) return;
+                    setTimelineMonth((current) => current.getFullYear() === centerDate.getFullYear() && current.getMonth() === centerDate.getMonth()
+                      ? current
+                      : new Date(centerDate.getFullYear(), centerDate.getMonth(), 1));
+                  }}
                   className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain"
                   style={{ scrollbarColor: "#cbd5e1 #f8fafc", scrollbarWidth: "thin" }}
                 >
@@ -459,10 +493,11 @@ const ProviderCalendar = ({ token }) => {
                       const changedContinuesLeft = isManual && isChanged && manual.includes(toYMD(previous)) && !manualInitial.includes(toYMD(previous));
                       const changedContinuesRight = isManual && isChanged && manual.includes(toYMD(next)) && !manualInitial.includes(toYMD(next));
                       const selected = activeYmd === ymd;
+                      const startsMonth = date.getDate() === 1;
                       return (
                         <div key={ymd} className="w-14 shrink-0 border-r border-slate-200 last:border-r-0">
                           <button type="button" onClick={() => setActiveYmd(ymd)} className={`flex h-16 w-full flex-col items-center justify-center border-b border-slate-200 transition ${selected ? "bg-orange-50 ring-2 ring-inset ring-orange-500" : weekend ? "bg-slate-50/60 hover:bg-slate-100" : "bg-white hover:bg-slate-50"}`}>
-                            <span className={`text-[11px] font-bold uppercase ${weekend ? "text-rose-500" : "text-slate-400"}`}>{weekday}</span>
+                            <span className={`max-w-full truncate px-0.5 text-[10px] font-bold uppercase ${startsMonth ? "text-orange-600" : weekend ? "text-rose-500" : "text-slate-400"}`}>{startsMonth ? new Intl.DateTimeFormat(i18n.language || "en", { month: "short" }).format(date) : weekday}</span>
                             <span className={`mt-1 flex h-8 w-8 items-center justify-center rounded-md text-sm font-black ${isToday ? "bg-slate-950 text-white" : weekend ? "text-rose-600" : "text-slate-900"}`}>{date.getDate()}</span>
                           </button>
                           <button
@@ -473,7 +508,14 @@ const ProviderCalendar = ({ token }) => {
                             className={`relative h-24 w-full touch-none select-none overflow-hidden transition disabled:cursor-not-allowed ${selected ? "ring-2 ring-inset ring-orange-500" : ""} ${isPast ? "bg-slate-50 opacity-45" : isChanged ? "bg-orange-50" : weekend ? "bg-slate-50/60 hover:bg-slate-100" : "bg-white hover:bg-slate-50"}`}
                           >
                             {booking ? (
-                              <span className={`absolute top-1/2 flex h-7 -translate-y-1/2 items-center bg-emerald-600 px-2 text-left text-[10px] font-black text-white ${continuesLeft ? "left-0" : "left-1 rounded-l-full"} ${continuesRight ? "right-0" : "right-1 rounded-r-full"}`}>
+                              <span
+                                onMouseEnter={(event) => openBookingPreview(event, booking)}
+                                onMouseLeave={scheduleBookingPreviewClose}
+                                onFocus={(event) => openBookingPreview(event, booking)}
+                                onBlur={scheduleBookingPreviewClose}
+                                tabIndex={0}
+                                className={`absolute top-1/2 z-10 flex h-7 -translate-y-1/2 items-center bg-emerald-600 px-2 text-left text-[10px] font-black text-white outline-none hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-300 ${continuesLeft ? "left-0" : "left-1 rounded-l-full"} ${continuesRight ? "right-0" : "right-1 rounded-r-full"}`}
+                              >
                                 {!continuesLeft ? (booking.customer_name || `#${booking.id}`) : ""}
                               </span>
                             ) : null}
@@ -562,6 +604,27 @@ const ProviderCalendar = ({ token }) => {
         </footer>
       </section>
     </main>
+    {bookingPreview ? createPortal(
+      <div
+        className="fixed z-[5000] w-72 rounded-lg border border-slate-200 bg-white p-4 shadow-2xl"
+        style={{ left: Math.max(12, bookingPreview.left), top: Math.min(bookingPreview.top, window.innerHeight - 230) }}
+        onMouseEnter={keepBookingPreviewOpen}
+        onMouseLeave={scheduleBookingPreviewClose}
+      >
+        <div className="text-[10px] font-black uppercase text-emerald-700">{t("calendar.booking_number", { number: bookingPreview.booking.id })}</div>
+        <div className="mt-1 text-sm font-black text-slate-950">{bookingPreview.booking.service_title || t("calendar.service_booking")}</div>
+        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+          {bookingPreview.booking.customer_photo ? <img src={bookingPreview.booking.customer_photo} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"><UserRound size={17} /></span>}
+          <div className="min-w-0">
+            <div className="truncate text-sm font-black text-slate-900">{bookingPreview.booking.customer_name || t("calendar.unknown_name")}</div>
+            <div className="text-xs text-slate-500">{bookingPreview.booking.customer_role === "provider" ? t("calendar.customer_provider", { defaultValue: "Поставщик" }) : t("calendar.customer_client", { defaultValue: "Клиент" })}</div>
+          </div>
+        </div>
+        {bookingPreview.booking.customer_profile_url ? <a href={bookingPreview.booking.customer_profile_url} className="mt-3 flex h-9 w-full items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-black text-white transition hover:bg-slate-800">{t("calendar.open_customer_profile", { defaultValue: "Открыть профиль" })}</a> : null}
+      </div>,
+      document.body
+    ) : null}
+    </>
   );
 };
 

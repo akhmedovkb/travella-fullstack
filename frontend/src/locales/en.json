@@ -261,6 +261,9 @@
     ,"booking_price": "Price"
     ,"customer_comment": "Customer comment"
     ,"open_booking": "Open booking"
+    ,"open_customer_profile": "Open profile"
+    ,"customer_provider": "Provider"
+    ,"customer_client": "Client"
     ,"unavailable_title": "This section is available to guides and transport providers"
     ,"unavailable_description": "Hotels manage inventory and stop-sales under My hotels, while travel agents manage bookings under Activity."
   },

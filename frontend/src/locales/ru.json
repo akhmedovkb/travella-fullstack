@@ -262,6 +262,9 @@
     ,"booking_price": "Стоимость"
     ,"customer_comment": "Комментарий заказчика"
     ,"open_booking": "Открыть бронирование"
+    ,"open_customer_profile": "Открыть профиль"
+    ,"customer_provider": "Поставщик"
+    ,"customer_client": "Клиент"
     ,"unavailable_title": "Этот раздел доступен гидам и транспортникам"
     ,"unavailable_description": "Отели управляют остатками и stop-sale внутри «Мои отели», а турагенты работают с бронированиями в разделе «Активность»."
   },
