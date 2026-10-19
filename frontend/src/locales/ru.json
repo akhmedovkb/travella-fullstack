@@ -1250,6 +1250,7 @@
   "service_deleted": "Услуга удалена",
   "service_images": "Фото услуги",
   "service_updated": "Услуга обновлена",
+  "service_no_changes": "Изменений нет. Сохранение не требуется.",
   "services_marketplace": "Услуги для MARKETPLACE",
   "services_load_error": "Не удалось загрузить услуги",
   "social": "Telegram юзернэйм",

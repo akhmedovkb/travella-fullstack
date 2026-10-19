@@ -1313,6 +1313,7 @@
   "service_deleted": "Service deleted",
   "service_images": "Service photos",
   "service_updated": "Service updated",
+  "service_no_changes": "No changes were made. There is nothing to save.",
   "services_marketplace": "Services for MARKETPLACE",
   "services_load_error": "Failed to load services",
   "social": "Telegram username",

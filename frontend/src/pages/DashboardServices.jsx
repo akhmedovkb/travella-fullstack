@@ -209,6 +209,47 @@ function compactDeep(value) {
   return value;
 }
 
+function buildServiceSavePayload({ category, title, description, price, images, details, isExtended }) {
+  const net = parseMoney(details.netPrice);
+  const gross = parseMoney(details.grossPrice);
+  const simplePrice = parseMoney(price);
+  const expirationDate = details.expiration ? new Date(details.expiration) : null;
+
+  return compactDeep({
+    title: String(title || "").trim(),
+    category,
+    images,
+    price: isExtended ? undefined : simplePrice,
+    description: isExtended ? undefined : description,
+    details: isExtended
+      ? {
+          ...(category === "author_tour" ? normalizeAuthorTourDetailsForSave(details) : details),
+          flightDetails: normalizeFlightDetails(details.flightDetails),
+          netPrice: net,
+          grossPrice: gross,
+          proofImages: details.proofImages || [],
+          ...(expirationDate && Number.isFinite(expirationDate.getTime())
+            ? { expiration_ts: Math.floor(expirationDate.getTime() / 1000) }
+            : {}),
+        }
+      : {
+          ...details,
+          proofImages: details.proofImages || [],
+        },
+  });
+}
+
+function stableFingerprint(value) {
+  if (Array.isArray(value)) return `[${value.map(stableFingerprint).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableFingerprint(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function asDetails(service) {
   if (service?.details && typeof service.details === "object") return service.details;
   if (typeof service?.details === "string") {
@@ -1749,6 +1790,7 @@ export default function DashboardServices({ viewMode = "create" }) {
   const [supportPromptService, setSupportPromptService] = useState(null);
   const [supportPayBusy, setSupportPayBusy] = useState(false);
   const [supportPayError, setSupportPayError] = useState("");
+  const editBaselineRef = useRef(null);
 
   const [category, setCategory] = useState("");
   const [title, setTitle] = useState("");
@@ -1901,6 +1943,7 @@ export default function DashboardServices({ viewMode = "create" }) {
   }, []);
 
   const resetForm = () => {
+    editBaselineRef.current = null;
     setSelectedService(null);
     setCategory("");
     setTitle("");
@@ -1986,13 +2029,28 @@ export default function DashboardServices({ viewMode = "create" }) {
       return;
     }
     const d = asDetails(service);
+    const hydratedDetails = {
+      ...DEFAULT_DETAILS,
+      ...d,
+      proofImages: Array.isArray(d.proofImages || d.proof_images) ? (d.proofImages || d.proof_images) : [],
+    };
+    const serviceIsExtended = profile?.type === "agent" && EXTENDED_AGENT_CATEGORIES.includes(service.category);
+    editBaselineRef.current = stableFingerprint(buildServiceSavePayload({
+      category: service.category || "",
+      title: service.title || "",
+      description: service.description || d.description || "",
+      price: service.price ?? "",
+      images: Array.isArray(service.images) ? service.images : [],
+      details: hydratedDetails,
+      isExtended: serviceIsExtended,
+    }));
     setSelectedService(service);
     setCategory(service.category || "");
     setTitle(service.title || "");
     setDescription(service.description || d.description || "");
     setPrice(service.price ?? "");
     setImages(Array.isArray(service.images) ? service.images : []);
-    setDetails({ ...DEFAULT_DETAILS, ...d, proofImages: Array.isArray(d.proofImages || d.proof_images) ? (d.proofImages || d.proof_images) : [] });
+    setDetails(hydratedDetails);
     setAuthorProgramDayIndex(0);
     setStep(1);
     setTab("create");
@@ -2049,37 +2107,18 @@ export default function DashboardServices({ viewMode = "create" }) {
   };
 
   const saveService = async () => {
-    if (!validate()) return;
     const wasEditing = !!selectedService?.id;
     const createdCategory = category;
+    const payload = buildServiceSavePayload({ category, title, description, price, images, details, isExtended });
+
+    if (wasEditing && editBaselineRef.current === stableFingerprint(payload)) {
+      tWarn(t("service_no_changes", { defaultValue: "Изменений нет. Сохранение не требуется." }));
+      return;
+    }
+
+    if (!validate()) return;
     try {
       setSaving(true);
-      const net = parseMoney(details.netPrice);
-      const gross = parseMoney(details.grossPrice);
-      const simplePrice = parseMoney(price);
-      const expirationDate = details.expiration ? new Date(details.expiration) : null;
-      const payload = compactDeep({
-        title: title.trim(),
-        category,
-        images,
-        price: isExtended ? undefined : simplePrice,
-        description: isExtended ? undefined : description,
-        details: isExtended
-          ? {
-              ...(category === "author_tour" ? normalizeAuthorTourDetailsForSave(details) : details),
-              flightDetails: normalizeFlightDetails(details.flightDetails),
-              netPrice: net,
-              grossPrice: gross,
-              proofImages: details.proofImages || [],
-              ...(expirationDate && Number.isFinite(expirationDate.getTime())
-                ? { expiration_ts: Math.floor(expirationDate.getTime() / 1000) }
-                : {}),
-            }
-          : {
-              ...details,
-              proofImages: details.proofImages || [],
-            },
-      });
       const res = selectedService?.id
         ? await api.put(`/api/providers/services/${selectedService.id}`, payload)
         : await api.post("/api/providers/services", payload);
