@@ -336,7 +336,7 @@ const ProviderCalendar = ({ token }) => {
             </div>
             <div className="grid grid-cols-3 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
               <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-slate-950">{booked.length}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.by_bookings")}</div></div>
-              <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-sky-700">{manualSavedYmd.length}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.closed_by_you")}</div></div>
+              <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-slate-700">{manualSavedYmd.length}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.closed_by_you")}</div></div>
               <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-orange-700">{changedDatesCount}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.unsaved")}</div></div>
             </div>
           </div>
@@ -344,7 +344,7 @@ const ProviderCalendar = ({ token }) => {
 
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-slate-200 bg-slate-50 px-5 py-3 text-xs font-bold text-slate-600 sm:px-7">
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-600" />{t("calendar.booked")}</span>
-          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-sky-600" />{t("calendar.closed_by_you")}</span>
+          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-slate-700" />{t("calendar.closed_by_you")}</span>
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-600" />{t("calendar.unsaved")}</span>
           <span className="ml-auto hidden items-center gap-2 text-slate-400 sm:flex"><LockKeyhole size={14} />{t("calendar.click_hint")}</span>
         </div>
@@ -402,6 +402,8 @@ const ProviderCalendar = ({ token }) => {
                       const next = new Date(date); next.setDate(date.getDate() + 1);
                       const continuesLeft = booking && bookingByDate[toYMD(previous)]?.id === booking.id;
                       const continuesRight = booking && bookingByDate[toYMD(next)]?.id === booking.id;
+                      const manualContinuesLeft = isManual && !isChanged && manual.includes(toYMD(previous)) && manualInitial.includes(toYMD(previous));
+                      const manualContinuesRight = isManual && !isChanged && manual.includes(toYMD(next)) && manualInitial.includes(toYMD(next));
                       const selected = activeYmd === ymd;
                       return (
                         <div key={ymd} className="w-16 shrink-0 border-r border-slate-200 last:border-r-0">
@@ -413,15 +415,16 @@ const ProviderCalendar = ({ token }) => {
                             type="button"
                             onClick={() => selectTimelineDate(ymd)}
                             disabled={isPast}
-                            className={`relative h-28 w-full overflow-hidden transition disabled:cursor-not-allowed ${selected ? "ring-2 ring-inset ring-orange-500" : ""} ${isPast ? "bg-slate-50 opacity-45" : isChanged ? "bg-orange-50" : isManual ? "bg-sky-50" : "bg-white hover:bg-slate-50"}`}
-                            style={isManual && !isChanged ? { backgroundImage: "repeating-linear-gradient(135deg, transparent 0, transparent 10px, rgba(14,165,233,.12) 10px, rgba(14,165,233,.12) 12px)" } : undefined}
+                            className={`relative h-28 w-full overflow-hidden transition disabled:cursor-not-allowed ${selected ? "ring-2 ring-inset ring-orange-500" : ""} ${isPast ? "bg-slate-50 opacity-45" : isChanged ? "bg-orange-50" : "bg-white hover:bg-slate-50"}`}
                           >
                             {booking ? (
-                              <span className={`absolute top-9 flex h-8 items-center bg-emerald-600 px-2 text-left text-[10px] font-black text-white ${continuesLeft ? "left-0" : "left-1 rounded-l-full"} ${continuesRight ? "right-0" : "right-1 rounded-r-full"}`}>
+                              <span className={`absolute top-1/2 flex h-7 -translate-y-1/2 items-center bg-emerald-600 px-2 text-left text-[10px] font-black text-white ${continuesLeft ? "left-0" : "left-1 rounded-l-full"} ${continuesRight ? "right-0" : "right-1 rounded-r-full"}`}>
                                 {!continuesLeft ? (booking.customer_name || `#${booking.id}`) : ""}
                               </span>
                             ) : null}
-                            {isManual && !booking ? <span className={`absolute inset-x-2 bottom-3 h-1 rounded-full ${isChanged ? "bg-orange-600" : "bg-sky-600"}`} /> : null}
+                            {isManual && !booking ? (
+                              <span className={`absolute top-1/2 h-7 -translate-y-1/2 ${isChanged ? "inset-x-2 rounded-full bg-orange-600" : `bg-slate-700 ${manualContinuesLeft ? "left-0" : "left-1 rounded-l-full"} ${manualContinuesRight ? "right-0" : "right-1 rounded-r-full"}`}`} />
+                            ) : null}
                           </button>
                         </div>
                       );
@@ -443,8 +446,8 @@ const ProviderCalendar = ({ token }) => {
               <div>
                 <div className="text-[11px] font-black uppercase text-slate-400">{t("calendar.selected_day")}</div>
                 <div className="mt-1 text-lg font-black capitalize text-slate-950">{activeDateLabel}</div>
-                <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-black ${activeIsBooked ? "bg-emerald-100 text-emerald-800" : activeIsChanged ? "bg-orange-100 text-orange-800" : activeIsManual ? "bg-sky-100 text-sky-800" : "bg-slate-200 text-slate-800"}`}>
-                  <span className={`h-2 w-2 rounded-full ${activeIsBooked ? "bg-emerald-600" : activeIsChanged ? "bg-orange-600" : activeIsManual ? "bg-sky-600" : "bg-slate-500"}`} />
+                <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-black ${activeIsBooked ? "bg-emerald-100 text-emerald-800" : activeIsChanged ? "bg-orange-100 text-orange-800" : activeIsManual ? "bg-slate-200 text-slate-800" : "bg-slate-200 text-slate-800"}`}>
+                  <span className={`h-2 w-2 rounded-full ${activeIsBooked ? "bg-emerald-600" : activeIsChanged ? "bg-orange-600" : activeIsManual ? "bg-slate-700" : "bg-slate-500"}`} />
                   {activeIsBooked ? t("calendar.booked") : activeIsChanged ? t("calendar.unsaved") : activeIsManual ? t("calendar.closed_by_you") : t("calendar.available")}
                 </div>
                 {activeIsBooked && (
