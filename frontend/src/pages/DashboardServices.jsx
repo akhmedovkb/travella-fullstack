@@ -2454,15 +2454,15 @@ export default function DashboardServices({ viewMode = "create" }) {
               {viewMode === "manage" && <div className="grid grid-cols-3 gap-2 text-center">
                 <div className="min-w-[88px] rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
                   <div className="text-lg font-black text-slate-950">{serviceListStats.active}</div>
-                  <div className="text-[10px] font-bold text-slate-500">Активные</div>
+                  <div className="text-[10px] font-bold text-slate-500">{t("service_list_filter.active", { defaultValue: "Активные" })}</div>
                 </div>
                 <div className="min-w-[88px] rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-100">
                   <div className="text-lg font-black text-amber-700">{serviceListStats.pending}</div>
-                  <div className="text-[10px] font-bold text-amber-700">На проверке</div>
+                  <div className="text-[10px] font-bold text-amber-700">{t("service_list_filter.pending", { defaultValue: "На проверке" })}</div>
                 </div>
                 <div className="min-w-[88px] rounded-lg bg-emerald-50 px-3 py-2 ring-1 ring-emerald-100">
                   <div className="text-lg font-black text-emerald-700">{serviceListStats.published}</div>
-                  <div className="text-[10px] font-bold text-emerald-700">Опубликовано</div>
+                  <div className="text-[10px] font-bold text-emerald-700">{t("service_list_filter.published", { defaultValue: "Опубликовано" })}</div>
                 </div>
               </div>}
               <button
@@ -2502,7 +2502,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                   type="search"
                   value={serviceSearch}
                   onChange={(event) => setServiceSearch(event.target.value)}
-                  placeholder="Поиск по услугам"
+                  placeholder={t("service_form.search_services", { defaultValue: "Поиск по услугам" })}
                   className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-semibold outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
                 />
               </label>
@@ -2807,7 +2807,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                       <span className="inline-flex items-center gap-1"><MapPin aria-hidden="true" className="h-3.5 w-3.5" />{routeText}</span>
                       <span className="inline-flex items-center gap-1"><CalendarDays aria-hidden="true" className="h-3.5 w-3.5" />{dateRangeText || "—"}</span>
                       <span className="inline-flex items-center gap-1"><BadgeDollarSign aria-hidden="true" className="h-3.5 w-3.5" />{priceText || "—"}</span>
-                      <span className="inline-flex items-center gap-1">{serviceHasProof({ details }) ? <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-emerald-600" /> : <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5 text-amber-600" />}Подтверждение</span>
+                      <span className="inline-flex items-center gap-1">{serviceHasProof({ details }) ? <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-emerald-600" /> : <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5 text-amber-600" />}{t("service_form.proof_label", { defaultValue: "Подтверждение" })}</span>
                     </div>
                   </div>
                 </div>
