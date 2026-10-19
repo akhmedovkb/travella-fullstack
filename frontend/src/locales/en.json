@@ -724,8 +724,17 @@
     "meeting_point_hint": "Choose from the list or enter an exact address",
     "meeting_point_placeholder": "Choose a place or start typing an address",
     "languages": "Service languages",
-    "languages_hint": "You can select multiple languages from your profile",
-    "languages_empty": "Select at least one language"
+    "languages_hint": "Select one or more languages. Profile languages are shown first",
+    "languages_empty": "Select at least one language",
+    "languages_placeholder": "Select or search for a language",
+    "languages_not_found": "No language found",
+    "city": "City or region",
+    "city_hint": "Select a GeoNames city or enter your own value",
+    "city_placeholder": "Select or start typing a city",
+    "city_type_more": "Type at least 2 characters",
+    "city_not_found": "No city found. You can save the entered name",
+    "city_loading": "Searching cities…",
+    "use_city": "Use “{{value}}”"
   },
   "marketplace": {
     "accommodation": "Accommodation",

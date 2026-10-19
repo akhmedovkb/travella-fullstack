@@ -723,8 +723,17 @@
     "meeting_point_hint": "Ro‘yxatdan tanlang yoki aniq manzilni kiriting",
     "meeting_point_placeholder": "Joyni tanlang yoki manzilni yozishni boshlang",
     "languages": "Xizmat tillari",
-    "languages_hint": "Profilingizdan bir nechta tilni tanlashingiz mumkin",
-    "languages_empty": "Kamida bitta tilni tanlang"
+    "languages_hint": "Bir yoki bir nechta tilni tanlang. Profil tillari birinchi ko‘rsatiladi",
+    "languages_empty": "Kamida bitta tilni tanlang",
+    "languages_placeholder": "Tilni tanlang yoki qidiring",
+    "languages_not_found": "Til topilmadi",
+    "city": "Shahar yoki hudud",
+    "city_hint": "GeoNames ro‘yxatidan shaharni tanlang yoki o‘z variantingizni kiriting",
+    "city_placeholder": "Shaharni tanlang yoki yozishni boshlang",
+    "city_type_more": "Kamida 2 ta belgi kiriting",
+    "city_not_found": "Shahar topilmadi. Kiritilgan nomni saqlashingiz mumkin",
+    "city_loading": "Shaharlar qidirilmoqda…",
+    "use_city": "“{{value}}”dan foydalanish"
   },
   "marketplace": {
     "accommodation": "Joylashuv",

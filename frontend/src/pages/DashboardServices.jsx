@@ -1,8 +1,10 @@
 // frontend/src/pages/DashboardServices.jsx
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import ISO6391 from "iso-639-1";
+import Select from "react-select";
+import AsyncCreatableSelect from "react-select/async-creatable";
 import { useTranslation } from "react-i18next";
 import ConfirmModal from "../components/ConfirmModal";
 import { tSuccess, tError, tWarn } from "../shared/toast";
@@ -1190,6 +1192,73 @@ function OptionTextInput({ value, onChange, options = [], placeholder, listId, c
   );
 }
 
+function useDebouncedLoader(asyncFn, delay = 350) {
+  const timerRef = useRef(null);
+  const controllerRef = useRef(null);
+  const resolveRef = useRef(null);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    controllerRef.current?.abort?.();
+    resolveRef.current?.([]);
+  }, []);
+
+  return useCallback((inputValue) => new Promise((resolve) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    controllerRef.current?.abort?.();
+    resolveRef.current?.([]);
+    resolveRef.current = resolve;
+    const query = String(inputValue || "").trim();
+    if (query.length < 2) {
+      resolveRef.current = null;
+      resolve([]);
+      return;
+    }
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    timerRef.current = setTimeout(async () => {
+      try {
+        resolve(await asyncFn(query, controller.signal));
+      } catch (error) {
+        if (error?.code !== "ERR_CANCELED") console.warn("City autocomplete failed", error);
+        resolve([]);
+      } finally {
+        if (resolveRef.current === resolve) resolveRef.current = null;
+      }
+    }, delay);
+  }), [asyncFn, delay]);
+}
+
+const POPULAR_CITY_OPTIONS = [
+  "Tashkent", "Samarkand", "Bukhara", "Khiva", "Shahrisabz", "Nukus",
+  "Fergana", "Andijan", "Namangan", "Termez",
+].map((name) => ({ value: name, label: name }));
+
+const selectStyles = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: 44,
+    borderRadius: 8,
+    borderColor: state.isFocused ? "#fb923c" : "#e2e8f0",
+    boxShadow: state.isFocused ? "0 0 0 4px #ffedd5" : "none",
+    fontSize: 14,
+    fontWeight: 600,
+    ":hover": { borderColor: state.isFocused ? "#fb923c" : "#cbd5e1" },
+  }),
+  valueContainer: (base) => ({ ...base, padding: "5px 12px" }),
+  menu: (base) => ({ ...base, zIndex: 30, borderRadius: 8, overflow: "hidden" }),
+  option: (base, state) => ({
+    ...base,
+    fontSize: 14,
+    fontWeight: 600,
+    backgroundColor: state.isSelected ? "#0f172a" : state.isFocused ? "#fff7ed" : "#fff",
+    color: state.isSelected ? "#fff" : "#334155",
+  }),
+  multiValue: (base) => ({ ...base, borderRadius: 999, backgroundColor: "#0f172a" }),
+  multiValueLabel: (base) => ({ ...base, color: "#fff", fontWeight: 700, paddingLeft: 9 }),
+  multiValueRemove: (base) => ({ ...base, color: "#fff", borderRadius: 999, ":hover": { backgroundColor: "#334155", color: "#fff" } }),
+};
+
 const LANGUAGE_ALIASES = {
   russian: "ru", "русский": "ru", ru: "ru",
   english: "en", "английский": "en", en: "en",
@@ -1216,9 +1285,16 @@ function normalizeLanguageCodes(details) {
 
 function languageLabel(code, uiLanguage) {
   const normalized = String(code || "").toLowerCase();
-  const russianNames = { ru: "Русский", en: "Английский", uz: "Узбекский", de: "Немецкий", fr: "Французский", es: "Испанский", tr: "Турецкий", ar: "Арабский", zh: "Китайский" };
-  if (String(uiLanguage || "").startsWith("ru") && russianNames[normalized]) return russianNames[normalized];
-  return ISO6391.getNativeName(normalized) || ISO6391.getName(normalized) || normalized.toUpperCase();
+  try {
+    const locale = String(uiLanguage || "en").slice(0, 2);
+    const localized = new Intl.DisplayNames([locale], { type: "language" }).of(normalized);
+    if (localized && localized.toLowerCase() !== normalized) {
+      return localized.charAt(0).toUpperCase() + localized.slice(1);
+    }
+  } catch {
+    // Older browsers fall back to the ISO catalog below.
+  }
+  return ISO6391.getName(normalized) || ISO6391.getNativeName(normalized) || normalized.toUpperCase();
 }
 
 function TextArea(props) {
@@ -1685,6 +1761,58 @@ export default function DashboardServices({ viewMode = "create" }) {
       .filter(Boolean);
   }, [profile?.languages, details.guideLanguages, details.guideLanguage]);
 
+  const languageOptions = useMemo(() => {
+    const preferred = new Set(availableGuideLanguages);
+    return ISO6391.getAllCodes()
+      .map((code) => ({ value: code, label: languageLabel(code, i18n.language) }))
+      .sort((a, b) => {
+        const preferredDifference = Number(preferred.has(b.value)) - Number(preferred.has(a.value));
+        return preferredDifference || a.label.localeCompare(b.label, i18n.language);
+      });
+  }, [availableGuideLanguages, i18n.language]);
+
+  const loadCityOptionsRaw = useCallback(async (query, signal) => {
+    const username = import.meta.env.VITE_GEONAMES_USERNAME;
+    if (!username) {
+      return POPULAR_CITY_OPTIONS.filter((option) => option.label.toLowerCase().includes(query.toLowerCase()));
+    }
+    const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        q: query,
+        name_startsWith: query,
+        featureClass: "P",
+        maxRows: 15,
+        orderby: "population",
+        style: "FULL",
+        lang: String(i18n.language || "en").slice(0, 2),
+        username,
+      },
+      signal,
+    });
+    const seen = new Set();
+    return (data?.geonames || []).flatMap((city) => {
+      const name = String(city?.name || "").trim();
+      if (!name) return [];
+      const region = String(city?.adminName1 || "").trim();
+      const country = String(city?.countryName || "").trim();
+      const label = [name, region, country].filter(Boolean).join(", ");
+      const key = `${name}|${city?.countryCode || ""}`.toLowerCase();
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{
+        value: name,
+        label,
+        city: name,
+        geonameId: city?.geonameId || null,
+        countryCode: city?.countryCode || "",
+        latitude: city?.lat || null,
+        longitude: city?.lng || null,
+      }];
+    });
+  }, [i18n.language]);
+
+  const loadCityOptions = useDebouncedLoader(loadCityOptionsRaw);
+
   const meetingPointOptions = useMemo(() => {
     const standard = [
       t("marketplace_form.meeting_hotel", { defaultValue: "Отель клиента" }),
@@ -1779,12 +1907,21 @@ export default function DashboardServices({ viewMode = "create" }) {
 
   const patchDetails = (patch) => setDetails((prev) => ({ ...prev, ...patch }));
 
-  const toggleGuideLanguage = (code) => {
-    const current = normalizeLanguageCodes(details);
-    const next = current.includes(code) ? current.filter((item) => item !== code) : [...current, code];
+  const selectGuideLanguages = (options) => {
+    const next = (options || []).map((option) => option.value);
     patchDetails({
       guideLanguages: next,
-      guideLanguage: next.map((item) => languageLabel(item, i18n.language)).join(", "),
+      guideLanguage: next.map((code) => languageLabel(code, i18n.language)).join(", "),
+    });
+  };
+
+  const selectCity = (option) => {
+    patchDetails({
+      location: option?.city || option?.value || "",
+      locationGeonameId: option?.geonameId || null,
+      locationCountryCode: option?.countryCode || "",
+      locationLatitude: option?.latitude || null,
+      locationLongitude: option?.longitude || null,
     });
   };
 
@@ -2724,11 +2861,27 @@ export default function DashboardServices({ viewMode = "create" }) {
                           </Field>
                         </div>
 
-                        <Field label="Город или регион">
-                          <div className="relative">
-                            <MapPin aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <TextInput className="pl-9" value={details.location} onChange={(e) => patchDetails({ location: e.target.value })} placeholder="Например, Samarkand" />
-                          </div>
+                        <Field
+                          label={t("marketplace_form.city", { defaultValue: "Город или регион" })}
+                          hint={t("marketplace_form.city_hint", { defaultValue: "Выберите город из GeoNames или введите свой вариант" })}
+                        >
+                          <AsyncCreatableSelect
+                            cacheOptions
+                            defaultOptions={POPULAR_CITY_OPTIONS}
+                            loadOptions={loadCityOptions}
+                            value={details.location ? { value: details.location, label: details.location } : null}
+                            onChange={selectCity}
+                            onCreateOption={(value) => selectCity({ value, city: value })}
+                            isClearable
+                            formatCreateLabel={(value) => t("marketplace_form.use_city", { defaultValue: "Использовать «{{value}}»", value })}
+                            noOptionsMessage={({ inputValue }) => inputValue.trim().length < 2
+                              ? t("marketplace_form.city_type_more", { defaultValue: "Введите минимум 2 символа" })
+                              : t("marketplace_form.city_not_found", { defaultValue: "Город не найден. Можно сохранить введённое название" })}
+                            loadingMessage={() => t("marketplace_form.city_loading", { defaultValue: "Ищем города…" })}
+                            placeholder={t("marketplace_form.city_placeholder", { defaultValue: "Выберите или начните вводить город" })}
+                            styles={selectStyles}
+                            components={{ DropdownIndicator: () => <MapPin aria-hidden="true" className="mr-3 h-4 w-4 text-slate-400" /> }}
+                          />
                         </Field>
 
                         <Field label="Продолжительность">
@@ -2756,37 +2909,19 @@ export default function DashboardServices({ viewMode = "create" }) {
                         {isGuide && (
                           <Field
                             label={t("marketplace_form.languages", { defaultValue: "Языки проведения" })}
-                            hint={t("marketplace_form.languages_hint", { defaultValue: "Можно выбрать несколько языков из профиля" })}
+                            hint={t("marketplace_form.languages_hint", { defaultValue: "Выберите один или несколько языков. Языки профиля показаны первыми" })}
                           >
-                            <div className="rounded-lg border border-slate-200 bg-white p-2.5 focus-within:border-orange-400 focus-within:ring-4 focus-within:ring-orange-100">
-                              <div className="flex flex-wrap gap-2">
-                                {availableGuideLanguages.map((code) => {
-                                  const selected = normalizeLanguageCodes(details).includes(code);
-                                  return (
-                                    <button
-                                      key={code}
-                                      type="button"
-                                      aria-pressed={selected}
-                                      onClick={() => toggleGuideLanguage(code)}
-                                      className={cx(
-                                        "inline-flex min-h-8 items-center gap-1.5 rounded-full px-3 py-1 text-xs font-black transition",
-                                        selected
-                                          ? "bg-slate-950 text-white ring-1 ring-slate-950"
-                                          : "bg-slate-50 text-slate-600 ring-1 ring-slate-200 hover:bg-orange-50 hover:text-orange-700 hover:ring-orange-200"
-                                      )}
-                                    >
-                                      <Languages aria-hidden="true" className="h-3.5 w-3.5" />
-                                      {languageLabel(code, i18n.language)}
-                                    </button>
-                                  );
-                                })}
-                              </div>
-                              {!normalizeLanguageCodes(details).length && (
-                                <div className="mt-2 text-xs font-semibold text-slate-400">
-                                  {t("marketplace_form.languages_empty", { defaultValue: "Выберите хотя бы один язык" })}
-                                </div>
-                              )}
-                            </div>
+                            <Select
+                              isMulti
+                              closeMenuOnSelect={false}
+                              options={languageOptions}
+                              value={languageOptions.filter((option) => normalizeLanguageCodes(details).includes(option.value))}
+                              onChange={selectGuideLanguages}
+                              placeholder={t("marketplace_form.languages_placeholder", { defaultValue: "Выберите или найдите язык" })}
+                              noOptionsMessage={() => t("marketplace_form.languages_not_found", { defaultValue: "Язык не найден" })}
+                              styles={selectStyles}
+                              components={{ DropdownIndicator: () => <Languages aria-hidden="true" className="mr-3 h-4 w-4 text-slate-400" /> }}
+                            />
                           </Field>
                         )}
 
