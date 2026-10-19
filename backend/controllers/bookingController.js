@@ -443,9 +443,11 @@ const createBooking = async (req, res) => {
         return res.status(400).json({ message: "Не указана услуга Marketplace", error: "marketplace_service_required" });
       }
       const serviceResult = await pool.query(
-        `SELECT id, provider_id, title, category, price, currency, details
-           FROM services
-          WHERE id=$1 AND provider_id=$2
+        `SELECT s.id, s.provider_id, s.title, s.category, s.price,
+                COALESCE(NULLIF(to_jsonb(s)->>'currency', ''), 'UZS') AS currency,
+                s.details
+           FROM services s
+          WHERE s.id=$1 AND s.provider_id=$2
             AND deleted_at IS NULL
             AND status IN ('published','approved','active')
             AND COALESCE(LOWER(moderation_status), 'approved') IN ('approved','published','active')
