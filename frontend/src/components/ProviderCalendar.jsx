@@ -1,12 +1,9 @@
 // frontend/src/components/ProviderCalendar.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { DayPicker } from "react-day-picker";
-import "react-day-picker/dist/style.css";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
-import { enUS, ru, uz } from "date-fns/locale";
-import { CalendarDays, Check, CircleAlert, LockKeyhole, MapPin, Save, UserRound } from "lucide-react";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, LockKeyhole, MessageCircle, Save, UserRound } from "lucide-react";
 
 const CALENDAR_PROVIDER_TYPES = new Set(["guide", "transport"]);
 
@@ -50,6 +47,7 @@ const ProviderCalendar = ({ token }) => {
 
   // подробности по бронированиям: { [ymd]: [{ name, phone, telegram, profileId, profileUrl }] }
   const [bookedDetails, setBookedDetails] = useState({});
+  const [calendarBookings, setCalendarBookings] = useState([]);
 
   // тип провайдера: guide / transport / ...
   const [providerType, setProviderType] = useState("");
@@ -58,6 +56,11 @@ const ProviderCalendar = ({ token }) => {
   const [saving, setSaving] = useState(false);
 
   const [activeYmd, setActiveYmd] = useState("");
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
+  const timelineRef = useRef(null);
 
   const cfg = useMemo(() => {
     const stored =
@@ -147,6 +150,7 @@ const ProviderCalendar = ({ token }) => {
         setManualInitial(blockedArr);
         setBooked(bookedArr);
         setBookedDetails(detailsMap);
+        setCalendarBookings(Array.isArray(data?.bookings) ? data.bookings : []);
 
         if (!Object.keys(detailsMap).length) {
           try {
@@ -198,51 +202,12 @@ const ProviderCalendar = ({ token }) => {
     return () => { cancelled = true; };
   }, [calendarEnabled, cfg, profileResolved, t]);
 
-  // преобразования дат
-  const manualAsDates = useMemo(() => manual.map(ymdToLocalDate).filter(Boolean), [manual]);
-  const bookedAsDates = useMemo(() => booked.map(ymdToLocalDate).filter(Boolean), [booked]);
-
-  // разрез: сохранённые вручную / новые несохранённые
   const manualSavedYmd = useMemo(
     () => manual.filter((d) => manualInitial.includes(d)),
     [manual, manualInitial]
   );
-  const manualNewYmd = useMemo(
-    () => manual.filter((d) => !manualInitial.includes(d)),
-    [manual, manualInitial]
-  );
-  const manualSavedAsDates = useMemo(
-    () => manualSavedYmd.map(ymdToLocalDate).filter(Boolean),
-    [manualSavedYmd]
-  );
-  const manualNewAsDates = useMemo(
-    () => manualNewYmd.map(ymdToLocalDate).filter(Boolean),
-    [manualNewYmd]
-  );
-
-  // локаль и первый день недели
-  const dpLocale = useMemo(() => {
-    const lang = (i18n.language || "en").split("-")[0];
-    if (lang === "ru") return ru;
-    if (lang === "uz") return uz;
-    return enUS;
-  }, [i18n.language]);
-
-  const weekStartsOn = useMemo(() => {
-    const lang = (i18n.language || "en").split("-")[0];
-    return lang === "ru" || lang === "uz" ? 1 : 0;
-  }, [i18n.language]);
 
   const startOfToday = useMemo(() => getStartOfToday(), []);
-  const pastMatcher = useMemo(() => ({ before: startOfToday }), [startOfToday]);
-
-  // контролируемый выбор
-  const handleSelect = (dates) => {
-    const arr = Array.isArray(dates) ? dates : dates ? [dates] : [];
-    const ymds = arr.map(toYMD).filter(Boolean);
-    const filtered = ymds.filter((d) => !booked.includes(d)); // нельзя выбирать системно занятые
-    setManual(filtered);
-  };
 
   const handleSave = async () => {
     const final = Array.from(new Set(manual)).sort();
@@ -263,9 +228,6 @@ const ProviderCalendar = ({ token }) => {
     }
   };
 
-  // только прошлые запрещаем (booked НЕ дизейблим, чтобы работал hover)
-  const disabledMatchers = useMemo(() => [pastMatcher], [pastMatcher]);
-
   const hasChanges = useMemo(() => {
     const current = [...new Set(manual)].sort().join(",");
     const saved = [...new Set(manualInitial)].sort().join(",");
@@ -279,6 +241,16 @@ const ProviderCalendar = ({ token }) => {
 
   const activeDate = activeYmd ? ymdToLocalDate(activeYmd) : null;
   const activeBookedDetails = activeYmd ? bookedDetails[activeYmd] || [] : [];
+  const normalizedBookings = useMemo(() => calendarBookings.map((booking) => ({
+    ...booking,
+    dates: (Array.isArray(booking?.dates) ? booking.dates : []).map(toYMD).filter(Boolean),
+  })), [calendarBookings]);
+  const bookingByDate = useMemo(() => {
+    const map = {};
+    normalizedBookings.forEach((booking) => booking.dates.forEach((date) => { if (!map[date]) map[date] = booking; }));
+    return map;
+  }, [normalizedBookings]);
+  const activeBooking = activeYmd ? bookingByDate[activeYmd] || null : null;
   const activeIsBooked = activeYmd ? booked.includes(activeYmd) : false;
   const activeIsManual = activeYmd ? manual.includes(activeYmd) : false;
   const activeIsChanged = activeYmd ? manual.includes(activeYmd) !== manualInitial.includes(activeYmd) : false;
@@ -296,29 +268,33 @@ const ProviderCalendar = ({ token }) => {
     ? t("calendar.provider_guide")
     : t("calendar.provider_transport");
 
-  const DayCell = (dayProps) => {
-    const dateYmd = toYMD(dayProps.date);
-    const isBookedDay = booked.includes(dateYmd);
-    const isSavedManual = manualSavedYmd.includes(dateYmd);
-    const isChanged = manual.includes(dateYmd) !== manualInitial.includes(dateYmd);
-    const isActive = activeYmd === dateYmd;
+  const monthDays = useMemo(() => {
+    const year = visibleMonth.getFullYear();
+    const month = visibleMonth.getMonth();
+    const count = new Date(year, month + 1, 0).getDate();
+    return Array.from({ length: count }, (_, index) => new Date(year, month, index + 1));
+  }, [visibleMonth]);
+  const monthInputValue = `${visibleMonth.getFullYear()}-${String(visibleMonth.getMonth() + 1).padStart(2, "0")}`;
+  const monthTitle = new Intl.DateTimeFormat(i18n.language || "en", { month: "long", year: "numeric" }).format(visibleMonth);
 
-    const dayNum = dayProps.date.getDate();
-    const statusColor = isBookedDay
-      ? "bg-slate-700"
-      : isChanged
-        ? "bg-orange-600"
-        : isSavedManual
-          ? "bg-sky-600"
-          : "";
-
-    return (
-      <div className={`relative flex h-full w-full items-start p-2 text-left ${isActive ? "ring-2 ring-inset ring-orange-500" : ""}`}>
-        <span className="text-sm font-black">{dayNum}</span>
-        {statusColor ? <span aria-hidden="true" className={`absolute inset-x-2 bottom-2 h-1 rounded-full ${statusColor}`} /> : null}
-      </div>
-    );
+  const moveMonth = (delta) => setVisibleMonth((current) => new Date(current.getFullYear(), current.getMonth() + delta, 1));
+  const goToday = () => {
+    const today = getStartOfToday();
+    setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setActiveYmd(toYMD(today));
   };
+  const selectTimelineDate = (dateYmd) => {
+    setActiveYmd(dateYmd);
+    const date = ymdToLocalDate(dateYmd);
+    if (!date || date < startOfToday || booked.includes(dateYmd)) return;
+    setManual((current) => current.includes(dateYmd) ? current.filter((item) => item !== dateYmd) : [...current, dateYmd]);
+  };
+
+  useEffect(() => {
+    const today = getStartOfToday();
+    if (visibleMonth.getFullYear() !== today.getFullYear() || visibleMonth.getMonth() !== today.getMonth()) return;
+    timelineRef.current?.scrollTo({ left: Math.max(0, (today.getDate() - 4) * 64), behavior: "smooth" });
+  }, [visibleMonth]);
 
   if (!profileResolved) {
     return <div className="mx-auto max-w-7xl px-4 py-16 text-center text-sm font-semibold text-slate-500">{t("calendar.loading")}</div>;
@@ -355,51 +331,86 @@ const ProviderCalendar = ({ token }) => {
         </header>
 
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-slate-200 bg-slate-50 px-5 py-3 text-xs font-bold text-slate-600 sm:px-7">
-          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-slate-700" />{t("calendar.booked")}</span>
+          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-600" />{t("calendar.booked")}</span>
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-sky-600" />{t("calendar.closed_by_you")}</span>
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-600" />{t("calendar.unsaved")}</span>
           <span className="ml-auto hidden items-center gap-2 text-slate-400 sm:flex"><LockKeyhole size={14} />{t("calendar.click_hint")}</span>
         </div>
 
         <div className="grid lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="relative min-w-0 px-2 py-4 sm:px-6 sm:py-6">
-            {calendarLoading ? <div className="py-20 text-center text-sm font-semibold text-slate-500">{t("calendar.loading_availability")}</div> : (
-              <DayPicker
-                locale={dpLocale}
-                weekStartsOn={weekStartsOn}
-                mode="multiple"
-                selected={manualAsDates}
-                onSelect={handleSelect}
-                disabled={disabledMatchers}
-                modifiers={{ past: pastMatcher, booked: bookedAsDates, manualSaved: manualSavedAsDates, manualNew: manualNewAsDates }}
-                modifiersClassNames={{ booked: "bg-slate-100 text-slate-950", past: "text-gray-400 cursor-not-allowed" }}
-                modifiersStyles={{
-                  manualSaved: { backgroundColor: "#f0f9ff", color: "#0f172a" },
-                  manualNew: { backgroundColor: "#fff7ed", color: "#0f172a" },
-                  booked: { backgroundColor: "#f1f5f9", color: "#0f172a", opacity: 1 },
-                }}
-                components={{ DayContent: DayCell }}
-                className="rdp w-full !m-0 text-slate-900"
-                classNames={{
-                  months: "w-full", month: "w-full", table: "w-full table-fixed",
-                  caption: "relative mb-3 flex h-10 items-center justify-center",
-                  caption_label: "text-base font-black capitalize text-slate-950 sm:text-lg",
-                  nav: "absolute right-0 top-0 flex gap-2",
-                  nav_button: "h-9 w-9 rounded-md border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50",
-                  head_row: "grid grid-cols-7 border-b border-slate-100",
-                  head_cell: "py-2.5 text-center text-[10px] font-black uppercase text-slate-400 sm:text-[11px]",
-                  row: "grid grid-cols-7 border-b border-slate-100 last:border-b-0",
-                  cell: "relative h-16 border-r border-slate-100 last:border-r-0 sm:h-20",
-                  day: "rdp-day relative h-full w-full text-sm font-bold transition hover:bg-orange-50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500",
-                }}
-                styles={{
-                  months: { width: "100%" },
-                  month: { width: "100%" },
-                  table: { width: "100%" },
-                  day: { width: "100%", maxWidth: "100%", height: "100%", border: 0, borderRadius: 0 },
-                }}
-                onDayClick={(date) => setActiveYmd(toYMD(date))}
-              />
+          <div className="relative min-w-0 bg-slate-100/60">
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+              <label className="relative">
+                <span className="sr-only">{t("calendar.choose_month")}</span>
+                <input
+                  type="month"
+                  value={monthInputValue}
+                  onChange={(event) => {
+                    const [year, month] = event.target.value.split("-").map(Number);
+                    if (year && month) setVisibleMonth(new Date(year, month - 1, 1));
+                  }}
+                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-black capitalize text-slate-800 outline-none focus:border-orange-400"
+                />
+              </label>
+              <button type="button" onClick={goToday} className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50">{t("calendar.today")}</button>
+              <div className="ml-auto flex items-center gap-1">
+                <button type="button" onClick={() => moveMonth(-1)} aria-label={t("calendar.previous_month")} className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><ChevronLeft size={18} /></button>
+                <button type="button" onClick={() => moveMonth(1)} aria-label={t("calendar.next_month")} className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><ChevronRight size={18} /></button>
+              </div>
+            </div>
+
+            {calendarLoading ? <div className="bg-white py-24 text-center text-sm font-semibold text-slate-500">{t("calendar.loading_availability")}</div> : (
+              <div className="flex min-h-[290px] border-b border-slate-200 bg-white">
+                <div className="z-10 w-32 shrink-0 border-r border-slate-200 bg-white sm:w-44">
+                  <div className="flex h-20 items-end border-b border-slate-200 px-3 pb-3 text-sm font-black capitalize text-slate-900 sm:px-4">{monthTitle}</div>
+                  <div className="flex h-28 flex-col justify-center px-3 sm:px-4">
+                    <div className="text-sm font-black text-slate-950">{t("calendar.my_availability")}</div>
+                    <div className="mt-1 text-xs leading-4 text-slate-500">{typeLabel}</div>
+                  </div>
+                </div>
+
+                <div ref={timelineRef} className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain">
+                  <div className="flex min-w-max">
+                    {monthDays.map((date) => {
+                      const ymd = toYMD(date);
+                      const weekday = new Intl.DateTimeFormat(i18n.language || "en", { weekday: "short" }).format(date);
+                      const weekend = date.getDay() === 0 || date.getDay() === 6;
+                      const isToday = ymd === toYMD(startOfToday);
+                      const isPast = date < startOfToday;
+                      const isManual = manual.includes(ymd);
+                      const isChanged = isManual !== manualInitial.includes(ymd);
+                      const booking = bookingByDate[ymd];
+                      const previous = new Date(date); previous.setDate(date.getDate() - 1);
+                      const next = new Date(date); next.setDate(date.getDate() + 1);
+                      const continuesLeft = booking && bookingByDate[toYMD(previous)]?.id === booking.id;
+                      const continuesRight = booking && bookingByDate[toYMD(next)]?.id === booking.id;
+                      const selected = activeYmd === ymd;
+                      return (
+                        <div key={ymd} className="w-16 shrink-0 border-r border-slate-200 last:border-r-0">
+                          <button type="button" onClick={() => setActiveYmd(ymd)} className={`flex h-20 w-full flex-col items-center justify-center border-b border-slate-200 transition ${selected ? "bg-orange-50 ring-2 ring-inset ring-orange-500" : "bg-white hover:bg-slate-50"}`}>
+                            <span className={`text-[11px] font-bold uppercase ${weekend ? "text-rose-500" : "text-slate-400"}`}>{weekday}</span>
+                            <span className={`mt-1 flex h-8 w-8 items-center justify-center rounded-md text-sm font-black ${isToday ? "bg-slate-950 text-white" : weekend ? "text-rose-600" : "text-slate-900"}`}>{date.getDate()}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => selectTimelineDate(ymd)}
+                            disabled={isPast}
+                            className={`relative h-28 w-full overflow-hidden transition disabled:cursor-not-allowed ${selected ? "ring-2 ring-inset ring-orange-500" : ""} ${isPast ? "bg-slate-50 opacity-45" : isChanged ? "bg-orange-50" : isManual ? "bg-sky-50" : "bg-white hover:bg-slate-50"}`}
+                            style={isManual && !isChanged ? { backgroundImage: "repeating-linear-gradient(135deg, transparent 0, transparent 10px, rgba(14,165,233,.12) 10px, rgba(14,165,233,.12) 12px)" } : undefined}
+                          >
+                            {booking ? (
+                              <span className={`absolute top-9 flex h-8 items-center bg-emerald-600 px-2 text-left text-[10px] font-black text-white ${continuesLeft ? "left-0" : "left-1 rounded-l-full"} ${continuesRight ? "right-0" : "right-1 rounded-r-full"}`}>
+                                {!continuesLeft ? (booking.customer_name || `#${booking.id}`) : ""}
+                              </span>
+                            ) : null}
+                            {isManual && !booking ? <span className={`absolute inset-x-2 bottom-3 h-1 rounded-full ${isChanged ? "bg-orange-600" : "bg-sky-600"}`} /> : null}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
             )}
           </div>
 
@@ -414,20 +425,44 @@ const ProviderCalendar = ({ token }) => {
               <div>
                 <div className="text-[11px] font-black uppercase text-slate-400">{t("calendar.selected_day")}</div>
                 <div className="mt-1 text-lg font-black capitalize text-slate-950">{activeDateLabel}</div>
-                <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-black ${activeIsBooked ? "bg-slate-200 text-slate-800" : activeIsChanged ? "bg-orange-100 text-orange-800" : activeIsManual ? "bg-sky-100 text-sky-800" : "bg-emerald-100 text-emerald-800"}`}>
-                  <span className={`h-2 w-2 rounded-full ${activeIsBooked ? "bg-slate-700" : activeIsChanged ? "bg-orange-600" : activeIsManual ? "bg-sky-600" : "bg-emerald-600"}`} />
+                <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-black ${activeIsBooked ? "bg-emerald-100 text-emerald-800" : activeIsChanged ? "bg-orange-100 text-orange-800" : activeIsManual ? "bg-sky-100 text-sky-800" : "bg-slate-200 text-slate-800"}`}>
+                  <span className={`h-2 w-2 rounded-full ${activeIsBooked ? "bg-emerald-600" : activeIsChanged ? "bg-orange-600" : activeIsManual ? "bg-sky-600" : "bg-slate-500"}`} />
                   {activeIsBooked ? t("calendar.booked") : activeIsChanged ? t("calendar.unsaved") : activeIsManual ? t("calendar.closed_by_you") : t("calendar.available")}
                 </div>
                 {activeIsBooked && (
-                  <div className="mt-5 space-y-3">
-                    <div className="text-xs font-black uppercase text-slate-400">{t("calendar.booking_details")}</div>
-                    {activeBookedDetails.length ? activeBookedDetails.map((item, index) => (
+                  <div className="mt-5 space-y-4">
+                    {activeBooking ? (
+                      <>
+                        <div className="border-b border-slate-200 pb-4">
+                          <div className="text-xs font-bold text-slate-400">{t("calendar.booking_number", { number: activeBooking.id })}</div>
+                          <div className="mt-1 text-sm font-black text-slate-950">{activeBooking.service_title || t("calendar.service_booking")}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-black uppercase text-slate-400">{t("calendar.customer")}</div>
+                          <div className="mt-2 flex items-center gap-2 text-sm font-black text-slate-900"><UserRound size={16} className="text-slate-400" />{activeBooking.customer_name || t("calendar.unknown_name")}</div>
+                          {activeBooking.customer_phone ? <a className="mt-2 block text-sm font-bold text-slate-600 hover:text-orange-600" href={`tel:${activeBooking.customer_phone}`}>{activeBooking.customer_phone}</a> : null}
+                          {activeBooking.customer_telegram ? <a className="mt-1 block text-sm font-bold text-slate-600 hover:text-orange-600" href={`https://t.me/${String(activeBooking.customer_telegram).replace(/^@/, "")}`} target="_blank" rel="noreferrer">@{String(activeBooking.customer_telegram).replace(/^@/, "")}</a> : null}
+                        </div>
+                        {activeBooking.provider_price ? (
+                          <div className="border-t border-slate-200 pt-4">
+                            <div className="text-xs font-black uppercase text-slate-400">{t("calendar.booking_price")}</div>
+                            <div className="mt-1 text-lg font-black text-slate-950">{Number(activeBooking.provider_price).toLocaleString(i18n.language || "en")} {activeBooking.currency || "UZS"}</div>
+                          </div>
+                        ) : null}
+                        {activeBooking.client_message ? (
+                          <div className="border-t border-slate-200 pt-4">
+                            <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-400"><MessageCircle size={14} />{t("calendar.customer_comment")}</div>
+                            <div className="mt-2 text-sm leading-5 text-slate-600">{activeBooking.client_message}</div>
+                          </div>
+                        ) : null}
+                        <a href="/dashboard/bookings" className="flex h-10 w-full items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-black text-slate-800 transition hover:bg-slate-100">{t("calendar.open_booking")}</a>
+                      </>
+                    ) : activeBookedDetails.length ? activeBookedDetails.map((item, index) => (
                       <div key={index} className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
                         <div className="flex items-center gap-2 text-sm font-black text-slate-900"><UserRound size={15} className="text-slate-400" />{item.name || t("calendar.unknown_name")}</div>
                         {item.phone ? <a className="mt-2 block text-sm font-bold text-slate-600 hover:text-orange-600" href={`tel:${item.phone}`}>{item.phone}</a> : null}
-                        {item.telegram ? <a className="mt-1 block text-sm font-bold text-slate-600 hover:text-orange-600" href={`https://t.me/${String(item.telegram).replace(/^@/, "")}`} target="_blank" rel="noreferrer">@{String(item.telegram).replace(/^@/, "")}</a> : null}
                       </div>
-                    )) : <div className="flex items-center gap-2 text-sm text-slate-500"><MapPin size={15} />{t("calendar.booking_without_contacts")}</div>}
+                    )) : <div className="text-sm text-slate-500">{t("calendar.booking_without_contacts")}</div>}
                   </div>
                 )}
                 {!activeIsBooked && !activeIsPast && (

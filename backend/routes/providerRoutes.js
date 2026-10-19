@@ -644,7 +644,7 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
 router.get("/calendar", authenticateToken, requireProvider, async (req, res) => {
   try {
     const providerId = req.user.id;
-    const [booked, blocked, details] = await Promise.all([
+    const [booked, blocked, details, calendarBookings] = await Promise.all([
       pool.query(
         `
           SELECT DISTINCT COALESCE(bd.date, b.date)::text AS date
@@ -690,11 +690,45 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
         `,
         [providerId]
       ),
+      pool.query(
+        `
+          SELECT
+            b.id,
+            b.status,
+            b.source,
+            b.created_at,
+            b.client_message,
+            b.provider_price,
+            COALESCE(b.attachments::jsonb, '{}'::jsonb) AS details,
+            COALESCE(
+              (SELECT array_agg(d.date::date ORDER BY d.date)
+                 FROM booking_dates d
+                WHERE d.booking_id = b.id),
+              CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
+            ) AS dates,
+            COALESCE(s.title, (b.attachments::jsonb)->>'rate_title', (b.attachments::jsonb)->>'service_title') AS service_title,
+            COALESCE((b.attachments::jsonb)->>'published_currency', (b.attachments::jsonb)->>'currency', 'UZS') AS currency,
+            COALESCE(rp.name, c.name) AS customer_name,
+            COALESCE(rp.phone, c.phone) AS customer_phone,
+            COALESCE(rp.social, c.telegram) AS customer_telegram,
+            COALESCE(rp.photo, c.avatar_url) AS customer_photo
+          FROM bookings b
+          LEFT JOIN clients c ON c.id = b.client_id
+          LEFT JOIN providers rp ON rp.id = b.requester_provider_id
+          LEFT JOIN services s ON s.id = b.service_id
+          WHERE b.provider_id = $1
+            AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+            AND (b.date IS NOT NULL OR EXISTS (SELECT 1 FROM booking_dates d WHERE d.booking_id = b.id))
+          ORDER BY b.created_at DESC
+        `,
+        [providerId]
+      ),
     ]);
     res.json({
       booked: booked.rows,
       blocked: blocked.rows,
       bookedDetails: details.rows,
+      bookings: calendarBookings.rows,
     });
   } catch (e) {
     console.error("providers/calendar error:", e);
