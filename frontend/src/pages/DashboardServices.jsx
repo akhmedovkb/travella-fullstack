@@ -1333,6 +1333,7 @@ function Toggle({ checked, onChange, label, hint }) {
 }
 
 function ImageUploader({ title, hint, images, onChange, max = 10 }) {
+  const { t } = useTranslation();
   const handleFiles = async (event) => {
     const files = Array.from(event.target.files || []).slice(0, Math.max(0, max - images.length));
     if (!files.length) return;
@@ -1354,7 +1355,7 @@ function ImageUploader({ title, hint, images, onChange, max = 10 }) {
         </div>
         {!!images.length && (
           <button type="button" onClick={() => onChange([])} className="text-xs font-black text-rose-600 hover:underline">
-            Очистить
+            {t("marketplace_form.photos_clear", { defaultValue: "Очистить" })}
           </button>
         )}
       </div>
@@ -1376,13 +1377,13 @@ function ImageUploader({ title, hint, images, onChange, max = 10 }) {
         </div>
       ) : (
         <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-400">
-          Изображений пока нет
+          {t("marketplace_form.photos_empty", { defaultValue: "Изображений пока нет" })}
         </div>
       )}
 
       <label className="mt-3 inline-flex cursor-pointer rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-orange-600">
         <input type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
-        Выбрать файлы
+        {t("marketplace_form.photos_choose", { defaultValue: "Выбрать файлы" })}
       </label>
     </div>
   );
@@ -2812,13 +2813,13 @@ export default function DashboardServices({ viewMode = "create" }) {
               <div className="mx-auto mt-2 grid max-w-5xl gap-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
                 <aside className="space-y-3 lg:sticky lg:top-5">
                   <div className="rounded-lg border border-slate-200 bg-white p-4">
-                    <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">Тип услуги</div>
+                    <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">{t("marketplace_form.service_type", { defaultValue: "Тип услуги" })}</div>
                     <div className="mt-2 text-sm font-black text-slate-950">{getCategoryMeta(category, t).label}</div>
-                    <button type="button" onClick={() => { setCategory(""); setStep(1); }} className="mt-3 text-xs font-black text-orange-600 hover:text-orange-700">Изменить тип</button>
+                    <button type="button" onClick={() => { setCategory(""); setStep(1); }} className="mt-3 text-xs font-black text-orange-600 hover:text-orange-700">{t("marketplace_form.change_type", { defaultValue: "Изменить тип" })}</button>
                   </div>
 
                   {isExtended && (
-                    <nav className="rounded-lg border border-slate-200 bg-white p-2" aria-label="Шаги создания услуги">
+                    <nav className="rounded-lg border border-slate-200 bg-white p-2" aria-label={t("marketplace_form.creation_steps", { defaultValue: "Шаги создания услуги" })}>
                       {steps.map((item) => (
                         <button
                           key={item.id}
@@ -2835,7 +2836,7 @@ export default function DashboardServices({ viewMode = "create" }) {
 
                   {!isExtended && (
                     <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs font-medium leading-5 text-slate-500">
-                      Заполните данные, добавьте фотографии и сохраните услугу как черновик.
+                      {t("marketplace_form.sidebar_hint", { defaultValue: "Заполните данные, добавьте фотографии и сохраните услугу как черновик." })}
                     </div>
                   )}
                 </aside>
@@ -2849,15 +2850,15 @@ export default function DashboardServices({ viewMode = "create" }) {
                           <Layers3 aria-hidden="true" className="h-5 w-5" />
                         </div>
                         <div>
-                          <div className="text-base font-black text-slate-950">Основная информация</div>
-                          <div className="text-xs font-medium text-slate-500">То, что клиент увидит в карточке услуги</div>
+                          <div className="text-base font-black text-slate-950">{t("marketplace_form.main_info", { defaultValue: "Основная информация" })}</div>
+                          <div className="text-xs font-medium text-slate-500">{t("marketplace_form.main_info_hint", { defaultValue: "То, что клиент увидит в карточке услуги" })}</div>
                         </div>
                       </div>
 
                       <div className="grid gap-5 p-5 sm:grid-cols-2">
                         <div className="sm:col-span-2">
-                          <Field label={t("title", { defaultValue: "Название услуги" })} hint="Короткое и конкретное: например, «Обзорная экскурсия по Самарканду»">
-                            <TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Введите название" />
+                          <Field label={t("title", { defaultValue: "Название услуги" })} hint={t("marketplace_form.title_hint", { defaultValue: "Короткое и конкретное: например, «Обзорная экскурсия по Самарканду»" })}>
+                            <TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("marketplace_form.title_placeholder", { defaultValue: "Введите название" })} />
                           </Field>
                         </div>
 
@@ -2884,10 +2885,10 @@ export default function DashboardServices({ viewMode = "create" }) {
                           />
                         </Field>
 
-                        <Field label="Продолжительность">
+                        <Field label={t("marketplace_form.duration", { defaultValue: "Продолжительность" })}>
                           <div className="relative">
                             <Clock3 aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <TextInput className="pl-9" value={details.duration} onChange={(e) => patchDetails({ duration: e.target.value })} placeholder="Например, 4 часа" />
+                            <TextInput className="pl-9" value={details.duration} onChange={(e) => patchDetails({ duration: e.target.value })} placeholder={t("marketplace_form.duration_placeholder", { defaultValue: "Например, 4 часа" })} />
                           </div>
                         </Field>
 
@@ -2925,14 +2926,14 @@ export default function DashboardServices({ viewMode = "create" }) {
                           </Field>
                         )}
 
-                        <Field label={isTransport ? "Количество мест" : "Максимум гостей"}>
+                        <Field label={isTransport ? t("marketplace_form.seats", { defaultValue: "Количество мест" }) : t("marketplace_form.max_guests", { defaultValue: "Максимум гостей" })}>
                           <div className="relative">
                             <Users aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <TextInput className="pl-9" type="number" min="1" value={details.maxPax} onChange={(e) => patchDetails({ maxPax: e.target.value })} placeholder="Например, 8" />
+                            <TextInput className="pl-9" type="number" min="1" value={details.maxPax} onChange={(e) => patchDetails({ maxPax: e.target.value })} placeholder={t("marketplace_form.guests_placeholder", { defaultValue: "Например, 8" })} />
                           </div>
                         </Field>
 
-                        <Field label={`Цена за услугу${profile?.currency ? `, ${profile.currency}` : ""}`} hint="Итоговая стоимость, которую увидит клиент">
+                        <Field label={`${t("marketplace_form.price", { defaultValue: "Цена за услугу" })}${profile?.currency ? `, ${profile.currency}` : ""}`} hint={t("marketplace_form.price_hint", { defaultValue: "Итоговая стоимость, которую увидит клиент" })}>
                           <div className="relative">
                             <BadgeDollarSign aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <TextInput className="pl-9" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" />
@@ -2940,8 +2941,8 @@ export default function DashboardServices({ viewMode = "create" }) {
                         </Field>
 
                         <div className="sm:col-span-2">
-                          <Field label={t("description", { defaultValue: "Описание" })} hint="Расскажите о маршруте, программе и важных условиях">
-                            <TextArea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Что входит в услугу и как она проходит" />
+                          <Field label={t("description", { defaultValue: "Описание" })} hint={t("marketplace_form.description_hint", { defaultValue: "Расскажите о маршруте, программе и важных условиях" })}>
+                            <TextArea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("marketplace_form.description_placeholder", { defaultValue: "Что входит в услугу и как она проходит" })} />
                           </Field>
                         </div>
                       </div>
