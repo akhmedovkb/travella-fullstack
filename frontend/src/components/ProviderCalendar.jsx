@@ -291,10 +291,22 @@ const ProviderCalendar = ({ token }) => {
   };
 
   useEffect(() => {
+    if (calendarLoading || !timelineRef.current) return undefined;
     const today = getStartOfToday();
-    if (visibleMonth.getFullYear() !== today.getFullYear() || visibleMonth.getMonth() !== today.getMonth()) return;
-    timelineRef.current?.scrollTo({ left: Math.max(0, (today.getDate() - 4) * 64), behavior: "smooth" });
-  }, [visibleMonth]);
+    if (visibleMonth.getFullYear() !== today.getFullYear() || visibleMonth.getMonth() !== today.getMonth()) return undefined;
+
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = timelineRef.current;
+      if (!viewport) return;
+      const dayWidth = 64;
+      const target = (today.getDate() - 1) * dayWidth;
+      viewport.scrollTo({
+        left: Math.max(0, target - (viewport.clientWidth / 2) + (dayWidth / 2)),
+        behavior: "auto",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [calendarLoading, visibleMonth]);
 
   if (!profileResolved) {
     return <div className="mx-auto max-w-7xl px-4 py-16 text-center text-sm font-semibold text-slate-500">{t("calendar.loading")}</div>;
@@ -340,8 +352,10 @@ const ProviderCalendar = ({ token }) => {
         <div className="grid lg:grid-cols-[minmax(0,1fr)_300px]">
           <div className="relative min-w-0 bg-slate-100/60">
             <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
-              <label className="relative">
+              <label className="relative flex h-10 min-w-48 cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black capitalize text-slate-800 transition hover:bg-slate-50 focus-within:border-orange-400">
                 <span className="sr-only">{t("calendar.choose_month")}</span>
+                <CalendarDays size={16} className="text-slate-400" />
+                <span>{monthTitle}</span>
                 <input
                   type="month"
                   value={monthInputValue}
@@ -349,7 +363,7 @@ const ProviderCalendar = ({ token }) => {
                     const [year, month] = event.target.value.split("-").map(Number);
                     if (year && month) setVisibleMonth(new Date(year, month - 1, 1));
                   }}
-                  className="h-10 rounded-md border border-slate-200 bg-white px-3 text-sm font-black capitalize text-slate-800 outline-none focus:border-orange-400"
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
                 />
               </label>
               <button type="button" onClick={goToday} className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50">{t("calendar.today")}</button>
@@ -369,7 +383,11 @@ const ProviderCalendar = ({ token }) => {
                   </div>
                 </div>
 
-                <div ref={timelineRef} className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain">
+                <div
+                  ref={timelineRef}
+                  className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain"
+                  style={{ scrollbarColor: "#cbd5e1 #f8fafc", scrollbarWidth: "thin" }}
+                >
                   <div className="flex min-w-max">
                     {monthDays.map((date) => {
                       const ymd = toYMD(date);
