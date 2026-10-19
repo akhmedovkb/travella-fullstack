@@ -87,10 +87,22 @@ export const TRANSPORT_SERVICE_GROUPS = [
   },
 ];
 
+export const HOTEL_SERVICE_GROUPS = [
+  {
+    id: "hotel_products",
+    label: "Услуги отеля",
+    services: [
+      { id: "hotel_room", label: "Номер в отеле" },
+      { id: "hotel_transfer", label: "Трансфер от/до отеля" },
+      { id: "hall_rent", label: "Аренда зала" },
+    ],
+  },
+];
+
 export const GUIDE_CATEGORY_IDS = GUIDE_SERVICE_GROUPS.flatMap((group) => group.services.map((service) => service.id));
 export const TRANSPORT_CATEGORY_IDS = TRANSPORT_SERVICE_GROUPS.flatMap((group) => group.services.map((service) => service.id));
 export const PROVIDER_SERVICE_LABELS = Object.fromEntries(
-  [...GUIDE_SERVICE_GROUPS, ...TRANSPORT_SERVICE_GROUPS]
+  [...GUIDE_SERVICE_GROUPS, ...TRANSPORT_SERVICE_GROUPS, ...HOTEL_SERVICE_GROUPS]
     .flatMap((group) => group.services)
     .map((service) => [service.id, service.label])
 );

@@ -305,6 +305,19 @@
     "crm": { "title": "CRM overview", "subtitle": "A quick snapshot of profile activity.", "opens": "Opens", "hot": "Hot leads", "requests": "Requests", "bookings": "Bookings" }
   },
   "provider_services_tourbuilder_not_allowed": "Tour Builder rates can only be edited by guides, transport providers and travel agents.",
+  "marketplace_create": {
+    "title": "Create a Marketplace service",
+    "subtitle": "Choose a service type and complete a clear customer-facing listing.",
+    "choose_title": "What would you like to offer?",
+    "choose_hint": "Choose one service type and the form will adapt automatically.",
+    "card_hint": "Open the form and set a price",
+    "role_hint": {
+      "guide": "Choose a tour or guide service that you provide personally.",
+      "transport": "Choose a transfer or chauffeured vehicle service.",
+      "hotel": "Choose a hotel product available for booking.",
+      "agent": "Choose the product you want to publish on Marketplace."
+    }
+  },
   "provider_services": {
     "from": "From",
     "to": "To",
@@ -316,7 +329,8 @@
       "tour_transport": "Transport for tours and programs",
       "route_transfers": "Intercity and route transfers",
       "vehicle_hire": "Chauffeured vehicle",
-      "transport_extras": "Additional transport services"
+      "transport_extras": "Additional transport services",
+      "hotel_products": "Hotel services"
     },
     "items": {
       "city_tour_guide": "City sightseeing tour",

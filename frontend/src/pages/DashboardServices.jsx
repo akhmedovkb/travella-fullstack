@@ -9,7 +9,14 @@ import { tSuccess, tError, tWarn } from "../shared/toast";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
 import { SERVICE_FIELD_OPTIONS } from "../constants/serviceFieldOptions";
 import { getServiceUrgency } from "../utils/serviceUrgency";
-import { GUIDE_CATEGORY_IDS, TRANSPORT_CATEGORY_IDS, PROVIDER_SERVICE_LABELS } from "../config/providerServiceCatalog";
+import {
+  GUIDE_CATEGORY_IDS,
+  GUIDE_SERVICE_GROUPS,
+  HOTEL_SERVICE_GROUPS,
+  TRANSPORT_CATEGORY_IDS,
+  TRANSPORT_SERVICE_GROUPS,
+  PROVIDER_SERVICE_LABELS,
+} from "../config/providerServiceCatalog";
 import {
   BadgeDollarSign,
   CalendarDays,
@@ -1667,6 +1674,7 @@ export default function DashboardServices({ viewMode = "create" }) {
   const isAgent = profile?.type === "agent";
   const isGuide = profile?.type === "guide";
   const isTransport = profile?.type === "transport";
+  const isHotel = profile?.type === "hotel";
   const isExtended = isAgent && EXTENDED_AGENT_CATEGORIES.includes(category);
 
   const availableGuideLanguages = useMemo(() => {
@@ -1714,11 +1722,20 @@ export default function DashboardServices({ viewMode = "create" }) {
         "author_tour",
       ];
     }
-    if (type === "guide") return [...GUIDE_CATEGORY_IDS, ...TRANSPORT_CATEGORY_IDS];
+    if (type === "guide") return GUIDE_CATEGORY_IDS;
     if (type === "transport") return TRANSPORT_CATEGORY_IDS;
     if (type === "hotel") return ["hotel_room", "hotel_transfer", "hall_rent"];
     return [];
   }, [profile?.type]);
+
+  const categoryGroups = useMemo(() => {
+    if (isGuide) return GUIDE_SERVICE_GROUPS;
+    if (isTransport) return TRANSPORT_SERVICE_GROUPS;
+    if (isHotel) return HOTEL_SERVICE_GROUPS;
+    return categoryOptions.length
+      ? [{ id: "agent_products", label: "Marketplace", services: categoryOptions.map((id) => ({ id })) }]
+      : [];
+  }, [categoryOptions, isGuide, isHotel, isTransport]);
 
   const loadAll = async () => {
     try {
@@ -2224,12 +2241,12 @@ export default function DashboardServices({ viewMode = "create" }) {
               <h2 className="text-xl font-black text-slate-950 sm:text-2xl">
                 {viewMode === "manage"
                   ? t("provider_services_tab_created", { defaultValue: "Мои услуги" })
-                  : "Создать услугу для Marketplace"}
+                  : t("marketplace_create.title", { defaultValue: "Создать услугу для Marketplace" })}
               </h2>
               <p className="mt-1 max-w-2xl text-sm font-medium leading-5 text-slate-500">
                 {viewMode === "manage"
                   ? t("service_form.manage_hint", { defaultValue: "Управляйте статусами, актуальностью и публикацией созданных услуг." })
-                  : "Выберите тип услуги и последовательно заполните карточку для клиента."}
+                  : t("marketplace_create.subtitle", { defaultValue: "Выберите тип услуги и последовательно заполните карточку для клиента." })}
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
@@ -2599,29 +2616,57 @@ export default function DashboardServices({ viewMode = "create" }) {
             {!category && (
               <div className="mx-auto max-w-5xl">
                 <div className="mb-4">
-                  <div className="text-lg font-black text-slate-950">Что вы хотите предложить?</div>
-                  <div className="mt-1 text-sm font-medium text-slate-500">Выберите один тип. Набор полей настроится автоматически.</div>
+                  <div className="text-lg font-black text-slate-950">
+                    {t("marketplace_create.choose_title", { defaultValue: "Что вы хотите предложить?" })}
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-slate-500">
+                    {t(`marketplace_create.role_hint.${profile?.type}`, {
+                      defaultValue: t("marketplace_create.choose_hint", { defaultValue: "Выберите один тип. Набор полей настроится автоматически." }),
+                    })}
+                  </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {categoryOptions.map((cat) => {
-                    const meta = getCategoryMeta(cat, t);
-                    return (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => { setCategory(cat); setStep(1); setDetails({ ...DEFAULT_DETAILS }); }}
-                        className="group flex min-h-28 items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-orange-300 hover:bg-orange-50/40 hover:shadow-sm"
-                      >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition group-hover:bg-orange-100 group-hover:text-orange-600">
-                          <Layers3 aria-hidden="true" className="h-5 w-5" />
-                        </span>
-                        <span>
-                          <span className="block text-sm font-black text-slate-950">{meta.label}</span>
-                          <span className="mt-1 block text-xs font-medium leading-5 text-slate-500">{meta.hint}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
+                <div className="space-y-5">
+                  {categoryGroups.map((group) => (
+                    <section key={group.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3">
+                        <h3 className="text-sm font-black text-slate-900">
+                          {t(`provider_services.groups.${group.id}`, { defaultValue: group.label })}
+                        </h3>
+                        <span className="text-xs font-bold text-slate-400">{group.services.length}</span>
+                      </div>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3">
+                        {group.services.map((service, index) => {
+                          const cat = service.id;
+                          const meta = getCategoryMeta(cat, t);
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => { setCategory(cat); setStep(1); setDetails({ ...DEFAULT_DETAILS }); }}
+                              className={cx(
+                                "group flex min-h-24 items-start gap-3 p-4 text-left transition hover:bg-orange-50/60",
+                                index > 0 && "border-t border-slate-100",
+                                "sm:[&:nth-child(2)]:border-t-0 sm:[&:nth-child(even)]:border-l",
+                                "lg:[&:nth-child(3)]:border-t-0 lg:[&:nth-child(3n+1)]:border-l-0 lg:[&:nth-child(n+4)]:border-t lg:[&:not(:nth-child(3n+1))]:border-l"
+                              )}
+                            >
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition group-hover:bg-orange-100 group-hover:text-orange-600">
+                                <Layers3 aria-hidden="true" className="h-5 w-5" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block text-sm font-black leading-5 text-slate-950">
+                                  {t(`provider_services.items.${cat}`, { defaultValue: meta.label })}
+                                </span>
+                                <span className="mt-1 block text-xs font-medium leading-4 text-slate-500">
+                                  {t("marketplace_create.card_hint", { defaultValue: "Открыть форму и назначить цену" })}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
                 </div>
               </div>
             )}

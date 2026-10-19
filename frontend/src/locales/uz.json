@@ -304,6 +304,19 @@
     "crm": { "title": "CRM xulosasi", "subtitle": "Profil faolligining qisqacha ko‘rinishi.", "opens": "Ochilgan", "hot": "Qiziqqanlar", "requests": "So‘rovlar", "bookings": "Bronlar" }
   },
   "provider_services_tourbuilder_not_allowed": "Tour Builder tariflarini faqat gidlar, transport yetkazib beruvchilari va turagentlar tahrirlashi mumkin.",
+  "marketplace_create": {
+    "title": "Marketplace uchun xizmat yaratish",
+    "subtitle": "Xizmat turini tanlang va mijoz uchun tushunarli kartochkani to‘ldiring.",
+    "choose_title": "Nimani taklif qilmoqchisiz?",
+    "choose_hint": "Bitta xizmat turini tanlang — shakl avtomatik moslashadi.",
+    "card_hint": "Shaklni ochish va narx belgilash",
+    "role_hint": {
+      "guide": "Shaxsan o‘tkazadigan ekskursiya yoki gid xizmatini tanlang.",
+      "transport": "Transfer yoki transport ijarasi turini tanlang.",
+      "hotel": "Bron qilish mumkin bo‘lgan mehmonxona xizmatini tanlang.",
+      "agent": "Marketplace’da e’lon qilmoqchi bo‘lgan mahsulotni tanlang."
+    }
+  },
   "provider_services": {
     "from": "Qayerdan",
     "to": "Qayerga",
@@ -315,7 +328,8 @@
       "tour_transport": "Ekskursiya va dasturlar uchun transport",
       "route_transfers": "Shaharlararo va yo‘nalish transferlari",
       "vehicle_hire": "Haydovchili avtomobil",
-      "transport_extras": "Qo‘shimcha transport xizmatlari"
+      "transport_extras": "Qo‘shimcha transport xizmatlari",
+      "hotel_products": "Mehmonxona xizmatlari"
     },
     "items": {
       "city_tour_guide": "Shahar bo‘ylab tanishuv ekskursiyasi",
