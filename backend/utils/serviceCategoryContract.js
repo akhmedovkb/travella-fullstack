@@ -5,6 +5,7 @@
 // submit validation and moderation blockers.
 
 const { normalizeCategory } = require("./serviceCategories");
+const { PROVIDER_SERVICE_CATEGORY_SET } = require("./providerServiceCatalog");
 
 const STEP = Object.freeze({
   TITLE: "svc_create_title",
@@ -118,6 +119,13 @@ const COMMERCIAL_FIELDS = Object.freeze([
 ]);
 
 const CONTRACTS = Object.freeze({
+  marketplace_service: Object.freeze([
+    f("title", "Название", null, { code: "TITLE_REQUIRED", weight: 2 }),
+    f("description", "Описание", null, { code: "DESCRIPTION_REQUIRED", weight: 2 }),
+    f("grossPrice", "Цена за услугу", null, { code: "PRICE_REQUIRED", weight: 3 }),
+    f("photo", "Фото услуги", null, { code: "PHOTO_REQUIRED", weight: 2 }),
+  ]),
+
   refused_tour: Object.freeze([
     f("title", "Название", STEP.TITLE, { code: "TITLE_REQUIRED", weight: 2 }),
     f("country", "Страна направления", STEP.COUNTRY, { code: "COUNTRY_REQUIRED", weight: 2 }),
@@ -211,6 +219,7 @@ const CONTRACTS = Object.freeze({
 
 function getEffectiveCategoryFromInput(category = "", details = {}) {
   const normalized = normalizeCategory(category || details?.category || "");
+  if (PROVIDER_SERVICE_CATEGORY_SET.has(normalized)) return "marketplace_service";
   return CONTRACTS[normalized] ? normalized : "refused_tour";
 }
 

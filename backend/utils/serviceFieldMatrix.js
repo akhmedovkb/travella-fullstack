@@ -115,6 +115,7 @@ function field(key, label, ok, opts = {}) {
 function okByContractKey(key, service, d) {
   switch (key) {
     case "title": return hasServiceDisplayTitle(service);
+    case "description": return hasFilled(service.description, d.description);
     case "country": return hasFilled(d.directionCountry, d.country, d.locationCountry);
     case "from": return hasFilled(d.directionFrom, d.fromCity, d.cityFrom, d.departureCity);
     case "to": return hasFilled(d.directionTo, d.toCity, d.city, d.cityTo, d.arrivalCity, d.location);

@@ -987,6 +987,7 @@
     },
     "send_to_review": "Moderatsiyaga yuborish",
     "submitted_toast": "Moderatsiyaga yuborildi",
+    "submit_blocked": "Moderatsiyaga yuborishdan oldin to‘ldiring: {{fields}}",
     "no_title": "(sarlavhasiz)",
     "supplier": "Ta`minotchi",
     "direction": "Yo‘nalish",

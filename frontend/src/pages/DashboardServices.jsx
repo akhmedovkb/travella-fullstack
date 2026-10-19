@@ -2334,7 +2334,47 @@ export default function DashboardServices({ viewMode = "create" }) {
       tSuccess(t("moderation.submitted_toast", { defaultValue: "Отправлено на модерацию" }));
     } catch (err) {
       console.error(err);
-      tError(err?.response?.data?.message || t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
+      const response = err?.response?.data;
+      const blockerKeys = {
+        TITLE_REQUIRED: "validation.title_required",
+        DESCRIPTION_REQUIRED: "validation.description_required",
+        PRICE_REQUIRED: "validation.price_positive",
+        NET_PRICE_REQUIRED: "validation.net_positive",
+        GROSS_PRICE_REQUIRED: "validation.gross_positive",
+        GROSS_PRICE_TOO_LOW: "validation.gross_ge_net",
+        PHOTO_REQUIRED: "validation.photo_required",
+        PROOF_IMAGES_REQUIRED: "validation.proof_required",
+        COUNTRY_REQUIRED: "validation.country_required",
+        FROM_REQUIRED: "validation.from_required",
+        TO_REQUIRED: "validation.to_required",
+        CITY_REQUIRED: "validation.city_required",
+        START_DATE_REQUIRED: "validation.start_date_required",
+        END_DATE_REQUIRED: "validation.end_date_required",
+        DEPARTURE_DATE_REQUIRED: "validation.departure_date_required",
+        HOTEL_REQUIRED: "validation.hotel_required",
+        ACCOMMODATION_REQUIRED: "validation.room_required",
+        CHECKIN_REQUIRED: "validation.checkin_required",
+        CHECKOUT_REQUIRED: "validation.checkout_required",
+        EVENT_NAME_REQUIRED: "validation.event_name_required",
+        EVENT_CITY_REQUIRED: "validation.location_required",
+        EVENT_DATE_REQUIRED: "validation.event_date_required",
+        FLIGHT_DETAILS_REQUIRED: "validation.flight_details_required",
+        PROGRAM_REQUIRED: "validation.program_required",
+        INCLUDED_REQUIRED: "validation.included_required",
+      };
+      const details = Array.isArray(response?.blockerDetails) ? response.blockerDetails : [];
+      if (details.length > 0) {
+        const fields = details.map((blocker) => {
+          const key = blockerKeys[blocker?.code];
+          return key ? t(key) : blocker?.label;
+        }).filter(Boolean);
+        tError(t("moderation.submit_blocked", {
+          fields: fields.join("; "),
+          defaultValue: `Before submitting for moderation, fix: ${fields.join("; ")}`,
+        }));
+      } else {
+        tError(t("submit_error", { defaultValue: "Failed to submit for moderation" }));
+      }
     }
   };
 

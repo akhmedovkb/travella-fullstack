@@ -988,6 +988,7 @@
     },
     "send_to_review": "Send for moderation",
     "submitted_toast": "Submitted for moderation",
+    "submit_blocked": "Before submitting for moderation, fix: {{fields}}",
     "no_title": "(no title)",
     "supplier": "Supplier",
     "created_at": "Created",
