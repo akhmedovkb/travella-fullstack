@@ -350,7 +350,7 @@ const ProviderCalendar = ({ token }) => {
     const frame = window.requestAnimationFrame(() => {
       const viewport = timelineRef.current;
       if (!viewport) return;
-      const dayWidth = 64;
+      const dayWidth = 56;
       const target = (today.getDate() - 1) * dayWidth;
       viewport.scrollTo({
         left: Math.max(0, target - (viewport.clientWidth / 2) + (dayWidth / 2)),
@@ -377,33 +377,33 @@ const ProviderCalendar = ({ token }) => {
   }
 
   return (
-    <main className="mx-auto max-w-7xl px-3 py-5 sm:px-6 sm:py-7">
+    <main className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6">
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
-        <header className="px-5 py-5 sm:px-7 sm:py-6">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+        <header className="px-5 py-5 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <div className="flex items-center gap-2 text-[11px] font-black uppercase text-orange-600"><CalendarDays size={15} />{typeLabel} · {t("calendar.availability")}</div>
-              <h1 className="mt-2 text-2xl font-black text-slate-950">{t("calendar.blocking_title")}</h1>
-              <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-500">{t("calendar.workspace_description")}</p>
+              <h1 className="mt-1.5 text-2xl font-black text-slate-950">{t("calendar.blocking_title")}</h1>
+              <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-500">{t("calendar.workspace_description")}</p>
             </div>
-            <div className="grid grid-cols-3 divide-x divide-slate-200 overflow-hidden rounded-lg border border-slate-200 bg-white">
-              <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-slate-950">{booked.length}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.by_bookings")}</div></div>
-              <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-slate-700">{manualSavedYmd.length}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.closed_by_you")}</div></div>
-              <div className="min-w-0 px-3 py-2.5 sm:min-w-28 sm:px-4"><div className="text-lg font-black text-orange-700">{changedDatesCount}</div><div className="truncate text-[11px] font-bold text-slate-500">{t("calendar.unsaved")}</div></div>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+              <div className="min-w-0 rounded-md bg-white px-3 py-2 sm:min-w-28"><div className="text-base font-black text-emerald-700">{booked.length}</div><div className="truncate text-[10px] font-bold uppercase text-slate-400">{t("calendar.by_bookings")}</div></div>
+              <div className="min-w-0 rounded-md bg-white px-3 py-2 sm:min-w-28"><div className="text-base font-black text-slate-700">{manualSavedYmd.length}</div><div className="truncate text-[10px] font-bold uppercase text-slate-400">{t("calendar.closed_by_you")}</div></div>
+              <div className="min-w-0 rounded-md bg-white px-3 py-2 sm:min-w-28"><div className="text-base font-black text-orange-700">{changedDatesCount}</div><div className="truncate text-[10px] font-bold uppercase text-slate-400">{t("calendar.unsaved")}</div></div>
             </div>
           </div>
         </header>
 
-        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-slate-200 bg-slate-50 px-5 py-3 text-xs font-bold text-slate-600 sm:px-7">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-slate-200 bg-slate-50/70 px-5 py-2.5 text-xs font-bold text-slate-600 sm:px-6">
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-600" />{t("calendar.booked")}</span>
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-slate-700" />{t("calendar.closed_by_you")}</span>
           <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-600" />{t("calendar.unsaved")}</span>
           <span className="ml-auto hidden items-center gap-2 text-slate-400 sm:flex"><LockKeyhole size={14} />{t("calendar.click_hint")}</span>
         </div>
 
-        <div className="grid lg:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="relative min-w-0 bg-slate-100/60">
-            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-3 sm:px-5">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="relative min-w-0 bg-white">
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
               <label className="relative flex h-10 min-w-48 cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black capitalize text-slate-800 transition hover:bg-slate-50 focus-within:border-orange-400">
                 <span className="sr-only">{t("calendar.choose_month")}</span>
                 <CalendarDays size={16} className="text-slate-400" />
@@ -426,10 +426,10 @@ const ProviderCalendar = ({ token }) => {
             </div>
 
             {calendarLoading ? <div className="bg-white py-24 text-center text-sm font-semibold text-slate-500">{t("calendar.loading_availability")}</div> : (
-              <div className="flex min-h-[290px] border-b border-slate-200 bg-white">
-                <div className="z-10 w-32 shrink-0 border-r border-slate-200 bg-white sm:w-44">
-                  <div className="flex h-20 items-end border-b border-slate-200 px-3 pb-3 text-sm font-black capitalize text-slate-900 sm:px-4">{monthTitle}</div>
-                  <div className="flex h-28 flex-col justify-center px-3 sm:px-4">
+              <div className="flex border-b border-slate-200 bg-white">
+                <div className="z-10 w-32 shrink-0 border-r border-slate-200 bg-white sm:w-36">
+                  <div className="flex h-16 items-center border-b border-slate-200 px-3 text-sm font-black capitalize text-slate-900">{monthTitle}</div>
+                  <div className="flex h-24 flex-col justify-center px-3">
                     <div className="text-sm font-black text-slate-950">{t("calendar.my_availability")}</div>
                     <div className="mt-1 text-xs leading-4 text-slate-500">{typeLabel}</div>
                   </div>
@@ -460,8 +460,8 @@ const ProviderCalendar = ({ token }) => {
                       const changedContinuesRight = isManual && isChanged && manual.includes(toYMD(next)) && !manualInitial.includes(toYMD(next));
                       const selected = activeYmd === ymd;
                       return (
-                        <div key={ymd} className="w-16 shrink-0 border-r border-slate-200 last:border-r-0">
-                          <button type="button" onClick={() => setActiveYmd(ymd)} className={`flex h-20 w-full flex-col items-center justify-center border-b border-slate-200 transition ${selected ? "bg-orange-50 ring-2 ring-inset ring-orange-500" : "bg-white hover:bg-slate-50"}`}>
+                        <div key={ymd} className="w-14 shrink-0 border-r border-slate-200 last:border-r-0">
+                          <button type="button" onClick={() => setActiveYmd(ymd)} className={`flex h-16 w-full flex-col items-center justify-center border-b border-slate-200 transition ${selected ? "bg-orange-50 ring-2 ring-inset ring-orange-500" : weekend ? "bg-slate-50/60 hover:bg-slate-100" : "bg-white hover:bg-slate-50"}`}>
                             <span className={`text-[11px] font-bold uppercase ${weekend ? "text-rose-500" : "text-slate-400"}`}>{weekday}</span>
                             <span className={`mt-1 flex h-8 w-8 items-center justify-center rounded-md text-sm font-black ${isToday ? "bg-slate-950 text-white" : weekend ? "text-rose-600" : "text-slate-900"}`}>{date.getDate()}</span>
                           </button>
@@ -470,7 +470,7 @@ const ProviderCalendar = ({ token }) => {
                             onPointerDown={(event) => startTimelineDrag(event, ymd)}
                             onPointerEnter={() => continueTimelineDrag(ymd)}
                             disabled={isPast}
-                            className={`relative h-28 w-full touch-none select-none overflow-hidden transition disabled:cursor-not-allowed ${selected ? "ring-2 ring-inset ring-orange-500" : ""} ${isPast ? "bg-slate-50 opacity-45" : isChanged ? "bg-orange-50" : "bg-white hover:bg-slate-50"}`}
+                            className={`relative h-24 w-full touch-none select-none overflow-hidden transition disabled:cursor-not-allowed ${selected ? "ring-2 ring-inset ring-orange-500" : ""} ${isPast ? "bg-slate-50 opacity-45" : isChanged ? "bg-orange-50" : weekend ? "bg-slate-50/60 hover:bg-slate-100" : "bg-white hover:bg-slate-50"}`}
                           >
                             {booking ? (
                               <span className={`absolute top-1/2 flex h-7 -translate-y-1/2 items-center bg-emerald-600 px-2 text-left text-[10px] font-black text-white ${continuesLeft ? "left-0" : "left-1 rounded-l-full"} ${continuesRight ? "right-0" : "right-1 rounded-r-full"}`}>
@@ -490,7 +490,7 @@ const ProviderCalendar = ({ token }) => {
             )}
           </div>
 
-          <aside className="border-t border-slate-200 bg-slate-50 p-5 lg:border-l lg:border-t-0 lg:p-6">
+          <aside className="border-t border-slate-200 bg-slate-50/70 p-5 lg:border-l lg:border-t-0">
             {!activeYmd ? (
               <div className="flex min-h-44 flex-col items-center justify-center text-center lg:min-h-full">
                 <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200"><CalendarDays size={20} /></div>
@@ -500,7 +500,7 @@ const ProviderCalendar = ({ token }) => {
             ) : (
               <div>
                 <div className="text-[11px] font-black uppercase text-slate-400">{t("calendar.selected_day")}</div>
-                <div className="mt-1 text-lg font-black capitalize text-slate-950">{activeDateLabel}</div>
+                <div className="mt-1 text-base font-black capitalize leading-6 text-slate-950">{activeDateLabel}</div>
                 <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-black ${activeIsBooked ? "bg-emerald-100 text-emerald-800" : activeIsChanged ? "bg-orange-100 text-orange-800" : activeIsManual ? "bg-slate-200 text-slate-800" : "bg-slate-200 text-slate-800"}`}>
                   <span className={`h-2 w-2 rounded-full ${activeIsBooked ? "bg-emerald-600" : activeIsChanged ? "bg-orange-600" : activeIsManual ? "bg-slate-700" : "bg-slate-500"}`} />
                   {activeIsBooked ? t("calendar.booked") : activeIsChanged ? t("calendar.unsaved") : activeIsManual ? t("calendar.closed_by_you") : t("calendar.available")}
@@ -551,7 +551,7 @@ const ProviderCalendar = ({ token }) => {
           </aside>
         </div>
 
-        <footer className="flex flex-col gap-4 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
+        <footer className="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
           <div className={`flex items-center gap-2 text-sm font-bold ${hasChanges ? "text-orange-700" : "text-emerald-700"}`}>
             {hasChanges ? <CircleAlert size={17} /> : <Check size={17} />}
             {hasChanges ? t(pendingChangesKey, { count: changedDatesCount }) : t("calendar.all_saved")}
