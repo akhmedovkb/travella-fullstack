@@ -239,6 +239,24 @@ const ProviderCalendar = ({ token }) => {
     const allDates = new Set([...manual, ...manualInitial]);
     return [...allDates].filter((date) => manual.includes(date) !== manualInitial.includes(date)).length;
   }, [manual, manualInitial]);
+  const datesToCloseCount = useMemo(
+    () => manual.filter((date) => !manualInitial.includes(date)).length,
+    [manual, manualInitial]
+  );
+  const datesToOpenCount = useMemo(
+    () => manualInitial.filter((date) => !manual.includes(date)).length,
+    [manual, manualInitial]
+  );
+  const saveActionKey = datesToOpenCount && !datesToCloseCount
+    ? "calendar.save_open_dates"
+    : datesToCloseCount && !datesToOpenCount
+      ? "calendar.save_blocked_dates"
+      : "calendar.save_changes";
+  const pendingChangesKey = datesToOpenCount && !datesToCloseCount
+    ? "calendar.unsaved_open_changes"
+    : datesToCloseCount && !datesToOpenCount
+      ? "calendar.unsaved_close_changes"
+      : "calendar.unsaved_mixed_changes";
 
   const activeDate = activeYmd ? ymdToLocalDate(activeYmd) : null;
   const activeBookedDetails = activeYmd ? bookedDetails[activeYmd] || [] : [];
@@ -536,10 +554,10 @@ const ProviderCalendar = ({ token }) => {
         <footer className="flex flex-col gap-4 border-t border-slate-200 bg-white px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
           <div className={`flex items-center gap-2 text-sm font-bold ${hasChanges ? "text-orange-700" : "text-emerald-700"}`}>
             {hasChanges ? <CircleAlert size={17} /> : <Check size={17} />}
-            {hasChanges ? t("calendar.unsaved_changes", { count: changedDatesCount }) : t("calendar.all_saved")}
+            {hasChanges ? t(pendingChangesKey, { count: changedDatesCount }) : t("calendar.all_saved")}
           </div>
           <button type="button" onClick={handleSave} disabled={!hasChanges || saving} className="flex h-11 items-center justify-center gap-2 rounded-md bg-orange-600 px-6 text-sm font-black text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
-            <Save size={17} />{saving ? t("calendar.saving") : t("calendar.save_blocked_dates")}
+            <Save size={17} />{saving ? t("calendar.saving") : t(saveActionKey)}
           </button>
         </footer>
       </section>

@@ -216,6 +216,11 @@
     "load_error": "Failed to load booked dates",
     "manual_blocked": "Manually blocked",
     "save_blocked_dates": "Save blocked dates",
+    "save_open_dates": "Save open dates",
+    "save_changes": "Save changes",
+    "unsaved_close_changes": "Dates to block: {{count}}",
+    "unsaved_open_changes": "Dates to open: {{count}}",
+    "unsaved_mixed_changes": "Unsaved changes: {{count}}",
     "save_button": "Save blocked dates",
     "save_error": "Error saving dates",
     "saved_successfully": "Dates saved"

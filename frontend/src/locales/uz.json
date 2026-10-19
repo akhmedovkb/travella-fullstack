@@ -216,6 +216,11 @@
     "load_error": "Band sanalarni yuklab bo‘lmadi",
     "manual_blocked": "Qo‘lda bloklangan",
     "save_blocked_dates": "Band sanalarni saqlash",
+    "save_open_dates": "Ochiq sanalarni saqlash",
+    "save_changes": "O‘zgarishlarni saqlash",
+    "unsaved_close_changes": "Yopiladigan sanalar: {{count}}",
+    "unsaved_open_changes": "Ochiladigan sanalar: {{count}}",
+    "unsaved_mixed_changes": "Saqlanmagan o‘zgarishlar: {{count}}",
     "save_button": "Band sanalarni saqlash",
     "save_error": "Sanalarni saqlashda xatolik",
     "saved_successfully": "Sanalar saqlandi"

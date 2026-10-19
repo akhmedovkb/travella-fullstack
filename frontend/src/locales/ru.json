@@ -216,6 +216,11 @@
     "load_error": "Не удалось загрузить занятые даты",
     "manual_blocked": "Заблокировано вручную",
     "save_blocked_dates": "Сохранить занятые даты",
+    "save_open_dates": "Сохранить открытые даты",
+    "save_changes": "Сохранить изменения",
+    "unsaved_close_changes": "Дат для закрытия: {{count}}",
+    "unsaved_open_changes": "Дат для открытия: {{count}}",
+    "unsaved_mixed_changes": "Несохранённых изменений: {{count}}",
     "save_button": "Сохранить занятые даты",
     "save_error": "Ошибка сохранения дат",
     "saved_successfully": "Даты сохранены"
