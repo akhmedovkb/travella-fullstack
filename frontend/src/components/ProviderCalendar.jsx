@@ -61,6 +61,7 @@ const ProviderCalendar = ({ token }) => {
     return new Date(today.getFullYear(), today.getMonth(), 1);
   });
   const timelineRef = useRef(null);
+  const dragSelectionRef = useRef({ active: false, mode: "add", touched: new Set() });
 
   const cfg = useMemo(() => {
     const stored =
@@ -283,12 +284,45 @@ const ProviderCalendar = ({ token }) => {
     setVisibleMonth(new Date(today.getFullYear(), today.getMonth(), 1));
     setActiveYmd(toYMD(today));
   };
-  const selectTimelineDate = (dateYmd) => {
+  const updateTimelineDate = (dateYmd, mode) => {
     setActiveYmd(dateYmd);
     const date = ymdToLocalDate(dateYmd);
     if (!date || date < startOfToday || booked.includes(dateYmd)) return;
-    setManual((current) => current.includes(dateYmd) ? current.filter((item) => item !== dateYmd) : [...current, dateYmd]);
+    setManual((current) => {
+      if (mode === "add") return current.includes(dateYmd) ? current : [...current, dateYmd];
+      return current.filter((item) => item !== dateYmd);
+    });
   };
+
+  const startTimelineDrag = (event, dateYmd) => {
+    if (event.button !== 0) return;
+    const date = ymdToLocalDate(dateYmd);
+    if (!date || date < startOfToday || booked.includes(dateYmd)) {
+      setActiveYmd(dateYmd);
+      return;
+    }
+    event.preventDefault();
+    const mode = manual.includes(dateYmd) ? "remove" : "add";
+    dragSelectionRef.current = { active: true, mode, touched: new Set([dateYmd]) };
+    updateTimelineDate(dateYmd, mode);
+  };
+
+  const continueTimelineDrag = (dateYmd) => {
+    const drag = dragSelectionRef.current;
+    if (!drag.active || drag.touched.has(dateYmd)) return;
+    drag.touched.add(dateYmd);
+    updateTimelineDate(dateYmd, drag.mode);
+  };
+
+  useEffect(() => {
+    const stopDrag = () => { dragSelectionRef.current.active = false; };
+    window.addEventListener("pointerup", stopDrag);
+    window.addEventListener("pointercancel", stopDrag);
+    return () => {
+      window.removeEventListener("pointerup", stopDrag);
+      window.removeEventListener("pointercancel", stopDrag);
+    };
+  }, []);
 
   useEffect(() => {
     if (calendarLoading || !timelineRef.current) return undefined;
@@ -404,6 +438,8 @@ const ProviderCalendar = ({ token }) => {
                       const continuesRight = booking && bookingByDate[toYMD(next)]?.id === booking.id;
                       const manualContinuesLeft = isManual && !isChanged && manual.includes(toYMD(previous)) && manualInitial.includes(toYMD(previous));
                       const manualContinuesRight = isManual && !isChanged && manual.includes(toYMD(next)) && manualInitial.includes(toYMD(next));
+                      const changedContinuesLeft = isManual && isChanged && manual.includes(toYMD(previous)) && !manualInitial.includes(toYMD(previous));
+                      const changedContinuesRight = isManual && isChanged && manual.includes(toYMD(next)) && !manualInitial.includes(toYMD(next));
                       const selected = activeYmd === ymd;
                       return (
                         <div key={ymd} className="w-16 shrink-0 border-r border-slate-200 last:border-r-0">
@@ -413,9 +449,10 @@ const ProviderCalendar = ({ token }) => {
                           </button>
                           <button
                             type="button"
-                            onClick={() => selectTimelineDate(ymd)}
+                            onPointerDown={(event) => startTimelineDrag(event, ymd)}
+                            onPointerEnter={() => continueTimelineDrag(ymd)}
                             disabled={isPast}
-                            className={`relative h-28 w-full overflow-hidden transition disabled:cursor-not-allowed ${selected ? "ring-2 ring-inset ring-orange-500" : ""} ${isPast ? "bg-slate-50 opacity-45" : isChanged ? "bg-orange-50" : "bg-white hover:bg-slate-50"}`}
+                            className={`relative h-28 w-full touch-none select-none overflow-hidden transition disabled:cursor-not-allowed ${selected ? "ring-2 ring-inset ring-orange-500" : ""} ${isPast ? "bg-slate-50 opacity-45" : isChanged ? "bg-orange-50" : "bg-white hover:bg-slate-50"}`}
                           >
                             {booking ? (
                               <span className={`absolute top-1/2 flex h-7 -translate-y-1/2 items-center bg-emerald-600 px-2 text-left text-[10px] font-black text-white ${continuesLeft ? "left-0" : "left-1 rounded-l-full"} ${continuesRight ? "right-0" : "right-1 rounded-r-full"}`}>
@@ -423,7 +460,7 @@ const ProviderCalendar = ({ token }) => {
                               </span>
                             ) : null}
                             {isManual && !booking ? (
-                              <span className={`absolute top-1/2 h-7 -translate-y-1/2 ${isChanged ? "inset-x-2 rounded-full bg-orange-600" : `bg-slate-700 ${manualContinuesLeft ? "left-0" : "left-1 rounded-l-full"} ${manualContinuesRight ? "right-0" : "right-1 rounded-r-full"}`}`} />
+                              <span className={`absolute top-1/2 h-7 -translate-y-1/2 ${isChanged ? `bg-orange-600 ${changedContinuesLeft ? "left-0" : "left-1 rounded-l-full"} ${changedContinuesRight ? "right-0" : "right-1 rounded-r-full"}` : `bg-slate-700 ${manualContinuesLeft ? "left-0" : "left-1 rounded-l-full"} ${manualContinuesRight ? "right-0" : "right-1 rounded-r-full"}`}`} />
                             ) : null}
                           </button>
                         </div>
