@@ -2065,12 +2065,12 @@ export default function DashboardServices({ viewMode = "create" }) {
         return [...prev, saved];
       });
       tSuccess(wasEditing ? t("service_updated", { defaultValue: "Услуга обновлена" }) : t("service_added", { defaultValue: "Услуга добавлена" }));
-      if (!wasEditing && saved?.id && HISTORICAL_REFUSED_CATEGORIES.includes(createdCategory)) {
+      const shouldOfferSupport = !wasEditing && saved?.id && HISTORICAL_REFUSED_CATEGORIES.includes(createdCategory);
+      if (shouldOfferSupport) {
         setSupportPayError("");
         setSupportPromptService(saved);
-      }
-      if (saved?.id) {
-        loadServiceToEdit(saved);
+      } else if (saved?.id) {
+        navigate("/dashboard/services/my");
       }
     } catch (err) {
       console.error(err);
@@ -3495,6 +3495,7 @@ export default function DashboardServices({ viewMode = "create" }) {
           if (!supportPayBusy) {
             setSupportPayError("");
             setSupportPromptService(null);
+            navigate("/dashboard/services/my");
           }
         }}
         onPay={createSupportPaymentAfterService}
