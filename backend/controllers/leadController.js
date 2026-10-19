@@ -573,9 +573,23 @@ async function decideLead(req, res) {
       if (decision === "approved_provider") {
         const exists = await db.query(
           `SELECT id FROM providers
-            WHERE regexp_replace(phone,'\\D','','g') = $1
+            WHERE ($1 <> '' AND regexp_replace(phone,'\\D','','g') = $1)
+               OR ($2::text IS NOT NULL AND $2 = ANY(ARRAY[
+                    telegram_refused_chat_id::text,
+                    telegram_chat_id::text,
+                    tg_chat_id::text,
+                    telegram_web_chat_id::text
+                  ]))
+            ORDER BY
+              CASE WHEN $2::text IS NOT NULL AND $2 = ANY(ARRAY[
+                telegram_refused_chat_id::text,
+                telegram_chat_id::text,
+                tg_chat_id::text,
+                telegram_web_chat_id::text
+              ]) THEN 0 ELSE 1 END,
+              id
             LIMIT 1`,
-          [phoneDigits]
+          [phoneDigits, chatId ? String(chatId) : null]
         );
       
         if (!exists.rowCount) {

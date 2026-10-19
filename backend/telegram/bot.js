@@ -8381,6 +8381,14 @@ async function finishCreateServiceFromWizard(ctx) {
       return;
     }
 
+    if (apiError === "PROVIDER_TELEGRAM_ID_AMBIGUOUS") {
+      await ctx.reply(
+        "⚠️ Этот Telegram привязан к двум профилям поставщика. Черновик сохранён в боте. " +
+          "Обратитесь в поддержку, чтобы оставить одну привязку, затем повторите сохранение."
+      );
+      return;
+    }
+
     await ctx.reply("⚠️ Ошибка при сохранении услуги. Попробуйте позже.");
     resetServiceWizard(ctx);
   }
@@ -8582,7 +8590,15 @@ bot.start(async (ctx) => {
         }
 
         const conflict = await client.query(
-          "SELECT id FROM providers WHERE telegram_chat_id::text = $1 AND id <> $2 LIMIT 1",
+          `SELECT id FROM providers
+            WHERE id <> $2
+              AND $1 = ANY(ARRAY[
+                telegram_refused_chat_id::text,
+                telegram_chat_id::text,
+                tg_chat_id::text,
+                telegram_web_chat_id::text
+              ])
+            LIMIT 1`,
           [String(actorId), link.providerId]
         );
         if (conflict.rowCount) {
