@@ -2452,18 +2452,18 @@ export default function DashboardServices({ viewMode = "create" }) {
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               {viewMode === "manage" && <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="min-w-[88px] rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                  <div className="text-lg font-black text-slate-950">{serviceListStats.active}</div>
-                  <div className="text-[10px] font-bold text-slate-500">{t("service_list_filter.active", { defaultValue: "Активные" })}</div>
-                </div>
-                <div className="min-w-[88px] rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-100">
-                  <div className="text-lg font-black text-amber-700">{serviceListStats.pending}</div>
-                  <div className="text-[10px] font-bold text-amber-700">{t("service_list_filter.pending", { defaultValue: "На проверке" })}</div>
-                </div>
-                <div className="min-w-[88px] rounded-lg bg-emerald-50 px-3 py-2 ring-1 ring-emerald-100">
-                  <div className="text-lg font-black text-emerald-700">{serviceListStats.published}</div>
-                  <div className="text-[10px] font-bold text-emerald-700">{t("service_list_filter.published", { defaultValue: "Опубликовано" })}</div>
-                </div>
+                <button type="button" onClick={() => setServiceListFilter("active")} className={cx("min-w-[88px] rounded-lg px-3 py-2 ring-1 transition", serviceListFilter === "active" ? "bg-slate-900 text-white ring-slate-900" : "bg-slate-50 text-slate-950 ring-slate-200 hover:bg-slate-100")}>
+                  <div className={cx("text-lg font-black", serviceListFilter === "active" ? "text-white" : "text-slate-950")}>{serviceListStats.active}</div>
+                  <div className={cx("text-[10px] font-bold", serviceListFilter === "active" ? "text-white/70" : "text-slate-500")}>{t("service_list_filter.active", { defaultValue: "Активные" })}</div>
+                </button>
+                <button type="button" onClick={() => setServiceListFilter("pending")} className={cx("min-w-[88px] rounded-lg px-3 py-2 ring-1 transition", serviceListFilter === "pending" ? "bg-amber-500 text-white ring-amber-500" : "bg-amber-50 text-amber-700 ring-amber-100 hover:bg-amber-100")}>
+                  <div className={cx("text-lg font-black", serviceListFilter === "pending" ? "text-white" : "text-amber-700")}>{serviceListStats.pending}</div>
+                  <div className={cx("text-[10px] font-bold", serviceListFilter === "pending" ? "text-white/80" : "text-amber-700")}>{t("service_list_filter.pending", { defaultValue: "На проверке" })}</div>
+                </button>
+                <button type="button" onClick={() => setServiceListFilter("published")} className={cx("min-w-[88px] rounded-lg px-3 py-2 ring-1 transition", serviceListFilter === "published" ? "bg-emerald-600 text-white ring-emerald-600" : "bg-emerald-50 text-emerald-700 ring-emerald-100 hover:bg-emerald-100")}>
+                  <div className={cx("text-lg font-black", serviceListFilter === "published" ? "text-white" : "text-emerald-700")}>{serviceListStats.published}</div>
+                  <div className={cx("text-[10px] font-bold", serviceListFilter === "published" ? "text-white/80" : "text-emerald-700")}>{t("service_list_filter.published", { defaultValue: "Опубликовано" })}</div>
+                </button>
               </div>}
               <button
                 type="button"
@@ -2483,38 +2483,38 @@ export default function DashboardServices({ viewMode = "create" }) {
           {viewMode === "manage" && (
           <aside className="border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
             <div className="border-b border-slate-100 bg-white p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-lg font-black tracking-[-0.02em] text-slate-950">
-                    {t("provider_services_tab_created", { defaultValue: "Мои услуги" })}
-                  </div>
-                  <div className="mt-0.5 text-xs font-semibold text-slate-500">
-                    {services.length} {t("service_form.services_count", { defaultValue: "всего" })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 border-b border-slate-100 bg-white p-3">
-              <label className="relative block">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <label className="relative block min-w-0 flex-1">
                 <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="search"
                   value={serviceSearch}
                   onChange={(event) => setServiceSearch(event.target.value)}
                   placeholder={t("service_form.search_services", { defaultValue: "Поиск по услугам" })}
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-semibold outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-semibold outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
                 />
               </label>
-              <select
-                value={serviceListFilter}
-                onChange={(event) => setServiceListFilter(event.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-              >
+              <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1" role="tablist" aria-label={t("service_filters", { defaultValue: "Фильтры услуг" })}>
                 {serviceListTabs.map((item) => (
-                  <option key={item.id} value={item.id}>{item.label} · {item.count}</option>
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={serviceListFilter === item.id}
+                    onClick={() => setServiceListFilter(item.id)}
+                    className={cx(
+                      "inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-black transition",
+                      serviceListFilter === item.id
+                        ? "bg-white text-slate-950 shadow-sm ring-1 ring-slate-200"
+                        : "text-slate-500 hover:bg-white/60 hover:text-slate-800"
+                    )}
+                  >
+                    <span>{item.label}</span>
+                    <span className={cx("rounded-full px-1.5 py-0.5 text-[10px]", serviceListFilter === item.id ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-600")}>{item.count}</span>
+                  </button>
                 ))}
-              </select>
+              </div>
+              </div>
             </div>
 
             <div className="space-y-4 p-3">
@@ -2538,7 +2538,7 @@ export default function DashboardServices({ viewMode = "create" }) {
               ) : (
                 filteredServiceSections.map((section) => (
                     <div key={section.id} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      <div className="sticky top-0 z-[1] -mx-1 flex items-center justify-between rounded-2xl bg-white/95 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500 shadow-sm ring-1 ring-slate-100 backdrop-blur md:col-span-2 xl:col-span-3">
+                      <div className="flex items-center justify-between border-b border-slate-200 px-1 pb-2 text-xs font-black uppercase tracking-wide text-slate-500 md:col-span-2 xl:col-span-3">
                       <span>{section.label}</span>
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{section.items.length}</span>
                     </div>
@@ -2574,7 +2574,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                         <article
                           key={service.id}
                           className={cx(
-                            "group overflow-hidden rounded-[1.5rem] border bg-white shadow-sm transition",
+                            "group overflow-hidden rounded-lg border bg-white shadow-sm transition",
                             isSelected
                               ? "border-orange-300 ring-4 ring-orange-100"
                               : "border-slate-200 hover:border-orange-200 hover:shadow-md",
