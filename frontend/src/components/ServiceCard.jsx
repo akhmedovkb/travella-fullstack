@@ -793,6 +793,16 @@ const dates =
     item.destination
   );
   const direction = dirFrom && dirTo ? `${dirFrom} → ${dirTo}` : null;
+  const serviceLocation = firstNonEmpty(
+    details?.location,
+    details?.city,
+    details?.city_slug,
+    svc.location,
+    svc.city,
+    item.location,
+    item.city
+  );
+  const placeText = direction || serviceLocation;
 
   const inlineProvider =
     firstNonEmpty(
@@ -1936,12 +1946,12 @@ return (
                   {title}
                 </div>
 
-                {(direction || dates) && (
+                {(placeText || dates) && (
                   <div className="mt-2.5 space-y-1.5">
-                    {direction && (
+                    {placeText && (
                       <div className="flex items-center gap-1.5 text-[12px] font-bold leading-4 text-gray-700 line-clamp-1">
-                        <span className="text-gray-400">✈️</span>
-                        <span className="truncate">{direction}</span>
+                        <span className="text-gray-400">{direction ? "✈️" : "📍"}</span>
+                        <span className="truncate">{placeText}</span>
                       </div>
                     )}
                     {dates && (
@@ -2498,7 +2508,7 @@ return (
               )}
             </div>
 
-            {((!isRefusedHotel && direction) || accommodation || transfer || authorFormat || authorDuration || authorPax || authorGuideLang || authorMeetingPoint || details.insuranceIncluded || details.earlyCheckIn || (!isRefusedHotel && details.arrivalFastTrack)) && (
+            {((!isRefusedHotel && placeText) || accommodation || transfer || authorFormat || authorDuration || authorPax || authorGuideLang || authorMeetingPoint || details.insuranceIncluded || details.earlyCheckIn || (!isRefusedHotel && details.arrivalFastTrack)) && (
               <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
@@ -2512,12 +2522,12 @@ return (
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {!isRefusedHotel && direction && (
+                  {!isRefusedHotel && placeText && (
                     <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        {t("marketplace.route", { defaultValue: "Маршрут" })}
+                        {direction ? t("marketplace.route", { defaultValue: "Маршрут" }) : t("marketplace.location", { defaultValue: "Локация" })}
                       </div>
-                      <div className="mt-1 text-sm font-black text-slate-900">✈️ {direction}</div>
+                      <div className="mt-1 text-sm font-black text-slate-900">{direction ? "✈️" : "📍"} {placeText}</div>
                     </div>
                   )}
                   {isAuthorTour && authorFormat && (
@@ -2801,10 +2811,10 @@ return (
                     </div>
                   )}
 
-                  {direction && (
+                  {placeText && (
                     <div className="mt-1.5 flex items-center gap-1.5 text-sm font-semibold text-gray-600">
-                      <span>✈️</span>
-                      <span className="truncate">{direction}</span>
+                      <span>{direction ? "✈️" : "📍"}</span>
+                      <span className="truncate">{placeText}</span>
                     </div>
                   )}
 

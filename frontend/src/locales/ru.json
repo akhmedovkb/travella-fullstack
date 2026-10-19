@@ -2435,6 +2435,9 @@
     "bot_username_missing": "Username Telegram-бота поставщика не настроен. Добавьте VITE_TELEGRAM_PROVIDER_BOT_USERNAME.",
     "not_approved": "Этот Telegram-аккаунт пока не привязан к одобренному поставщику. Сначала пройдите модерацию."
   },
+  "service_form": {
+    "proof_missing_short": "Без подтверждения"
+  },
   "service_status": {
     "draft": "Черновик",
     "pending": "На модерации",

@@ -278,9 +278,10 @@ function getServiceRouteText(service, fallback = "—") {
     return firstText(d.visaCountry, d.directionCountry, d.description, fallback);
   }
 
-  return [firstText(d.directionFrom, d.fromCity), firstText(d.directionTo, d.toCity), firstText(d.hotel)]
+  const route = [firstText(d.directionFrom, d.fromCity), firstText(d.directionTo, d.toCity), firstText(d.hotel)]
     .filter(Boolean)
-    .join(" → ") || firstText(d.directionCountry, fallback);
+    .join(" → ");
+  return route || firstText(d.location, d.city, d.city_slug, d.directionCountry, fallback);
 }
 
 function getServicePriceText(service, fallback = "—") {
