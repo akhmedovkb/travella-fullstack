@@ -1,6 +1,6 @@
 // frontend/src/pages/DashboardServices.jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
 import ISO6391 from "iso-639-1";
 import Select from "react-select";
@@ -210,7 +210,16 @@ function compactDeep(value) {
 }
 
 function asDetails(service) {
-  return service?.details && typeof service.details === "object" ? service.details : {};
+  if (service?.details && typeof service.details === "object") return service.details;
+  if (typeof service?.details === "string") {
+    try {
+      const parsed = JSON.parse(service.details);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
 }
 
 function firstText(...values) {
@@ -1714,6 +1723,7 @@ function AuthorProgramDaysEditor({ value, activeIndex, setActiveIndex, onChange,
 export default function DashboardServices({ viewMode = "create" }) {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const api = useMemo(() => {
     const instance = axios.create({ baseURL: API_BASE });
@@ -1877,9 +1887,6 @@ export default function DashboardServices({ viewMode = "create" }) {
       setProfile(profileRes.data || {});
       const loadedServices = Array.isArray(servicesRes.data) ? servicesRes.data : [];
       setServices(loadedServices);
-      const requestedServiceId = new URLSearchParams(window.location.search).get("service");
-      const requestedService = loadedServices.find((service) => String(service.id) === String(requestedServiceId));
-      if (requestedService) loadServiceToEdit(requestedService, { stayOnPage: true });
     } catch (err) {
       console.error(err);
       tError(t("services_load_error", { defaultValue: "Не удалось загрузить услуги" }));
@@ -1978,7 +1985,7 @@ export default function DashboardServices({ viewMode = "create" }) {
       navigate(`/dashboard/services/marketplace?service=${service.id}`);
       return;
     }
-    const d = service?.details && typeof service.details === "object" ? service.details : {};
+    const d = asDetails(service);
     setSelectedService(service);
     setCategory(service.category || "");
     setTitle(service.title || "");
@@ -1990,6 +1997,22 @@ export default function DashboardServices({ viewMode = "create" }) {
     setStep(1);
     setTab("create");
   };
+
+  useEffect(() => {
+    if (loading || viewMode === "manage") return;
+
+    const requestedServiceId = new URLSearchParams(location.search).get("service");
+    if (!requestedServiceId) return;
+
+    const requestedService = services.find(
+      (service) => String(service.id) === String(requestedServiceId)
+    );
+    if (!requestedService || String(selectedService?.id) === String(requestedService.id)) return;
+
+    loadServiceToEdit(requestedService, { stayOnPage: true });
+    // loadServiceToEdit only copies the selected service into form state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, location.search, services, selectedService?.id, viewMode]);
 
   const currentValidationIssues = useMemo(
     () => buildValidationIssues({ category, title, description, price, images, details, isExtended, t, requireProof: false }),
