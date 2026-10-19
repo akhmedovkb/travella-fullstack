@@ -781,7 +781,8 @@
     "accommodation": "Accommodation",
     "booking": {
       "eyebrow": "Service booking", "hint": "The supplier will confirm availability. You will then have 30 minutes to pay.",
-      "service_date": "Service date", "check_in": "Check-in", "check_out": "Check-out", "adults": "Adults", "children": "Children",
+      "service_date": "Service date", "start_date": "Start date", "end_date": "End date", "check_in": "Check-in", "check_out": "Check-out", "adults": "Adults", "children": "Children",
+      "date_mode": "Service period", "one_day": "One day", "several_days": "Several days", "days": "Days", "nights": "Nights", "total_price": "Total price", "max_guests_error": "Maximum guests: {{count}}",
       "comment": "Message to supplier", "comment_placeholder": "Time, route or special requests", "send": "Request booking",
       "created": "Booking request sent to the supplier", "error": "Could not create the booking"
     },

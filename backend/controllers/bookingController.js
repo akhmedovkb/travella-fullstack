@@ -10,6 +10,7 @@ const { ensureHotelOfferTables } = require("../utils/hotelOffersSchema");
 const {
   GUIDE_SERVICE_CATEGORY_SET,
   TRANSPORT_SERVICE_CATEGORY_SET,
+  PROVIDER_SERVICE_CATEGORY_SET,
 } = require("../utils/providerServiceCatalog");
 
 function buildPaymeCheckoutUrl({ orderId, amountTiyin, redirectUrl }) {
@@ -462,13 +463,19 @@ const createBooking = async (req, res) => {
         return res.status(409).json({ message: "У поставщика не указана актуальная цена услуги.", error: "marketplace_service_price_missing" });
       }
       publishedMarketplaceRate = {
-        amount,
+        amount: PROVIDER_SERVICE_CATEGORY_SET.has(String(service.category || ""))
+          ? amount * new Set(days).size
+          : amount,
+        unitAmount: amount,
+        units: new Set(days).size,
         currency: String(service.currency || "UZS").toUpperCase(),
         title: service.title || null,
       };
       bag.fixed_marketplace_rate = true;
       bag.marketplace_service_id = marketplaceServiceId;
-      bag.published_price = amount;
+      bag.published_price = publishedMarketplaceRate.amount;
+      bag.published_unit_price = amount;
+      bag.published_units = publishedMarketplaceRate.units;
       bag.published_currency = publishedMarketplaceRate.currency;
     }
     const providerServiceId = Number(bag.provider_service_id || req.body?.provider_service_id || 0);
@@ -531,7 +538,7 @@ const createBooking = async (req, res) => {
       values.push(
         managedHotelPrice?.amount || publishedTourBuilderRate?.amount || publishedMarketplaceRate.amount,
         publishedMarketplaceRate?.title
-          ? `Опубликованная цена Marketplace: ${publishedMarketplaceRate.title}`
+          ? `Опубликованная цена Marketplace: ${publishedMarketplaceRate.title} (${publishedMarketplaceRate.unitAmount} × ${publishedMarketplaceRate.units} дн.)`
           : publishedTourBuilderRate?.title
           ? `Опубликованный тариф Tour Builder: ${publishedTourBuilderRate.title} (${publishedTourBuilderRate.unitAmount} × ${publishedTourBuilderRate.units} дн.)`
           : "Цена зафиксирована по опубликованному тарифу Tour Builder"

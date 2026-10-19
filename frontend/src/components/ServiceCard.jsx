@@ -882,6 +882,8 @@ const dates =
         details?.flight_info,
         Array.isArray(details?.flights) ? details.flights.join("\n") : null
       );
+  const currency = firstNonEmpty(details?.currency, svc.currency, item.currency, "UZS");
+  const maxGuests = toPositiveInt(firstNonEmpty(details?.maxGuests, details?.max_guests, details?.pax, svc.max_guests));
 
   return {
     svc,
@@ -894,7 +896,10 @@ const dates =
     direction,
     placeText,
     prettyPrice,
+    rawPrice,
     priceDisplay,
+    currency,
+    maxGuests,
     inlineProvider,
     providerId,
     flatName,
@@ -947,7 +952,10 @@ export default function ServiceCard({
     direction,
     placeText,
     prettyPrice,
+    rawPrice,
     priceDisplay,
+    currency,
+    maxGuests,
     inlineProvider,
     providerId,
     flatName,
@@ -2354,6 +2362,9 @@ return (
                     onBook?.(id, providerId, title, {
                       providerType: prov?.type || prov?.provider_type || prov?.category,
                       category: svc.category || details?.category || item?.category,
+                      price: rawPrice,
+                      currency,
+                      maxGuests,
                     });
                   }}
                 >

@@ -780,7 +780,8 @@
     "accommodation": "Joylashuv",
     "booking": {
       "eyebrow": "Xizmatni bron qilish", "hint": "Ta’minotchi mavjudlikni tasdiqlaydi. Shundan so‘ng to‘lov uchun 30 daqiqa beriladi.",
-      "service_date": "Xizmat sanasi", "check_in": "Kirish", "check_out": "Chiqish", "adults": "Kattalar", "children": "Bolalar",
+      "service_date": "Xizmat sanasi", "start_date": "Boshlanish sanasi", "end_date": "Tugash sanasi", "check_in": "Kirish", "check_out": "Chiqish", "adults": "Kattalar", "children": "Bolalar",
+      "date_mode": "Xizmat davri", "one_day": "Bir kun", "several_days": "Bir necha kun", "days": "Kun", "nights": "Tun", "total_price": "Yakuniy narx", "max_guests_error": "Maksimal mehmonlar soni: {{count}}",
       "comment": "Ta’minotchiga izoh", "comment_placeholder": "Vaqt, yo‘nalish yoki maxsus istaklar", "send": "Bron so‘rovini yuborish",
       "created": "Bron so‘rovi ta’minotchiga yuborildi", "error": "Bron yaratib bo‘lmadi"
     },
