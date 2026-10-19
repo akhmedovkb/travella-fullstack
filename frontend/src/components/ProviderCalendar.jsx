@@ -304,15 +304,18 @@ const ProviderCalendar = ({ token }) => {
     const isActive = activeYmd === dateYmd;
 
     const dayNum = dayProps.date.getDate();
+    const statusColor = isBookedDay
+      ? "bg-slate-700"
+      : isChanged
+        ? "bg-orange-600"
+        : isSavedManual
+          ? "bg-sky-600"
+          : "";
 
     return (
-      <div className={`relative flex h-full w-full flex-col items-start justify-between p-2 text-left ${isActive ? "ring-2 ring-inset ring-orange-500" : ""}`}>
+      <div className={`relative flex h-full w-full items-start p-2 text-left ${isActive ? "ring-2 ring-inset ring-orange-500" : ""}`}>
         <span className="text-sm font-black">{dayNum}</span>
-        <span className="flex min-h-4 items-center gap-1 text-[10px] font-bold">
-          {isBookedDay ? <><span className="h-1.5 w-1.5 rounded-full bg-slate-700" /><span className="hidden sm:inline">{t("calendar.booked_short")}</span></> : null}
-          {isSavedManual ? <><span className="h-1.5 w-1.5 rounded-full bg-sky-600" /><span className="hidden sm:inline">{t("calendar.closed_short")}</span></> : null}
-          {isChanged ? <><span className="h-1.5 w-1.5 rounded-full bg-orange-600" /><span className="hidden sm:inline">{t("calendar.unsaved_short")}</span></> : null}
-        </span>
+        {statusColor ? <span aria-hidden="true" className={`absolute inset-x-2 bottom-2 h-1 rounded-full ${statusColor}`} /> : null}
       </div>
     );
   };
@@ -389,7 +392,12 @@ const ProviderCalendar = ({ token }) => {
                   cell: "relative h-16 border-r border-slate-100 last:border-r-0 sm:h-20",
                   day: "rdp-day relative h-full w-full text-sm font-bold transition hover:bg-orange-50 focus-visible:z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-orange-500",
                 }}
-                styles={{ months: { width: "100%" }, month: { width: "100%" }, table: { width: "100%" } }}
+                styles={{
+                  months: { width: "100%" },
+                  month: { width: "100%" },
+                  table: { width: "100%" },
+                  day: { width: "100%", maxWidth: "100%", height: "100%", border: 0, borderRadius: 0 },
+                }}
                 onDayClick={(date) => setActiveYmd(toYMD(date))}
               />
             )}
