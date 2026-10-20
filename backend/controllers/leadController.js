@@ -2,6 +2,12 @@
 
 const pool = require("../db");
 const { tgSend, tgSendToAdmins } = require("../utils/telegram");
+const {
+  findProviderIdentityMatches,
+  lockProviderIdentity,
+  normalizeProviderEmail,
+  requireVerifiedProviderLink,
+} = require("../utils/providerIdentity");
 
 const TELEGRAM_DUMMY_PASSWORD_HASH =
   process.env.TELEGRAM_DUMMY_PASSWORD_HASH ||
@@ -571,29 +577,15 @@ async function decideLead(req, res) {
       }
 
       if (decision === "approved_provider") {
-        const exists = await db.query(
-          `SELECT id FROM providers
-            WHERE ($1 <> '' AND regexp_replace(phone,'\\D','','g') = $1)
-               OR ($2::text IS NOT NULL AND $2 = ANY(ARRAY[
-                    telegram_refused_chat_id::text,
-                    telegram_chat_id::text,
-                    tg_chat_id::text,
-                    telegram_web_chat_id::text
-                  ]))
-            ORDER BY
-              CASE WHEN $2::text IS NOT NULL AND $2 = ANY(ARRAY[
-                telegram_refused_chat_id::text,
-                telegram_chat_id::text,
-                tg_chat_id::text,
-                telegram_web_chat_id::text
-              ]) THEN 0 ELSE 1 END,
-              id
-            LIMIT 1`,
-          [phoneDigits, chatId ? String(chatId) : null]
+        const identity = { email: lead.email, phone, telegramId: chatId };
+        await lockProviderIdentity(db, identity);
+        const existing = requireVerifiedProviderLink(
+          await findProviderIdentityMatches(db, identity)
         );
       
-        if (!exists.rowCount) {
-          const email = `tg_${phoneDigits || Date.now()}@telegram.local`;
+        if (!existing) {
+          const email = normalizeProviderEmail(lead.email) ||
+            `tg_${phoneDigits || Date.now()}@telegram.local`;
       
           // requested_role в lead (например: agent/guide/transport/hotel)
           // Важно: для турагентов хотим хранить type="agent" (а не "provider")
@@ -624,7 +616,7 @@ async function decideLead(req, res) {
                     telegram_refused_chat_id = CASE WHEN $4 THEN $2 ELSE telegram_refused_chat_id END,
                     social = COALESCE($3, social)
               WHERE id = $1`,
-            [exists.rows[0].id, chatId, username ? `@${username}` : null, isRefusedProviderBot]
+            [existing.id, chatId, username ? `@${username}` : null, isRefusedProviderBot]
           );
         }
       }
@@ -707,7 +699,11 @@ async function decideLead(req, res) {
   } catch (e) {
     await db.query("ROLLBACK");
     console.error("decideLead error:", e);
-    return res.status(500).json({ ok: false, error: "decide_failed" });
+    return res.status(Number(e?.status) || 500).json({
+      ok: false,
+      error: e?.code || "decide_failed",
+      provider_ids: e?.providerIds || undefined,
+    });
   } finally {
     db.release();
   }

@@ -21,6 +21,13 @@ const parseErrorMessage = (err, t) => {
     err?.message ??
     "";
 
+  if (err?.response?.data?.code === "PROVIDER_ACCOUNT_EXISTS") {
+    const method = err?.response?.data?.login_method;
+    return t(method === "telegram"
+      ? "register.errors.provider_exists_telegram"
+      : "register.errors.provider_exists");
+  }
+
   if (typeof raw === "string" && raw.startsWith("register.")) {
     return t(raw);
   }

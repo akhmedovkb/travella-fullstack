@@ -1337,6 +1337,8 @@
     "errors": {
       "email_taken": "This e-mail is already registered",
       "phone_taken": "This phone number is already registered",
+      "provider_exists": "A profile with this email or phone already exists. Sign in to the existing account.",
+      "provider_exists_telegram": "This provider is already registered through Telegram. Sign in with Telegram to open the same workspace.",
       "phone_invalid": "Enter the phone number in international format, for example +998901234567",
       "required": "Complete all required fields",
       "password_length": "Password must contain at least 8 characters",

@@ -1335,6 +1335,8 @@
     "errors": {
       "email_taken": "Ushbu e-mail allaqachon ro‘yxatdan o‘tgan",
       "phone_taken": "Ushbu raqam allaqachon ro‘yxatdan o‘tgan",
+      "provider_exists": "Bu email yoki telefon bilan profil mavjud. Mavjud akkauntga kiring.",
+      "provider_exists_telegram": "Bu provayder Telegram orqali ro‘yxatdan o‘tgan. Xuddi shu kabinetni ochish uchun Telegram orqali kiring.",
       "phone_invalid": "Telefonni xalqaro formatda kiriting, masalan +998901234567",
       "required": "Barcha majburiy maydonlarni to'ldiring",
       "password_length": "Parol kamida 8 ta belgidan iborat bo'lishi kerak",

@@ -6,6 +6,12 @@ const pool = require("../db");
 const { resolveCitySlugs } = require("../utils/cities");
 const { notifyModerationNew } = require("../utils/telegram");
 const { upsertFleet } = require("../utils/vehicleCatalog");
+const {
+  findProviderIdentityMatches,
+  lockProviderIdentity,
+  normalizeProviderEmail,
+  normalizeProviderPhone,
+} = require("../utils/providerIdentity");
 
 const {
   extractPrices,
@@ -677,10 +683,12 @@ function sendDuplicateProviderService(res, duplicateId) {
 
 // ---------- Auth ----------
 const registerProvider = async (req, res) => {
+  const db = await pool.connect();
   try {
     const { name, email, password, type, location, phone, social, photo, address } =
       req.body || {};
-    const emailNorm = String(email || "").trim().toLowerCase();
+    const emailNorm = normalizeProviderEmail(email);
+    const phoneNorm = normalizeProviderPhone(phone);
 
     if (!name || !email || !password || !type || !location || !phone) {
       return res.status(400).json({ message: "Заполните все обязательные поля" });
@@ -689,33 +697,49 @@ const registerProvider = async (req, res) => {
       return res.status(400).json({ message: "Некорректный формат изображения" });
     }
 
-    const existing = await pool.query("SELECT 1 FROM providers WHERE lower(email) = $1", [
-      emailNorm,
-    ]);
-    if (existing.rows.length) {
-      return res.status(400).json({ message: "Email уже используется" });
+    await db.query("BEGIN");
+    await lockProviderIdentity(db, { email: emailNorm, phone: phoneNorm });
+    const existing = await findProviderIdentityMatches(db, {
+      email: emailNorm,
+      phone: phoneNorm,
+    });
+    if (existing.length) {
+      await db.query("ROLLBACK");
+      const hasTelegram = existing.some((row) => row.matchedFields?.includes("phone") && (
+        row.telegram_chat_id || row.tg_chat_id || row.telegram_web_chat_id || row.telegram_refused_chat_id
+      ));
+      return res.status(409).json({
+        code: "PROVIDER_ACCOUNT_EXISTS",
+        message: "register.errors.provider_exists",
+        login_method: hasTelegram ? "telegram" : "email",
+      });
     }
 
     const hashed = await bcrypt.hash(password, 10);
-    await pool.query(
+    const inserted = await db.query(
       `INSERT INTO providers (name, email, password, type, location, phone, social, photo, address)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
+       RETURNING id`,
       [
         name,
         emailNorm,
         hashed,
         type,
         location,
-        phone,
+        phoneNorm ? `+${phoneNorm}` : phone,
         social ?? null,
         photo ?? null,
         address ?? null,
       ]
     );
-    res.status(201).json({ message: "Регистрация успешна" });
+    await db.query("COMMIT");
+    res.status(201).json({ message: "Регистрация успешна", provider_id: inserted.rows[0]?.id });
   } catch (err) {
+    try { await db.query("ROLLBACK"); } catch {}
     console.error("❌ Ошибка регистрации:", err);
     res.status(500).json({ message: "Ошибка сервера" });
+  } finally {
+    db.release();
   }
 };
 
