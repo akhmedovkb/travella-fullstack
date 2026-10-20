@@ -754,6 +754,19 @@ const vehicleModel =
   };
 };
 
+const serviceListSignature = (services = []) =>
+  services
+    .map((service) => [
+      service.id,
+      service.price,
+      service.currency,
+      service.title,
+      service.category,
+      service.vehicle_model,
+    ].join(":"))
+    .sort()
+    .join("|");
+
 
 async function fetchProvidersSmart({ kind, city, date, startTime = "", endTime = "", language, q = "", limit = 30 }) {
   // Пробуем строго /available
@@ -1220,6 +1233,94 @@ export default function TourBuilder() {
     /* ----- cache услуг провайдеров, чтобы не бить API каждый раз ----- */
   const [servicesCache, setServicesCache] = useState({});     // {providerId: Service[]}
   const [servicesLoading, setServicesLoading] = useState({}); // {providerId: bool}
+  const serviceRefreshInFlight = useRef(false);
+
+  const selectedServiceProviderKey = useMemo(() => {
+    const ids = new Set();
+    Object.values(byDay).forEach((state) => {
+      if (state?.guide?.id) ids.add(String(state.guide.id));
+      if (state?.transport?.id) ids.add(String(state.transport.id));
+    });
+    return [...ids].sort().join("|");
+  }, [byDay]);
+
+  useEffect(() => {
+    if (!selectedServiceProviderKey) return undefined;
+
+    let cancelled = false;
+    const refreshSelectedServicePrices = async () => {
+      if (serviceRefreshInFlight.current) return;
+      serviceRefreshInFlight.current = true;
+      try {
+        const providerIds = selectedServiceProviderKey.split("|").filter(Boolean);
+        const refreshedEntries = await Promise.all(
+          providerIds.map(async (providerId) => [providerId, await fetchProviderServices(providerId)])
+        );
+        if (cancelled) return;
+
+        const refreshedByProvider = Object.fromEntries(refreshedEntries);
+        setServicesCache((previous) => {
+          let changed = false;
+          const next = { ...previous };
+          refreshedEntries.forEach(([providerId, services]) => {
+            if (serviceListSignature(previous[providerId]) !== serviceListSignature(services)) {
+              next[providerId] = services;
+              changed = true;
+            }
+          });
+          return changed ? next : previous;
+        });
+
+        setByDay((previous) => {
+          let changed = false;
+          const next = { ...previous };
+          Object.entries(previous).forEach(([dateKey, state]) => {
+            let updatedState = state;
+            const selections = [
+              ["guide", "guideService"],
+              ["transport", "transportService"],
+            ];
+
+            selections.forEach(([providerKey, serviceKey]) => {
+              const providerId = state?.[providerKey]?.id;
+              const selectedService = state?.[serviceKey];
+              if (!providerId || !selectedService?.id) return;
+              const refreshedService = refreshedByProvider[String(providerId)]?.find(
+                (service) => String(service.id) === String(selectedService.id)
+              );
+              if (!refreshedService) return;
+              if (serviceListSignature([selectedService]) === serviceListSignature([refreshedService])) return;
+              updatedState = { ...updatedState, [serviceKey]: refreshedService };
+              changed = true;
+            });
+
+            if (updatedState !== state) next[dateKey] = updatedState;
+          });
+          return changed ? next : previous;
+        });
+      } catch (error) {
+        console.warn("TourBuilder: failed to refresh provider service prices", error);
+      } finally {
+        serviceRefreshInFlight.current = false;
+      }
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshSelectedServicePrices();
+    };
+    refreshSelectedServicePrices();
+    const intervalId = window.setInterval(refreshSelectedServicePrices, 30_000);
+    window.addEventListener("focus", refreshSelectedServicePrices);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshSelectedServicePrices);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [selectedServiceProviderKey]);
+
   const ensureServicesLoaded = async (provider) => {
     const pid = provider?.id;
         if (!pid) return [];
