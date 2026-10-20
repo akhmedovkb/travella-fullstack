@@ -12,7 +12,13 @@
     "reset_filters": "Сбросить фильтры",
     "results_count": "Найдено: {{count}}",
     "filtered_from": "из {{total}} услуг",
-    "try_other_filters": "Измените параметры поиска или сбросьте фильтры"
+    "try_other_filters": "Измените параметры поиска или сбросьте фильтры",
+    "service_format": "Комплектация услуги",
+    "guide_only": "Только гид",
+    "guide_only_hint": "Без автомобиля и расходов на транспорт",
+    "guide_with_transport": "Гид + транспорт",
+    "guide_with_transport_hint": "Автомобиль гида уже включён в тариф",
+    "transport_included": "Транспорт включён"
   },
   "actions": {
     "book": "Бронировать",

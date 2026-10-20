@@ -12,7 +12,13 @@
     "reset_filters": "Filtrlarni tozalash",
     "results_count": "Topildi: {{count}}",
     "filtered_from": "{{total}} ta xizmatdan",
-    "try_other_filters": "Qidiruv parametrlarini o‘zgartiring yoki filtrlarni tozalang"
+    "try_other_filters": "Qidiruv parametrlarini o‘zgartiring yoki filtrlarni tozalang",
+    "service_format": "Xizmat tarkibi",
+    "guide_only": "Faqat gid",
+    "guide_only_hint": "Avtomobil va transport xarajatlarisiz",
+    "guide_with_transport": "Gid + transport",
+    "guide_with_transport_hint": "Gidning avtomobili tarifga kiritilgan",
+    "transport_included": "Transport kiritilgan"
   },
   "actions": {
     "book": "Bron qilish",

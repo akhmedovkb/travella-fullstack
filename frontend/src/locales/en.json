@@ -12,7 +12,13 @@
     "reset_filters": "Reset filters",
     "results_count": "Found: {{count}}",
     "filtered_from": "of {{total}} services",
-    "try_other_filters": "Change the search options or reset the filters"
+    "try_other_filters": "Change the search options or reset the filters",
+    "service_format": "Service package",
+    "guide_only": "Guide only",
+    "guide_only_hint": "No vehicle or transport costs included",
+    "guide_with_transport": "Guide + transport",
+    "guide_with_transport_hint": "The guide's vehicle is included in the rate",
+    "transport_included": "Transport included"
   },
   "actions": {
     "book": "Book",

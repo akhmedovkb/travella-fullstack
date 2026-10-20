@@ -2771,8 +2771,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         .map(s => {
                           const seats = svcSeats(s); // берёт из s.raw.details.seats
                           const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
+                          const transportIncluded = s.category === "city_tour_guide_with_transport" || s?.raw?.details?.transport_included;
                            const base = t(`provider_services.items.${s.category}`, { defaultValue: s.title || CATEGORY_LABELS[s.category] || "Service" });
-                          const parts = [base, seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
+                          const parts = [base, transportIncluded ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only"), seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
                             .filter(Boolean)
                             .join(" — ");
                           return (
@@ -2781,7 +2782,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         })}
                     </select>
                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
-                      <span>{activeGuideService ? t(`provider_services.items.${activeGuideService.category}`, { defaultValue: t("tb.ui.selected_service") }) : t("tb.ui.service_not_selected")}</span>
+                      <span>{activeGuideService ? `${t(`provider_services.items.${activeGuideService.category}`, { defaultValue: t("tb.ui.selected_service") })} · ${(activeGuideService.category === "city_tour_guide_with_transport" || activeGuideService.raw?.details?.transport_included) ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only")}` : t("tb.ui.service_not_selected")}</span>
                       <strong className="text-sm text-slate-950">{activeGuideService ? calcGuideForDay(k).toFixed(2) : "0.00"} {activeGuideService?.currency || st.guide?.currency || "UZS"}</strong>
                     </div>
                     </div>
