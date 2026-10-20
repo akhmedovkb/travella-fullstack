@@ -1957,6 +1957,11 @@ export default function DashboardServices({ viewMode = "create" }) {
     setTab("create");
   };
 
+  const startNewService = () => {
+    resetForm();
+    navigate("/dashboard/services/marketplace");
+  };
+
   const patchDetails = (patch) => setDetails((prev) => ({ ...prev, ...patch }));
 
   const selectGuideLanguages = (options) => {
@@ -2060,7 +2065,10 @@ export default function DashboardServices({ viewMode = "create" }) {
     if (loading || viewMode === "manage") return;
 
     const requestedServiceId = new URLSearchParams(location.search).get("service");
-    if (!requestedServiceId) return;
+    if (!requestedServiceId) {
+      if (selectedService) resetForm();
+      return;
+    }
 
     const requestedService = services.find(
       (service) => String(service.id) === String(requestedServiceId)
@@ -2507,7 +2515,7 @@ export default function DashboardServices({ viewMode = "create" }) {
               </div>}
               <button
                 type="button"
-                onClick={() => viewMode === "manage" ? navigate("/dashboard/services/marketplace") : navigate("/dashboard/services/my")}
+                onClick={() => viewMode === "manage" ? startNewService() : navigate("/dashboard/services/my")}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 text-sm font-black text-white shadow-sm transition hover:bg-orange-600"
               >
                 {viewMode === "manage" ? <Plus aria-hidden="true" className="h-4 w-4" /> : <Layers3 aria-hidden="true" className="h-4 w-4" />}
