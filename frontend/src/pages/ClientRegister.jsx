@@ -3,7 +3,6 @@ import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
-import LanguageSelector from "../components/LanguageSelector";
 import { apiPost } from "../api";             // как и было
 import { toast } from "../ui/toast";          // реэкспорт react-hot-toast
 
@@ -135,13 +134,12 @@ export default function ClientRegister() {
         </aside>
 
         <section className="order-1 p-6 md:p-10 lg:order-2">
-          <div className="flex flex-col gap-5 border-b border-slate-200 pb-6 sm:flex-row sm:items-start sm:justify-between">
+          <div className="border-b border-slate-200 pb-6">
             <div>
               <p className="text-xs font-black uppercase text-orange-600">{t("client.register.eyebrow")}</p>
               <h1 className="mt-2 text-3xl font-black text-slate-950">{t("client.register.title")}</h1>
               <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">{t("client.register.subtitle")}</p>
             </div>
-            <LanguageSelector />
           </div>
 
           {err && (
