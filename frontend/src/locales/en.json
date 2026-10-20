@@ -1,6 +1,19 @@
 {
   "accommodation": "Accommodation",
   "accommodation_category": "Accommodation category",
+  "provider_services_filters": {
+    "filter_category": "Filter by category",
+    "filter_city": "Filter by city",
+    "filter_status": "Filter by status",
+    "all_categories": "All categories",
+    "all_cities": "All cities",
+    "all_statuses": "All statuses",
+    "reset": "Reset",
+    "reset_filters": "Reset filters",
+    "results_count": "Found: {{count}}",
+    "filtered_from": "of {{total}} services",
+    "try_other_filters": "Change the search options or reset the filters"
+  },
   "actions": {
     "book": "Book",
     "cancel": "Cancel",

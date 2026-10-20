@@ -1,6 +1,19 @@
 {
   "accommodation": "Joylashuv",
   "accommodation_category": "Joylashuv toifasi",
+  "provider_services_filters": {
+    "filter_category": "Toifa bo‘yicha filtrlash",
+    "filter_city": "Shahar bo‘yicha filtrlash",
+    "filter_status": "Holat bo‘yicha filtrlash",
+    "all_categories": "Barcha toifalar",
+    "all_cities": "Barcha shaharlar",
+    "all_statuses": "Barcha holatlar",
+    "reset": "Tozalash",
+    "reset_filters": "Filtrlarni tozalash",
+    "results_count": "Topildi: {{count}}",
+    "filtered_from": "{{total}} ta xizmatdan",
+    "try_other_filters": "Qidiruv parametrlarini o‘zgartiring yoki filtrlarni tozalang"
+  },
   "actions": {
     "book": "Bron qilish",
     "cancel": "Bekor qilish",

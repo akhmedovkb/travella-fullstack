@@ -1,6 +1,19 @@
 {
   "accommodation": "Размещение",
   "accommodation_category": "Категория размещения",
+  "provider_services_filters": {
+    "filter_category": "Фильтр по категории",
+    "filter_city": "Фильтр по городу",
+    "filter_status": "Фильтр по статусу",
+    "all_categories": "Все категории",
+    "all_cities": "Все города",
+    "all_statuses": "Все статусы",
+    "reset": "Сбросить",
+    "reset_filters": "Сбросить фильтры",
+    "results_count": "Найдено: {{count}}",
+    "filtered_from": "из {{total}} услуг",
+    "try_other_filters": "Измените параметры поиска или сбросьте фильтры"
+  },
   "actions": {
     "book": "Бронировать",
     "cancel": "Отмена",

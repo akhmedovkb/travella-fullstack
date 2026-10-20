@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Layers3, MapPin, Plus, RefreshCw, Trash2, WalletCards } from "lucide-react";
+import { CheckCircle2, Layers3, MapPin, Plus, RefreshCw, Search, Trash2, WalletCards, X } from "lucide-react";
 import { tError, tSuccess } from "../shared/toast";
 import ConfirmModal from "./ConfirmModal";
 import {
@@ -80,6 +80,7 @@ function calculatedPreview(form, w) {
 export default function ProviderServicesWorkspace({ providerId, providerType }) {
   const { t } = useTranslation();
   const w = (key, options = {}) => t(`provider_services.workspace.${key}`, options);
+  const f = (key, options = {}) => t(`provider_services_filters.${key}`, options);
   const pid = Number(providerId);
   const [rows, setRows] = useState([]);
   const [profile, setProfile] = useState({});
@@ -87,6 +88,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(blankForm);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [cityFilter, setCityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [deletingId, setDeletingId] = useState(null);
@@ -298,12 +301,35 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     }
   }
 
+  const availableCategoryGroups = useMemo(() => categoryGroups
+    .map((group) => ({
+      ...group,
+      count: rows.filter((row) => group.services.some((service) => service.id === row.category)).length,
+    }))
+    .filter((group) => group.count > 0), [categoryGroups, rows]);
+  const availableCities = useMemo(() => Array.from(new Set(rows.flatMap((row) => [
+    row.details?.city_slug,
+    row.details?.origin_city,
+    row.details?.destination_city,
+  ]).filter(Boolean))).sort((a, b) => cityLabel(a).localeCompare(cityLabel(b))), [rows]);
+  const hasFilters = Boolean(query.trim()) || categoryFilter !== "all" || cityFilter !== "all" || statusFilter !== "all";
+  const clearFilters = () => {
+    setQuery("");
+    setCategoryFilter("all");
+    setCityFilter("all");
+    setStatusFilter("all");
+  };
+
   const filtered = useMemo(() => rows.filter((row) => {
-    const text = `${row.title || ""} ${serviceLabel(row.category)}`.toLowerCase();
-    const matchesText = text.includes(query.toLowerCase());
+    const rowCities = [row.details?.city_slug, row.details?.origin_city, row.details?.destination_city].filter(Boolean);
+    const text = `${row.title || ""} ${serviceLabel(row.category)} ${rowCities.map(cityLabel).join(" ")} ${row.details?.vehicle_model || ""}`.toLowerCase();
+    const matchesText = text.includes(query.trim().toLowerCase());
+    const matchesCategory = categoryFilter === "all"
+      || findServiceGroup(row.category, categoryGroups)?.id === categoryFilter;
+    const matchesCity = cityFilter === "all" || rowCities.includes(cityFilter);
     const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? row.is_active : !row.is_active);
-    return matchesText && matchesStatus;
-  }), [rows, query, statusFilter]);
+    return matchesText && matchesCategory && matchesCity && matchesStatus;
+  }), [rows, query, categoryFilter, cityFilter, statusFilter, categoryGroups]);
 
   return (
     <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
@@ -368,13 +394,41 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       </section>
 
       <section className="px-5 py-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div><h3 className="font-bold text-slate-950">{w("my_services")}</h3><p className="text-sm text-slate-500">{w("services_enabled", { total: rows.length, active: rows.filter((row) => row.is_active).length })}</p></div>
-          <div className="flex flex-wrap gap-2"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={w("search_service")} className="h-10 min-w-56 rounded-md border border-slate-300 px-3 text-sm" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">{w("all")}</option><option value="active">{w("enabled_plural")}</option><option value="inactive">{w("disabled_plural")}</option></select></div>
+        <div>
+          <h3 className="font-bold text-slate-950">{w("my_services")}</h3>
+          <p className="text-sm text-slate-500">{w("services_enabled", { total: rows.length, active: rows.filter((row) => row.is_active).length })}</p>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_minmax(180px,0.7fr)_minmax(160px,0.55fr)_minmax(150px,0.5fr)_auto]">
+            <label className="relative block">
+              <span className="sr-only">{w("search_service")}</span>
+              <Search size={17} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={w("search_service")} className="h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200" />
+            </label>
+            <FilterSelect label={f("filter_category")} value={categoryFilter} onChange={setCategoryFilter}>
+              <option value="all">{f("all_categories")}</option>
+              {availableCategoryGroups.map((group) => <option key={group.id} value={group.id}>{groupLabel(group)} ({group.count})</option>)}
+            </FilterSelect>
+            <FilterSelect label={f("filter_city")} value={cityFilter} onChange={setCityFilter}>
+              <option value="all">{f("all_cities")}</option>
+              {availableCities.map((city) => <option key={city} value={city}>{cityLabel(city)}</option>)}
+            </FilterSelect>
+            <FilterSelect label={f("filter_status")} value={statusFilter} onChange={setStatusFilter}>
+              <option value="all">{f("all_statuses")}</option>
+              <option value="active">{w("enabled_plural")}</option>
+              <option value="inactive">{w("disabled_plural")}</option>
+            </FilterSelect>
+            <button type="button" onClick={clearFilters} disabled={!hasFilters} className="flex h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-default disabled:opacity-40" title={f("reset_filters")}><X size={17} aria-hidden="true" />{f("reset")}</button>
+          </div>
+          <div className="mt-2 flex min-h-5 items-center justify-between gap-3 text-xs text-slate-500">
+            <span>{f("results_count", { count: filtered.length })}</span>
+            {hasFilters && filtered.length !== rows.length && <span>{f("filtered_from", { total: rows.length })}</span>}
+          </div>
         </div>
 
         <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
-          {loading ? <div className="py-8 text-center text-slate-500">{w("loading")}</div> : filtered.length === 0 ? <div className="py-8 text-center text-slate-500">{w("services_not_found")}</div> : filtered.map((row) => {
+          {loading ? <div className="py-8 text-center text-slate-500">{w("loading")}</div> : filtered.length === 0 ? <div className="flex flex-col items-center py-10 text-center"><Search size={24} className="mb-2 text-slate-300" aria-hidden="true" /><div className="font-semibold text-slate-700">{w("services_not_found")}</div><div className="mt-1 text-sm text-slate-500">{f("try_other_filters")}</div>{hasFilters && <button type="button" onClick={clearFilters} className="mt-3 text-sm font-semibold text-orange-600 hover:text-orange-700">{f("reset_filters")}</button>}</div> : filtered.map((row) => {
             const expanded = editingId === row.id;
             const draftCategoryGroup = expanded && draft
               ? categoryGroups.find((group) => group.id === draft.catalogGroup) || findServiceGroup(draft.category, categoryGroups)
@@ -497,6 +551,9 @@ function FormStep({ icon: Icon, number, title, description, stepLabel, children 
 }
 function SelectField({ label, value, onChange, options, placeholder, disabled = false }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-100 disabled:text-slate-400"><option value="">{placeholder}</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+}
+function FilterSelect({ label, value, onChange, children }) {
+  return <label className="relative block"><span className="sr-only">{label}</span><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200">{children}</select></label>;
 }
 function CitySelect({ label, value, cities, onChange, placeholder, compact = false }) {
   return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={!cities.length} className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-50`}><option value="">{placeholder}</option>{cities.map((city) => <option key={city} value={city}>{cityLabel(city)}</option>)}</select></label>;
