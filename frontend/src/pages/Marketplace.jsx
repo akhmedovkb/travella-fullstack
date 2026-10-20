@@ -1260,11 +1260,14 @@ const search = async (opts = {}) => {
 
   const quickCategories = [
     { value: "", label: t("marketplace.category_all", { defaultValue: "Все" }) },
-    { value: "refused_tour", label: t("marketplace.category_tours", { defaultValue: "Туры" }) },
+    { value: "refused_tour", label: t("marketplace.category_tours", { defaultValue: "Отказные туры" }) },
+    { value: "refused_hotel", label: t("marketplace.category_hotels", { defaultValue: "Отказные отели" }) },
+    { value: "refused_flight", label: t("marketplace.category_flights", { defaultValue: "Отказные авиабилеты" }) },
+    { value: "refused_event_ticket", label: t("marketplace.category_events", { defaultValue: "Отказные билеты" }) },
     { value: "guide", label: t("marketplace.category_guides", { defaultValue: "Гиды" }) },
     { value: "transport", label: t("marketplace.category_transport", { defaultValue: "Транспорт" }) },
-    { value: "refused_hotel", label: t("marketplace.category_hotels", { defaultValue: "Отели" }) },
-    { value: "refused_flight", label: t("marketplace.category_flights", { defaultValue: "Авиабилеты" }) },
+    { value: "author_tour", label: t("marketplace.category_author_tours", { defaultValue: "Авторские туры" }) },
+    { value: "visa_support", label: t("marketplace.category_visa", { defaultValue: "Визовая поддержка" }) },
   ];
 
   const runSearch = () => {
@@ -1444,7 +1447,7 @@ const search = async (opts = {}) => {
           {t("marketplace.hero_subtitle", { defaultValue: "Гиды, транспорт, отели и туры от проверенных поставщиков в одном месте." })}
         </p>
 
-        <div className="mt-5 flex gap-2 overflow-x-auto pb-1" role="tablist" aria-label={t("marketplace.categories", { defaultValue: "Категории услуг" })}>
+        <div className="mt-5 flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible" role="tablist" aria-label={t("marketplace.categories", { defaultValue: "Категории услуг" })}>
           {quickCategories.map((option) => (
             <button
               key={option.value || "all"}
