@@ -6,6 +6,7 @@ import { apiPost } from "../api";
 import LanguageSelector from "../components/LanguageSelector";
 import { useTranslation } from "react-i18next";
 import TelegramLoginButton from "../components/TelegramLoginButton";
+import { CircleAlert } from "lucide-react";
 
 export default function ClientLogin() {
   const { t } = useTranslation();
@@ -45,8 +46,13 @@ export default function ClientLogin() {
       </div>
 
       {err && (
-        <div className="mb-3 bg-orange-500 text-white text-sm px-3 py-2 rounded">
-          {err}
+        <div
+          role="alert"
+          aria-live="polite"
+          className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-3 py-3 text-sm font-semibold text-red-800"
+        >
+          <CircleAlert className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+          <span>{err}</span>
         </div>
       )}
 
