@@ -341,7 +341,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   }), [rows, query, categoryFilter, cityFilter, statusFilter, categoryGroups]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <div className="rounded-lg border border-slate-200 bg-white">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
         <div>
           <h2 className="text-lg font-bold text-slate-950">{w("catalog_title")}</h2>
@@ -403,7 +403,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
             </FormStep>
           </div>
 
-          <aside className="overflow-hidden rounded-lg bg-slate-950 text-white xl:sticky xl:top-4">
+          <aside className="overflow-hidden rounded-lg bg-slate-950 text-white xl:sticky xl:top-20 xl:z-10 xl:self-start">
             <div className="border-b border-white/10 px-5 py-4"><div className="text-xs font-bold uppercase text-orange-400">{w("preview")}</div><div className="mt-1 text-xs text-slate-400">{w("preview_hint")}</div></div>
             <div className="px-5 py-5"><div className="text-lg font-bold leading-snug">{serviceTitle(form)}</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-300"><MapPin size={16} />{isIntercity ? `${cityLabel(form.originCity) || w("from")} → ${cityLabel(form.destinationCity) || w("to")}` : cityLabel(form.citySlug) || w("location_not_selected")}</div><div className="mt-6 border-t border-white/10 pt-4"><div className="text-xs uppercase text-slate-400">{w("example_calculation")}</div><div className="mt-1 text-sm text-slate-300">{preview.duration} · {preview.rule}</div><div className="mt-2 text-2xl font-bold">{money(preview.total)} <span className="text-base font-semibold text-slate-300">UZS</span></div></div></div>
             <div className="px-5 pb-5"><button type="button" onClick={addService} disabled={saving || !cities.length} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-5 font-bold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={19} />{saving ? w("saving") : w("add_rate")}</button></div>
