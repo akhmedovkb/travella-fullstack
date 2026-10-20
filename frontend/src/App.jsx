@@ -10,7 +10,74 @@ import { installActivityTracker } from "./utils/activityTracker";
 import Header from "./components/Header";
 import Footer from "./components/Footer";
 
-const lazy = (loader) => React.lazy(loader);
+const CHUNK_RELOAD_KEY = "travella:chunk-reload";
+
+const isChunkLoadError = (error) =>
+  /failed to fetch dynamically imported module|importing a module script failed|loading chunk .* failed|error loading dynamically imported module/i.test(
+    String(error?.message || error || "")
+  );
+
+const recoverFromChunkError = (error) => {
+  if (!isChunkLoadError(error)) return false;
+
+  const routeKey = `${window.location.pathname}${window.location.search}`;
+  if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === routeKey) return false;
+
+  sessionStorage.setItem(CHUNK_RELOAD_KEY, routeKey);
+  window.location.reload();
+  return true;
+};
+
+const lazy = (loader) =>
+  React.lazy(async () => {
+    try {
+      const module = await loader();
+      sessionStorage.removeItem(CHUNK_RELOAD_KEY);
+      return module;
+    } catch (error) {
+      if (recoverFromChunkError(error)) {
+        return new Promise(() => {});
+      }
+      throw error;
+    }
+  });
+
+class AppErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { error };
+  }
+
+  componentDidCatch(error) {
+    recoverFromChunkError(error);
+  }
+
+  render() {
+    if (!this.state.error) return this.props.children;
+
+    return (
+      <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <h1 className="text-xl font-semibold text-gray-900">Не удалось загрузить страницу</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Обновите страницу, чтобы загрузить актуальную версию Travella.
+          </p>
+          <button
+            type="button"
+            className="mt-5 rounded-md bg-orange-500 px-5 py-2.5 font-medium text-white hover:bg-orange-600"
+            onClick={() => window.location.reload()}
+          >
+            Обновить страницу
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
 const Register = lazy(() => import("./pages/Register"));
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -144,6 +211,7 @@ export default function App() {
   }, []);
 
   return (
+    <AppErrorBoundary>
     <Router>
       <ToastMount />
       <div className="min-h-screen bg-gray-100 flex flex-col">
@@ -695,5 +763,6 @@ export default function App() {
         defaultService="india_inside"
       />
     </Router>
+    </AppErrorBoundary>
   );
 }

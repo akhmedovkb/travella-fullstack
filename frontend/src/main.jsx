@@ -8,6 +8,17 @@ import i18n from "./i18n";
 import { Toaster } from "react-hot-toast";
 import './ui/theme.css';
 
+const CHUNK_RELOAD_KEY = "travella:chunk-reload";
+
+window.addEventListener("vite:preloadError", (event) => {
+  const routeKey = `${window.location.pathname}${window.location.search}`;
+  if (sessionStorage.getItem(CHUNK_RELOAD_KEY) === routeKey) return;
+
+  event.preventDefault();
+  sessionStorage.setItem(CHUNK_RELOAD_KEY, routeKey);
+  window.location.reload();
+});
+
 /* === mobile 100vh fix === */
 function setVh() {
   const vh = window.innerHeight * 0.01;
