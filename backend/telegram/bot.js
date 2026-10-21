@@ -1640,7 +1640,7 @@ function isHardBlocked(userId) {
 }
 // ===================== AUTH REHYDRATE (FIX PENDING STUCK) =====================
 // Если админ одобрил лид через сайт, Telegraf-сессия про это не знает.
-// Поэтому при pending/!linked мы раз в несколько секунд перепроверяем БД через API
+// Поэтому при pending/!linked мы раз в несколько секунд перепроверяем БД
 // и обновляем ctx.session (pending=false, linked=true, role=...).
 const AUTH_RECHECK_TTL_MS = 6000;
 
@@ -1658,18 +1658,21 @@ async function rehydrateAuthSessionIfNeeded(ctx) {
     if (Date.now() - last < AUTH_RECHECK_TTL_MS) return false;
     ctx.session._authRecheckTs = Date.now();
 
-    // 1) provider?
+    // 1) provider? Use the canonical resolver shared with provider service routes.
     try {
-      const r = await axios.get(`/api/telegram/profile/provider/${actorId}`);
-      if (r?.data?.success && r?.data?.user?.id) {
+      const providerId = await resolveProviderIdByTelegramChatId(actorId, {
+        action: "rehydrate_auth_session",
+      });
+      if (providerId) {
         ctx.session.pending = false;
         ctx.session.linked = true;
         ctx.session.role = "provider";
         ctx.session.requestedRole = null;
+        ctx.session.__providerFunnelProviderId = providerId;
         return true;
       }
     } catch (e) {
-      // 404 ok -> try client
+      console.log("[tg-bot] provider auth rehydrate error:", e?.message || e);
     }
 
     // 2) client?
@@ -5378,11 +5381,28 @@ function buildInlineDescription(svc, category, roleForInline) {
 /* ===================== ROLE RESOLUTION ===================== */
 
 async function ensureProviderRole(ctx) {
-  if (ctx.session?.role === "provider") return "provider";
+  if (ctx.session?.role === "provider" && ctx.session?.linked) return "provider";
 
   const actorId = getActorId(ctx);
   if (!actorId) return ctx.session?.role || null;
 
+  try {
+    const providerId = await resolveProviderIdByTelegramChatId(actorId, {
+      action: "restore_provider_session",
+    });
+    if (providerId) {
+      if (!ctx.session) ctx.session = {};
+      ctx.session.role = "provider";
+      ctx.session.linked = true;
+      ctx.session.pending = false;
+      ctx.session.__providerFunnelProviderId = providerId;
+      return "provider";
+    }
+  } catch (e) {
+    console.log("[tg-bot] provider resolver error:", e?.message || e);
+  }
+
+  // Keep the legacy endpoint as a fallback while older installations migrate.
   try {
     const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
     if (resProv.data && resProv.data.success) {
@@ -8523,7 +8543,13 @@ bot.hears(/^\/testpay(?:@\w+)?$/i, async (ctx) => {
 bot.command("menu", async (ctx) => {
   logUpdate(ctx, "/menu");
 
-  if (!ctx.session?.linked) {
+  const role =
+    (await ensureProviderRole(ctx)) ||
+    (await ensureClientRole(ctx)) ||
+    ctx.session?.role ||
+    null;
+
+  if (!role || !ctx.session?.linked) {
     await ctx.reply(
       "🔐 Сначала привяжите аккаунт по номеру телефона. После этого кнопки меню будут закреплены снизу."
     );
@@ -8531,14 +8557,19 @@ bot.command("menu", async (ctx) => {
     return;
   }
 
-  const role = ctx.session?.role || (await ensureProviderRole(ctx)) || (await ensureClientRole(ctx)) || "client";
   await showMainMenu(ctx, role);
 });
 
 bot.hears(MAIN_MENU_TEXT_RE, async (ctx) => {
   logUpdate(ctx, "hears main menu");
 
-  if (!ctx.session?.linked) {
+  const role =
+    (await ensureProviderRole(ctx)) ||
+    (await ensureClientRole(ctx)) ||
+    ctx.session?.role ||
+    null;
+
+  if (!role || !ctx.session?.linked) {
     await ctx.reply(
       "🔐 Сначала привяжите аккаунт по номеру телефона. После этого меню будет доступно без /start."
     );
@@ -8549,7 +8580,6 @@ bot.hears(MAIN_MENU_TEXT_RE, async (ctx) => {
   forceCloseEditWizard(ctx);
   resetServiceWizard(ctx);
 
-  const role = ctx.session?.role || (await ensureProviderRole(ctx)) || (await ensureClientRole(ctx)) || "client";
   await showMainMenu(ctx, role);
 });
 
@@ -8638,15 +8668,8 @@ bot.start(async (ctx) => {
       return;
     }
 
-    // ✅ ПРИОРИТЕТ: СНАЧАЛА provider, ПОТОМ client
-    try {
-      const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
-      if (resProv.data && resProv.data.success) role = "provider";
-    } catch (e) {
-      if (e?.response?.status !== 404) {
-        console.log("[tg-bot] profile provider error:", e?.response?.data || e.message || e);
-      }
-    }
+    // Provider identity is resolved from the same canonical fields as service actions.
+    role = await ensureProviderRole(ctx);
 
     // client проверяем ТОЛЬКО если провайдера нет
     if (!role) {
@@ -8876,9 +8899,6 @@ bot.start(async (ctx) => {
       return;
     }
 
-    await ctx.reply(
-      "👋 Добро пожаловать в Travella!\n\nЧтобы показать ваши бронирования/заявки — привяжем аккаунт по номеру телефона."
-    );
     await askRole(ctx);
   } catch (e) {
     console.error("[tg-bot] /start error:", e?.response?.data || e);
@@ -8895,6 +8915,17 @@ bot.action(/^role:(client|provider)$/, async (ctx) => {
     await ctx.answerCbQuery();
 
     if (role === "provider") {
+      const existingProviderRole = await ensureProviderRole(ctx);
+      if (existingProviderRole === "provider") {
+        ctx.session.requestedRole = null;
+        ctx.session.state = null;
+        await ctx.reply(
+          "✅ Аккаунт поставщика найден. Выберите раздел в меню ниже 👇",
+          getMainMenuKeyboard("provider")
+        );
+        return;
+      }
+
       ctx.session.requestedRole = null;
       ctx.session.state = "choosing_provider_type";
       await askProviderType(ctx);
