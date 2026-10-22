@@ -363,6 +363,19 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_responded_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_component_events (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      event_type VARCHAR(32) NOT NULL,
+      actor_type VARCHAR(24) NOT NULL DEFAULT 'system',
+      actor_telegram_id TEXT,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_events_booking ON tour_package_component_events(package_id, booking_id, created_at DESC)`);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_tasks (
       id BIGSERIAL PRIMARY KEY,
       package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
@@ -403,7 +416,15 @@ async function packageBookings(packageId) {
             p.social AS provider_telegram,
             ops.confirmation_reference, ops.supplier_payment_due_at,
             COALESCE(ops.supplier_paid,FALSE) AS supplier_paid, ops.operational_note,
-            ops.service_order_sent_at,ops.service_order_status,ops.service_order_responded_at
+            ops.service_order_sent_at,ops.service_order_status,ops.service_order_responded_at,
+            COALESCE((
+              SELECT jsonb_agg(jsonb_build_object(
+                'id',event.id,'event_type',event.event_type,'actor_type',event.actor_type,
+                'created_at',event.created_at,'metadata',event.metadata
+              ) ORDER BY event.created_at DESC,event.id DESC)
+              FROM tour_package_component_events event
+              WHERE event.package_id=$1::uuid AND event.booking_id=b.id
+            ),'[]'::jsonb) AS service_order_events
        FROM bookings b
        LEFT JOIN providers p ON p.id = b.provider_id
        LEFT JOIN services s ON s.id = b.service_id
@@ -1002,9 +1023,20 @@ async function sendTourPackageServiceOrder(req, res) {
          WHERE package_id=$1::uuid AND booking_id=$2`,
         [packageId, bookingId]
       );
+      await pool.query(
+        `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type)
+         VALUES($1::uuid,$2,'delivery_failed','dmc')`,
+        [packageId, bookingId]
+      );
       return res.status(502).json({ message: "Failed to send supplier order" });
     }
-    return res.json({ sent: true, ...saved.rows[0] });
+    const event = await pool.query(
+      `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type)
+       VALUES($1::uuid,$2,'sent','dmc')
+       RETURNING id,event_type,actor_type,created_at,metadata`,
+      [packageId, bookingId]
+    );
+    return res.json({ sent: true, ...saved.rows[0], service_order_event: event.rows[0] });
   } catch (error) {
     console.error("sendTourPackageServiceOrder error:", error);
     return res.status(500).json({ message: "Failed to send supplier order" });

@@ -8,6 +8,7 @@ const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 const cfg = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("token") || localStorage.getItem("providerToken")}` } });
 const money = (value, currency) => `${Number(value || 0).toLocaleString(currency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} ${currency || "UZS"}`;
 const dateText = (value) => value ? new Date(value).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) : "—";
+const dateTimeText = (value) => value ? new Date(value).toLocaleString(undefined, { day: "2-digit", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "—";
 const dateValue = (value) => value ? String(value).slice(0, 10) : "";
 const confirmedStatuses = new Set(["confirmed", "paid", "completed"]);
 const lockedStatuses = new Set(["booked", "paid", "cancelled"]);
@@ -111,6 +112,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, 
       <button type="button" disabled={saving} onClick={() => onSave(item.id, form)} className="inline-flex h-11 items-center justify-center gap-2 bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-40"><Save size={16} />{t("common.save")}</button>
     </div>
     <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.supplier_paid} onChange={(e) => setField("supplier_paid", e.target.checked)} className="h-4 w-4 accent-emerald-600" />{t("tb.workspace.supplier_paid")}</label>
+    {item.service_order_events?.length > 0 && <details className="mt-4 border-t border-gray-200 pt-3"><summary className="cursor-pointer text-sm font-semibold text-gray-600">{t("tb.documents.service_order_history")} · {item.service_order_events.length}</summary><div className="mt-3 space-y-2">{item.service_order_events.map((event) => <div key={event.id} className="flex items-center justify-between gap-4 text-xs"><span className={`font-semibold ${event.event_type === "accepted" ? "text-emerald-700" : ["declined", "delivery_failed"].includes(event.event_type) ? "text-red-700" : "text-gray-700"}`}>{t(`tb.documents.service_order_event_${event.event_type}`)}</span><span className="text-gray-400">{dateTimeText(event.created_at)}</span></div>)}</div></details>}
   </article>;
 }
 
@@ -264,7 +266,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.patch(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}`, values, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data } : item) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item) }));
       setNotice(t("tb.workspace.component_saved"));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.workspace.component_save_error"));

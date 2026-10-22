@@ -45,6 +45,11 @@ async function respondToSupplierServiceOrder({ actorTelegramId, bookingId, decis
     [Number(bookingId), normalizedDecision]
   );
   if (!updated.rowCount) return { ok: false, code: "already_responded" };
+  await pool.query(
+    `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,actor_telegram_id)
+     VALUES($1::uuid,$2,$3,'supplier',$4)`,
+    [item.package_id, Number(bookingId), normalizedDecision, String(actorTelegramId)]
+  );
   const agencyChatId = profileChatId(item.agency_profile || {});
   if (agencyChatId) {
     const symbol = normalizedDecision === "accepted" ? "✅" : "❌";
