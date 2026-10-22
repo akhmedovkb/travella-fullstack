@@ -1,11 +1,19 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
   assert.equal(calculateGross(1000, "fixed", 250), 1250);
   assert.equal(calculateGross(-10, "percent", 15), 0);
+});
+
+test("only editable tour package states can be revised", () => {
+  assert.equal(canEditTourPackage("proposed"), true);
+  assert.equal(canEditTourPackage("confirmed"), true);
+  assert.equal(canEditTourPackage("booked"), false);
+  assert.equal(canEditTourPackage("paid"), false);
+  assert.equal(canEditTourPackage("cancelled"), false);
 });
 
 test("hashes proposal tokens deterministically without storing the raw token", () => {

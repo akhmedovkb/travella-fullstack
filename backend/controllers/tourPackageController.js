@@ -18,6 +18,10 @@ function calculateGross(netTotal, markupType, markupValue) {
   return cleanMoney(markupType === "fixed" ? net + value : net * (1 + value / 100));
 }
 
+function canEditTourPackage(status) {
+  return !["booked", "paid", "cancelled"].includes(String(status || "").toLowerCase());
+}
+
 function derivePackageStatus(rows = [], storedStatus = "draft") {
   if (["proposed", "booked", "paid", "cancelled"].includes(storedStatus)) return storedStatus;
   if (!rows.length) return storedStatus || "draft";
@@ -349,6 +353,9 @@ async function updateTourPackage(req, res) {
     await ensureTourPackagesTable();
     const current = await pool.query(`SELECT * FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2`, [req.params.id, ownerId]);
     if (!current.rowCount) return res.status(404).json({ message: "Tour package not found" });
+    if (!canEditTourPackage(current.rows[0].status)) {
+      return res.status(409).json({ message: "Booked, paid or cancelled packages cannot be edited" });
+    }
     const value = normalizePackageBody({
       ...current.rows[0],
       ...req.body,
@@ -570,6 +577,7 @@ async function getPublicTourProposal(req, res) {
 
 module.exports = {
   calculateGross,
+  canEditTourPackage,
   derivePackageStatus,
   packageSaleReadiness,
   hashShareToken,

@@ -1,109 +1,136 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, CalendarDays, CheckCircle2, CircleDashed, Clock3, UserRound } from "lucide-react";
+import { ArrowLeft, CalendarDays, CheckCircle2, CircleDashed, Clock3, Copy, Pencil, Plus, Save, Send, Trash2, UserRound, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
-const getToken = () => localStorage.getItem("token") || localStorage.getItem("providerToken");
-const cfg = () => ({ headers: { Authorization: `Bearer ${getToken()}` } });
-
+const cfg = () => ({ headers: { Authorization: `Bearer ${localStorage.getItem("token") || localStorage.getItem("providerToken")}` } });
 const money = (value, currency) => `${Number(value || 0).toLocaleString(currency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} ${currency || "UZS"}`;
 const dateText = (value) => value ? new Date(value).toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" }) : "—";
+const dateValue = (value) => value ? String(value).slice(0, 10) : "";
 const confirmedStatuses = new Set(["confirmed", "paid", "completed"]);
+const lockedStatuses = new Set(["booked", "paid", "cancelled"]);
+const fieldClass = "h-11 w-full border border-gray-300 bg-white px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100";
+
+function createForm(item) {
+  return {
+    title: item.title || "", client_name: item.client_name || "", client_company: item.client_company || "",
+    client_phone: item.client_phone || "", client_email: item.client_email || "",
+    start_date: dateValue(item.start_date), end_date: dateValue(item.end_date), quote_valid_until: dateValue(item.quote_valid_until),
+    pax_adult: Number(item.pax_adult || 0), pax_child: Number(item.pax_child || 0),
+    markup_type: item.markup_type === "fixed" ? "fixed" : "percent", markup_value: Number(item.markup_value || 0),
+    itinerary: (Array.isArray(item.itinerary) ? item.itinerary : []).map((day, index) => ({
+      ...day, day: day.day || index + 1, date: dateValue(day.date), city: day.city || "", program_text: day.program_text || "",
+    })),
+  };
+}
+
+function LabeledField({ label, children, wide = false }) {
+  return <label className={wide ? "md:col-span-2" : ""}><span className="mb-1.5 block text-sm font-semibold">{label}</span>{children}</label>;
+}
 
 export default function TourPackageWorkspace() {
   const { id } = useParams();
   const { t } = useTranslation();
   const [tourPackage, setTourPackage] = useState(null);
+  const [form, setForm] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  const [shareUrl, setShareUrl] = useState("");
 
-  useEffect(() => {
-    let active = true;
-    setLoading(true);
-    axios.get(`${API_BASE}/api/tour-packages/${id}`, cfg())
-      .then(({ data }) => active && setTourPackage(data))
-      .catch((requestError) => active && setError(requestError?.response?.data?.message || t("tb.workspace.load_error")))
-      .finally(() => active && setLoading(false));
-    return () => { active = false; };
+  const loadPackage = useCallback(async () => {
+    setLoading(true); setError("");
+    try {
+      const { data } = await axios.get(`${API_BASE}/api/tour-packages/${id}`, cfg());
+      setTourPackage(data); setForm(createForm(data)); setDirty(false);
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || t("tb.workspace.load_error"));
+    } finally { setLoading(false); }
   }, [id, t]);
 
-  const margin = useMemo(() => Number(tourPackage?.gross_total || 0) - Number(tourPackage?.net_total || 0), [tourPackage]);
+  useEffect(() => { loadPackage(); }, [loadPackage]);
+
+  const setField = (name, value) => {
+    setForm((current) => ({ ...current, [name]: value })); setDirty(true); setNotice("");
+  };
+  const setDay = (index, name, value) => setField("itinerary", form.itinerary.map((day, i) => i === index ? { ...day, [name]: value } : day));
+  const grossPreview = useMemo(() => {
+    const net = Number(tourPackage?.net_total || 0); const markup = Math.max(0, Number(form?.markup_value || 0));
+    return form?.markup_type === "fixed" ? net + markup : net * (1 + markup / 100);
+  }, [form?.markup_type, form?.markup_value, tourPackage?.net_total]);
+  const margin = Number(tourPackage?.gross_total || 0) - Number(tourPackage?.net_total || 0);
+
+  const saveDraft = async (quiet = false) => {
+    setSaving(true); setError("");
+    try {
+      const { data } = await axios.patch(`${API_BASE}/api/tour-packages/${id}`, form, cfg());
+      const merged = { ...tourPackage, ...data };
+      setTourPackage(merged); setForm(createForm(merged)); setDirty(false);
+      if (!quiet) setNotice(t("tb.workspace.saved"));
+      return true;
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || t("tb.workspace.save_error")); return false;
+    } finally { setSaving(false); }
+  };
+
+  const publishRevision = async () => {
+    if (!(await saveDraft(true))) return;
+    setSaving(true); setError("");
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/share`, {}, cfg());
+      const url = `${window.location.origin}/tour-proposal/${data.token}`;
+      await loadPackage(); setShareUrl(url); setEditing(false);
+      setNotice(t("tb.workspace.published", { version: data.current_revision }));
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || t("tb.workspace.publish_error"));
+    } finally { setSaving(false); }
+  };
+
   if (loading) return <main className="mx-auto max-w-7xl p-6 text-gray-500">{t("common.loading")}</main>;
-  if (error || !tourPackage) return <main className="mx-auto max-w-3xl p-6"><div className="border border-red-200 bg-red-50 p-5 text-red-800">{error || t("tb.workspace.load_error")}</div></main>;
+  if (!tourPackage) return <main className="mx-auto max-w-3xl p-6"><div className="border border-red-200 bg-red-50 p-5 text-red-800">{error || t("tb.workspace.load_error")}</div></main>;
 
   const currency = tourPackage.currency || "UZS";
   const components = Array.isArray(tourPackage.components) ? tourPackage.components : [];
   const revisions = Array.isArray(tourPackage.revisions) ? tourPackage.revisions : [];
   const confirmed = components.filter((item) => confirmedStatuses.has(String(item.status || "").toLowerCase())).length;
   const readinessPercent = components.length ? Math.round((confirmed / components.length) * 100) : 0;
+  const locked = lockedStatuses.has(String(tourPackage.status || "").toLowerCase());
 
-  return (
-    <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
-      <Link to="/dashboard/bookings" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-950"><ArrowLeft size={17} />{t("tb.workspace.back")}</Link>
-      <header className="mt-5 flex flex-wrap items-start justify-between gap-5 border-b border-gray-200 pb-6">
-        <div>
-          <div className="text-xs font-semibold uppercase text-orange-600">Tour Builder · {t("tb.workspace.package")}</div>
-          <h1 className="mt-2 text-3xl font-bold text-gray-950">{tourPackage.title}</h1>
-          <div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-600">
-            <span className="rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700 ring-1 ring-sky-200">{t(`tb.package_status.${tourPackage.status}`, { defaultValue: tourPackage.status })}</span>
-            {tourPackage.booking_reference ? <span className="font-mono font-bold">{tourPackage.booking_reference}</span> : null}
-            <span>{dateText(tourPackage.start_date)} — {dateText(tourPackage.end_date)}</span>
-          </div>
-        </div>
-        <div className="text-right">
-          <div className="text-xs font-semibold uppercase text-gray-400">GROSS</div>
-          <div className="mt-1 text-3xl font-bold text-emerald-700">{money(tourPackage.gross_total, currency)}</div>
-        </div>
-      </header>
+  return <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
+    <Link to="/dashboard/bookings" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-950"><ArrowLeft size={17} />{t("tb.workspace.back")}</Link>
+    <header className="mt-5 flex flex-wrap items-start justify-between gap-5 border-b border-gray-200 pb-6">
+      <div><div className="text-xs font-semibold uppercase text-orange-600">Tour Builder · {t("tb.workspace.package")}</div><h1 className="mt-2 text-3xl font-bold">{tourPackage.title}</h1><div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-600"><span className="rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700 ring-1 ring-sky-200">{t(`tb.package_status.${tourPackage.status}`, { defaultValue: tourPackage.status })}</span>{tourPackage.booking_reference && <span className="font-mono font-bold">{tourPackage.booking_reference}</span>}<span>{dateText(tourPackage.start_date)} — {dateText(tourPackage.end_date)}</span></div></div>
+      <div className="flex flex-wrap items-center gap-3"><div className="mr-2 text-right"><div className="text-xs font-semibold uppercase text-gray-400">GROSS</div><div className="text-3xl font-bold text-emerald-700">{money(tourPackage.gross_total, currency)}</div></div>{!locked && !editing && <button type="button" onClick={() => setEditing(true)} className="inline-flex h-11 items-center gap-2 border border-gray-300 bg-white px-4 font-semibold hover:bg-gray-50"><Pencil size={17} />{t("tb.workspace.edit")}</button>}</div>
+    </header>
+    {error && <div className="mt-4 border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</div>}
+    {notice && <div className="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{notice}</div>}
+    {shareUrl && <div className="mt-4 flex flex-col gap-2 border border-sky-200 bg-sky-50 p-3 sm:flex-row"><input readOnly value={shareUrl} className="h-10 min-w-0 flex-1 border border-sky-200 bg-white px-3 text-sm" /><button type="button" onClick={async () => { await navigator.clipboard.writeText(shareUrl); setNotice(t("tb.workspace.link_copied")); }} className="inline-flex h-10 items-center justify-center gap-2 bg-gray-950 px-4 text-sm font-semibold text-white"><Copy size={16} />{t("tb.workspace.copy_link")}</button></div>}
 
-      <section className="grid border-b border-gray-200 lg:grid-cols-4">
-        <div className="border-b border-gray-200 py-5 lg:border-b-0 lg:border-r lg:pr-5"><div className="text-xs font-semibold uppercase text-gray-400">NET</div><div className="mt-1 text-xl font-bold">{money(tourPackage.net_total, currency)}</div></div>
-        <div className="border-b border-gray-200 py-5 lg:border-b-0 lg:border-r lg:px-5"><div className="text-xs font-semibold uppercase text-gray-400">{t("tb.summary.markup")}</div><div className="mt-1 text-xl font-bold text-orange-600">{tourPackage.markup_type === "percent" ? `${tourPackage.markup_value}%` : money(tourPackage.markup_value, currency)}</div></div>
-        <div className="border-b border-gray-200 py-5 lg:border-b-0 lg:border-r lg:px-5"><div className="text-xs font-semibold uppercase text-gray-400">{t("tb.workspace.margin")}</div><div className="mt-1 text-xl font-bold text-emerald-700">{money(margin, currency)}</div></div>
-        <div className="py-5 lg:pl-5"><div className="text-xs font-semibold uppercase text-gray-400">PAX</div><div className="mt-1 text-xl font-bold">{Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0)}</div></div>
-      </section>
-
-      <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_340px]">
-        <div className="space-y-8">
-          <section>
-            <div className="flex items-center justify-between gap-4"><h2 className="text-xl font-bold text-gray-950">{t("tb.workspace.components")}</h2><span className="text-sm font-semibold text-gray-600">{confirmed}/{components.length}</span></div>
-            <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className="h-full bg-emerald-500" style={{ width: `${readinessPercent}%` }} /></div>
-            <div className="mt-4 divide-y border-y border-gray-200">
-              {components.map((item) => {
-                const ready = confirmedStatuses.has(String(item.status || "").toLowerCase());
-                return <div key={item.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><div className="font-bold text-gray-950">{item.provider_name || t("tb.workspace.supplier")}</div><div className="mt-1 text-sm text-gray-500">{item.provider_type || "—"} · #{item.id}</div></div><div className="font-semibold text-gray-800">{money(item.provider_price, item.currency || currency)}</div><span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${ready ? "text-emerald-700" : "text-amber-700"}`}>{ready ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}{item.status}</span></div>;
-              })}
-              {!components.length ? <div className="py-6 text-gray-500">{t("tb.workspace.no_components")}</div> : null}
-            </div>
-          </section>
-
-          <section>
-            <h2 className="text-xl font-bold text-gray-950">{t("tb.workspace.revisions")}</h2>
-            <div className="mt-4 divide-y border-y border-gray-200">
-              {revisions.map((revision) => <div key={revision.version} className="flex flex-wrap items-center justify-between gap-4 py-4"><div className="flex items-center gap-3"><Clock3 size={18} className="text-gray-400" /><div><div className="font-bold">{t("tb.workspace.version", { version: revision.version })}{Number(tourPackage.accepted_revision) === Number(revision.version) ? ` · ${t("tb.workspace.accepted")}` : ""}</div><div className="text-sm text-gray-500">{dateText(revision.created_at)}</div></div></div><div className="font-bold">{money(revision.gross_total, revision.currency || currency)}</div></div>)}
-              {!revisions.length ? <div className="py-6 text-gray-500">{t("tb.workspace.no_revisions")}</div> : null}
-            </div>
-          </section>
-        </div>
-
-        <aside className="space-y-5">
-          <section className="border border-gray-200 bg-white p-5">
-            <div className="flex items-center gap-2 text-sm font-semibold uppercase text-gray-400"><UserRound size={17} />{t("tb.workspace.client")}</div>
-            <div className="mt-4 text-lg font-bold text-gray-950">{tourPackage.client_name || t("tb.workspace.client_missing")}</div>
-            {tourPackage.client_company ? <div className="mt-1 text-sm text-gray-600">{tourPackage.client_company}</div> : null}
-            {tourPackage.client_phone ? <div className="mt-4 text-sm text-gray-700">{tourPackage.client_phone}</div> : null}
-            {tourPackage.client_email ? <div className="mt-1 break-all text-sm text-gray-700">{tourPackage.client_email}</div> : null}
-          </section>
-          <section className="border border-gray-200 bg-white p-5">
-            <div className="flex items-center gap-2 text-sm font-semibold uppercase text-gray-400"><CalendarDays size={17} />{t("tb.workspace.proposal")}</div>
-            <div className="mt-4 text-sm text-gray-600">{t("tb.quote_valid_until")}</div><div className="font-bold">{dateText(tourPackage.quote_valid_until)}</div>
-            <div className="mt-4 text-sm text-gray-600">{t("tb.workspace.current_version")}</div><div className="font-bold">v{tourPackage.current_revision || 0}</div>
-            {tourPackage.proposal_response ? <div className="mt-4 border-l-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm"><div className="font-bold">{t(`tb.proposal.response_${tourPackage.proposal_response}`)}</div>{tourPackage.proposal_response_message ? <div className="mt-1 text-gray-700">{tourPackage.proposal_response_message}</div> : null}</div> : null}
-          </section>
-        </aside>
+    {editing && <section className="mt-6 border border-orange-200 bg-orange-50/40 p-5 md:p-6">
+      <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-bold">{t("tb.workspace.edit_title")}</h2><p className="mt-1 text-sm text-gray-600">{t("tb.workspace.edit_hint")}</p></div><button type="button" onClick={() => { setForm(createForm(tourPackage)); setDirty(false); setEditing(false); }} className="inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold text-gray-600"><X size={17} />{t("common.cancel")}</button></div>
+      <div className="mt-6 grid gap-4 md:grid-cols-2">
+        <LabeledField wide label={t("tb.workspace.tour_name")}><input value={form.title} onChange={(e) => setField("title", e.target.value)} className={fieldClass} /></LabeledField>
+        {["client_name", "client_company", "client_phone", "client_email"].map((name) => <LabeledField key={name} label={t(`tb.workspace.${name}`)}><input type={name === "client_email" ? "email" : "text"} value={form[name]} onChange={(e) => setField(name, e.target.value)} className={fieldClass} /></LabeledField>)}
       </div>
-    </main>
-  );
+      <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        {["start_date", "end_date", "quote_valid_until"].map((name) => <LabeledField key={name} label={t(`tb.workspace.${name}`)}><input type="date" value={form[name]} onChange={(e) => setField(name, e.target.value)} className={fieldClass} /></LabeledField>)}
+        <LabeledField label={t("tb.workspace.adults")}><input type="number" min="0" value={form.pax_adult} onChange={(e) => setField("pax_adult", Math.max(0, Number(e.target.value)))} className={fieldClass} /></LabeledField>
+        <LabeledField label={t("tb.workspace.children")}><input type="number" min="0" value={form.pax_child} onChange={(e) => setField("pax_child", Math.max(0, Number(e.target.value)))} className={fieldClass} /></LabeledField>
+      </div>
+      <div className="mt-5 grid gap-4 sm:grid-cols-[180px_1fr_auto] sm:items-end"><LabeledField label={t("tb.workspace.markup_type")}><select value={form.markup_type} onChange={(e) => setField("markup_type", e.target.value)} className={fieldClass}><option value="percent">%</option><option value="fixed">{currency}</option></select></LabeledField><LabeledField label={t("tb.summary.markup")}><input type="number" min="0" step="0.01" value={form.markup_value} onChange={(e) => setField("markup_value", Math.max(0, Number(e.target.value)))} className={fieldClass} /></LabeledField><div className="h-11 bg-gray-950 px-4 py-1.5 text-right text-white"><div className="text-[10px] uppercase text-gray-400">GROSS</div><div className="font-bold">{money(grossPreview, currency)}</div></div></div>
+      <div className="mt-7 border-t border-gray-200 pt-6"><div className="flex items-center justify-between gap-3"><h3 className="font-bold">{t("tb.workspace.program")}</h3><button type="button" onClick={() => setField("itinerary", [...form.itinerary, { day: form.itinerary.length + 1, date: "", city: "", program_text: "" }])} className="inline-flex h-9 items-center gap-2 border border-gray-300 bg-white px-3 text-sm font-semibold"><Plus size={16} />{t("tb.workspace.add_day")}</button></div><div className="mt-3 space-y-3">{form.itinerary.map((day, index) => <div key={`${day.day}-${index}`} className="grid gap-3 border border-gray-200 bg-white p-3 md:grid-cols-[70px_150px_180px_1fr_40px]"><div className="pt-3 text-sm font-bold">{t("tb.workspace.day", { day: index + 1 })}</div><input type="date" value={day.date || ""} onChange={(e) => setDay(index, "date", e.target.value)} className={fieldClass} /><input value={day.city || ""} onChange={(e) => setDay(index, "city", e.target.value)} placeholder={t("tb.workspace.city")} className={fieldClass} /><textarea value={day.program_text || ""} onChange={(e) => setDay(index, "program_text", e.target.value)} placeholder={t("tb.workspace.program_placeholder")} rows="3" className="min-h-20 w-full border border-gray-300 px-3 py-2 text-sm outline-none focus:border-orange-500" /><button type="button" onClick={() => setField("itinerary", form.itinerary.filter((_, i) => i !== index).map((item, i) => ({ ...item, day: i + 1 })))} title={t("common.delete")} className="inline-flex h-10 items-center justify-center text-red-600 hover:bg-red-50"><Trash2 size={17} /></button></div>)}</div></div>
+      <div className="mt-6 flex flex-wrap justify-end gap-3"><button type="button" disabled={saving || !dirty} onClick={() => saveDraft(false)} className="inline-flex h-11 items-center gap-2 border border-gray-300 bg-white px-5 font-semibold disabled:opacity-50"><Save size={17} />{t("tb.workspace.save_draft")}</button><button type="button" disabled={saving} onClick={publishRevision} className="inline-flex h-11 items-center gap-2 bg-orange-600 px-5 font-semibold text-white hover:bg-orange-700 disabled:opacity-50"><Send size={17} />{t("tb.workspace.publish_revision")}</button></div>
+    </section>}
+
+    <section className="grid border-b border-gray-200 lg:grid-cols-4">{[["NET", money(tourPackage.net_total, currency), ""], [t("tb.summary.markup"), tourPackage.markup_type === "percent" ? `${tourPackage.markup_value}%` : money(tourPackage.markup_value, currency), "text-orange-600"], [t("tb.workspace.margin"), money(margin, currency), "text-emerald-700"], ["PAX", Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0), ""]].map(([label, value, color]) => <div key={label} className="border-b border-gray-200 py-5 lg:border-b-0 lg:border-r lg:px-5 first:pl-0 last:border-r-0"><div className="text-xs font-semibold uppercase text-gray-400">{label}</div><div className={`mt-1 text-xl font-bold ${color}`}>{value}</div></div>)}</section>
+    <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_340px]"><div className="space-y-8">
+      <section><div className="flex items-center justify-between"><h2 className="text-xl font-bold">{t("tb.workspace.components")}</h2><span className="text-sm font-semibold text-gray-600">{confirmed}/{components.length}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className="h-full bg-emerald-500" style={{ width: `${readinessPercent}%` }} /></div><div className="mt-4 divide-y border-y border-gray-200">{components.map((item) => { const ready = confirmedStatuses.has(String(item.status || "").toLowerCase()); return <div key={item.id} className="grid gap-3 py-4 sm:grid-cols-[1fr_auto_auto] sm:items-center"><div><div className="font-bold">{item.provider_name || t("tb.workspace.supplier")}</div><div className="text-sm text-gray-500">{item.provider_type || "—"} · #{item.id}</div></div><div className="font-semibold">{money(item.provider_price, item.currency || currency)}</div><span className={`inline-flex items-center gap-1.5 text-sm font-semibold ${ready ? "text-emerald-700" : "text-amber-700"}`}>{ready ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}{item.status}</span></div>; })}{!components.length && <div className="py-6 text-gray-500">{t("tb.workspace.no_components")}</div>}</div></section>
+      <section><h2 className="text-xl font-bold">{t("tb.workspace.revisions")}</h2><div className="mt-4 divide-y border-y border-gray-200">{revisions.map((revision) => <div key={revision.version} className="flex items-center justify-between gap-4 py-4"><div className="flex items-center gap-3"><Clock3 size={18} className="text-gray-400" /><div><div className="font-bold">{t("tb.workspace.version", { version: revision.version })}{Number(tourPackage.accepted_revision) === Number(revision.version) ? ` · ${t("tb.workspace.accepted")}` : ""}</div><div className="text-sm text-gray-500">{dateText(revision.created_at)}</div></div></div><div className="font-bold">{money(revision.gross_total, revision.currency || currency)}</div></div>)}{!revisions.length && <div className="py-6 text-gray-500">{t("tb.workspace.no_revisions")}</div>}</div></section>
+    </div><aside className="space-y-5"><section className="border border-gray-200 bg-white p-5"><div className="flex items-center gap-2 text-sm font-semibold uppercase text-gray-400"><UserRound size={17} />{t("tb.workspace.client")}</div><div className="mt-4 text-lg font-bold">{tourPackage.client_name || t("tb.workspace.client_missing")}</div>{tourPackage.client_company && <div className="text-sm text-gray-600">{tourPackage.client_company}</div>}{tourPackage.client_phone && <div className="mt-4 text-sm">{tourPackage.client_phone}</div>}{tourPackage.client_email && <div className="break-all text-sm">{tourPackage.client_email}</div>}</section><section className="border border-gray-200 bg-white p-5"><div className="flex items-center gap-2 text-sm font-semibold uppercase text-gray-400"><CalendarDays size={17} />{t("tb.workspace.proposal")}</div><div className="mt-4 text-sm text-gray-600">{t("tb.quote_valid_until")}</div><div className="font-bold">{dateText(tourPackage.quote_valid_until)}</div><div className="mt-4 text-sm text-gray-600">{t("tb.workspace.current_version")}</div><div className="font-bold">v{tourPackage.current_revision || 0}</div>{tourPackage.proposal_response && <div className="mt-4 border-l-2 border-orange-500 bg-orange-50 px-3 py-2 text-sm"><div className="font-bold">{t(`tb.proposal.response_${tourPackage.proposal_response}`)}</div>{tourPackage.proposal_response_message && <div className="mt-1 text-gray-700">{tourPackage.proposal_response_message}</div>}</div>}</section></aside></div>
+  </main>;
 }
