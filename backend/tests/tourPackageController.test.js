@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -62,6 +62,21 @@ test("creates a readable booking reference", () => {
 
 test("escapes untrusted client text before Telegram HTML delivery", () => {
   assert.equal(escapeTelegramHtml("<b>A & B</b>"), "&lt;b&gt;A &amp; B&lt;/b&gt;");
+});
+
+test("builds a supplier-safe service order", () => {
+  const message = buildSupplierServiceOrderMessage({
+    tourPackage: { title: "Silk & Sun", booking_reference: "TVL-001", pax_adult: 2, pax_child: 1, agency_name: "DMC <One>", agency_phone: "+99890" },
+    component: { service_title: "City <Tour>", date: "2026-11-03T00:00:00.000Z", confirmation_reference: "CNF-7", operational_note: "Meet & greet" },
+    travelers: [{ full_name: "Ali <A>" }, { full_name: "Sara" }],
+  });
+  assert.match(message, /Silk &amp; Sun/);
+  assert.match(message, /City &lt;Tour&gt;/);
+  assert.match(message, /Гостей: 3/);
+  assert.match(message, /Ali &lt;A&gt;, Sara/);
+  assert.match(message, /CNF-7/);
+  assert.match(message, /Meet &amp; greet/);
+  assert.doesNotMatch(message, /gross_total|client_phone|марж/i);
 });
 
 test("revision snapshots never retain a share token", () => {

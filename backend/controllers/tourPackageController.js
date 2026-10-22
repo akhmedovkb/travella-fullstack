@@ -158,6 +158,27 @@ function escapeTelegramHtml(value) {
   return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
+function buildSupplierServiceOrderMessage({ tourPackage = {}, component = {}, travelers = [] } = {}) {
+  const serviceDate = component.date ? String(component.date).slice(0, 10) : "—";
+  const pax = Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0);
+  const travelerNames = travelers.map((item) => String(item.full_name || "").trim()).filter(Boolean);
+  return [
+    "📋 <b>Новый заказ от DMC</b>",
+    `Тур: <b>${escapeTelegramHtml(tourPackage.title || "—")}</b>`,
+    tourPackage.booking_reference ? `Номер тура: ${escapeTelegramHtml(tourPackage.booking_reference)}` : "",
+    `Услуга: <b>${escapeTelegramHtml(component.service_title || "—")}</b>`,
+    `Дата услуги: ${escapeTelegramHtml(serviceDate)}`,
+    `Гостей: ${pax}`,
+    travelerNames.length ? `Туристы: ${escapeTelegramHtml(travelerNames.join(", "))}` : "",
+    component.confirmation_reference ? `Подтверждение: ${escapeTelegramHtml(component.confirmation_reference)}` : "",
+    component.operational_note ? `Инструкции: ${escapeTelegramHtml(component.operational_note)}` : "",
+    "",
+    `<b>${escapeTelegramHtml(tourPackage.agency_name || "Travella partner")}</b>`,
+    tourPackage.agency_phone ? `Телефон: ${escapeTelegramHtml(tourPackage.agency_phone)}` : "",
+    tourPackage.agency_email ? `Email: ${escapeTelegramHtml(tourPackage.agency_email)}` : "",
+  ].filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== "")).join("\n");
+}
+
 async function notifyAgencyProposalResponse(item) {
   try {
     const provider = await pool.query(`SELECT to_jsonb(p) AS profile FROM providers p WHERE id=$1 LIMIT 1`, [item.owner_provider_id]);
@@ -327,12 +348,14 @@ async function ensureTourPackagesTable() {
       supplier_payment_due_at DATE,
       supplier_paid BOOLEAN NOT NULL DEFAULT FALSE,
       operational_note TEXT,
+      service_order_sent_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(package_id, booking_id)
     )
   `);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_paid BOOLEAN NOT NULL DEFAULT FALSE`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_sent_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_tasks (
@@ -374,7 +397,8 @@ async function packageBookings(packageId) {
             p.name AS provider_name, p.type AS provider_type, p.phone AS provider_phone,
             p.social AS provider_telegram,
             ops.confirmation_reference, ops.supplier_payment_due_at,
-            COALESCE(ops.supplier_paid,FALSE) AS supplier_paid, ops.operational_note
+            COALESCE(ops.supplier_paid,FALSE) AS supplier_paid, ops.operational_note,
+            ops.service_order_sent_at
        FROM bookings b
        LEFT JOIN providers p ON p.id = b.provider_id
        LEFT JOIN services s ON s.id = b.service_id
@@ -908,6 +932,56 @@ async function replaceTourPackageTravelers(req, res) {
   }
 }
 
+async function sendTourPackageServiceOrder(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const packageId = req.params.id;
+    const bookingId = Number(req.params.bookingId);
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
+    const result = await pool.query(
+      `SELECT tp.title,tp.status,tp.booking_reference,tp.pax_adult,tp.pax_child,
+              agency.name AS agency_name,agency.phone AS agency_phone,agency.email AS agency_email,
+              b.id,b.date,s.title AS service_title,to_jsonb(supplier) AS supplier_profile,
+              ops.confirmation_reference,ops.operational_note
+         FROM tour_packages tp
+         JOIN providers agency ON agency.id=tp.owner_provider_id
+         JOIN bookings b ON b.group_id=tp.id AND b.id=$3
+         LEFT JOIN services s ON s.id=b.service_id
+         LEFT JOIN providers supplier ON supplier.id=b.provider_id
+         LEFT JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+        WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
+      [packageId, ownerId, bookingId]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Tour package component not found" });
+    const item = result.rows[0];
+    if (!["booked", "paid"].includes(String(item.status || "").toLowerCase())) {
+      return res.status(409).json({ message: "Confirm the tour sale before sending supplier orders" });
+    }
+    const profile = item.supplier_profile || {};
+    const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
+    if (!chatId) return res.status(409).json({ message: "Supplier Telegram is not connected" });
+    const travelers = await pool.query(
+      `SELECT full_name FROM tour_package_travelers WHERE package_id=$1::uuid ORDER BY sort_order,id`,
+      [packageId]
+    );
+    const message = buildSupplierServiceOrderMessage({ tourPackage: item, component: item, travelers: travelers.rows });
+    if (!(await tgSend(chatId, message))) return res.status(502).json({ message: "Failed to send supplier order" });
+    const saved = await pool.query(
+      `INSERT INTO tour_package_component_ops(package_id,booking_id,service_order_sent_at)
+       VALUES($1::uuid,$2,NOW())
+       ON CONFLICT(package_id,booking_id) DO UPDATE SET service_order_sent_at=NOW(),updated_at=NOW()
+       RETURNING service_order_sent_at`,
+      [packageId, bookingId]
+    );
+    return res.json({ sent: true, service_order_sent_at: saved.rows[0].service_order_sent_at });
+  } catch (error) {
+    console.error("sendTourPackageServiceOrder error:", error);
+    return res.status(500).json({ message: "Failed to send supplier order" });
+  }
+}
+
 async function createTourPackageTask(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -1051,6 +1125,7 @@ module.exports = {
   hashShareToken,
   createBookingReference,
   escapeTelegramHtml,
+  buildSupplierServiceOrderMessage,
   publicPackageView,
   packageSnapshot,
   createTourPackage,
@@ -1065,6 +1140,7 @@ module.exports = {
   updateTourPackagePayment,
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
+  sendTourPackageServiceOrder,
   createTourPackageTask,
   updateTourPackageTask,
   deleteTourPackageTask,
