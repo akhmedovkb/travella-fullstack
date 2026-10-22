@@ -1589,7 +1589,21 @@
       "exchange_rate_hint": "1 USD uchun UZS miqdori",
       "group_total": "Guruh uchun jami",
       "per_person": "Bir mehmon uchun",
-      "booking_hint": "So‘rovlar tanlangan yetkazib beruvchilarga ko‘rsatilgan tariflar bo‘yicha yuboriladi."
+      "booking_hint": "So‘rovlar tanlangan yetkazib beruvchilarga ko‘rsatilgan tariflar bo‘yicha yuboriladi.",
+      "sale_price": "Sotuv narxi",
+      "net_cost": "NET tannarx",
+      "markup": "Agentlik ustamasi"
+    },
+    "quote_valid_until": "Taklifning amal qilish muddati",
+    "package_status": {
+      "draft": "Qoralama",
+      "request_sent": "So‘rov yuborildi",
+      "partially_confirmed": "Qisman tasdiqlangan",
+      "confirmed": "Tasdiqlangan",
+      "proposed": "Mijozga taklif qilindi",
+      "booked": "Bron qilingan",
+      "paid": "To‘langan",
+      "cancelled": "Bekor qilingan"
     },
     "title": "Tur konstruktori",
     "dates": "Tur sanalari",

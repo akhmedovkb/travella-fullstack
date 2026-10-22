@@ -215,6 +215,7 @@ export default function ProviderBookings() {
   const [filter, setFilter] = useState("all"); // all | pending | quoted | payment | confirmed | rejected
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
+  const [tourPackages, setTourPackages] = useState([]);
   const [loading, setLoading] = useState(true);
     // --- Модалка отмены поставщиком ---
   const [showCancelModal, setShowCancelModal] = useState(false);
@@ -239,12 +240,14 @@ export default function ProviderBookings() {
     if (!getToken()) return;
     setLoading(true);
     try {
-      const [incRes, outRes] = await Promise.all([
+      const [incRes, outRes, packagesRes] = await Promise.all([
         axios.get(`${API_BASE}/api/bookings/provider`, cfg()),
         axios.get(`${API_BASE}/api/bookings/provider/outgoing`, cfg()),
+        axios.get(`${API_BASE}/api/tour-packages`, cfg()).catch(() => ({ data: [] })),
       ]);
       setIncoming(Array.isArray(incRes.data) ? incRes.data : []);
       setOutgoing(Array.isArray(outRes.data) ? outRes.data : []);
+      setTourPackages(Array.isArray(packagesRes.data) ? packagesRes.data : []);
     } catch (e) {
       console.error("load provider bookings failed", e);
       setIncoming([]);
@@ -610,6 +613,11 @@ export default function ProviderBookings() {
   const renderPackageOverview = (group) => {
     const rows = buildDailyMatrix(group.items);
     const reference = String(group.group_id || "").split("-")[0].toUpperCase();
+    const tourPackage = group.package;
+    const currency = tourPackage?.currency || "UZS";
+    const status = String(tourPackage?.status || "request_sent");
+    const validUntil = tourPackage?.quote_valid_until ? new Date(tourPackage.quote_valid_until) : null;
+    const formatMoney = (value) => Number(value || 0).toLocaleString(currency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 });
     return (
       <div className="border-b border-gray-200 bg-white px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
@@ -617,16 +625,26 @@ export default function ProviderBookings() {
             <div className="text-xs font-semibold text-orange-600">Tour Builder</div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
               <h2 className="text-lg font-bold text-gray-950">
-                {t("bookings.request", { defaultValue: "Заявка" })} {reference ? `№ ${reference}` : ""}
+                {tourPackage?.title || `${t("bookings.request", { defaultValue: "Заявка" })} ${reference ? `№ ${reference}` : ""}`}
               </h2>
+              <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-200">
+                {t(`tb.package_status.${status}`, { defaultValue: status })}
+              </span>
               <span className="text-xs text-gray-500">
                 {group.items.length} {t("bookings.services_count", { defaultValue: "услуг" })}
               </span>
             </div>
           </div>
-          <div className="max-w-[280px] text-right text-xs text-gray-400">
-            <div className="truncate font-mono" title={group.group_id}>{group.group_id}</div>
-          </div>
+          {tourPackage ? (
+            <div className="grid min-w-[280px] grid-cols-3 gap-4 text-right">
+              <div><div className="text-[11px] font-semibold uppercase text-gray-400">NET</div><div className="font-bold text-gray-950">{formatMoney(tourPackage.net_total)} {currency}</div></div>
+              <div><div className="text-[11px] font-semibold uppercase text-gray-400">{t("tb.summary.markup")}</div><div className="font-bold text-orange-600">{tourPackage.markup_type === "percent" ? `${formatMoney(tourPackage.markup_value)}%` : `${formatMoney(tourPackage.markup_value)} ${currency}`}</div></div>
+              <div><div className="text-[11px] font-semibold uppercase text-gray-400">GROSS</div><div className="font-bold text-emerald-700">{formatMoney(tourPackage.gross_total)} {currency}</div></div>
+              {validUntil && Number.isFinite(validUntil.getTime()) ? <div className="col-span-3 text-xs text-gray-500">{t("tb.quote_valid_until")}: {validUntil.toLocaleDateString()}</div> : null}
+            </div>
+          ) : (
+            <div className="max-w-[280px] truncate font-mono text-right text-xs text-gray-400" title={group.group_id}>{group.group_id}</div>
+          )}
         </div>
 
         {rows.length ? (
@@ -762,17 +780,18 @@ export default function ProviderBookings() {
         singles.push(b);
       }
     }
+    const packagesById = new Map(tourPackages.map((item) => [String(item.id), item]));
     const groups = [...map.entries()].map(([group_id, items]) => {
       const firstTs = Math.min(
         ...items
           .map((x) => new Date(x?.created_at || x?.updated_at || 0).getTime())
           .filter(Number.isFinite)
       );
-      return { group_id, items, firstTs: Number.isFinite(firstTs) ? firstTs : 0 };
+      return { group_id, items, package: packagesById.get(String(group_id)) || null, firstTs: Number.isFinite(firstTs) ? firstTs : 0 };
     });
     groups.sort((a, b) => b.firstTs - a.firstTs); // новые сверху
     return { groups, singles };
-  }, [filtered, tab]);
+  }, [filtered, tab, tourPackages]);
 
   const groupedIncoming = useMemo(() => {
     if (tab !== "incoming") return [];

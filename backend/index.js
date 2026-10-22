@@ -213,6 +213,9 @@ app.use("/api/requests", requestRouter);
 const bookingRoutes = require("./routes/bookingRoutes");
 app.use("/api/bookings", bookingRoutes);
 
+const tourPackageRoutes = require("./routes/tourPackageRoutes");
+app.use("/api/tour-packages", tourPackageRoutes);
+
 const notificationsRoutes = require("./routes/notificationsRoutes");
 app.use("/api/notifications", notificationsRoutes);
 

@@ -611,11 +611,34 @@ const postJSON = async (path, body) => {
   return await r.json().catch(() => ({}));
 }
 
+const patchJSON = async (path, body) => {
+  const base = API_BASE || (typeof window !== "undefined" ? window.frontend?.API_BASE : "") || "";
+  const response = await fetch(new URL(path, base).toString(), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json", ...authHeaders() },
+    credentials: "include",
+    body: JSON.stringify(body || {}),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data?.message || data?.error || `HTTP ${response.status}`);
+  }
+  return response.json().catch(() => ({}));
+};
+
 // ------ Bookings API ------
 // POST /api/bookings
 // body: { provider_id, service_id?, dates:[YYYY-MM-DD], message?, attachments?, currency?, source?, group_id? }
 async function createBooking(payload) {
   return await postJSON("/api/bookings", payload);
+}
+
+async function createTourPackage(payload) {
+  return postJSON("/api/tour-packages", payload);
+}
+
+async function updateTourPackage(id, payload) {
+  return patchJSON(`/api/tour-packages/${id}`, payload);
 }
 
 // ------ Совместимость: бронирования с фоллбеком на /api/requests ------
@@ -1176,6 +1199,8 @@ export default function TourBuilder() {
  const [usdRate, setUsdRate] = useState(Number(import.meta.env.VITE_USD_RATE || 0) || 0);
  const toUSD = (vUZS) => (Number(usdRate) > 0 ? Number(vUZS) / Number(usdRate) : 0);
  const [summaryCurrency, setSummaryCurrency] = useState("UZS");
+  const [markupType, setMarkupType] = useState("percent");
+  const [markupValue, setMarkupValue] = useState(10);
 
   const [byDay, setByDay] = useState({});
   useEffect(() => {
@@ -1856,6 +1881,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
     return { guide, transport, hotel, entries, transfers, meals, net, perPax: net / pax };
   }, [byDay, adt, chd, residentType, usdRate]);
+  const commercialTotals = useMemo(() => {
+    const net = summaryCurrency === "USD" ? toUSD(totals.net) : totals.net;
+    const markup = markupType === "fixed"
+      ? Math.max(0, Number(markupValue) || 0)
+      : net * Math.max(0, Number(markupValue) || 0) / 100;
+    const gross = net + markup;
+    const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
+    return { net, markup, gross, perPax: gross / pax };
+  }, [totals.net, summaryCurrency, usdRate, markupType, markupValue, adt, chd]);
   const buildTourProgram = () =>
     Object.entries(byDay)
       .sort(([a], [b]) => String(a).localeCompare(String(b)))
@@ -2003,9 +2037,38 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   try {
     let ok = 0,
       fail = 0;
-    const groupId =
+    let groupId =
       crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
     const errs = [];
+
+    const itinerary = buildTourProgram();
+    const routeLabel = [routeCities.from, routeCities.to].filter(Boolean).join(" — ");
+    const packageTitle = routeLabel || `${t("tb.title")} ${ymd(range.from)} — ${ymd(range.to)}`;
+    const validUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    try {
+      const tourPackage = await createTourPackage({
+        id: groupId,
+        title: packageTitle,
+        status: "draft",
+        currency: summaryCurrency,
+        net_total: commercialTotals.net,
+        markup_type: markupType,
+        markup_value: Number(markupValue) || 0,
+        pax_adult: Number(adt) || 0,
+        pax_child: Number(chd) || 0,
+        start_date: ymd(range.from),
+        end_date: ymd(range.to),
+        quote_valid_until: validUntil,
+        route: routeCities,
+        itinerary,
+        meta: { resident_type: residentType, language: lang, transport_segments: transportSegments },
+      });
+      groupId = tourPackage.id || groupId;
+    } catch (error) {
+      setBookingResult({ status: "error", created: 0, ok: 0, fail: payloads.length, groupId: null, errs: [String(error?.message || error)] });
+      return;
+    }
 
     for (const p of payloads) {
       try {
@@ -2057,24 +2120,29 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
     // вместо alert — открываем красивое модальное окно
     if (ok && !fail) {
+      await updateTourPackage(groupId, { status: "request_sent" }).catch(() => {});
       setBookingResult({
         status: "success",
         created: ok,
         ok,
         fail,
         groupId,
+        url: `/dashboard/bookings?tab=outgoing&package=${groupId}`,
         errs,
       });
     } else if (ok && fail) {
+      await updateTourPackage(groupId, { status: "request_sent", meta: { partial_creation: true } }).catch(() => {});
       setBookingResult({
         status: "partial",
         created: ok,
         ok,
         fail,
         groupId,
+        url: `/dashboard/bookings?tab=outgoing&package=${groupId}`,
         errs,
       });
     } else {
+      await updateTourPackage(groupId, { status: "draft", meta: { creation_failed: true } }).catch(() => {});
       setBookingResult({
         status: "error",
         created: ok,
@@ -3671,13 +3739,24 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
           <aside className="flex flex-col justify-between bg-slate-950 p-5 text-white sm:p-6">
             <div>
-              <div className="flex items-center gap-2 text-xs font-bold uppercase text-orange-400"><ReceiptText size={16} />{t("tb.summary.group_total")}</div>
+              <div className="flex items-center gap-2 text-xs font-bold uppercase text-orange-400"><ReceiptText size={16} />{t("tb.summary.sale_price")}</div>
               <div className="mt-3 text-3xl font-bold">
-                {summaryCurrency === "USD" ? toUSD(totals.net).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(totals.net).toLocaleString("ru-RU")} <span className="text-base text-slate-400">{summaryCurrency}</span>
+                {summaryCurrency === "USD" ? commercialTotals.gross.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(commercialTotals.gross).toLocaleString("ru-RU")} <span className="text-base text-slate-400">{summaryCurrency}</span>
+              </div>
+              <div className="mt-5 space-y-3 border-t border-slate-800 pt-4 text-sm">
+                <div className="flex items-center justify-between"><span className="text-slate-400">{t("tb.summary.net_cost")}</span><strong>{commercialTotals.net.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+                <div className="flex items-center justify-between"><span className="text-slate-400">{t("tb.summary.markup")}</span><strong>{commercialTotals.markup.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+              </div>
+              <div className="mt-4 grid grid-cols-[110px_1fr] gap-2">
+                <select value={markupType} onChange={(event) => setMarkupType(event.target.value)} className="h-10 rounded border border-slate-700 bg-slate-900 px-2 text-sm text-white">
+                  <option value="percent">%</option>
+                  <option value="fixed">{summaryCurrency}</option>
+                </select>
+                <input type="number" min="0" step={markupType === "percent" ? "0.1" : "1"} value={markupValue} onChange={(event) => setMarkupValue(Math.max(0, Number(event.target.value) || 0))} aria-label={t("tb.summary.markup")} className="h-10 min-w-0 rounded border border-slate-700 bg-slate-900 px-3 text-right text-sm font-bold text-white" />
               </div>
               <div className="mt-5 flex items-center justify-between border-t border-slate-800 pt-4 text-sm">
                 <span className="text-slate-400">{t("tb.summary.per_person")}</span>
-                <strong>{summaryCurrency === "USD" ? toUSD(totals.perPax).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(totals.perPax).toLocaleString("ru-RU")} {summaryCurrency}</strong>
+                <strong>{summaryCurrency === "USD" ? commercialTotals.perPax.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(commercialTotals.perPax).toLocaleString("ru-RU")} {summaryCurrency}</strong>
               </div>
             </div>
             <div className="mt-8">

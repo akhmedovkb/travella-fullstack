@@ -1591,7 +1591,21 @@
       "exchange_rate_hint": "UZS per 1 USD",
       "group_total": "Group total",
       "per_person": "Per guest",
-      "booking_hint": "Requests will be sent to the selected providers at the listed rates."
+      "booking_hint": "Requests will be sent to the selected providers at the listed rates.",
+      "sale_price": "Selling price",
+      "net_cost": "NET cost",
+      "markup": "Agency markup"
+    },
+    "quote_valid_until": "Proposal valid until",
+    "package_status": {
+      "draft": "Draft",
+      "request_sent": "Request sent",
+      "partially_confirmed": "Partially confirmed",
+      "confirmed": "Confirmed",
+      "proposed": "Proposed to client",
+      "booked": "Booked",
+      "paid": "Paid",
+      "cancelled": "Cancelled"
     },
     "title": "Tour builder",
     "dates": "Tour dates",
