@@ -89,6 +89,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, 
     operational_note: item.operational_note || "",
   });
   const ready = confirmedStatuses.has(String(item.status || "").toLowerCase());
+  const orderStatus = String(item.service_order_status || "").toLowerCase();
   const setField = (name, value) => setForm((current) => ({ ...current, [name]: value }));
   return <article className="border border-gray-200 bg-white p-4">
     <div className="flex flex-wrap items-start justify-between gap-4">
@@ -100,7 +101,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, 
           {item.provider_telegram && <span className="text-gray-600">{item.provider_telegram}</span>}
         </div>
       </div>
-      <div className="text-right"><div className="font-bold">{money(item.provider_price, item.currency || currency)}</div><span className={`mt-1 inline-flex items-center gap-1.5 text-sm font-semibold ${ready ? "text-emerald-700" : "text-amber-700"}`}>{ready ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}{item.status}</span>{canIssueOrder && <div className="mt-2 flex flex-wrap justify-end gap-3"><Link to={`/dashboard/tour-packages/${packageId}/document/service-order?booking=${item.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-sky-700 hover:underline"><FileText size={14} />{t("tb.documents.open_service_order")}</Link><button type="button" disabled={saving} onClick={() => onSendOrder(item.id)} className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 hover:underline disabled:opacity-40"><Send size={14} />{t("tb.documents.send_service_order")}</button></div>}{item.service_order_sent_at && <div className="mt-1 text-xs font-semibold text-emerald-700">{t("tb.documents.service_order_sent_at", { date: dateText(item.service_order_sent_at) })}</div>}</div>
+      <div className="text-right"><div className="font-bold">{money(item.provider_price, item.currency || currency)}</div><span className={`mt-1 inline-flex items-center gap-1.5 text-sm font-semibold ${ready ? "text-emerald-700" : "text-amber-700"}`}>{ready ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}{item.status}</span>{canIssueOrder && <div className="mt-2 flex flex-wrap justify-end gap-3"><Link to={`/dashboard/tour-packages/${packageId}/document/service-order?booking=${item.id}`} className="inline-flex items-center gap-1 text-xs font-semibold text-sky-700 hover:underline"><FileText size={14} />{t("tb.documents.open_service_order")}</Link><button type="button" disabled={saving} onClick={() => onSendOrder(item.id)} className="inline-flex items-center gap-1 text-xs font-semibold text-orange-700 hover:underline disabled:opacity-40"><Send size={14} />{t(item.service_order_sent_at ? "tb.documents.resend_service_order" : "tb.documents.send_service_order")}</button></div>}{item.service_order_sent_at && <div className={`mt-1 text-xs font-semibold ${orderStatus === "accepted" ? "text-emerald-700" : orderStatus === "declined" ? "text-red-700" : "text-amber-700"}`}>{t(`tb.documents.service_order_${orderStatus || "sent"}`, { date: dateText(item.service_order_responded_at || item.service_order_sent_at) })}</div>}</div>
     </div>
     {item.provider_note && <div className="mt-3 border-l-2 border-sky-300 bg-sky-50 px-3 py-2 text-sm text-gray-700"><span className="font-semibold">{t("tb.workspace.supplier_note")}:</span> {item.provider_note}</div>}
     <div className="mt-4 grid gap-3 border-t border-gray-200 pt-4 md:grid-cols-[1fr_180px_1.5fr_auto] md:items-end">
@@ -186,6 +187,19 @@ export default function TourPackageWorkspace() {
 
   useEffect(() => { loadPackage(); }, [loadPackage]);
 
+  const hasPendingSupplierResponse = (tourPackage?.components || []).some((item) => item.service_order_status === "sent");
+  useEffect(() => {
+    if (!hasPendingSupplierResponse) return undefined;
+    const timer = window.setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const { data } = await axios.get(`${API_BASE}/api/tour-packages/${id}`, cfg());
+        setTourPackage((current) => ({ ...current, components: data.components || [] }));
+      } catch {}
+    }, 15000);
+    return () => window.clearInterval(timer);
+  }, [hasPendingSupplierResponse, id]);
+
   const setField = (name, value) => {
     setForm((current) => ({ ...current, [name]: value })); setDirty(true); setNotice("");
   };
@@ -262,8 +276,8 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/send-service-order`, {}, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_sent_at: data.service_order_sent_at } : item) }));
-      setNotice(t("tb.documents.service_order_sent"));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data } : item) }));
+      setNotice(t("tb.documents.service_order_sent_notice"));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.documents.service_order_send_error"));
     } finally { setSaving(false); }

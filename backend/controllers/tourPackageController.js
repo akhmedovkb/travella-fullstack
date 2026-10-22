@@ -349,6 +349,8 @@ async function ensureTourPackagesTable() {
       supplier_paid BOOLEAN NOT NULL DEFAULT FALSE,
       operational_note TEXT,
       service_order_sent_at TIMESTAMPTZ,
+      service_order_status VARCHAR(16),
+      service_order_responded_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(package_id, booking_id)
@@ -356,6 +358,8 @@ async function ensureTourPackagesTable() {
   `);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_paid BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_sent_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_status VARCHAR(16)`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_responded_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_tasks (
@@ -398,7 +402,7 @@ async function packageBookings(packageId) {
             p.social AS provider_telegram,
             ops.confirmation_reference, ops.supplier_payment_due_at,
             COALESCE(ops.supplier_paid,FALSE) AS supplier_paid, ops.operational_note,
-            ops.service_order_sent_at
+            ops.service_order_sent_at,ops.service_order_status,ops.service_order_responded_at
        FROM bookings b
        LEFT JOIN providers p ON p.id = b.provider_id
        LEFT JOIN services s ON s.id = b.service_id
@@ -967,15 +971,27 @@ async function sendTourPackageServiceOrder(req, res) {
       [packageId]
     );
     const message = buildSupplierServiceOrderMessage({ tourPackage: item, component: item, travelers: travelers.rows });
-    if (!(await tgSend(chatId, message))) return res.status(502).json({ message: "Failed to send supplier order" });
+    const keyboard = { inline_keyboard: [[
+      { text: "✅ Принять заказ", callback_data: `tour_order:${bookingId}:accepted` },
+      { text: "❌ Отклонить", callback_data: `tour_order:${bookingId}:declined` },
+    ]] };
     const saved = await pool.query(
-      `INSERT INTO tour_package_component_ops(package_id,booking_id,service_order_sent_at)
-       VALUES($1::uuid,$2,NOW())
-       ON CONFLICT(package_id,booking_id) DO UPDATE SET service_order_sent_at=NOW(),updated_at=NOW()
-       RETURNING service_order_sent_at`,
+      `INSERT INTO tour_package_component_ops(package_id,booking_id,service_order_sent_at,service_order_status,service_order_responded_at)
+       VALUES($1::uuid,$2,NOW(),'sent',NULL)
+       ON CONFLICT(package_id,booking_id) DO UPDATE SET
+         service_order_sent_at=NOW(),service_order_status='sent',service_order_responded_at=NULL,updated_at=NOW()
+       RETURNING service_order_sent_at,service_order_status,service_order_responded_at`,
       [packageId, bookingId]
     );
-    return res.json({ sent: true, service_order_sent_at: saved.rows[0].service_order_sent_at });
+    if (!(await tgSend(chatId, message, { reply_markup: keyboard }))) {
+      await pool.query(
+        `UPDATE tour_package_component_ops SET service_order_sent_at=NULL,service_order_status='failed',updated_at=NOW()
+         WHERE package_id=$1::uuid AND booking_id=$2`,
+        [packageId, bookingId]
+      );
+      return res.status(502).json({ message: "Failed to send supplier order" });
+    }
+    return res.json({ sent: true, ...saved.rows[0] });
   } catch (error) {
     console.error("sendTourPackageServiceOrder error:", error);
     return res.status(500).json({ message: "Failed to send supplier order" });

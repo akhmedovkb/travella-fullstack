@@ -47,6 +47,7 @@ const {
 } = require("../utils/providerTelegramResolver");
 const { verifyProviderTelegramLinkPayload } = require("../utils/providerTelegramLink");
 const { isRegistrationCallbackData } = require("../utils/telegramRegistration");
+const { respondToSupplierServiceOrder } = require("../utils/tourServiceOrderResponse");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -3919,6 +3920,29 @@ bot.use(async (ctx, next) => {
     }
   } catch {}
   return next();
+});
+
+// ===================== ACTUAL REMINDER CALLBACK (svc_actual:...) =====================
+bot.action(/^tour_order:(\d+):(accepted|declined)$/, async (ctx) => {
+  try {
+    const match = String(ctx.callbackQuery?.data || "").match(/^tour_order:(\d+):(accepted|declined)$/);
+    const result = await respondToSupplierServiceOrder({
+      actorTelegramId: ctx.from?.id,
+      bookingId: Number(match?.[1]),
+      decision: match?.[2],
+    });
+    if (!result.ok) {
+      const message = result.code === "forbidden" ? "Этот заказ назначен другому поставщику" : "Заказ не найден или уже недоступен";
+      await ctx.answerCbQuery(message, { show_alert: true });
+      return;
+    }
+    await ctx.answerCbQuery(result.service_order_status === "accepted" ? "Заказ принят" : "Заказ отклонён");
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+    await safeReply(ctx, result.service_order_status === "accepted" ? "✅ Вы приняли заказ. DMC получил уведомление." : "❌ Вы отклонили заказ. DMC получил уведомление.");
+  } catch (error) {
+    console.error("[tg-bot] tour order response error:", error?.message || error);
+    try { await ctx.answerCbQuery("Не удалось сохранить ответ", { show_alert: true }); } catch {}
+  }
 });
 
 // ===================== ACTUAL REMINDER CALLBACK (svc_actual:...) =====================

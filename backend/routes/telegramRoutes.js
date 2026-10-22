@@ -9,6 +9,7 @@ const pool = require("../db");
 const telegramClientController = require("../controllers/telegramClientController");
 const telegramProviderController = require("../controllers/telegramProviderController");
 const { loginWithTelegram } = require("../controllers/telegramWebAuthController");
+const { respondToSupplierServiceOrder } = require("../utils/tourServiceOrderResponse");
 
 let sharp = null;
 try {
@@ -122,6 +123,27 @@ async function handleWebhook(req, res) {
     if (update.callback_query) {
       const cq = update.callback_query;
       const data = String(cq.data || "");
+      const orderResponse = data.match(/^tour_order:(\d+):(accepted|declined)$/);
+      if (orderResponse) {
+        const result = await respondToSupplierServiceOrder({
+          actorTelegramId: cq.from?.id,
+          bookingId: Number(orderResponse[1]),
+          decision: orderResponse[2],
+        });
+        const message = result.ok
+          ? result.service_order_status === "accepted" ? "Заказ принят" : "Заказ отклонён"
+          : result.code === "forbidden" ? "Этот заказ назначен другому поставщику" : "Заказ не найден или уже недоступен";
+        await tgAnswerCallbackQuery(cq.id, message, { show_alert: !result.ok });
+        if (result.ok && cq.message?.chat?.id && cq.message?.message_id) {
+          await tgEditMessageReplyMarkup({
+            chat_id: cq.message.chat.id,
+            message_id: cq.message.message_id,
+            reply_markup: { inline_keyboard: [] },
+          });
+          await tgSend(cq.message.chat.id, result.service_order_status === "accepted" ? "✅ Вы приняли заказ. DMC получил уведомление." : "❌ Вы отклонили заказ. DMC получил уведомление.");
+        }
+        return res.json({ ok: true });
+      }
       if (/^noop:\d+$/.test(data)) {
         await tgAnswerCallbackQuery(cq.id, "Готово ✅");
         return res.json({ ok: true });
