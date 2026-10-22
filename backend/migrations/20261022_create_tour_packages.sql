@@ -16,6 +16,13 @@ CREATE TABLE IF NOT EXISTS tour_packages (
   route JSONB NOT NULL DEFAULT '{}'::jsonb,
   itinerary JSONB NOT NULL DEFAULT '[]'::jsonb,
   meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+  client_name TEXT,
+  client_phone TEXT,
+  client_email TEXT,
+  client_company TEXT,
+  share_token_hash VARCHAR(64),
+  shared_at TIMESTAMPTZ,
+  share_expires_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT tour_packages_status_chk CHECK (status IN (
@@ -34,4 +41,7 @@ CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated
 
 CREATE INDEX IF NOT EXISTS idx_tour_packages_status
   ON tour_packages(status, updated_at DESC);
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_share_token
+  ON tour_packages(share_token_hash) WHERE share_token_hash IS NOT NULL;
 

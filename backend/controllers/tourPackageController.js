@@ -1,3 +1,4 @@
+const crypto = require("crypto");
 const pool = require("../db");
 
 const PACKAGE_STATUSES = new Set([
@@ -27,6 +28,36 @@ function derivePackageStatus(rows = [], storedStatus = "draft") {
   return "request_sent";
 }
 
+function hashShareToken(token) {
+  return crypto.createHash("sha256").update(String(token || "")).digest("hex");
+}
+
+function createShareToken() {
+  return crypto.randomBytes(32).toString("base64url");
+}
+
+function publicPackageView(row = {}) {
+  return {
+    title: row.title,
+    status: row.status,
+    currency: row.currency,
+    gross_total: row.gross_total,
+    pax_adult: row.pax_adult,
+    pax_child: row.pax_child,
+    start_date: row.start_date,
+    end_date: row.end_date,
+    quote_valid_until: row.quote_valid_until,
+    route: row.route || {},
+    itinerary: Array.isArray(row.itinerary) ? row.itinerary : [],
+    client_name: row.client_name || null,
+    agency: {
+      name: row.agency_name || "Travella partner",
+      phone: row.agency_phone || null,
+      email: row.agency_email || null,
+    },
+  };
+}
+
 async function ensureTourPackagesTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_packages (
@@ -47,11 +78,26 @@ async function ensureTourPackagesTable() {
       route JSONB NOT NULL DEFAULT '{}'::jsonb,
       itinerary JSONB NOT NULL DEFAULT '[]'::jsonb,
       meta JSONB NOT NULL DEFAULT '{}'::jsonb,
+      client_name TEXT,
+      client_phone TEXT,
+      client_email TEXT,
+      client_company TEXT,
+      share_token_hash VARCHAR(64),
+      shared_at TIMESTAMPTZ,
+      share_expires_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS client_name TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS client_phone TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS client_email TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS client_company TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS share_token_hash VARCHAR(64)`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS shared_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated ON tour_packages(owner_provider_id, updated_at DESC)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_share_token ON tour_packages(share_token_hash) WHERE share_token_hash IS NOT NULL`);
 }
 
 function requireProviderOwner(req, res) {
@@ -95,6 +141,10 @@ function normalizePackageBody(body = {}) {
     route: body.route && typeof body.route === "object" ? body.route : {},
     itinerary: Array.isArray(body.itinerary) ? body.itinerary : [],
     meta: body.meta && typeof body.meta === "object" ? body.meta : {},
+    clientName: String(body.client_name || "").trim().slice(0, 180) || null,
+    clientPhone: String(body.client_phone || "").trim().slice(0, 80) || null,
+    clientEmail: String(body.client_email || "").trim().slice(0, 180) || null,
+    clientCompany: String(body.client_company || "").trim().slice(0, 180) || null,
   };
 }
 
@@ -112,8 +162,9 @@ async function createTourPackage(req, res) {
       `INSERT INTO tour_packages (
          id, owner_provider_id, title, status, currency, net_total, markup_type,
          markup_value, gross_total, pax_adult, pax_child, start_date, end_date,
-         quote_valid_until, route, itinerary, meta
-       ) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13::date,$14,$15::jsonb,$16::jsonb,$17::jsonb)
+         quote_valid_until, route, itinerary, meta, client_name, client_phone,
+         client_email, client_company
+       ) VALUES ($1::uuid,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12::date,$13::date,$14,$15::jsonb,$16::jsonb,$17::jsonb,$18,$19,$20,$21)
        ON CONFLICT (id) DO UPDATE SET
          title=EXCLUDED.title, status=EXCLUDED.status, currency=EXCLUDED.currency,
          net_total=EXCLUDED.net_total, markup_type=EXCLUDED.markup_type,
@@ -121,13 +172,17 @@ async function createTourPackage(req, res) {
          pax_adult=EXCLUDED.pax_adult, pax_child=EXCLUDED.pax_child,
          start_date=EXCLUDED.start_date, end_date=EXCLUDED.end_date,
          quote_valid_until=EXCLUDED.quote_valid_until, route=EXCLUDED.route,
-         itinerary=EXCLUDED.itinerary, meta=EXCLUDED.meta, updated_at=NOW()
+         itinerary=EXCLUDED.itinerary, meta=EXCLUDED.meta,
+         client_name=EXCLUDED.client_name, client_phone=EXCLUDED.client_phone,
+         client_email=EXCLUDED.client_email, client_company=EXCLUDED.client_company,
+         updated_at=NOW()
        WHERE tour_packages.owner_provider_id=$2
        RETURNING *`,
       [id, ownerId, value.title, value.status, value.currency, value.netTotal,
         value.markupType, value.markupValue, value.grossTotal, value.paxAdult,
         value.paxChild, value.startDate, value.endDate, value.quoteValidUntil,
-        JSON.stringify(value.route), JSON.stringify(value.itinerary), JSON.stringify(value.meta)]
+        JSON.stringify(value.route), JSON.stringify(value.itinerary), JSON.stringify(value.meta),
+        value.clientName, value.clientPhone, value.clientEmail, value.clientCompany]
     );
     if (!result.rowCount) return res.status(403).json({ message: "Package belongs to another agency" });
     return res.status(201).json(result.rows[0]);
@@ -157,6 +212,8 @@ async function listTourPackages(req, res) {
       const bookings = await packageBookings(item.id);
       return {
         ...item,
+        is_shared: Boolean(item.share_token_hash),
+        share_token_hash: undefined,
         status: derivePackageStatus(bookings, item.status),
         component_count: bookings.length,
         confirmed_count: bookings.filter((booking) => ["confirmed", "paid", "completed"].includes(String(booking.status || "").toLowerCase())).length,
@@ -178,7 +235,7 @@ async function getTourPackage(req, res) {
     if (!result.rowCount) return res.status(404).json({ message: "Tour package not found" });
     const bookings = await packageBookings(req.params.id);
     const item = result.rows[0];
-    return res.json({ ...item, status: derivePackageStatus(bookings, item.status), components: bookings });
+    return res.json({ ...item, share_token_hash: undefined, is_shared: Boolean(item.share_token_hash), status: derivePackageStatus(bookings, item.status), components: bookings });
   } catch (error) {
     console.error("getTourPackage error:", error);
     return res.status(500).json({ message: "Failed to load tour package" });
@@ -200,25 +257,111 @@ async function updateTourPackage(req, res) {
     const result = await pool.query(
       `UPDATE tour_packages SET title=$3,status=$4,currency=$5,net_total=$6,
          markup_type=$7,markup_value=$8,gross_total=$9,quote_valid_until=$10,
-         meta=$11::jsonb,updated_at=NOW()
+         meta=$11::jsonb, client_name=$12, client_phone=$13, client_email=$14,
+         client_company=$15, route=$16::jsonb, itinerary=$17::jsonb,
+         pax_adult=$18, pax_child=$19, start_date=$20::date, end_date=$21::date,
+         updated_at=NOW()
        WHERE id=$1::uuid AND owner_provider_id=$2 RETURNING *`,
       [req.params.id, ownerId, value.title, value.status, value.currency, value.netTotal,
         value.markupType, value.markupValue, value.grossTotal, value.quoteValidUntil,
-        JSON.stringify(value.meta)]
+        JSON.stringify(value.meta), value.clientName, value.clientPhone, value.clientEmail,
+        value.clientCompany, JSON.stringify(value.route), JSON.stringify(value.itinerary),
+        value.paxAdult, value.paxChild, value.startDate, value.endDate]
     );
-    return res.json(result.rows[0]);
+    return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash) });
   } catch (error) {
     console.error("updateTourPackage error:", error);
     return res.status(500).json({ message: "Failed to update tour package" });
   }
 }
 
+async function shareTourPackage(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const current = await pool.query(
+      `SELECT * FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2`,
+      [req.params.id, ownerId]
+    );
+    if (!current.rowCount) return res.status(404).json({ message: "Tour package not found" });
+
+    const value = normalizePackageBody({ ...current.rows[0], ...req.body });
+    const token = createShareToken();
+    const fallbackExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+    const requestedExpiry = value.quoteValidUntil ? new Date(value.quoteValidUntil) : fallbackExpiry;
+    const expiresAt = Number.isFinite(requestedExpiry.getTime()) && requestedExpiry > new Date()
+      ? requestedExpiry
+      : fallbackExpiry;
+    const result = await pool.query(
+      `UPDATE tour_packages SET title=$3, client_name=$4, client_phone=$5,
+         client_email=$6, client_company=$7, quote_valid_until=$8,
+         share_token_hash=$9, shared_at=NOW(), share_expires_at=$8,
+         status='proposed', updated_at=NOW()
+       WHERE id=$1::uuid AND owner_provider_id=$2
+       RETURNING id,status,shared_at,share_expires_at`,
+      [req.params.id, ownerId, value.title, value.clientName, value.clientPhone,
+        value.clientEmail, value.clientCompany, expiresAt.toISOString(), hashShareToken(token)]
+    );
+    return res.json({ ...result.rows[0], token });
+  } catch (error) {
+    console.error("shareTourPackage error:", error);
+    return res.status(500).json({ message: "Failed to create proposal link" });
+  }
+}
+
+async function revokeTourPackageShare(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const result = await pool.query(
+      `UPDATE tour_packages SET share_token_hash=NULL, shared_at=NULL,
+         share_expires_at=NULL, updated_at=NOW()
+       WHERE id=$1::uuid AND owner_provider_id=$2 RETURNING id`,
+      [req.params.id, ownerId]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Tour package not found" });
+    return res.status(204).send();
+  } catch (error) {
+    console.error("revokeTourPackageShare error:", error);
+    return res.status(500).json({ message: "Failed to revoke proposal link" });
+  }
+}
+
+async function getPublicTourProposal(req, res) {
+  try {
+    const token = String(req.params.token || "");
+    if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) return res.status(404).json({ message: "Proposal not found" });
+    await ensureTourPackagesTable();
+    const result = await pool.query(
+      `SELECT tp.*, p.name AS agency_name, p.phone AS agency_phone, p.email AS agency_email
+         FROM tour_packages tp
+         JOIN providers p ON p.id=tp.owner_provider_id
+        WHERE tp.share_token_hash=$1 AND tp.share_expires_at > NOW()
+        LIMIT 1`,
+      [hashShareToken(token)]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Proposal not found or expired" });
+    res.set("Cache-Control", "no-store");
+    return res.json(publicPackageView(result.rows[0]));
+  } catch (error) {
+    console.error("getPublicTourProposal error:", error);
+    return res.status(500).json({ message: "Failed to load proposal" });
+  }
+}
+
 module.exports = {
   calculateGross,
   derivePackageStatus,
+  hashShareToken,
+  publicPackageView,
   createTourPackage,
   listTourPackages,
   getTourPackage,
   updateTourPackage,
+  shareTourPackage,
+  revokeTourPackageShare,
+  getPublicTourProposal,
 };
 

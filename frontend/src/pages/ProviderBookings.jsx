@@ -6,6 +6,7 @@ import BookingRow from "../components/BookingRow";
 import { tSuccess, tError, tInfo } from "../shared/toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
+import { Copy, ExternalLink, Link2, X } from "lucide-react";
 
 /* ================= helpers ================= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -217,6 +218,10 @@ export default function ProviderBookings() {
   const [outgoing, setOutgoing] = useState([]);
   const [tourPackages, setTourPackages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [proposalTarget, setProposalTarget] = useState(null);
+  const [proposalForm, setProposalForm] = useState({ client_name: "", client_phone: "", client_email: "", client_company: "", quote_valid_until: "" });
+  const [proposalUrl, setProposalUrl] = useState("");
+  const [proposalBusy, setProposalBusy] = useState(false);
     // --- Модалка отмены поставщиком ---
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -254,6 +259,60 @@ export default function ProviderBookings() {
       setOutgoing([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openProposal = (tourPackage) => {
+    const fallback = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    setProposalTarget(tourPackage);
+    setProposalUrl("");
+    setProposalForm({
+      client_name: tourPackage?.client_name || "",
+      client_phone: tourPackage?.client_phone || "",
+      client_email: tourPackage?.client_email || "",
+      client_company: tourPackage?.client_company || "",
+      quote_valid_until: String(tourPackage?.quote_valid_until || fallback).slice(0, 10),
+    });
+  };
+
+  const generateProposalLink = async () => {
+    if (!proposalTarget?.id || proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      const expires = proposalForm.quote_valid_until
+        ? new Date(`${proposalForm.quote_valid_until}T23:59:59`).toISOString()
+        : null;
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${proposalTarget.id}/share`, {
+        ...proposalForm,
+        quote_valid_until: expires,
+      }, cfg());
+      const url = `${window.location.origin}/tour-proposal/${data.token}`;
+      setProposalUrl(url);
+      setTourPackages((items) => items.map((item) => item.id === proposalTarget.id
+        ? { ...item, ...proposalForm, quote_valid_until: expires, status: "proposed", is_shared: true, share_expires_at: data.share_expires_at }
+        : item));
+      try { await navigator.clipboard.writeText(url); } catch {}
+      tSuccess(t("tb.proposal.link_created"));
+    } catch (error) {
+      tError(error?.response?.data?.message || t("tb.proposal.link_error"));
+    } finally {
+      setProposalBusy(false);
+    }
+  };
+
+  const revokeProposalLink = async () => {
+    if (!proposalTarget?.id || proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      await axios.delete(`${API_BASE}/api/tour-packages/${proposalTarget.id}/share`, cfg());
+      setProposalUrl("");
+      setTourPackages((items) => items.map((item) => item.id === proposalTarget.id ? { ...item, is_shared: false } : item));
+      setProposalTarget((item) => ({ ...item, is_shared: false }));
+      tSuccess(t("tb.proposal.link_revoked"));
+    } catch (error) {
+      tError(error?.response?.data?.message || t("tb.proposal.revoke_error"));
+    } finally {
+      setProposalBusy(false);
     }
   };
 
@@ -641,6 +700,11 @@ export default function ProviderBookings() {
               <div><div className="text-[11px] font-semibold uppercase text-gray-400">{t("tb.summary.markup")}</div><div className="font-bold text-orange-600">{tourPackage.markup_type === "percent" ? `${formatMoney(tourPackage.markup_value)}%` : `${formatMoney(tourPackage.markup_value)} ${currency}`}</div></div>
               <div><div className="text-[11px] font-semibold uppercase text-gray-400">GROSS</div><div className="font-bold text-emerald-700">{formatMoney(tourPackage.gross_total)} {currency}</div></div>
               {validUntil && Number.isFinite(validUntil.getTime()) ? <div className="col-span-3 text-xs text-gray-500">{t("tb.quote_valid_until")}: {validUntil.toLocaleDateString()}</div> : null}
+              {tab === "outgoing" ? (
+                <button type="button" onClick={() => openProposal(tourPackage)} className="col-span-3 ml-auto inline-flex h-9 items-center gap-2 rounded-md border border-gray-300 px-3 text-sm font-semibold text-gray-800 hover:border-orange-400 hover:text-orange-700">
+                  <Link2 size={16} /> {tourPackage.is_shared ? t("tb.proposal.manage_link") : t("tb.proposal.create_link")}
+                </button>
+              ) : null}
             </div>
           ) : (
             <div className="max-w-[280px] truncate font-mono text-right text-xs text-gray-400" title={group.group_id}>{group.group_id}</div>
@@ -1210,6 +1274,47 @@ export default function ProviderBookings() {
         : tab === "incoming" && inSubTab === "tb"
         ? tbIncomingContent
         : flatListContent}
+      {proposalTarget ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-gray-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="proposal-dialog-title">
+          <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-5">
+              <div>
+                <div className="text-xs font-semibold uppercase text-orange-600">Tour Builder</div>
+                <h2 id="proposal-dialog-title" className="mt-1 text-xl font-bold text-gray-950">{t("tb.proposal.dialog_title")}</h2>
+                <p className="mt-1 text-sm text-gray-600">{proposalTarget.title}</p>
+              </div>
+              <button type="button" onClick={() => setProposalTarget(null)} className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label={t("actions.close", { defaultValue: "Закрыть" })}><X size={18} /></button>
+            </div>
+            <div className="space-y-5 px-6 py-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-gray-800">{t("tb.proposal.client_name")}<input value={proposalForm.client_name} onChange={(e) => setProposalForm((v) => ({ ...v, client_name: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+                <label className="block text-sm font-semibold text-gray-800">{t("tb.proposal.client_company")}<input value={proposalForm.client_company} onChange={(e) => setProposalForm((v) => ({ ...v, client_company: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+                <label className="block text-sm font-semibold text-gray-800">{t("tb.proposal.client_phone")}<input value={proposalForm.client_phone} onChange={(e) => setProposalForm((v) => ({ ...v, client_phone: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+                <label className="block text-sm font-semibold text-gray-800">Email<input type="email" value={proposalForm.client_email} onChange={(e) => setProposalForm((v) => ({ ...v, client_email: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+                <label className="block text-sm font-semibold text-gray-800 sm:col-span-2">{t("tb.quote_valid_until")}<input type="date" value={proposalForm.quote_valid_until} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setProposalForm((v) => ({ ...v, quote_valid_until: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+              </div>
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{t("tb.proposal.privacy_note")}</div>
+              {proposalTarget.is_shared && !proposalUrl ? <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{t("tb.proposal.rotate_note")}</div> : null}
+              {proposalUrl ? (
+                <div className="border border-gray-200 bg-gray-50 p-3">
+                  <div className="break-all text-sm text-gray-700">{proposalUrl}</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(proposalUrl); tSuccess(t("tb.proposal.copied")); }} className="inline-flex h-9 items-center gap-2 rounded-md bg-gray-950 px-3 text-sm font-semibold text-white"><Copy size={16} />{t("tb.proposal.copy")}</button>
+                    <a href={proposalUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-300 px-3 text-sm font-semibold text-gray-800"><ExternalLink size={16} />{t("tb.proposal.open")}</a>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-6 py-4">
+              <div>{proposalTarget.is_shared ? <button type="button" onClick={revokeProposalLink} disabled={proposalBusy} className="text-sm font-semibold text-red-600 hover:text-red-700 disabled:opacity-50">{t("tb.proposal.revoke")}</button> : null}</div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setProposalTarget(null)} className="h-10 rounded-md border border-gray-300 px-4 font-semibold text-gray-700">{t("actions.cancel", { defaultValue: "Отмена" })}</button>
+                <button type="button" onClick={generateProposalLink} disabled={proposalBusy || !proposalForm.quote_valid_until} className="h-10 rounded-md bg-orange-600 px-4 font-semibold text-white hover:bg-orange-700 disabled:opacity-50">{proposalBusy ? t("common.loading") : proposalTarget.is_shared ? t("tb.proposal.rotate") : t("tb.proposal.create")}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
             {/* Модалка отмены поставщиком — через общий ConfirmModal */}
       <ConfirmModal
         open={showCancelModal}

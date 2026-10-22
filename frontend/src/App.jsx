@@ -144,6 +144,7 @@ const Hotels = lazy(() => import("./pages/Hotels"));
 const AdminHotelForm = lazy(() => import("./pages/admin/AdminHotelForm"));
 const TemplateCreator = lazy(() => import("./pages/TemplateCreator"));
 const TourBuilder = lazy(() => import("./pages/TourBuilder"));
+const TourProposal = lazy(() => import("./pages/TourProposal"));
 const AdminEntryFees = lazy(() => import("./pages/AdminEntryFees"));
 const IndiaLayout = lazy(() => import("./pages/landing/IndiaLayout"));
 const LandingHome = lazy(() => import("./pages/landing/Home"));
@@ -740,6 +741,7 @@ export default function App() {
 
             {/* Инструменты */}
             <Route path="/tour-builder" element={<TourBuilder />} />
+            <Route path="/tour-proposal/:token" element={<TourProposal />} />
             <Route path="/templates" element={<TemplateCreator />} />
             
             {/* Donas Dosas */}
