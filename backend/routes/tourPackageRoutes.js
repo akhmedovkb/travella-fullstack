@@ -15,6 +15,7 @@ const {
   updateTourPackageComponentOperations,
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
+  cancelTourPackageServiceOrder,
   createTourPackageTask,
   updateTourPackageTask,
   deleteTourPackageTask,
@@ -35,6 +36,7 @@ router.put("/:id/travelers", replaceTourPackageTravelers);
 router.patch("/:id/components/:bookingId", updateTourPackageComponentOperations);
 router.post("/:id/components/:bookingId/send-service-order", sendTourPackageServiceOrder);
 router.post("/:id/components/:bookingId/remind-service-order", remindTourPackageServiceOrder);
+router.post("/:id/components/:bookingId/cancel-service-order", cancelTourPackageServiceOrder);
 router.post("/:id/tasks", createTourPackageTask);
 router.patch("/:id/tasks/:taskId", updateTourPackageTask);
 router.delete("/:id/tasks/:taskId", deleteTourPackageTask);

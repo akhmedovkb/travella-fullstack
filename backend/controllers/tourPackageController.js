@@ -190,6 +190,16 @@ function buildSupplierServiceOrderReminderMessage({ tourPackage = {}, component 
   ].filter(Boolean).join("\n");
 }
 
+function buildSupplierServiceOrderCancellationMessage({ tourPackage = {}, component = {} } = {}) {
+  return [
+    "🚫 <b>Заказ отменён DMC</b>",
+    `Тур: <b>${escapeTelegramHtml(tourPackage.title || "—")}</b>`,
+    tourPackage.booking_reference ? `Номер тура: ${escapeTelegramHtml(tourPackage.booking_reference)}` : "",
+    `Услуга: <b>${escapeTelegramHtml(component.service_title || "—")}</b>`,
+    "Пожалуйста, не выполняйте этот заказ. При необходимости DMC свяжется с вами отдельно.",
+  ].filter(Boolean).join("\n");
+}
+
 async function notifyAgencyProposalResponse(item) {
   try {
     const provider = await pool.query(`SELECT to_jsonb(p) AS profile FROM providers p WHERE id=$1 LIMIT 1`, [item.owner_provider_id]);
@@ -611,7 +621,7 @@ async function listTourPackages(req, res) {
               COUNT(b.id) FILTER (
                 WHERE tp.status IN ('booked','paid') AND (
                   ops.service_order_status IS NULL OR
-                  ops.service_order_status IN ('declined','failed') OR
+                  ops.service_order_status IN ('declined','failed','cancelled') OR
                   (ops.service_order_status='sent' AND ops.service_order_sent_at < NOW() - INTERVAL '24 hours')
                 )
               )::int AS supplier_order_attention_count,
@@ -1085,10 +1095,11 @@ async function sendTourPackageServiceOrder(req, res) {
       );
       return res.status(502).json({ message: "Failed to send supplier order" });
     }
-    await pool.query(
+    const closedTasks = await pool.query(
       `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
        WHERE package_id=$1::uuid AND booking_id=$2
-         AND task_type='follow_up_supplier_order' AND completed=FALSE`,
+         AND task_type='follow_up_supplier_order' AND completed=FALSE
+       RETURNING id`,
       [packageId, bookingId]
     );
     const event = await pool.query(
@@ -1097,7 +1108,7 @@ async function sendTourPackageServiceOrder(req, res) {
        RETURNING id,event_type,actor_type,created_at,metadata`,
       [packageId, bookingId]
     );
-    return res.json({ sent: true, ...saved.rows[0], service_order_event: event.rows[0] });
+    return res.json({ sent: true, ...saved.rows[0], service_order_event: event.rows[0], closed_task_ids: closedTasks.rows.map((task) => task.id) });
   } catch (error) {
     console.error("sendTourPackageServiceOrder error:", error);
     return res.status(500).json({ message: "Failed to send supplier order" });
@@ -1157,6 +1168,61 @@ async function remindTourPackageServiceOrder(req, res) {
   } catch (error) {
     console.error("remindTourPackageServiceOrder error:", error);
     return res.status(500).json({ message: "Failed to send supplier reminder" });
+  }
+}
+
+async function cancelTourPackageServiceOrder(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const packageId = req.params.id;
+    const bookingId = Number(req.params.bookingId);
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
+    const result = await pool.query(
+      `SELECT tp.title,tp.booking_reference,b.id,s.title AS service_title,
+              to_jsonb(supplier) AS supplier_profile,ops.service_order_status
+         FROM tour_packages tp
+         JOIN bookings b ON b.group_id=tp.id AND b.id=$3
+         LEFT JOIN services s ON s.id=b.service_id
+         LEFT JOIN providers supplier ON supplier.id=b.provider_id
+         JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+        WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
+      [packageId, ownerId, bookingId]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Tour package component not found" });
+    const item = result.rows[0];
+    if (!["sent", "accepted"].includes(item.service_order_status)) {
+      return res.status(409).json({ message: "Supplier order cannot be cancelled in its current status" });
+    }
+    const profile = item.supplier_profile || {};
+    const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
+    if (!chatId) return res.status(409).json({ message: "Supplier Telegram is not connected" });
+    const message = buildSupplierServiceOrderCancellationMessage({ tourPackage: item, component: item });
+    if (!(await tgSend(chatId, message))) return res.status(502).json({ message: "Failed to notify supplier about cancellation" });
+    const saved = await pool.query(
+      `UPDATE tour_package_component_ops SET service_order_status='cancelled',service_order_responded_at=NOW(),updated_at=NOW()
+       WHERE package_id=$1::uuid AND booking_id=$2
+       RETURNING service_order_status,service_order_responded_at`,
+      [packageId, bookingId]
+    );
+    const closedTasks = await pool.query(
+      `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
+       WHERE package_id=$1::uuid AND booking_id=$2
+         AND task_type='follow_up_supplier_order' AND completed=FALSE
+       RETURNING id`,
+      [packageId, bookingId]
+    );
+    const event = await pool.query(
+      `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,metadata)
+       VALUES($1::uuid,$2,'cancelled','dmc',jsonb_build_object('previous_status',$3::text))
+       RETURNING id,event_type,actor_type,created_at,metadata`,
+      [packageId, bookingId, item.service_order_status]
+    );
+    return res.json({ cancelled: true, ...saved.rows[0], service_order_event: event.rows[0], closed_task_ids: closedTasks.rows.map((task) => task.id) });
+  } catch (error) {
+    console.error("cancelTourPackageServiceOrder error:", error);
+    return res.status(500).json({ message: "Failed to cancel supplier order" });
   }
 }
 
@@ -1305,6 +1371,7 @@ module.exports = {
   escapeTelegramHtml,
   buildSupplierServiceOrderMessage,
   buildSupplierServiceOrderReminderMessage,
+  buildSupplierServiceOrderCancellationMessage,
   publicPackageView,
   packageSnapshot,
   createTourPackage,
@@ -1321,6 +1388,7 @@ module.exports = {
   updateTourPackageComponentOperations,
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
+  cancelTourPackageServiceOrder,
   createTourPackageTask,
   updateTourPackageTask,
   deleteTourPackageTask,
