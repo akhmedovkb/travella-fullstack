@@ -46,6 +46,7 @@ const {
   ProviderTelegramResolutionError,
 } = require("../utils/providerTelegramResolver");
 const { verifyProviderTelegramLinkPayload } = require("../utils/providerTelegramLink");
+const { isRegistrationCallbackData } = require("../utils/telegramRegistration");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -1838,10 +1839,10 @@ bot.use(async (ctx, next) => {
       typeof ctx.message?.text === "string" &&
       isMainMenuText(ctx.message.text);
 
-    const isRolePick =
+    const isRegistrationPick =
       ctx.updateType === "callback_query" &&
       typeof ctx.callbackQuery?.data === "string" &&
-      /^role:(client|provider)$/.test(ctx.callbackQuery.data);
+      isRegistrationCallbackData(ctx.callbackQuery.data);
 
     const isContact =
       ctx.updateType === "message" && !!ctx.message?.contact?.phone_number;
@@ -1857,7 +1858,7 @@ bot.use(async (ctx, next) => {
 
     // ✅ Если pending — режем всё, кроме /start / выбора роли / отправки телефона
     if (ctx.session?.pending) {
-      if (isStartCmd || isMenuCmd || isRolePick || isContact || isPhoneText) {
+      if (isStartCmd || isMenuCmd || isRegistrationPick || isContact || isPhoneText) {
         return next();
       }
 
@@ -1894,7 +1895,7 @@ bot.use(async (ctx, next) => {
 
     if (!isLinked) {
       // разрешаем базовые шаги привязки
-      if (isStartCmd || isMenuCmd || isRolePick || isContact || isPhoneText) {
+      if (isStartCmd || isMenuCmd || isRegistrationPick || isContact || isPhoneText) {
         return next();
       }
 
@@ -8460,7 +8461,7 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
       ctx.session.pendingRole = finalRole;
 
       await ctx.reply(
-        "🕒 Заявка принята и отправлена на модерацию.\n\n" +
+        (data.updated ? "🕒 Заявка обновлена и ожидает модерации.\n\n" : "🕒 Заявка принята и отправлена на модерацию.\n\n") +
           "⏳ Пожалуйста, дождитесь одобрения администратора.\n" +
           "После одобрения меню станет доступно.\n\n" +
           `🌐 Сайт: ${SITE_URL}`,

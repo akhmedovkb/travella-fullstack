@@ -492,20 +492,33 @@ if (byChat?.role === "client") {
 }
 
     
-    // 0) если уже есть pending по chatId — возвращаем lead
+    // 0) Повторная регистрация должна обновить старую pending-заявку.
+    // Иначе пользователь навсегда остаётся привязан к первой выбранной роли/телефону.
     const pendingByChat = await findPendingLeadByChat();
     if (pendingByChat) {
+      const providerRequest = requestedRole && requestedRole !== "client";
+      const source = providerRequest ? "telegram_provider" : "telegram_client";
+      const effectiveRole = providerRequest ? requestedRole : "client";
+      await pool.query(
+        `UPDATE leads
+            SET phone=$2,
+                name=$3,
+                source=$4,
+                requested_role=$5,
+                telegram_username=$6,
+                telegram_first_name=$7
+          WHERE id=$1`,
+        [pendingByChat.id, phone, displayName, source, effectiveRole, username || null, firstName || null]
+      );
       return res.json({
         success: true,
-        role:
-          pendingByChat.source === "telegram_provider"
-            ? "provider_lead"
-            : "client_lead",
+        role: providerRequest ? "provider_lead" : "client_lead",
         leadId: pendingByChat.id,
         existed: true,
-        created: null,
+        created: providerRequest ? "provider_lead" : "client_lead",
         requestedRole,
         pending: true,
+        updated: true,
       });
     }
 
