@@ -147,6 +147,7 @@ const TourBuilder = lazy(() => import("./pages/TourBuilder"));
 const TourProposal = lazy(() => import("./pages/TourProposal"));
 const TourPackageWorkspace = lazy(() => import("./pages/TourPackageWorkspace"));
 const TourPackageDocument = lazy(() => import("./pages/TourPackageDocument"));
+const TourPackages = lazy(() => import("./pages/TourPackages"));
 const AdminEntryFees = lazy(() => import("./pages/AdminEntryFees"));
 const IndiaLayout = lazy(() => import("./pages/landing/IndiaLayout"));
 const LandingHome = lazy(() => import("./pages/landing/Home"));
@@ -313,6 +314,14 @@ export default function App() {
               element={
                 <PrivateRoute>
                   <ProviderBookings />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/dashboard/tour-packages"
+              element={
+                <PrivateRoute>
+                  <TourPackages />
                 </PrivateRoute>
               }
             />

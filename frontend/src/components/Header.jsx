@@ -513,12 +513,20 @@ export default function Header() {
                       />
 
                       {role === "provider" && (
-                        <DropdownItem
-                          to="/tour-builder"
-                          label={t("nav.tour_builder")}
-                          description={t("nav.tour_builder_desc")}
-                          icon={<IconDoc />}
-                        />
+                        <>
+                          <DropdownItem
+                            to="/tour-builder"
+                            label={t("nav.tour_builder")}
+                            description={t("nav.tour_builder_desc")}
+                            icon={<IconDoc />}
+                          />
+                          <DropdownItem
+                            to="/dashboard/tour-packages"
+                            label={t("nav.my_tours")}
+                            description={t("nav.my_tours_desc")}
+                            icon={<IconBookings />}
+                          />
+                        </>
                       )}
 
                       <DropdownItem
@@ -776,6 +784,7 @@ export default function Header() {
             <RowGroupDark title={t("nav.products")}>
               <NavItemMobileDark to="/" label={t("nav.marketplace")} icon={<IconChecklist />} end />
               {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder")} icon={<IconDoc />} />}
+              {role === "provider" && <NavItemMobileDark to="/dashboard/tour-packages" label={t("nav.my_tours")} icon={<IconBookings />} />}
               <NavItemMobileDark to="/hotels" label={t("nav.hotel_catalog")} icon={<IconHotel />} />
               <NavItemMobileDark to="/community" label={t("nav.community")} icon={<IconUsers />} />
             </RowGroupDark>

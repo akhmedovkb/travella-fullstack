@@ -330,7 +330,8 @@ async function listTourPackages(req, res) {
     const result = await pool.query(
       `SELECT tp.*,
               COUNT(b.id)::int AS component_count,
-              COUNT(b.id) FILTER (WHERE b.status IN ('confirmed','paid','completed'))::int AS confirmed_count
+              COUNT(b.id) FILTER (WHERE b.status IN ('confirmed','paid','completed'))::int AS confirmed_count,
+              COALESCE(ARRAY_AGG(b.status::text) FILTER (WHERE b.id IS NOT NULL), ARRAY[]::text[]) AS component_statuses
          FROM tour_packages tp
          LEFT JOIN bookings b ON b.group_id=tp.id
         WHERE tp.owner_provider_id=$1
@@ -338,17 +339,16 @@ async function listTourPackages(req, res) {
         ORDER BY tp.updated_at DESC`,
       [ownerId]
     );
-    const items = await Promise.all(result.rows.map(async (item) => {
-      const bookings = await packageBookings(item.id);
+    const items = result.rows.map((item) => {
+      const bookings = (item.component_statuses || []).map((status) => ({ status }));
       return {
         ...item,
+        component_statuses: undefined,
         is_shared: Boolean(item.share_token_hash),
         share_token_hash: undefined,
         status: derivePackageStatus(bookings, item.status),
-        component_count: bookings.length,
-        confirmed_count: bookings.filter((booking) => ["confirmed", "paid", "completed"].includes(String(booking.status || "").toLowerCase())).length,
       };
-    }));
+    });
     return res.json(items);
   } catch (error) {
     console.error("listTourPackages error:", error);
