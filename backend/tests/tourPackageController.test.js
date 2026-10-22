@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizePackagePayment, normalizeTraveler, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTraveler, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -29,6 +29,13 @@ test("normalizes private traveler details", () => {
     fullName: "Jane Doe", travelerType: "child", birthDate: null, citizenship: null,
     passportNumber: "AB 123", passportExpiry: null, roomType: null, notes: "Vegan", sortOrder: 2,
   });
+});
+
+test("normalizes private component operations", () => {
+  assert.deepEqual(normalizeComponentOperations({ confirmation_reference: " HTL-42 ", supplier_payment_due_at: "2026-11-05", operational_note: " Pay after invoice " }), {
+    confirmationReference: "HTL-42", supplierPaymentDueAt: "2026-11-05", operationalNote: "Pay after invoice",
+  });
+  assert.equal(normalizeComponentOperations({ supplier_payment_due_at: "tomorrow" }).supplierPaymentDueAt, null);
 });
 
 test("hashes proposal tokens deterministically without storing the raw token", () => {

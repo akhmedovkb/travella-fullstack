@@ -106,3 +106,18 @@ CREATE TABLE IF NOT EXISTS tour_package_travelers (
 CREATE INDEX IF NOT EXISTS idx_tour_package_travelers_package
   ON tour_package_travelers(package_id, sort_order, id);
 
+CREATE TABLE IF NOT EXISTS tour_package_component_ops (
+  id BIGSERIAL PRIMARY KEY,
+  package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+  booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+  confirmation_reference TEXT,
+  supplier_payment_due_at DATE,
+  operational_note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(package_id, booking_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package
+  ON tour_package_component_ops(package_id, booking_id);
+

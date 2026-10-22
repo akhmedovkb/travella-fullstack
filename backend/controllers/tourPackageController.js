@@ -55,6 +55,15 @@ function normalizeTraveler(body = {}, index = 0) {
   };
 }
 
+function normalizeComponentOperations(body = {}) {
+  const dueAt = String(body.supplier_payment_due_at || "").trim();
+  return {
+    confirmationReference: String(body.confirmation_reference || "").trim().slice(0, 120) || null,
+    supplierPaymentDueAt: /^\d{4}-\d{2}-\d{2}$/.test(dueAt) ? dueAt : null,
+    operationalNote: String(body.operational_note || "").trim().slice(0, 1000) || null,
+  };
+}
+
 function derivePackageStatus(rows = [], storedStatus = "draft") {
   if (["proposed", "booked", "paid", "cancelled"].includes(storedStatus)) return storedStatus;
   if (!rows.length) return storedStatus || "draft";
@@ -256,6 +265,20 @@ async function ensureTourPackagesTable() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_travelers_package ON tour_package_travelers(package_id, sort_order, id)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_component_ops (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      confirmation_reference TEXT,
+      supplier_payment_due_at DATE,
+      operational_note TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(package_id, booking_id)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
 }
 
 function packageSnapshot(row = {}) {
@@ -276,14 +299,57 @@ function requireProviderOwner(req, res) {
 async function packageBookings(packageId) {
   const result = await pool.query(
     `SELECT b.id, b.status, b.provider_id, b.provider_price, b.currency,
-            b.payment_status, p.name AS provider_name, p.type AS provider_type
+            b.payment_status, b.date, b.provider_note,
+            s.title AS service_title,
+            p.name AS provider_name, p.type AS provider_type, p.phone AS provider_phone,
+            p.social AS provider_telegram,
+            ops.confirmation_reference, ops.supplier_payment_due_at, ops.operational_note
        FROM bookings b
        LEFT JOIN providers p ON p.id = b.provider_id
+       LEFT JOIN services s ON s.id = b.service_id
+       LEFT JOIN tour_package_component_ops ops ON ops.package_id=$1::uuid AND ops.booking_id=b.id
       WHERE b.group_id = $1::uuid
       ORDER BY b.created_at, b.id`,
     [packageId]
   );
   return result.rows;
+}
+
+async function updateTourPackageComponentOperations(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const packageId = req.params.id;
+    const bookingId = Number(req.params.bookingId);
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
+    const current = await pool.query(
+      `SELECT tp.status
+         FROM tour_packages tp
+         JOIN bookings b ON b.group_id=tp.id AND b.id=$3
+        WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
+      [packageId, ownerId, bookingId]
+    );
+    if (!current.rowCount) return res.status(404).json({ message: "Tour package component not found" });
+    if (String(current.rows[0].status) === "cancelled") return res.status(409).json({ message: "Cancelled packages cannot be changed" });
+    const value = normalizeComponentOperations(req.body);
+    const result = await pool.query(
+      `INSERT INTO tour_package_component_ops(
+         package_id,booking_id,confirmation_reference,supplier_payment_due_at,operational_note
+       ) VALUES($1::uuid,$2,$3,$4::date,$5)
+       ON CONFLICT(package_id,booking_id) DO UPDATE SET
+         confirmation_reference=EXCLUDED.confirmation_reference,
+         supplier_payment_due_at=EXCLUDED.supplier_payment_due_at,
+         operational_note=EXCLUDED.operational_note,
+         updated_at=NOW()
+       RETURNING booking_id,confirmation_reference,supplier_payment_due_at,operational_note,updated_at`,
+      [packageId, bookingId, value.confirmationReference, value.supplierPaymentDueAt, value.operationalNote]
+    );
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("updateTourPackageComponentOperations error:", error);
+    return res.status(500).json({ message: "Failed to update component operations" });
+  }
 }
 
 function normalizePackageBody(body = {}) {
@@ -768,6 +834,7 @@ module.exports = {
   canEditTourPackage,
   normalizePackagePayment,
   normalizeTraveler,
+  normalizeComponentOperations,
   derivePackageStatus,
   packageSaleReadiness,
   hashShareToken,
@@ -786,5 +853,6 @@ module.exports = {
   confirmTourPackageSale,
   updateTourPackagePayment,
   replaceTourPackageTravelers,
+  updateTourPackageComponentOperations,
 };
 
