@@ -11,6 +11,7 @@ const {
   respondToTourProposal,
   confirmTourPackageSale,
   updateTourPackagePayment,
+  replaceTourPackageTravelers,
 } = require("../controllers/tourPackageController");
 
 const router = express.Router();
@@ -24,6 +25,7 @@ router.post("/:id/share", shareTourPackage);
 router.delete("/:id/share", revokeTourPackageShare);
 router.post("/:id/confirm-sale", confirmTourPackageSale);
 router.patch("/:id/payment", updateTourPackagePayment);
+router.put("/:id/travelers", replaceTourPackageTravelers);
 router.get("/:id", getTourPackage);
 router.patch("/:id", updateTourPackage);
 

@@ -86,3 +86,23 @@ CREATE TABLE IF NOT EXISTS tour_package_payment_events (
 CREATE INDEX IF NOT EXISTS idx_tour_package_payment_events_package
   ON tour_package_payment_events(package_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS tour_package_travelers (
+  id BIGSERIAL PRIMARY KEY,
+  package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+  full_name TEXT NOT NULL,
+  traveler_type VARCHAR(16) NOT NULL DEFAULT 'adult',
+  birth_date DATE,
+  citizenship TEXT,
+  passport_number TEXT,
+  passport_expiry DATE,
+  room_type TEXT,
+  notes TEXT,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CONSTRAINT tour_package_travelers_type_chk CHECK (traveler_type IN ('adult','child'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tour_package_travelers_package
+  ON tour_package_travelers(package_id, sort_order, id);
+

@@ -38,6 +38,23 @@ function normalizePackagePayment(body = {}, grossTotal = 0) {
   };
 }
 
+function normalizeTraveler(body = {}, index = 0) {
+  const isoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim())
+    ? String(value).trim()
+    : null;
+  return {
+    fullName: String(body.full_name || "").trim().slice(0, 180),
+    travelerType: body.traveler_type === "child" ? "child" : "adult",
+    birthDate: isoDate(body.birth_date),
+    citizenship: String(body.citizenship || "").trim().slice(0, 80) || null,
+    passportNumber: String(body.passport_number || "").trim().toUpperCase().slice(0, 40) || null,
+    passportExpiry: isoDate(body.passport_expiry),
+    roomType: String(body.room_type || "").trim().slice(0, 80) || null,
+    notes: String(body.notes || "").trim().slice(0, 500) || null,
+    sortOrder: index,
+  };
+}
+
 function derivePackageStatus(rows = [], storedStatus = "draft") {
   if (["proposed", "booked", "paid", "cancelled"].includes(storedStatus)) return storedStatus;
   if (!rows.length) return storedStatus || "draft";
@@ -221,6 +238,24 @@ async function ensureTourPackagesTable() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_payment_events_package ON tour_package_payment_events(package_id, created_at DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_travelers (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      full_name TEXT NOT NULL,
+      traveler_type VARCHAR(16) NOT NULL DEFAULT 'adult',
+      birth_date DATE,
+      citizenship TEXT,
+      passport_number TEXT,
+      passport_expiry DATE,
+      room_type TEXT,
+      notes TEXT,
+      sort_order INTEGER NOT NULL DEFAULT 0,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_travelers_package ON tour_package_travelers(package_id, sort_order, id)`);
 }
 
 function packageSnapshot(row = {}) {
@@ -383,6 +418,12 @@ async function getTourPackage(req, res) {
          FROM tour_package_payment_events WHERE package_id=$1::uuid ORDER BY created_at DESC,id DESC`,
       [req.params.id]
     );
+    const travelers = await pool.query(
+      `SELECT id,full_name,traveler_type,birth_date,citizenship,passport_number,
+              passport_expiry,room_type,notes,sort_order
+         FROM tour_package_travelers WHERE package_id=$1::uuid ORDER BY sort_order,id`,
+      [req.params.id]
+    );
     return res.json({
       ...item,
       share_token_hash: undefined,
@@ -391,6 +432,7 @@ async function getTourPackage(req, res) {
       components: bookings,
       revisions: revisions.rows,
       payment_events: paymentEvents.rows,
+      travelers: travelers.rows,
       readiness: packageSaleReadiness(bookings, item.proposal_response),
     });
   } catch (error) {
@@ -612,6 +654,52 @@ async function updateTourPackagePayment(req, res) {
   }
 }
 
+async function replaceTourPackageTravelers(req, res) {
+  let client;
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const current = await pool.query(
+      `SELECT id,status,pax_adult,pax_child FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2`,
+      [req.params.id, ownerId]
+    );
+    if (!current.rowCount) return res.status(404).json({ message: "Tour package not found" });
+    if (String(current.rows[0].status) === "cancelled") return res.status(409).json({ message: "Cancelled packages cannot be changed" });
+    const rows = Array.isArray(req.body?.travelers) ? req.body.travelers.slice(0, 200).map(normalizeTraveler) : [];
+    if (rows.some((row) => !row.fullName)) return res.status(400).json({ message: "Every traveler must have a full name" });
+    const capacity = Number(current.rows[0].pax_adult || 0) + Number(current.rows[0].pax_child || 0);
+    if (rows.length > capacity) return res.status(400).json({ message: "Traveler count exceeds package PAX" });
+    client = await pool.connect();
+    await client.query("BEGIN");
+    await client.query(`DELETE FROM tour_package_travelers WHERE package_id=$1::uuid`, [req.params.id]);
+    for (const row of rows) {
+      await client.query(
+        `INSERT INTO tour_package_travelers(package_id,full_name,traveler_type,birth_date,citizenship,
+           passport_number,passport_expiry,room_type,notes,sort_order)
+         VALUES($1::uuid,$2,$3,$4::date,$5,$6,$7::date,$8,$9,$10)`,
+        [req.params.id, row.fullName, row.travelerType, row.birthDate, row.citizenship,
+          row.passportNumber, row.passportExpiry, row.roomType, row.notes, row.sortOrder]
+      );
+    }
+    await client.query(`UPDATE tour_packages SET updated_at=NOW() WHERE id=$1::uuid`, [req.params.id]);
+    await client.query("COMMIT");
+    const result = await pool.query(
+      `SELECT id,full_name,traveler_type,birth_date,citizenship,passport_number,
+              passport_expiry,room_type,notes,sort_order
+         FROM tour_package_travelers WHERE package_id=$1::uuid ORDER BY sort_order,id`,
+      [req.params.id]
+    );
+    return res.json({ travelers: result.rows });
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    console.error("replaceTourPackageTravelers error:", error);
+    return res.status(500).json({ message: "Failed to update travelers" });
+  } finally {
+    client?.release();
+  }
+}
+
 async function revokeTourPackageShare(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -679,6 +767,7 @@ module.exports = {
   calculateGross,
   canEditTourPackage,
   normalizePackagePayment,
+  normalizeTraveler,
   derivePackageStatus,
   packageSaleReadiness,
   hashShareToken,
@@ -696,5 +785,6 @@ module.exports = {
   respondToTourProposal,
   confirmTourPackageSale,
   updateTourPackagePayment,
+  replaceTourPackageTravelers,
 };
 

@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizePackagePayment, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizePackagePayment, normalizeTraveler, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -21,6 +21,13 @@ test("derives package payment status from the received amount", () => {
   assert.deepEqual(normalizePackagePayment({ paid_amount: 250 }, 1000).paymentStatus, "partial");
   assert.deepEqual(normalizePackagePayment({ paid_amount: 1500 }, 1000), {
     paymentStatus: "paid", paidAmount: 1000, paymentDueAt: null, paymentNote: null,
+  });
+});
+
+test("normalizes private traveler details", () => {
+  assert.deepEqual(normalizeTraveler({ full_name: "  Jane Doe  ", traveler_type: "child", passport_number: " ab 123 ", notes: " Vegan " }, 2), {
+    fullName: "Jane Doe", travelerType: "child", birthDate: null, citizenship: null,
+    passportNumber: "AB 123", passportExpiry: null, roomType: null, notes: "Vegan", sortOrder: 2,
   });
 });
 
