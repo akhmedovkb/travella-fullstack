@@ -80,6 +80,7 @@ export default function TourProposal() {
   const totalGuests = Number(proposal.pax_adult || 0) + Number(proposal.pax_child || 0);
   const amount = Number(proposal.gross_total || 0).toLocaleString(proposal.currency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 });
   const itinerary = Array.isArray(proposal.itinerary) ? proposal.itinerary : [];
+  const isBooked = ["booked", "paid"].includes(String(proposal.status || "").toLowerCase());
 
   return (
     <main className="proposal-page min-h-screen bg-gray-100 px-4 py-8 sm:px-6 lg:py-12">
@@ -88,12 +89,13 @@ export default function TourProposal() {
         <header className="proposal-cover bg-gray-950 px-6 py-8 text-white sm:px-10">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
-              <div className="text-sm font-semibold uppercase text-orange-400">{t("tb.proposal.label")}</div>
+              <div className="text-sm font-semibold uppercase text-orange-400">{isBooked ? t("tb.proposal.voucher_label") : t("tb.proposal.label")}</div>
               <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{proposal.title}</h1>
               {proposal.client_name ? <p className="mt-3 text-gray-300">{t("tb.proposal.prepared_for", { name: proposal.client_name })}</p> : null}
+              {proposal.booking_reference ? <div className="mt-4 inline-flex border border-emerald-500 bg-emerald-500/10 px-3 py-2 font-mono text-sm font-bold text-emerald-300">{proposal.booking_reference}</div> : null}
             </div>
             <button type="button" onClick={() => window.print()} className="proposal-actions inline-flex h-11 items-center gap-2 border border-gray-600 px-4 font-semibold hover:bg-gray-800">
-              <Printer size={18} /> {t("tb.proposal.print")}
+              <Printer size={18} /> {isBooked ? t("tb.proposal.print_voucher") : t("tb.proposal.print")}
             </button>
           </div>
         </header>
@@ -145,7 +147,18 @@ export default function TourProposal() {
         </section>
 
         <section className="proposal-actions border-t border-gray-200 bg-gray-50 px-6 py-8 sm:px-10">
-          {proposal.proposal_response ? (
+          {isBooked ? (
+            <div className="border border-emerald-300 bg-emerald-50 p-5">
+              <div className="flex items-start gap-3">
+                <CheckCircle2 className="mt-0.5 text-emerald-700" />
+                <div>
+                  <h2 className="font-bold text-gray-950">{t("tb.proposal.booking_confirmed")}</h2>
+                  <p className="mt-1 text-sm text-gray-700">{t("tb.proposal.booking_confirmed_text", { reference: proposal.booking_reference })}</p>
+                  {proposal.booked_at ? <p className="mt-2 text-xs text-gray-500">{t("tb.proposal.booked_at")}: {dateValue(proposal.booked_at, language)}</p> : null}
+                </div>
+              </div>
+            </div>
+          ) : proposal.proposal_response ? (
             <div className={`border p-5 ${proposal.proposal_response === "accepted" ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`}>
               <div className="flex items-start gap-3">
                 {proposal.proposal_response === "accepted" ? <CheckCircle2 className="mt-0.5 text-emerald-700" /> : <MessageSquare className="mt-0.5 text-amber-700" />}

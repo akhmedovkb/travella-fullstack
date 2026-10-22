@@ -1607,11 +1607,13 @@
     },
     "proposal": {
       "label": "Tijorat taklifi",
+      "voucher_label": "Bron tasdiqnomasi",
       "loading": "Taklif yuklanmoqda...",
       "unavailable_title": "Taklif mavjud emas",
       "unavailable_text": "Havola muddati tugagan yoki agentlik tomonidan bekor qilingan. Yangilangan taklifni so‘rang.",
       "prepared_for": "{{name}} uchun tayyorlandi",
       "print": "Chop etish / PDF",
+      "print_voucher": "Vaucherni yuklab olish",
       "dates": "Sayohat sanalari",
       "route": "Yo‘nalish",
       "guests": "Mehmonlar",
@@ -1659,7 +1661,10 @@
       "sale_confirmed": "Paket «Bron qilingan» holatiga o‘tkazildi",
       "acceptance_required": "Avval mijozning roziligi kerak",
       "components_required": "Paketda hali komponent bronlari yo‘q",
-      "components_pending": "{{total}} komponentdan {{confirmed}} tasi tasdiqlangan"
+      "components_pending": "{{total}} komponentdan {{confirmed}} tasi tasdiqlangan",
+      "booking_confirmed": "Sayohat bron qilindi",
+      "booking_confirmed_text": "Barcha komponentlar tasdiqlandi. Bron raqami: {{reference}}.",
+      "booked_at": "Rasmiylashtirilgan sana"
     },
     "title": "Tur konstruktori",
     "dates": "Tur sanalari",

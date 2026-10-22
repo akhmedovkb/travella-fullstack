@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS tour_packages (
   proposal_response VARCHAR(32),
   proposal_response_message TEXT,
   proposal_responded_at TIMESTAMPTZ,
+  booking_reference VARCHAR(32),
+  booked_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT tour_packages_status_chk CHECK (status IN (
@@ -47,4 +49,7 @@ CREATE INDEX IF NOT EXISTS idx_tour_packages_status
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_share_token
   ON tour_packages(share_token_hash) WHERE share_token_hash IS NOT NULL;
+
+CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_booking_reference
+  ON tour_packages(booking_reference) WHERE booking_reference IS NOT NULL;
 

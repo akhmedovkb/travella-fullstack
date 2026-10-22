@@ -49,6 +49,11 @@ function createShareToken() {
   return crypto.randomBytes(32).toString("base64url");
 }
 
+function createBookingReference(date = new Date(), bytes = crypto.randomBytes(3)) {
+  const stamp = date.toISOString().slice(2, 10).replace(/-/g, "");
+  return `TVL-${stamp}-${Buffer.from(bytes).toString("hex").toUpperCase()}`;
+}
+
 function publicPackageView(row = {}) {
   return {
     title: row.title,
@@ -66,6 +71,8 @@ function publicPackageView(row = {}) {
     proposal_response: row.proposal_response || null,
     proposal_response_message: row.proposal_response_message || null,
     proposal_responded_at: row.proposal_responded_at || null,
+    booking_reference: row.booking_reference || null,
+    booked_at: row.booked_at || null,
     agency: {
       name: row.agency_name || "Travella partner",
       phone: row.agency_phone || null,
@@ -104,6 +111,8 @@ async function ensureTourPackagesTable() {
       proposal_response VARCHAR(32),
       proposal_response_message TEXT,
       proposal_responded_at TIMESTAMPTZ,
+      booking_reference VARCHAR(32),
+      booked_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -118,8 +127,11 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_response VARCHAR(32)`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_response_message TEXT`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_responded_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS booking_reference VARCHAR(32)`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS booked_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated ON tour_packages(owner_provider_id, updated_at DESC)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_share_token ON tour_packages(share_token_hash) WHERE share_token_hash IS NOT NULL`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_booking_reference ON tour_packages(booking_reference) WHERE booking_reference IS NOT NULL`);
 }
 
 function requireProviderOwner(req, res) {
@@ -318,9 +330,15 @@ async function shareTourPackage(req, res) {
     const result = await pool.query(
       `UPDATE tour_packages SET title=$3, client_name=$4, client_phone=$5,
          client_email=$6, client_company=$7, quote_valid_until=$8,
-         share_token_hash=$9, shared_at=NOW(), share_expires_at=$8,
-         proposal_response=NULL, proposal_response_message=NULL, proposal_responded_at=NULL,
-         status='proposed', updated_at=NOW()
+         share_token_hash=$9, shared_at=NOW(),
+         share_expires_at=CASE WHEN status IN ('booked','paid')
+           THEN GREATEST($8::timestamptz, COALESCE(end_date::timestamptz + INTERVAL '7 days', NOW() + INTERVAL '30 days'))
+           ELSE $8::timestamptz END,
+         proposal_response=CASE WHEN status IN ('booked','paid') THEN proposal_response ELSE NULL END,
+         proposal_response_message=CASE WHEN status IN ('booked','paid') THEN proposal_response_message ELSE NULL END,
+         proposal_responded_at=CASE WHEN status IN ('booked','paid') THEN proposal_responded_at ELSE NULL END,
+         status=CASE WHEN status IN ('booked','paid') THEN status ELSE 'proposed' END,
+         updated_at=NOW()
        WHERE id=$1::uuid AND owner_provider_id=$2
        RETURNING id,status,shared_at,share_expires_at`,
       [req.params.id, ownerId, value.title, value.clientName, value.clientPhone,
@@ -380,11 +398,18 @@ async function confirmTourPackageSale(req, res) {
     if (!readiness.ready) {
       return res.status(409).json({ message: "All supplier components must be confirmed", readiness });
     }
+    const bookingReference = current.rows[0].booking_reference || createBookingReference();
     const result = await pool.query(
-      `UPDATE tour_packages SET status='booked', updated_at=NOW()
+      `UPDATE tour_packages SET status='booked', booking_reference=COALESCE(booking_reference,$3),
+         booked_at=COALESCE(booked_at,NOW()),
+         share_expires_at=GREATEST(
+           COALESCE(share_expires_at, NOW()),
+           COALESCE(end_date::timestamptz + INTERVAL '7 days', NOW() + INTERVAL '30 days')
+         ),
+         updated_at=NOW()
        WHERE id=$1::uuid AND owner_provider_id=$2
        RETURNING *`,
-      [req.params.id, ownerId]
+      [req.params.id, ownerId, bookingReference]
     );
     return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash), readiness });
   } catch (error) {
@@ -439,6 +464,7 @@ module.exports = {
   derivePackageStatus,
   packageSaleReadiness,
   hashShareToken,
+  createBookingReference,
   publicPackageView,
   createTourPackage,
   listTourPackages,

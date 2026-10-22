@@ -716,6 +716,7 @@ export default function ProviderBookings() {
               <span className="text-xs text-gray-500">
                 {group.items.length} {t("bookings.services_count", { defaultValue: "услуг" })}
               </span>
+              {tourPackage?.booking_reference ? <span className="font-mono text-xs font-semibold text-gray-600">{tourPackage.booking_reference}</span> : null}
               {tourPackage?.proposal_response ? (
                 <span className={`rounded-full px-2 py-1 text-xs font-semibold ring-1 ${tourPackage.proposal_response === "accepted" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>
                   {t(`tb.proposal.response_${tourPackage.proposal_response}`)}

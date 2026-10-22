@@ -1609,11 +1609,13 @@
     },
     "proposal": {
       "label": "Travel proposal",
+      "voucher_label": "Booking confirmation",
       "loading": "Loading proposal...",
       "unavailable_title": "Proposal unavailable",
       "unavailable_text": "This link has expired or was revoked by the agency. Please request an updated proposal.",
       "prepared_for": "Prepared for {{name}}",
       "print": "Print / PDF",
+      "print_voucher": "Download voucher",
       "dates": "Travel dates",
       "route": "Route",
       "guests": "Guests",
@@ -1661,7 +1663,10 @@
       "sale_confirmed": "Package moved to Booked",
       "acceptance_required": "Client acceptance is required first",
       "components_required": "The package has no component bookings yet",
-      "components_pending": "{{confirmed}} of {{total}} components confirmed"
+      "components_pending": "{{confirmed}} of {{total}} components confirmed",
+      "booking_confirmed": "Your trip is booked",
+      "booking_confirmed_text": "Every component is confirmed. Booking reference: {{reference}}.",
+      "booked_at": "Booked on"
     },
     "title": "Tour builder",
     "dates": "Tour dates",
