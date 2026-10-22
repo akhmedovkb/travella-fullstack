@@ -361,7 +361,12 @@ async function getTourPackage(req, res) {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
-    const result = await pool.query(`SELECT * FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2`, [req.params.id, ownerId]);
+    const result = await pool.query(
+      `SELECT tp.*,p.name AS agency_name,p.phone AS agency_phone,p.email AS agency_email
+         FROM tour_packages tp JOIN providers p ON p.id=tp.owner_provider_id
+        WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
+      [req.params.id, ownerId]
+    );
     if (!result.rowCount) return res.status(404).json({ message: "Tour package not found" });
     const bookings = await packageBookings(req.params.id);
     const item = result.rows[0];
