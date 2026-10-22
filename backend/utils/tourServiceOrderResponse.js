@@ -50,6 +50,12 @@ async function respondToSupplierServiceOrder({ actorTelegramId, bookingId, decis
      VALUES($1::uuid,$2,$3,'supplier',$4)`,
     [item.package_id, Number(bookingId), normalizedDecision, String(actorTelegramId)]
   );
+  await pool.query(
+    `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
+     WHERE package_id=$1::uuid AND booking_id=$2
+       AND task_type='follow_up_supplier_order' AND completed=FALSE`,
+    [item.package_id, Number(bookingId)]
+  );
   if (normalizedDecision === "declined") {
     await pool.query(
       `INSERT INTO tour_package_tasks(package_id,title,task_type,booking_id,due_at,priority)

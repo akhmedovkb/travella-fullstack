@@ -1713,6 +1713,7 @@
       "overdue": "Muddati o‘tgan",
       "automatic": "Avto",
       "replace_declined_supplier": "Ta’minotchini almashtirish: {{service}}",
+      "follow_up_supplier_order": "Ta’minotchi bilan bog‘lanish: {{service}}",
       "empty": "Bu tur uchun vazifalar hozircha yo‘q",
       "created": "Vazifa qo‘shildi",
       "save_error": "Vazifani saqlab bo‘lmadi",

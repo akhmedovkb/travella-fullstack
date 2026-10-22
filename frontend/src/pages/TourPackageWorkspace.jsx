@@ -156,7 +156,11 @@ function OperationsTasks({ items = [], saving, onCreate, onToggle, onDelete, t }
     </div>
     <div className="mt-3 divide-y border-y border-gray-200">{items.map((item) => {
       const overdue = !item.completed && item.due_at && dateValue(item.due_at) < new Date().toISOString().slice(0, 10);
-      const title = item.task_type === "replace_declined_supplier" ? t("tb.tasks.replace_declined_supplier", { service: item.service_title || `#${item.booking_id}` }) : item.title;
+      const title = item.task_type === "replace_declined_supplier"
+        ? t("tb.tasks.replace_declined_supplier", { service: item.service_title || `#${item.booking_id}` })
+        : item.task_type === "follow_up_supplier_order"
+          ? t("tb.tasks.follow_up_supplier_order", { service: item.service_title || `#${item.booking_id}` })
+          : item.title;
       return <div key={item.id} className={`flex flex-wrap items-center gap-3 px-2 py-3 ${item.completed ? "opacity-55" : ""}`}><button type="button" onClick={() => onToggle(item)} title={item.completed ? t("tb.tasks.reopen") : t("tb.tasks.complete")} className={item.completed ? "text-emerald-600" : "text-gray-400 hover:text-emerald-600"}>{item.completed ? <CheckCircle2 size={21} /> : <CircleDashed size={21} />}</button><div className="min-w-[220px] flex-1"><div className={`font-semibold ${item.completed ? "line-through" : ""}`}>{title}{item.task_type && <span className="ml-2 bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-sky-700">{t("tb.tasks.automatic")}</span>}</div><div className="mt-0.5 text-xs text-gray-500">{item.assigned_to || t("tb.tasks.unassigned")}{item.due_at ? ` · ${dateText(item.due_at)}` : ""}</div></div><span className={`px-2 py-1 text-xs font-bold ${priorityTone[item.priority] || priorityTone.normal}`}>{t(`tb.tasks.priority_${item.priority || "normal"}`)}</span>{overdue && <span className="text-xs font-bold text-red-700">{t("tb.tasks.overdue")}</span>}<button type="button" onClick={() => onDelete(item.id)} title={t("common.delete")} className="inline-flex h-9 w-9 items-center justify-center text-red-600 hover:bg-red-50"><Trash2 size={16} /></button></div>;
     })}{!items.length && <div className="py-6 text-center text-sm text-gray-500">{t("tb.tasks.empty")}</div>}</div>
   </section>;

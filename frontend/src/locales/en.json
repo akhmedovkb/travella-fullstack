@@ -1715,6 +1715,7 @@
       "overdue": "Overdue",
       "automatic": "Auto",
       "replace_declined_supplier": "Replace supplier: {{service}}",
+      "follow_up_supplier_order": "Follow up with supplier: {{service}}",
       "empty": "No tasks for this tour yet",
       "created": "Task added",
       "save_error": "Could not save task",

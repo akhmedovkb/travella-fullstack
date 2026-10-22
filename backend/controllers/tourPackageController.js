@@ -454,6 +454,36 @@ async function packageBookings(packageId) {
   return result.rows;
 }
 
+async function syncSupplierOrderFollowUpTasks(ownerId, packageId = null) {
+  const values = [ownerId];
+  const packageFilter = packageId ? "AND tp.id=$2::uuid" : "";
+  if (packageId) values.push(packageId);
+  await pool.query(
+    `INSERT INTO tour_package_tasks(package_id,title,task_type,booking_id,due_at,priority)
+     SELECT tp.id,
+            'Follow up supplier: ' || COALESCE(NULLIF(TRIM(service.title),''),'#' || booking.id::text),
+            'follow_up_supplier_order',booking.id,CURRENT_DATE,'high'
+       FROM tour_packages tp
+       JOIN bookings booking ON booking.group_id=tp.id
+       JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=booking.id
+       LEFT JOIN services service ON service.id=booking.service_id
+      WHERE tp.owner_provider_id=$1 ${packageFilter}
+        AND tp.status IN ('booked','paid')
+        AND ops.service_order_status='sent'
+        AND ops.service_order_sent_at < NOW() - INTERVAL '24 hours'
+        AND NOT EXISTS (
+          SELECT 1 FROM tour_package_tasks existing
+           WHERE existing.package_id=tp.id
+             AND existing.booking_id=booking.id
+             AND existing.task_type='follow_up_supplier_order'
+             AND existing.created_at >= ops.service_order_sent_at
+        )
+     ON CONFLICT (package_id,booking_id,task_type) WHERE completed=FALSE AND task_type IS NOT NULL
+     DO NOTHING`,
+    values
+  );
+}
+
 async function updateTourPackageComponentOperations(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -568,6 +598,7 @@ async function listTourPackages(req, res) {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
+    await syncSupplierOrderFollowUpTasks(ownerId);
     const result = await pool.query(
       `SELECT tp.*,
               COUNT(b.id)::int AS component_count,
@@ -659,6 +690,7 @@ async function getTourPackage(req, res) {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
+    await syncSupplierOrderFollowUpTasks(ownerId, req.params.id);
     const result = await pool.query(
       `SELECT tp.*,p.name AS agency_name,p.phone AS agency_phone,p.email AS agency_email
          FROM tour_packages tp JOIN providers p ON p.id=tp.owner_provider_id
@@ -1053,6 +1085,12 @@ async function sendTourPackageServiceOrder(req, res) {
       );
       return res.status(502).json({ message: "Failed to send supplier order" });
     }
+    await pool.query(
+      `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
+       WHERE package_id=$1::uuid AND booking_id=$2
+         AND task_type='follow_up_supplier_order' AND completed=FALSE`,
+      [packageId, bookingId]
+    );
     const event = await pool.query(
       `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type)
        VALUES($1::uuid,$2,'sent','dmc')
