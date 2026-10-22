@@ -89,7 +89,7 @@ export default function TourProposal() {
         <header className="proposal-cover bg-gray-950 px-6 py-8 text-white sm:px-10">
           <div className="flex flex-wrap items-start justify-between gap-6">
             <div>
-              <div className="text-sm font-semibold uppercase text-orange-400">{isBooked ? t("tb.proposal.voucher_label") : t("tb.proposal.label")}</div>
+              <div className="text-sm font-semibold uppercase text-orange-400">{isBooked ? t("tb.proposal.voucher_label") : t("tb.proposal.label")}{proposal.revision ? ` · v${proposal.revision}` : ""}</div>
               <h1 className="mt-2 text-3xl font-bold sm:text-4xl">{proposal.title}</h1>
               {proposal.client_name ? <p className="mt-3 text-gray-300">{t("tb.proposal.prepared_for", { name: proposal.client_name })}</p> : null}
               {proposal.booking_reference ? <div className="mt-4 inline-flex border border-emerald-500 bg-emerald-500/10 px-3 py-2 font-mono text-sm font-bold text-emerald-300">{proposal.booking_reference}</div> : null}

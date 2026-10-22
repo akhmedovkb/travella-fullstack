@@ -1666,6 +1666,23 @@
       "booking_confirmed_text": "Barcha komponentlar tasdiqlandi. Bron raqami: {{reference}}.",
       "booked_at": "Rasmiylashtirilgan sana"
     },
+    "workspace": {
+      "load_error": "Tur paketini yuklab bo‘lmadi",
+      "back": "Bronlarga qaytish",
+      "package": "Tur ish kartasi",
+      "margin": "Agentlik marjasi",
+      "components": "Komponentlar va yetkazib beruvchilar",
+      "supplier": "Yetkazib beruvchi",
+      "no_components": "Tur komponentlari hali yaratilmagan.",
+      "revisions": "Takliflar tarixi",
+      "version": "{{version}}-versiya",
+      "accepted": "mijoz tomonidan qabul qilingan",
+      "no_revisions": "Mijozga hali taklif yuborilmagan.",
+      "client": "Mijoz",
+      "client_missing": "Mijoz ko‘rsatilmagan",
+      "proposal": "Tijorat taklifi",
+      "current_version": "Joriy e’lon qilingan versiya"
+    },
     "title": "Tur konstruktori",
     "dates": "Tur sanalari",
     "pick_dates": "Boshlanish va tugash sanalarini tanlang",

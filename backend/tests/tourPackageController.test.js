@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, packageSaleReadiness, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -24,6 +24,11 @@ test("escapes untrusted client text before Telegram HTML delivery", () => {
   assert.equal(escapeTelegramHtml("<b>A & B</b>"), "&lt;b&gt;A &amp; B&lt;/b&gt;");
 });
 
+test("revision snapshots never retain a share token", () => {
+  const snapshot = packageSnapshot({ id: "package", title: "Tour", share_token_hash: "secret", is_shared: true });
+  assert.deepEqual(snapshot, { id: "package", title: "Tour" });
+});
+
 test("public proposal omits agency costs, markup and client contacts", () => {
   const view = publicPackageView({
     title: "Silk Road",
@@ -40,10 +45,12 @@ test("public proposal omits agency costs, markup and client contacts", () => {
     itinerary: [{ day: 1, city: "Tashkent" }],
     agency_name: "Example DMC",
     agency_phone: "+998711111111",
+    current_revision: 3,
   });
   assert.equal(view.gross_total, "1250.00");
   assert.equal(view.client_name, "Alex");
   assert.equal(view.agency.name, "Example DMC");
+  assert.equal(view.revision, 3);
   assert.equal(view.proposal_response, "changes_requested");
   assert.equal("net_total" in view, false);
   assert.equal("markup_value" in view, false);

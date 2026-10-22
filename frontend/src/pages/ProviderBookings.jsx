@@ -7,6 +7,7 @@ import { tSuccess, tError, tInfo } from "../shared/toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
 import { Copy, ExternalLink, Link2, X } from "lucide-react";
+import { Link } from "react-router-dom";
 
 /* ================= helpers ================= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -707,9 +708,7 @@ export default function ProviderBookings() {
           <div>
             <div className="text-xs font-semibold text-orange-600">Tour Builder</div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-bold text-gray-950">
-                {tourPackage?.title || `${t("bookings.request", { defaultValue: "Заявка" })} ${reference ? `№ ${reference}` : ""}`}
-              </h2>
+              {tourPackage ? <Link to={`/dashboard/tour-packages/${tourPackage.id}`} className="text-lg font-bold text-gray-950 hover:text-orange-700 hover:underline">{tourPackage.title}</Link> : <h2 className="text-lg font-bold text-gray-950">{`${t("bookings.request", { defaultValue: "Заявка" })} ${reference ? `№ ${reference}` : ""}`}</h2>}
               <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-200">
                 {t(`tb.package_status.${status}`, { defaultValue: status })}
               </span>

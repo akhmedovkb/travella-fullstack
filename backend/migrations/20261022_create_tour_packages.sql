@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS tour_packages (
   proposal_responded_at TIMESTAMPTZ,
   booking_reference VARCHAR(32),
   booked_at TIMESTAMPTZ,
+  current_revision INTEGER NOT NULL DEFAULT 0,
+  accepted_revision INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT tour_packages_status_chk CHECK (status IN (
@@ -52,4 +54,16 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_share_token
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_booking_reference
   ON tour_packages(booking_reference) WHERE booking_reference IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS tour_package_revisions (
+  id BIGSERIAL PRIMARY KEY,
+  package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+  version INTEGER NOT NULL,
+  snapshot JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE(package_id, version)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tour_package_revisions_package
+  ON tour_package_revisions(package_id, version DESC);
 

@@ -100,6 +100,7 @@ function publicPackageView(row = {}) {
     proposal_responded_at: row.proposal_responded_at || null,
     booking_reference: row.booking_reference || null,
     booked_at: row.booked_at || null,
+    revision: Number(row.current_revision || 0),
     agency: {
       name: row.agency_name || "Travella partner",
       phone: row.agency_phone || null,
@@ -140,6 +141,8 @@ async function ensureTourPackagesTable() {
       proposal_responded_at TIMESTAMPTZ,
       booking_reference VARCHAR(32),
       booked_at TIMESTAMPTZ,
+      current_revision INTEGER NOT NULL DEFAULT 0,
+      accepted_revision INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -156,9 +159,29 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_responded_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS booking_reference VARCHAR(32)`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS booked_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS current_revision INTEGER NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS accepted_revision INTEGER`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated ON tour_packages(owner_provider_id, updated_at DESC)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_share_token ON tour_packages(share_token_hash) WHERE share_token_hash IS NOT NULL`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_booking_reference ON tour_packages(booking_reference) WHERE booking_reference IS NOT NULL`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_revisions (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      version INTEGER NOT NULL,
+      snapshot JSONB NOT NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(package_id, version)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_revisions_package ON tour_package_revisions(package_id, version DESC)`);
+}
+
+function packageSnapshot(row = {}) {
+  const snapshot = { ...row };
+  delete snapshot.share_token_hash;
+  delete snapshot.is_shared;
+  return snapshot;
 }
 
 function requireProviderOwner(req, res) {
@@ -296,7 +319,23 @@ async function getTourPackage(req, res) {
     if (!result.rowCount) return res.status(404).json({ message: "Tour package not found" });
     const bookings = await packageBookings(req.params.id);
     const item = result.rows[0];
-    return res.json({ ...item, share_token_hash: undefined, is_shared: Boolean(item.share_token_hash), status: derivePackageStatus(bookings, item.status), components: bookings });
+    const revisions = await pool.query(
+      `SELECT version,created_at,
+              snapshot->>'title' AS title,
+              snapshot->>'gross_total' AS gross_total,
+              snapshot->>'currency' AS currency
+         FROM tour_package_revisions WHERE package_id=$1::uuid ORDER BY version DESC`,
+      [req.params.id]
+    );
+    return res.json({
+      ...item,
+      share_token_hash: undefined,
+      is_shared: Boolean(item.share_token_hash),
+      status: derivePackageStatus(bookings, item.status),
+      components: bookings,
+      revisions: revisions.rows,
+      readiness: packageSaleReadiness(bookings, item.proposal_response),
+    });
   } catch (error) {
     console.error("getTourPackage error:", error);
     return res.status(500).json({ message: "Failed to load tour package" });
@@ -354,6 +393,8 @@ async function shareTourPackage(req, res) {
     const expiresAt = Number.isFinite(requestedExpiry.getTime()) && requestedExpiry > new Date()
       ? requestedExpiry
       : fallbackExpiry;
+    const isFinal = ["booked", "paid"].includes(String(current.rows[0].status));
+    const nextRevision = isFinal ? Number(current.rows[0].current_revision || 0) : Number(current.rows[0].current_revision || 0) + 1;
     const result = await pool.query(
       `UPDATE tour_packages SET title=$3, client_name=$4, client_phone=$5,
          client_email=$6, client_company=$7, quote_valid_until=$8,
@@ -365,13 +406,29 @@ async function shareTourPackage(req, res) {
          proposal_response_message=CASE WHEN status IN ('booked','paid') THEN proposal_response_message ELSE NULL END,
          proposal_responded_at=CASE WHEN status IN ('booked','paid') THEN proposal_responded_at ELSE NULL END,
          status=CASE WHEN status IN ('booked','paid') THEN status ELSE 'proposed' END,
+         current_revision=$10,
          updated_at=NOW()
        WHERE id=$1::uuid AND owner_provider_id=$2
-       RETURNING id,status,shared_at,share_expires_at`,
+       RETURNING *`,
       [req.params.id, ownerId, value.title, value.clientName, value.clientPhone,
-        value.clientEmail, value.clientCompany, expiresAt.toISOString(), hashShareToken(token)]
+        value.clientEmail, value.clientCompany, expiresAt.toISOString(), hashShareToken(token), nextRevision]
     );
-    return res.json({ ...result.rows[0], token });
+    if (!isFinal) {
+      await pool.query(
+        `INSERT INTO tour_package_revisions(package_id,version,snapshot)
+         VALUES($1::uuid,$2,$3::jsonb)
+         ON CONFLICT(package_id,version) DO UPDATE SET snapshot=EXCLUDED.snapshot,created_at=NOW()`,
+        [req.params.id, nextRevision, JSON.stringify(packageSnapshot(result.rows[0]))]
+      );
+    }
+    return res.json({
+      id: result.rows[0].id,
+      status: result.rows[0].status,
+      shared_at: result.rows[0].shared_at,
+      share_expires_at: result.rows[0].share_expires_at,
+      current_revision: result.rows[0].current_revision,
+      token,
+    });
   } catch (error) {
     console.error("shareTourPackage error:", error);
     return res.status(500).json({ message: "Failed to create proposal link" });
@@ -391,6 +448,7 @@ async function respondToTourProposal(req, res) {
     const result = await pool.query(
       `UPDATE tour_packages SET proposal_response=$2,
          proposal_response_message=$3, proposal_responded_at=NOW(), updated_at=NOW()
+         ,accepted_revision=CASE WHEN $2='accepted' THEN current_revision ELSE NULL END
        WHERE share_token_hash=$1 AND share_expires_at > NOW()
        RETURNING id,owner_provider_id,title,client_name,proposal_response,
          proposal_response_message,proposal_responded_at`,
@@ -476,16 +534,34 @@ async function getPublicTourProposal(req, res) {
     if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) return res.status(404).json({ message: "Proposal not found" });
     await ensureTourPackagesTable();
     const result = await pool.query(
-      `SELECT tp.*, p.name AS agency_name, p.phone AS agency_phone, p.email AS agency_email
+      `SELECT tp.*, rev.snapshot AS published_snapshot,
+              p.name AS agency_name, p.phone AS agency_phone, p.email AS agency_email
          FROM tour_packages tp
          JOIN providers p ON p.id=tp.owner_provider_id
+         LEFT JOIN tour_package_revisions rev
+           ON rev.package_id=tp.id AND rev.version=tp.current_revision
         WHERE tp.share_token_hash=$1 AND tp.share_expires_at > NOW()
         LIMIT 1`,
       [hashShareToken(token)]
     );
     if (!result.rowCount) return res.status(404).json({ message: "Proposal not found or expired" });
     res.set("Cache-Control", "no-store");
-    return res.json(publicPackageView(result.rows[0]));
+    const item = result.rows[0];
+    const published = item.published_snapshot && typeof item.published_snapshot === "object"
+      ? item.published_snapshot
+      : item;
+    return res.json(publicPackageView({
+      ...published,
+      status: item.status,
+      proposal_response: item.proposal_response,
+      proposal_response_message: item.proposal_response_message,
+      proposal_responded_at: item.proposal_responded_at,
+      booking_reference: item.booking_reference,
+      booked_at: item.booked_at,
+      agency_name: item.agency_name,
+      agency_phone: item.agency_phone,
+      agency_email: item.agency_email,
+    }));
   } catch (error) {
     console.error("getPublicTourProposal error:", error);
     return res.status(500).json({ message: "Failed to load proposal" });
@@ -500,6 +576,7 @@ module.exports = {
   createBookingReference,
   escapeTelegramHtml,
   publicPackageView,
+  packageSnapshot,
   createTourPackage,
   listTourPackages,
   getTourPackage,

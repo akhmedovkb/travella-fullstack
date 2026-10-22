@@ -145,6 +145,7 @@ const AdminHotelForm = lazy(() => import("./pages/admin/AdminHotelForm"));
 const TemplateCreator = lazy(() => import("./pages/TemplateCreator"));
 const TourBuilder = lazy(() => import("./pages/TourBuilder"));
 const TourProposal = lazy(() => import("./pages/TourProposal"));
+const TourPackageWorkspace = lazy(() => import("./pages/TourPackageWorkspace"));
 const AdminEntryFees = lazy(() => import("./pages/AdminEntryFees"));
 const IndiaLayout = lazy(() => import("./pages/landing/IndiaLayout"));
 const LandingHome = lazy(() => import("./pages/landing/Home"));
@@ -311,6 +312,14 @@ export default function App() {
               element={
                 <PrivateRoute>
                   <ProviderBookings />
+                </PrivateRoute>
+              }
+            />
+            <Route
+              path="/dashboard/tour-packages/:id"
+              element={
+                <PrivateRoute>
+                  <TourPackageWorkspace />
                 </PrivateRoute>
               }
             />

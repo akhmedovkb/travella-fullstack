@@ -1668,6 +1668,23 @@
       "booking_confirmed_text": "Every component is confirmed. Booking reference: {{reference}}.",
       "booked_at": "Booked on"
     },
+    "workspace": {
+      "load_error": "Could not load the tour package",
+      "back": "Back to bookings",
+      "package": "Tour workspace",
+      "margin": "Agency margin",
+      "components": "Components and suppliers",
+      "supplier": "Supplier",
+      "no_components": "No tour components have been created yet.",
+      "revisions": "Proposal history",
+      "version": "Version {{version}}",
+      "accepted": "accepted by client",
+      "no_revisions": "No proposal has been sent to the client yet.",
+      "client": "Client",
+      "client_missing": "Client not specified",
+      "proposal": "Commercial proposal",
+      "current_version": "Current published version"
+    },
     "title": "Tour builder",
     "dates": "Tour dates",
     "pick_dates": "Select start and end dates",
