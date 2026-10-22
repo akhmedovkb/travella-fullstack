@@ -13,6 +13,23 @@ const confirmedStatuses = new Set(["confirmed", "paid", "completed"]);
 const lockedStatuses = new Set(["booked", "paid", "cancelled"]);
 const fieldClass = "h-11 w-full border border-gray-300 bg-white px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100";
 
+function currentOperationsTimeline(tourPackage, components) {
+  if (String(tourPackage.status || "").toLowerCase() === "cancelled") return [];
+  const today = new Date().toISOString().slice(0, 10);
+  const events = [];
+  const add = (type, value, extra = {}) => {
+    const dueAt = dateValue(value);
+    if (!dueAt) return;
+    const days = Math.round((Date.parse(`${dueAt}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86400000);
+    events.push({ type, due_at: dueAt, days, urgency: days < 0 ? "overdue" : days === 0 ? "today" : days <= 7 ? "soon" : "upcoming", ...extra });
+  };
+  if (tourPackage.payment_status !== "paid") add("client_payment", tourPackage.payment_due_at);
+  components.filter((item) => item.supplier_paid !== true).forEach((item) => add("supplier_payment", item.supplier_payment_due_at, { booking_id: item.id, label: item.service_title || item.provider_name }));
+  if (dateValue(tourPackage.start_date) >= today) add("departure", tourPackage.start_date);
+  const priority = { overdue: 0, today: 1, soon: 2, upcoming: 3 };
+  return events.sort((a, b) => priority[a.urgency] - priority[b.urgency] || a.due_at.localeCompare(b.due_at));
+}
+
 function createForm(item) {
   return {
     title: item.title || "", client_name: item.client_name || "", client_company: item.client_company || "",
@@ -102,6 +119,17 @@ function DepartureReadiness({ checks, percent, t }) {
     <div className="flex flex-wrap items-end justify-between gap-3"><div><div className="text-xs font-bold uppercase text-orange-600">{t("tb.operations.eyebrow")}</div><h2 className="mt-1 text-xl font-bold">{t("tb.operations.title")}</h2></div><div className={`text-3xl font-bold ${percent === 100 ? "text-emerald-700" : "text-gray-950"}`}>{percent}%</div></div>
     <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className={`h-full ${percent === 100 ? "bg-emerald-500" : "bg-orange-500"}`} style={{ width: `${percent}%` }} /></div>
     <div className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">{items.map((key) => <div key={key} className={`flex items-center gap-2 text-sm font-semibold ${checks[key] ? "text-emerald-700" : "text-gray-500"}`}>{checks[key] ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}<span>{t(`tb.operations.${key}`)}</span></div>)}</div>
+  </section>;
+}
+
+function OperationsTimeline({ items = [], t }) {
+  const tone = { overdue: "border-red-200 bg-red-50 text-red-800", today: "border-orange-200 bg-orange-50 text-orange-800", soon: "border-amber-200 bg-amber-50 text-amber-800", upcoming: "border-gray-200 bg-white text-gray-700" };
+  return <section className="border-b border-gray-200 pb-5">
+    <div className="flex items-center gap-2"><Clock3 size={20} /><h2 className="text-xl font-bold">{t("tb.timeline.title")}</h2></div>
+    <p className="mt-1 text-sm text-gray-500">{t("tb.timeline.subtitle")}</p>
+    <div className="mt-4 space-y-2">{items.map((item, index) => <div key={`${item.type}-${item.booking_id || index}`} className={`flex flex-wrap items-center justify-between gap-3 border px-4 py-3 ${tone[item.urgency] || tone.upcoming}`}><div><div className="font-semibold">{t(`tb.timeline.${item.type}`)}{item.label ? ` · ${item.label}` : ""}</div><div className="mt-0.5 text-xs opacity-75">{dateText(item.due_at)}</div></div><span className="text-xs font-bold uppercase">{item.urgency === "overdue" ? t("tb.timeline.overdue_days", { count: Math.abs(item.days) }) : item.urgency === "today" ? t("tb.timeline.today") : t("tb.timeline.days_left", { count: item.days })}</span></div>)}
+      {!items.length && <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{t("tb.timeline.empty")}</div>}
+    </div>
   </section>;
 }
 
@@ -224,6 +252,7 @@ export default function TourPackageWorkspace() {
     client_paid: tourPackage.payment_status === "paid",
   };
   const operationPercent = Math.round((Object.values(operationChecks).filter(Boolean).length / Object.keys(operationChecks).length) * 100);
+  const operationsTimeline = currentOperationsTimeline(tourPackage, components);
 
   return <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
     <Link to="/dashboard/bookings" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-950"><ArrowLeft size={17} />{t("tb.workspace.back")}</Link>
@@ -254,6 +283,7 @@ export default function TourPackageWorkspace() {
     <section className="grid border-b border-gray-200 lg:grid-cols-4">{[["NET", money(tourPackage.net_total, currency), ""], [t("tb.summary.markup"), tourPackage.markup_type === "percent" ? `${tourPackage.markup_value}%` : money(tourPackage.markup_value, currency), "text-orange-600"], [t("tb.workspace.margin"), money(margin, currency), "text-emerald-700"], ["PAX", Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0), ""]].map(([label, value, color]) => <div key={label} className="border-b border-gray-200 py-5 lg:border-b-0 lg:border-r lg:px-5 first:pl-0 last:border-r-0"><div className="text-xs font-semibold uppercase text-gray-400">{label}</div><div className={`mt-1 text-xl font-bold ${color}`}>{value}</div></div>)}</section>
     <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_340px]"><div className="space-y-8">
       <DepartureReadiness checks={operationChecks} percent={operationPercent} t={t} />
+      <OperationsTimeline items={operationsTimeline} t={t} />
       <section><div className="flex items-center justify-between"><div><h2 className="text-xl font-bold">{t("tb.workspace.components")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.workspace.components_hint")}</p></div><span className="text-sm font-semibold text-gray-600">{confirmed}/{components.length}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className="h-full bg-emerald-500" style={{ width: `${readinessPercent}%` }} /></div><div className="mt-4 space-y-3">{components.map((item) => <ComponentOperationsCard key={item.id} item={item} currency={currency} saving={saving} onSave={saveComponentOperations} t={t} />)}{!components.length && <div className="border-y border-gray-200 py-6 text-gray-500">{t("tb.workspace.no_components")}</div>}</div></section>
       <TravelerSection travelers={travelers} setTravelers={setTravelers} capacity={Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0)} onSave={saveTravelers} saving={saving} t={t} />
       <section><h2 className="text-xl font-bold">{t("tb.workspace.revisions")}</h2><div className="mt-4 divide-y border-y border-gray-200">{revisions.map((revision) => <div key={revision.version} className="flex items-center justify-between gap-4 py-4"><div className="flex items-center gap-3"><Clock3 size={18} className="text-gray-400" /><div><div className="font-bold">{t("tb.workspace.version", { version: revision.version })}{Number(tourPackage.accepted_revision) === Number(revision.version) ? ` · ${t("tb.workspace.accepted")}` : ""}</div><div className="text-sm text-gray-500">{dateText(revision.created_at)}</div></div></div><div className="font-bold">{money(revision.gross_total, revision.currency || currency)}</div></div>)}{!revisions.length && <div className="py-6 text-gray-500">{t("tb.workspace.no_revisions")}</div>}</div></section>

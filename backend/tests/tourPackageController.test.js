@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTraveler, packageOperationsReadiness, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -127,5 +127,22 @@ test("requires every operational milestone before departure", () => {
     status: "paid", paymentStatus: "paid", paxAdult: 2, travelerCount: 2,
     componentCount: 3, confirmedCount: 3, confirmationCount: 3, supplierPaidCount: 3,
   }).ready, true);
+});
+
+test("orders tour operations by urgency and omits completed payments", () => {
+  const timeline = packageOperationsTimeline({
+    status: "booked", paymentStatus: "partial", paymentDueAt: "2026-11-05", startDate: "2026-11-10",
+  }, [
+    { id: 12, service_title: "Hotel", supplier_payment_due_at: "2026-10-30", supplier_paid: false },
+    { id: 13, service_title: "Guide", supplier_payment_due_at: "2026-10-20", supplier_paid: true },
+  ], new Date("2026-11-01T12:00:00Z"));
+  assert.deepEqual(timeline.map((item) => [item.type, item.urgency, item.days]), [
+    ["supplier_payment", "overdue", -2],
+    ["client_payment", "soon", 4],
+    ["departure", "upcoming", 9],
+  ]);
+  assert.equal(timeline[0].label, "Hotel");
+  assert.deepEqual(packageOperationsTimeline({ status: "cancelled", startDate: "2026-11-10" }), []);
+  assert.deepEqual(packageOperationsTimeline({ status: "booked", paymentStatus: "paid", startDate: "2026-10-31" }, [], new Date("2026-11-01T12:00:00Z")), []);
 });
 

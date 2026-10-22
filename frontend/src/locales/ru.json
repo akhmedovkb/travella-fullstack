@@ -1603,6 +1603,23 @@
       "travelers_complete": "Список туристов заполнен",
       "client_paid": "Клиент полностью оплатил тур"
     },
+    "timeline": {
+      "title": "Ближайшие действия",
+      "subtitle": "Сроки оплат и дата начала тура в порядке срочности.",
+      "client_payment": "Получить оплату от клиента",
+      "supplier_payment": "Оплатить поставщика",
+      "departure": "Начало тура",
+      "today": "Сегодня",
+      "days_left_one": "Остался {{count}} день",
+      "days_left_few": "Осталось {{count}} дня",
+      "days_left_many": "Осталось {{count}} дней",
+      "days_left_other": "Осталось {{count}} дней",
+      "overdue_days_one": "Просрочено на {{count}} день",
+      "overdue_days_few": "Просрочено на {{count}} дня",
+      "overdue_days_many": "Просрочено на {{count}} дней",
+      "overdue_days_other": "Просрочено на {{count}} дней",
+      "empty": "Нет запланированных действий"
+    },
     "workspace": {
       "load_error": "Не удалось загрузить пакет тура",
       "back": "К бронированиям",

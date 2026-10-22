@@ -1683,6 +1683,19 @@
       "travelers_complete": "Sayohatchilar ro‘yxati to‘ldirilgan",
       "client_paid": "Mijoz to‘liq to‘lagan"
     },
+    "timeline": {
+      "title": "Yaqin vazifalar",
+      "subtitle": "To‘lov muddatlari va tur boshlanish sanasi shoshilinchlik bo‘yicha.",
+      "client_payment": "Mijoz to‘lovini olish",
+      "supplier_payment": "Ta’minotchiga to‘lash",
+      "departure": "Tur boshlanishi",
+      "today": "Bugun",
+      "days_left_one": "{{count}} kun qoldi",
+      "days_left_other": "{{count}} kun qoldi",
+      "overdue_days_one": "{{count}} kun kechikdi",
+      "overdue_days_other": "{{count}} kun kechikdi",
+      "empty": "Rejalashtirilgan vazifalar yo‘q"
+    },
     "workspace": {
       "load_error": "Tur paketini yuklab bo‘lmadi",
       "back": "Bronlarga qaytish",

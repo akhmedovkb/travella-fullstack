@@ -1685,6 +1685,19 @@
       "travelers_complete": "Traveler manifest completed",
       "client_paid": "Client paid in full"
     },
+    "timeline": {
+      "title": "Upcoming actions",
+      "subtitle": "Payment deadlines and departure date ordered by urgency.",
+      "client_payment": "Collect client payment",
+      "supplier_payment": "Pay supplier",
+      "departure": "Tour departure",
+      "today": "Today",
+      "days_left_one": "{{count}} day left",
+      "days_left_other": "{{count}} days left",
+      "overdue_days_one": "{{count}} day overdue",
+      "overdue_days_other": "{{count}} days overdue",
+      "empty": "No scheduled actions"
+    },
     "workspace": {
       "load_error": "Could not load the tour package",
       "back": "Back to bookings",

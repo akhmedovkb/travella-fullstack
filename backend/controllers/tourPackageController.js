@@ -105,6 +105,29 @@ function packageOperationsReadiness(input = {}) {
   return { checks, complete, total, percent: Math.round((complete / total) * 100), ready: complete === total };
 }
 
+function packageOperationsTimeline(input = {}, components = [], today = new Date()) {
+  if (String(input.status || "").toLowerCase() === "cancelled") return [];
+  const todayKey = today.toISOString().slice(0, 10);
+  const events = [];
+  const add = (type, dueAt, extra = {}) => {
+    const date = String(dueAt || "").slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+    const days = Math.round((Date.parse(`${date}T00:00:00Z`) - Date.parse(`${todayKey}T00:00:00Z`)) / 86400000);
+    events.push({ type, due_at: date, days, urgency: days < 0 ? "overdue" : days === 0 ? "today" : days <= 7 ? "soon" : "upcoming", ...extra });
+  };
+  if (String(input.paymentStatus || "unpaid") !== "paid") add("client_payment", input.paymentDueAt);
+  components.forEach((component) => {
+    if (component.supplier_paid === true) return;
+    add("supplier_payment", component.supplier_payment_due_at, {
+      booking_id: component.id || null,
+      label: component.service_title || component.provider_name || null,
+    });
+  });
+  if (String(input.startDate || "").slice(0, 10) >= todayKey) add("departure", input.startDate);
+  const priority = { overdue: 0, today: 1, soon: 2, upcoming: 3 };
+  return events.sort((a, b) => priority[a.urgency] - priority[b.urgency] || a.due_at.localeCompare(b.due_at));
+}
+
 function hashShareToken(token) {
   return crypto.createHash("sha256").update(String(token || "")).digest("hex");
 }
@@ -472,6 +495,10 @@ async function listTourPackages(req, res) {
                   AND tp.status <> 'cancelled'
                   AND COALESCE(ops.supplier_paid,FALSE)=FALSE
               )::int AS supplier_unpaid_count,
+              MIN(ops.supplier_payment_due_at) FILTER (
+                WHERE ops.supplier_payment_due_at IS NOT NULL
+                  AND COALESCE(ops.supplier_paid,FALSE)=FALSE
+              ) AS next_supplier_due_at,
               COALESCE(ARRAY_AGG(b.status::text) FILTER (WHERE b.id IS NOT NULL), ARRAY[]::text[]) AS component_statuses
          FROM tour_packages tp
          LEFT JOIN bookings b ON b.group_id=tp.id
@@ -483,6 +510,12 @@ async function listTourPackages(req, res) {
     );
     const items = result.rows.map((item) => {
       const bookings = (item.component_statuses || []).map((status) => ({ status }));
+      const timeline = packageOperationsTimeline({
+        status: item.status,
+        paymentStatus: item.payment_status,
+        paymentDueAt: item.payment_due_at,
+        startDate: item.start_date,
+      }, item.next_supplier_due_at ? [{ supplier_payment_due_at: item.next_supplier_due_at }] : []);
       return {
         ...item,
         component_statuses: undefined,
@@ -500,6 +533,7 @@ async function listTourPackages(req, res) {
           confirmationCount: item.confirmation_count,
           supplierPaidCount: item.supplier_paid_count,
         }),
+        next_action: timeline[0] || null,
       };
     });
     return res.json(items);
@@ -563,6 +597,12 @@ async function getTourPackage(req, res) {
         confirmationCount: bookings.filter((row) => String(row.confirmation_reference || "").trim()).length,
         supplierPaidCount: bookings.filter((row) => row.supplier_paid === true).length,
       }),
+      operations_timeline: packageOperationsTimeline({
+        status: derivePackageStatus(bookings, item.status),
+        paymentStatus: item.payment_status,
+        paymentDueAt: item.payment_due_at,
+        startDate: item.start_date,
+      }, bookings),
     });
   } catch (error) {
     console.error("getTourPackage error:", error);
@@ -901,6 +941,7 @@ module.exports = {
   derivePackageStatus,
   packageSaleReadiness,
   packageOperationsReadiness,
+  packageOperationsTimeline,
   hashShareToken,
   createBookingReference,
   escapeTelegramHtml,
