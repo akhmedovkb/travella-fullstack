@@ -1664,7 +1664,12 @@
       "components_pending": "{{total}} komponentdan {{confirmed}} tasi tasdiqlangan",
       "booking_confirmed": "Sayohat bron qilindi",
       "booking_confirmed_text": "Barcha komponentlar tasdiqlandi. Bron raqami: {{reference}}.",
-      "booked_at": "Rasmiylashtirilgan sana"
+      "booked_at": "Rasmiylashtirilgan sana",
+      "payment_unpaid": "To‘lov kutilmoqda",
+      "payment_partial": "Qisman to‘langan",
+      "payment_paid": "To‘liq to‘langan",
+      "amount_received": "Qabul qilindi",
+      "payment_due": "To‘lov muddati"
     },
     "workspace": {
       "load_error": "Tur paketini yuklab bo‘lmadi",
@@ -1708,7 +1713,19 @@
       "published": "{{version}}-versiya e’lon qilindi. Mijozga yangi havolani yuboring.",
       "publish_error": "Yangi versiyani e’lon qilib bo‘lmadi",
       "copy_link": "Havolani nusxalash",
-      "link_copied": "Havola nusxalandi"
+      "link_copied": "Havola nusxalandi",
+      "client_payment": "Mijoz to‘lovi",
+      "received": "Qabul qilindi",
+      "paid_amount": "Qabul qilingan summa",
+      "payment_due": "To‘lov muddati",
+      "payment_note": "To‘lov izohi",
+      "save_payment": "To‘lovni saqlash",
+      "payment_unpaid": "To‘lanmagan",
+      "payment_partial": "Qisman to‘langan",
+      "payment_paid": "To‘langan",
+      "payment_saved": "To‘lov ma’lumotlari yangilandi",
+      "payment_error": "To‘lov ma’lumotlarini yangilab bo‘lmadi",
+      "payment_history": "O‘zgarishlar tarixi"
     },
     "title": "Tur konstruktori",
     "dates": "Tur sanalari",

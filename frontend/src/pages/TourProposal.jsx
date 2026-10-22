@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, CheckCircle2, MapPin, MessageSquare, Printer, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, CreditCard, MapPin, MessageSquare, Printer, Users } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -155,6 +155,12 @@ export default function TourProposal() {
                   <h2 className="font-bold text-gray-950">{t("tb.proposal.booking_confirmed")}</h2>
                   <p className="mt-1 text-sm text-gray-700">{t("tb.proposal.booking_confirmed_text", { reference: proposal.booking_reference })}</p>
                   {proposal.booked_at ? <p className="mt-2 text-xs text-gray-500">{t("tb.proposal.booked_at")}: {dateValue(proposal.booked_at, language)}</p> : null}
+                  <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-emerald-200 pt-4 text-sm">
+                    <CreditCard size={18} className="text-emerald-700" />
+                    <strong>{t(`tb.proposal.payment_${proposal.payment_status || "unpaid"}`)}</strong>
+                    {Number(proposal.paid_amount || 0) > 0 ? <span>{t("tb.proposal.amount_received")}: {Number(proposal.paid_amount).toLocaleString(language, { maximumFractionDigits: 2 })} {proposal.currency}</span> : null}
+                    {proposal.payment_due_at && proposal.payment_status !== "paid" ? <span>{t("tb.proposal.payment_due")}: {dateValue(proposal.payment_due_at, language)}</span> : null}
+                  </div>
                 </div>
               </div>
             </div>

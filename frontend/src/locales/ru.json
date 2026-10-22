@@ -1584,7 +1584,12 @@
       "components_pending": "Подтверждено {{confirmed}} из {{total}} компонентов",
       "booking_confirmed": "Поездка забронирована",
       "booking_confirmed_text": "Все компоненты подтверждены. Номер бронирования: {{reference}}.",
-      "booked_at": "Дата оформления"
+      "booked_at": "Дата оформления",
+      "payment_unpaid": "Ожидает оплаты",
+      "payment_partial": "Частично оплачено",
+      "payment_paid": "Оплачено полностью",
+      "amount_received": "Получено",
+      "payment_due": "Оплатить до"
     },
     "workspace": {
       "load_error": "Не удалось загрузить пакет тура",
@@ -1628,7 +1633,19 @@
       "published": "Версия {{version}} опубликована. Отправьте клиенту новую ссылку.",
       "publish_error": "Не удалось опубликовать новую версию",
       "copy_link": "Копировать ссылку",
-      "link_copied": "Ссылка скопирована"
+      "link_copied": "Ссылка скопирована",
+      "client_payment": "Оплата клиента",
+      "received": "Получено",
+      "paid_amount": "Полученная сумма",
+      "payment_due": "Оплатить до",
+      "payment_note": "Примечание к оплате",
+      "save_payment": "Сохранить оплату",
+      "payment_unpaid": "Не оплачено",
+      "payment_partial": "Частично оплачено",
+      "payment_paid": "Оплачено",
+      "payment_saved": "Данные оплаты обновлены",
+      "payment_error": "Не удалось обновить данные оплаты",
+      "payment_history": "История изменений"
     },
     "title": "Конструктор тура",
     "dates": "Даты тура",

@@ -6,6 +6,7 @@ const PACKAGE_STATUSES = new Set([
   "draft", "request_sent", "partially_confirmed", "confirmed",
   "proposed", "booked", "paid", "cancelled",
 ]);
+const PACKAGE_PAYMENT_STATUSES = new Set(["unpaid", "partial", "paid"]);
 
 function cleanMoney(value) {
   const number = Number(value);
@@ -20,6 +21,21 @@ function calculateGross(netTotal, markupType, markupValue) {
 
 function canEditTourPackage(status) {
   return !["booked", "paid", "cancelled"].includes(String(status || "").toLowerCase());
+}
+
+function normalizePackagePayment(body = {}, grossTotal = 0) {
+  const gross = cleanMoney(grossTotal);
+  const paidAmount = Math.min(cleanMoney(body.paid_amount), gross);
+  let paymentStatus = PACKAGE_PAYMENT_STATUSES.has(body.payment_status) ? body.payment_status : "unpaid";
+  if (paidAmount <= 0) paymentStatus = "unpaid";
+  else if (paidAmount >= gross && gross > 0) paymentStatus = "paid";
+  else paymentStatus = "partial";
+  return {
+    paymentStatus,
+    paidAmount,
+    paymentDueAt: body.payment_due_at || null,
+    paymentNote: String(body.payment_note || "").trim().slice(0, 1000) || null,
+  };
 }
 
 function derivePackageStatus(rows = [], storedStatus = "draft") {
@@ -104,6 +120,10 @@ function publicPackageView(row = {}) {
     proposal_responded_at: row.proposal_responded_at || null,
     booking_reference: row.booking_reference || null,
     booked_at: row.booked_at || null,
+    payment_status: row.payment_status || "unpaid",
+    paid_amount: row.paid_amount || 0,
+    payment_due_at: row.payment_due_at || null,
+    paid_at: row.paid_at || null,
     revision: Number(row.current_revision || 0),
     agency: {
       name: row.agency_name || "Travella partner",
@@ -145,6 +165,11 @@ async function ensureTourPackagesTable() {
       proposal_responded_at TIMESTAMPTZ,
       booking_reference VARCHAR(32),
       booked_at TIMESTAMPTZ,
+      payment_status VARCHAR(16) NOT NULL DEFAULT 'unpaid',
+      paid_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      payment_due_at TIMESTAMPTZ,
+      payment_note TEXT,
+      paid_at TIMESTAMPTZ,
       current_revision INTEGER NOT NULL DEFAULT 0,
       accepted_revision INTEGER,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -163,6 +188,11 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_responded_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS booking_reference VARCHAR(32)`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS booked_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS payment_status VARCHAR(16) NOT NULL DEFAULT 'unpaid'`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS paid_amount NUMERIC(18,2) NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS payment_due_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS payment_note TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS current_revision INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS accepted_revision INTEGER`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated ON tour_packages(owner_provider_id, updated_at DESC)`);
@@ -179,6 +209,18 @@ async function ensureTourPackagesTable() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_revisions_package ON tour_package_revisions(package_id, version DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_payment_events (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      payment_status VARCHAR(16) NOT NULL,
+      paid_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      payment_due_at TIMESTAMPTZ,
+      payment_note TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_payment_events_package ON tour_package_payment_events(package_id, created_at DESC)`);
 }
 
 function packageSnapshot(row = {}) {
@@ -331,6 +373,11 @@ async function getTourPackage(req, res) {
          FROM tour_package_revisions WHERE package_id=$1::uuid ORDER BY version DESC`,
       [req.params.id]
     );
+    const paymentEvents = await pool.query(
+      `SELECT id,payment_status,paid_amount,payment_due_at,payment_note,created_at
+         FROM tour_package_payment_events WHERE package_id=$1::uuid ORDER BY created_at DESC,id DESC`,
+      [req.params.id]
+    );
     return res.json({
       ...item,
       share_token_hash: undefined,
@@ -338,6 +385,7 @@ async function getTourPackage(req, res) {
       status: derivePackageStatus(bookings, item.status),
       components: bookings,
       revisions: revisions.rows,
+      payment_events: paymentEvents.rows,
       readiness: packageSaleReadiness(bookings, item.proposal_response),
     });
   } catch (error) {
@@ -516,6 +564,49 @@ async function confirmTourPackageSale(req, res) {
   }
 }
 
+async function updateTourPackagePayment(req, res) {
+  let client;
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const current = await pool.query(
+      `SELECT * FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2`,
+      [req.params.id, ownerId]
+    );
+    if (!current.rowCount) return res.status(404).json({ message: "Tour package not found" });
+    if (!["booked", "paid"].includes(String(current.rows[0].status || "").toLowerCase())) {
+      return res.status(409).json({ message: "Confirm the package sale before recording client payment" });
+    }
+    const payment = normalizePackagePayment(req.body, current.rows[0].gross_total);
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
+      `UPDATE tour_packages SET payment_status=$3, paid_amount=$4,
+         payment_due_at=$5, payment_note=$6,
+         paid_at=CASE WHEN $3='paid' THEN COALESCE(paid_at,NOW()) ELSE NULL END,
+         status=CASE WHEN $3='paid' THEN 'paid' ELSE 'booked' END,
+         updated_at=NOW()
+       WHERE id=$1::uuid AND owner_provider_id=$2 RETURNING *`,
+      [req.params.id, ownerId, payment.paymentStatus, payment.paidAmount,
+        payment.paymentDueAt, payment.paymentNote]
+    );
+    await client.query(
+      `INSERT INTO tour_package_payment_events(package_id,payment_status,paid_amount,payment_due_at,payment_note)
+       VALUES($1::uuid,$2,$3,$4,$5)`,
+      [req.params.id, payment.paymentStatus, payment.paidAmount, payment.paymentDueAt, payment.paymentNote]
+    );
+    await client.query("COMMIT");
+    return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash) });
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    console.error("updateTourPackagePayment error:", error);
+    return res.status(500).json({ message: "Failed to update package payment" });
+  } finally {
+    client?.release();
+  }
+}
+
 async function revokeTourPackageShare(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -565,6 +656,10 @@ async function getPublicTourProposal(req, res) {
       proposal_responded_at: item.proposal_responded_at,
       booking_reference: item.booking_reference,
       booked_at: item.booked_at,
+      payment_status: item.payment_status,
+      paid_amount: item.paid_amount,
+      payment_due_at: item.payment_due_at,
+      paid_at: item.paid_at,
       agency_name: item.agency_name,
       agency_phone: item.agency_phone,
       agency_email: item.agency_email,
@@ -578,6 +673,7 @@ async function getPublicTourProposal(req, res) {
 module.exports = {
   calculateGross,
   canEditTourPackage,
+  normalizePackagePayment,
   derivePackageStatus,
   packageSaleReadiness,
   hashShareToken,
@@ -594,5 +690,6 @@ module.exports = {
   getPublicTourProposal,
   respondToTourProposal,
   confirmTourPackageSale,
+  updateTourPackagePayment,
 };
 

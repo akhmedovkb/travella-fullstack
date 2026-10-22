@@ -28,6 +28,11 @@ CREATE TABLE IF NOT EXISTS tour_packages (
   proposal_responded_at TIMESTAMPTZ,
   booking_reference VARCHAR(32),
   booked_at TIMESTAMPTZ,
+  payment_status VARCHAR(16) NOT NULL DEFAULT 'unpaid',
+  paid_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+  payment_due_at TIMESTAMPTZ,
+  payment_note TEXT,
+  paid_at TIMESTAMPTZ,
   current_revision INTEGER NOT NULL DEFAULT 0,
   accepted_revision INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -37,6 +42,7 @@ CREATE TABLE IF NOT EXISTS tour_packages (
     'proposed', 'booked', 'paid', 'cancelled'
   )),
   CONSTRAINT tour_packages_markup_type_chk CHECK (markup_type IN ('percent', 'fixed')),
+  CONSTRAINT tour_packages_payment_status_chk CHECK (payment_status IN ('unpaid', 'partial', 'paid')),
   CONSTRAINT tour_packages_nonnegative_chk CHECK (
     net_total >= 0 AND markup_value >= 0 AND gross_total >= 0
     AND pax_adult >= 0 AND pax_child >= 0
@@ -66,4 +72,17 @@ CREATE TABLE IF NOT EXISTS tour_package_revisions (
 
 CREATE INDEX IF NOT EXISTS idx_tour_package_revisions_package
   ON tour_package_revisions(package_id, version DESC);
+
+CREATE TABLE IF NOT EXISTS tour_package_payment_events (
+  id BIGSERIAL PRIMARY KEY,
+  package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+  payment_status VARCHAR(16) NOT NULL,
+  paid_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+  payment_due_at TIMESTAMPTZ,
+  payment_note TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_tour_package_payment_events_package
+  ON tour_package_payment_events(package_id, created_at DESC);
 

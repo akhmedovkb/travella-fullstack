@@ -1666,7 +1666,12 @@
       "components_pending": "{{confirmed}} of {{total}} components confirmed",
       "booking_confirmed": "Your trip is booked",
       "booking_confirmed_text": "Every component is confirmed. Booking reference: {{reference}}.",
-      "booked_at": "Booked on"
+      "booked_at": "Booked on",
+      "payment_unpaid": "Awaiting payment",
+      "payment_partial": "Partially paid",
+      "payment_paid": "Paid in full",
+      "amount_received": "Received",
+      "payment_due": "Payment due"
     },
     "workspace": {
       "load_error": "Could not load the tour package",
@@ -1710,7 +1715,19 @@
       "published": "Version {{version}} published. Send the new link to the client.",
       "publish_error": "Could not publish the new version",
       "copy_link": "Copy link",
-      "link_copied": "Link copied"
+      "link_copied": "Link copied",
+      "client_payment": "Client payment",
+      "received": "Received",
+      "paid_amount": "Amount received",
+      "payment_due": "Payment due",
+      "payment_note": "Payment note",
+      "save_payment": "Save payment",
+      "payment_unpaid": "Unpaid",
+      "payment_partial": "Partially paid",
+      "payment_paid": "Paid",
+      "payment_saved": "Payment details updated",
+      "payment_error": "Could not update payment details",
+      "payment_history": "Change history"
     },
     "title": "Tour builder",
     "dates": "Tour dates",

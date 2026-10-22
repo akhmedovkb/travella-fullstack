@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizePackagePayment, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -14,6 +14,14 @@ test("only editable tour package states can be revised", () => {
   assert.equal(canEditTourPackage("booked"), false);
   assert.equal(canEditTourPackage("paid"), false);
   assert.equal(canEditTourPackage("cancelled"), false);
+});
+
+test("derives package payment status from the received amount", () => {
+  assert.deepEqual(normalizePackagePayment({ paid_amount: 0 }, 1000).paymentStatus, "unpaid");
+  assert.deepEqual(normalizePackagePayment({ paid_amount: 250 }, 1000).paymentStatus, "partial");
+  assert.deepEqual(normalizePackagePayment({ paid_amount: 1500 }, 1000), {
+    paymentStatus: "paid", paidAmount: 1000, paymentDueAt: null, paymentNote: null,
+  });
 });
 
 test("hashes proposal tokens deterministically without storing the raw token", () => {
