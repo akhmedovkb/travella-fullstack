@@ -1690,6 +1690,7 @@
       "subtitle": "Payment deadlines and departure date ordered by urgency.",
       "client_payment": "Collect client payment",
       "supplier_payment": "Pay supplier",
+      "manual_task": "Team task",
       "departure": "Tour departure",
       "today": "Today",
       "days_left_one": "{{count}} day left",
@@ -1697,6 +1698,24 @@
       "overdue_days_one": "{{count}} day overdue",
       "overdue_days_other": "{{count}} days overdue",
       "empty": "No scheduled actions"
+    },
+    "tasks": {
+      "title": "Team tasks",
+      "subtitle": "Assign owners and track delivery for this tour.",
+      "task_ph": "What needs to be done",
+      "assignee_ph": "Owner",
+      "add": "Add task",
+      "priority_low": "Low",
+      "priority_normal": "Normal",
+      "priority_high": "High",
+      "unassigned": "Unassigned",
+      "complete": "Mark complete",
+      "reopen": "Reopen task",
+      "overdue": "Overdue",
+      "empty": "No tasks for this tour yet",
+      "created": "Task added",
+      "save_error": "Could not save task",
+      "delete_error": "Could not delete task"
     },
     "workspace": {
       "load_error": "Could not load the tour package",

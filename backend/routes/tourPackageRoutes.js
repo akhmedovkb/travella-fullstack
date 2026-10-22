@@ -13,6 +13,9 @@ const {
   updateTourPackagePayment,
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
+  createTourPackageTask,
+  updateTourPackageTask,
+  deleteTourPackageTask,
 } = require("../controllers/tourPackageController");
 
 const router = express.Router();
@@ -28,6 +31,9 @@ router.post("/:id/confirm-sale", confirmTourPackageSale);
 router.patch("/:id/payment", updateTourPackagePayment);
 router.put("/:id/travelers", replaceTourPackageTravelers);
 router.patch("/:id/components/:bookingId", updateTourPackageComponentOperations);
+router.post("/:id/tasks", createTourPackageTask);
+router.patch("/:id/tasks/:taskId", updateTourPackageTask);
+router.delete("/:id/tasks/:taskId", deleteTourPackageTask);
 router.get("/:id", getTourPackage);
 router.patch("/:id", updateTourPackage);
 

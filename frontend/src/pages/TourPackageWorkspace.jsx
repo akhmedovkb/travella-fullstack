@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, CalendarDays, CheckCircle2, CircleDashed, Clock3, Copy, CreditCard, FileText, Pencil, Plus, Save, Send, Trash2, UserRound, Users, X } from "lucide-react";
+import { ArrowLeft, CalendarDays, CheckCircle2, CircleDashed, Clock3, Copy, CreditCard, FileText, ListTodo, Pencil, Plus, Save, Send, Trash2, UserRound, Users, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -133,6 +133,30 @@ function OperationsTimeline({ items = [], t }) {
   </section>;
 }
 
+function OperationsTasks({ items = [], saving, onCreate, onToggle, onDelete, t }) {
+  const [form, setForm] = useState({ title: "", assigned_to: "", due_at: "", priority: "normal" });
+  const submit = async () => {
+    if (!form.title.trim()) return;
+    if (await onCreate(form)) setForm({ title: "", assigned_to: "", due_at: "", priority: "normal" });
+  };
+  const priorityTone = { high: "bg-red-50 text-red-700", normal: "bg-sky-50 text-sky-700", low: "bg-gray-100 text-gray-600" };
+  return <section className="border-b border-gray-200 pb-5">
+    <div className="flex items-center gap-2"><ListTodo size={20} /><h2 className="text-xl font-bold">{t("tb.tasks.title")}</h2></div>
+    <p className="mt-1 text-sm text-gray-500">{t("tb.tasks.subtitle")}</p>
+    <div className="mt-4 grid gap-2 border border-gray-200 bg-gray-50 p-3 md:grid-cols-[minmax(220px,1fr)_160px_150px_130px_auto]">
+      <input value={form.title} onChange={(e) => setForm((value) => ({ ...value, title: e.target.value }))} placeholder={t("tb.tasks.task_ph")} className={fieldClass} />
+      <input value={form.assigned_to} onChange={(e) => setForm((value) => ({ ...value, assigned_to: e.target.value }))} placeholder={t("tb.tasks.assignee_ph")} className={fieldClass} />
+      <input type="date" value={form.due_at} onChange={(e) => setForm((value) => ({ ...value, due_at: e.target.value }))} className={fieldClass} />
+      <select value={form.priority} onChange={(e) => setForm((value) => ({ ...value, priority: e.target.value }))} className={fieldClass}><option value="low">{t("tb.tasks.priority_low")}</option><option value="normal">{t("tb.tasks.priority_normal")}</option><option value="high">{t("tb.tasks.priority_high")}</option></select>
+      <button type="button" disabled={saving || !form.title.trim()} onClick={submit} title={t("tb.tasks.add")} className="inline-flex h-11 w-11 items-center justify-center bg-gray-950 text-white disabled:opacity-40"><Plus size={18} /></button>
+    </div>
+    <div className="mt-3 divide-y border-y border-gray-200">{items.map((item) => {
+      const overdue = !item.completed && item.due_at && dateValue(item.due_at) < new Date().toISOString().slice(0, 10);
+      return <div key={item.id} className={`flex flex-wrap items-center gap-3 px-2 py-3 ${item.completed ? "opacity-55" : ""}`}><button type="button" onClick={() => onToggle(item)} title={item.completed ? t("tb.tasks.reopen") : t("tb.tasks.complete")} className={item.completed ? "text-emerald-600" : "text-gray-400 hover:text-emerald-600"}>{item.completed ? <CheckCircle2 size={21} /> : <CircleDashed size={21} />}</button><div className="min-w-[220px] flex-1"><div className={`font-semibold ${item.completed ? "line-through" : ""}`}>{item.title}</div><div className="mt-0.5 text-xs text-gray-500">{item.assigned_to || t("tb.tasks.unassigned")}{item.due_at ? ` · ${dateText(item.due_at)}` : ""}</div></div><span className={`px-2 py-1 text-xs font-bold ${priorityTone[item.priority] || priorityTone.normal}`}>{t(`tb.tasks.priority_${item.priority || "normal"}`)}</span>{overdue && <span className="text-xs font-bold text-red-700">{t("tb.tasks.overdue")}</span>}<button type="button" onClick={() => onDelete(item.id)} title={t("common.delete")} className="inline-flex h-9 w-9 items-center justify-center text-red-600 hover:bg-red-50"><Trash2 size={16} /></button></div>;
+    })}{!items.length && <div className="py-6 text-center text-sm text-gray-500">{t("tb.tasks.empty")}</div>}</div>
+  </section>;
+}
+
 export default function TourPackageWorkspace() {
   const { id } = useParams();
   const { t } = useTranslation();
@@ -233,6 +257,33 @@ export default function TourPackageWorkspace() {
     } finally { setSaving(false); }
   };
 
+  const createTask = async (values) => {
+    setSaving(true); setError("");
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/tasks`, values, cfg());
+      setTourPackage((current) => ({ ...current, tasks: [data, ...(current.tasks || [])] }));
+      setNotice(t("tb.tasks.created")); return true;
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || t("tb.tasks.save_error")); return false;
+    } finally { setSaving(false); }
+  };
+  const toggleTask = async (item) => {
+    setSaving(true); setError("");
+    try {
+      const { data } = await axios.patch(`${API_BASE}/api/tour-packages/${id}/tasks/${item.id}`, { ...item, completed: !item.completed }, cfg());
+      setTourPackage((current) => ({ ...current, tasks: (current.tasks || []).map((task) => task.id === item.id ? data : task) }));
+    } catch (requestError) { setError(requestError?.response?.data?.message || t("tb.tasks.save_error")); }
+    finally { setSaving(false); }
+  };
+  const deleteTask = async (taskId) => {
+    setSaving(true); setError("");
+    try {
+      await axios.delete(`${API_BASE}/api/tour-packages/${id}/tasks/${taskId}`, cfg());
+      setTourPackage((current) => ({ ...current, tasks: (current.tasks || []).filter((task) => task.id !== taskId) }));
+    } catch (requestError) { setError(requestError?.response?.data?.message || t("tb.tasks.delete_error")); }
+    finally { setSaving(false); }
+  };
+
   if (loading) return <main className="mx-auto max-w-7xl p-6 text-gray-500">{t("common.loading")}</main>;
   if (!tourPackage) return <main className="mx-auto max-w-3xl p-6"><div className="border border-red-200 bg-red-50 p-5 text-red-800">{error || t("tb.workspace.load_error")}</div></main>;
 
@@ -284,6 +335,7 @@ export default function TourPackageWorkspace() {
     <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_340px]"><div className="space-y-8">
       <DepartureReadiness checks={operationChecks} percent={operationPercent} t={t} />
       <OperationsTimeline items={operationsTimeline} t={t} />
+      <OperationsTasks items={tourPackage.tasks} saving={saving} onCreate={createTask} onToggle={toggleTask} onDelete={deleteTask} t={t} />
       <section><div className="flex items-center justify-between"><div><h2 className="text-xl font-bold">{t("tb.workspace.components")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.workspace.components_hint")}</p></div><span className="text-sm font-semibold text-gray-600">{confirmed}/{components.length}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className="h-full bg-emerald-500" style={{ width: `${readinessPercent}%` }} /></div><div className="mt-4 space-y-3">{components.map((item) => <ComponentOperationsCard key={item.id} item={item} currency={currency} saving={saving} onSave={saveComponentOperations} t={t} />)}{!components.length && <div className="border-y border-gray-200 py-6 text-gray-500">{t("tb.workspace.no_components")}</div>}</div></section>
       <TravelerSection travelers={travelers} setTravelers={setTravelers} capacity={Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0)} onSave={saveTravelers} saving={saving} t={t} />
       <section><h2 className="text-xl font-bold">{t("tb.workspace.revisions")}</h2><div className="mt-4 divide-y border-y border-gray-200">{revisions.map((revision) => <div key={revision.version} className="flex items-center justify-between gap-4 py-4"><div className="flex items-center gap-3"><Clock3 size={18} className="text-gray-400" /><div><div className="font-bold">{t("tb.workspace.version", { version: revision.version })}{Number(tourPackage.accepted_revision) === Number(revision.version) ? ` · ${t("tb.workspace.accepted")}` : ""}</div><div className="text-sm text-gray-500">{dateText(revision.created_at)}</div></div></div><div className="font-bold">{money(revision.gross_total, revision.currency || currency)}</div></div>)}{!revisions.length && <div className="py-6 text-gray-500">{t("tb.workspace.no_revisions")}</div>}</div></section>

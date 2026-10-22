@@ -1688,6 +1688,7 @@
       "subtitle": "To‘lov muddatlari va tur boshlanish sanasi shoshilinchlik bo‘yicha.",
       "client_payment": "Mijoz to‘lovini olish",
       "supplier_payment": "Ta’minotchiga to‘lash",
+      "manual_task": "Jamoa vazifasi",
       "departure": "Tur boshlanishi",
       "today": "Bugun",
       "days_left_one": "{{count}} kun qoldi",
@@ -1695,6 +1696,24 @@
       "overdue_days_one": "{{count}} kun kechikdi",
       "overdue_days_other": "{{count}} kun kechikdi",
       "empty": "Rejalashtirilgan vazifalar yo‘q"
+    },
+    "tasks": {
+      "title": "Jamoa vazifalari",
+      "subtitle": "Mas’ullarni belgilang va tur bo‘yicha bajarilishini nazorat qiling.",
+      "task_ph": "Nima qilish kerak",
+      "assignee_ph": "Mas’ul",
+      "add": "Vazifa qo‘shish",
+      "priority_low": "Past",
+      "priority_normal": "Oddiy",
+      "priority_high": "Yuqori",
+      "unassigned": "Tayinlanmagan",
+      "complete": "Bajarildi deb belgilash",
+      "reopen": "Qayta ochish",
+      "overdue": "Muddati o‘tgan",
+      "empty": "Bu tur uchun vazifalar hozircha yo‘q",
+      "created": "Vazifa qo‘shildi",
+      "save_error": "Vazifani saqlab bo‘lmadi",
+      "delete_error": "Vazifani o‘chirib bo‘lmadi"
     },
     "workspace": {
       "load_error": "Tur paketini yuklab bo‘lmadi",

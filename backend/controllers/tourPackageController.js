@@ -65,6 +65,18 @@ function normalizeComponentOperations(body = {}) {
   };
 }
 
+function normalizeTourTask(body = {}) {
+  const dueAt = String(body.due_at || "").trim().slice(0, 10);
+  const priority = ["low", "normal", "high"].includes(body.priority) ? body.priority : "normal";
+  return {
+    title: String(body.title || "").trim().slice(0, 240),
+    assignedTo: String(body.assigned_to || "").trim().slice(0, 120) || null,
+    dueAt: /^\d{4}-\d{2}-\d{2}$/.test(dueAt) ? dueAt : null,
+    priority,
+    completed: body.completed === true,
+  };
+}
+
 function derivePackageStatus(rows = [], storedStatus = "draft") {
   if (["proposed", "booked", "paid", "cancelled"].includes(storedStatus)) return storedStatus;
   if (!rows.length) return storedStatus || "draft";
@@ -123,6 +135,7 @@ function packageOperationsTimeline(input = {}, components = [], today = new Date
       label: component.service_title || component.provider_name || null,
     });
   });
+  add("manual_task", input.nextTaskDueAt);
   if (String(input.startDate || "").slice(0, 10) >= todayKey) add("departure", input.startDate);
   const priority = { overdue: 0, today: 1, soon: 2, upcoming: 3 };
   return events.sort((a, b) => priority[a.urgency] - priority[b.urgency] || a.due_at.localeCompare(b.due_at));
@@ -321,6 +334,21 @@ async function ensureTourPackagesTable() {
   `);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_paid BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_tasks (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      title TEXT NOT NULL,
+      assigned_to TEXT,
+      due_at DATE,
+      priority VARCHAR(16) NOT NULL DEFAULT 'normal',
+      completed BOOLEAN NOT NULL DEFAULT FALSE,
+      completed_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_tasks_package ON tour_package_tasks(package_id, completed, due_at)`);
 }
 
 function packageSnapshot(row = {}) {
@@ -479,6 +507,9 @@ async function listTourPackages(req, res) {
               COUNT(b.id) FILTER (WHERE NULLIF(TRIM(ops.confirmation_reference),'') IS NOT NULL)::int AS confirmation_count,
               COUNT(b.id) FILTER (WHERE COALESCE(ops.supplier_paid,FALSE)=TRUE)::int AS supplier_paid_count,
               (SELECT COUNT(*)::int FROM tour_package_travelers tr WHERE tr.package_id=tp.id) AS traveler_count,
+              (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS open_task_count,
+              (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE AND task.due_at < CURRENT_DATE) AS overdue_task_count,
+              (SELECT MIN(task.due_at) FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS next_task_due_at,
               COUNT(b.id) FILTER (
                 WHERE b.status IN ('confirmed','paid','completed')
                   AND tp.status <> 'cancelled'
@@ -515,6 +546,7 @@ async function listTourPackages(req, res) {
         paymentStatus: item.payment_status,
         paymentDueAt: item.payment_due_at,
         startDate: item.start_date,
+        nextTaskDueAt: item.next_task_due_at,
       }, item.next_supplier_due_at ? [{ supplier_payment_due_at: item.next_supplier_due_at }] : []);
       return {
         ...item,
@@ -576,6 +608,12 @@ async function getTourPackage(req, res) {
          FROM tour_package_travelers WHERE package_id=$1::uuid ORDER BY sort_order,id`,
       [req.params.id]
     );
+    const tasks = await pool.query(
+      `SELECT id,title,assigned_to,due_at,priority,completed,completed_at,created_at,updated_at
+         FROM tour_package_tasks WHERE package_id=$1::uuid
+        ORDER BY completed ASC, due_at ASC NULLS LAST, created_at DESC`,
+      [req.params.id]
+    );
     return res.json({
       ...item,
       share_token_hash: undefined,
@@ -585,6 +623,7 @@ async function getTourPackage(req, res) {
       revisions: revisions.rows,
       payment_events: paymentEvents.rows,
       travelers: travelers.rows,
+      tasks: tasks.rows,
       readiness: packageSaleReadiness(bookings, item.proposal_response),
       operations_readiness: packageOperationsReadiness({
         status: derivePackageStatus(bookings, item.status),
@@ -869,6 +908,72 @@ async function replaceTourPackageTravelers(req, res) {
   }
 }
 
+async function createTourPackageTask(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const value = normalizeTourTask(req.body);
+    if (!value.title) return res.status(400).json({ message: "Task title is required" });
+    const result = await pool.query(
+      `INSERT INTO tour_package_tasks(package_id,title,assigned_to,due_at,priority,completed,completed_at)
+       SELECT tp.id,$3,$4,$5::date,$6,$7,CASE WHEN $7 THEN NOW() ELSE NULL END
+         FROM tour_packages tp WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2
+       RETURNING id,title,assigned_to,due_at,priority,completed,completed_at,created_at,updated_at`,
+      [req.params.id, ownerId, value.title, value.assignedTo, value.dueAt, value.priority, value.completed]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Tour package not found" });
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("createTourPackageTask error:", error);
+    return res.status(500).json({ message: "Failed to create task" });
+  }
+}
+
+async function updateTourPackageTask(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const value = normalizeTourTask(req.body);
+    if (!value.title) return res.status(400).json({ message: "Task title is required" });
+    const result = await pool.query(
+      `UPDATE tour_package_tasks task SET
+         title=$4,assigned_to=$5,due_at=$6::date,priority=$7,completed=$8,
+         completed_at=CASE WHEN $8 AND task.completed=FALSE THEN NOW() WHEN NOT $8 THEN NULL ELSE task.completed_at END,
+         updated_at=NOW()
+       FROM tour_packages tp
+       WHERE task.id=$3 AND task.package_id=$1::uuid AND tp.id=task.package_id AND tp.owner_provider_id=$2
+       RETURNING task.id,task.title,task.assigned_to,task.due_at,task.priority,task.completed,task.completed_at,task.created_at,task.updated_at`,
+      [req.params.id, ownerId, req.params.taskId, value.title, value.assignedTo, value.dueAt, value.priority, value.completed]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Task not found" });
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("updateTourPackageTask error:", error);
+    return res.status(500).json({ message: "Failed to update task" });
+  }
+}
+
+async function deleteTourPackageTask(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const result = await pool.query(
+      `DELETE FROM tour_package_tasks task USING tour_packages tp
+       WHERE task.id=$3 AND task.package_id=$1::uuid AND tp.id=task.package_id AND tp.owner_provider_id=$2
+       RETURNING task.id`,
+      [req.params.id, ownerId, req.params.taskId]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Task not found" });
+    return res.status(204).end();
+  } catch (error) {
+    console.error("deleteTourPackageTask error:", error);
+    return res.status(500).json({ message: "Failed to delete task" });
+  }
+}
+
 async function revokeTourPackageShare(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -938,6 +1043,7 @@ module.exports = {
   normalizePackagePayment,
   normalizeTraveler,
   normalizeComponentOperations,
+  normalizeTourTask,
   derivePackageStatus,
   packageSaleReadiness,
   packageOperationsReadiness,
@@ -959,5 +1065,8 @@ module.exports = {
   updateTourPackagePayment,
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
+  createTourPackageTask,
+  updateTourPackageTask,
+  deleteTourPackageTask,
 };
 

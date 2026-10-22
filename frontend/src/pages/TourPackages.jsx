@@ -33,7 +33,7 @@ export default function TourPackages() {
     awaiting: items.filter((item) => item.status === "proposed" && !item.proposal_response).length,
     booked: items.filter((item) => ["booked", "paid"].includes(String(item.status))).length,
     outstanding: items.filter((item) => item.status === "booked" && item.payment_status !== "paid").length,
-    attention: items.filter((item) => item.status !== "cancelled" && (Number(item.missing_confirmation_count || 0) > 0 || Number(item.supplier_overdue_count || 0) > 0)).length,
+    attention: items.filter((item) => item.status !== "cancelled" && (Number(item.missing_confirmation_count || 0) > 0 || Number(item.supplier_overdue_count || 0) > 0 || Number(item.overdue_task_count || 0) > 0)).length,
   }), [items]);
 
   const filtered = useMemo(() => {
@@ -41,7 +41,7 @@ export default function TourPackages() {
     return items.filter((item) => {
       if (status !== "all" && (status === "pipeline" ? !pipelineStatuses.has(String(item.status)) : item.status !== status)) return false;
       if (payment !== "all" && (item.payment_status || "unpaid") !== payment) return false;
-      if (operations === "attention" && Number(item.missing_confirmation_count || 0) <= 0 && Number(item.supplier_overdue_count || 0) <= 0) return false;
+      if (operations === "attention" && Number(item.missing_confirmation_count || 0) <= 0 && Number(item.supplier_overdue_count || 0) <= 0 && Number(item.overdue_task_count || 0) <= 0) return false;
       if (operations === "overdue" && Number(item.supplier_overdue_count || 0) <= 0) return false;
       if (operations === "missing" && Number(item.missing_confirmation_count || 0) <= 0) return false;
       if (needle && ![item.title, item.client_name, item.client_company, item.booking_reference].some((value) => String(value || "").toLowerCase().includes(needle))) return false;
@@ -61,7 +61,7 @@ export default function TourPackages() {
       {filtered.map((item) => {
         const due = item.payment_due_at ? new Date(item.payment_due_at) : null;
         const overdue = item.status === "booked" && item.payment_status !== "paid" && due && due < new Date();
-        const supplierAlerts = Number(item.missing_confirmation_count || 0) + Number(item.supplier_overdue_count || 0);
+        const supplierAlerts = Number(item.missing_confirmation_count || 0) + Number(item.supplier_overdue_count || 0) + Number(item.overdue_task_count || 0);
         const readiness = item.operations_readiness || { percent: 0 };
         const nextAction = item.next_action;
         return <Link key={item.id} to={`/dashboard/tour-packages/${item.id}`} className="grid gap-4 py-5 hover:bg-gray-50 sm:px-3 lg:grid-cols-[minmax(260px,1fr)_170px_150px_180px_28px] lg:items-center"><div><div className="flex flex-wrap items-center gap-2"><h2 className="font-bold text-gray-950">{item.title}</h2><span className="bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">{t(`tb.package_status.${item.status}`, { defaultValue: item.status })}</span>{supplierAlerts > 0 && <span className="inline-flex items-center gap-1 bg-red-50 px-2 py-0.5 text-xs font-semibold text-red-700"><AlertTriangle size={13} />{t("tb.portfolio.issues", { count: supplierAlerts })}</span>}</div><div className="mt-1 text-sm text-gray-500">{item.client_name || t("tb.workspace.client_missing")} · {dateText(item.start_date)} — {dateText(item.end_date)}</div>{nextAction && <div className={`mt-2 flex items-center gap-1.5 text-xs font-semibold ${nextAction.urgency === "overdue" ? "text-red-700" : nextAction.urgency === "today" ? "text-orange-700" : "text-gray-500"}`}><Clock3 size={13} />{t(`tb.timeline.${nextAction.type}`)} · {dateText(nextAction.due_at)}</div>}</div><div><div className="flex items-center justify-between gap-2 text-xs uppercase text-gray-400"><span>{t("tb.portfolio.readiness")}</span><strong className={readiness.percent === 100 ? "text-emerald-700" : "text-gray-700"}>{readiness.percent}%</strong></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-gray-200"><div className={readiness.percent === 100 ? "h-full bg-emerald-500" : "h-full bg-orange-500"} style={{ width: `${readiness.percent}%` }} /></div>{Number(item.supplier_unpaid_count || 0) > 0 && <div className="mt-1 text-xs text-amber-700">{t("tb.portfolio.supplier_unpaid", { count: item.supplier_unpaid_count })}</div>}</div><div><div className="text-xs uppercase text-gray-400">{t("tb.portfolio.sale")}</div><div className="mt-1 font-bold">{money(item.gross_total, item.currency)}</div></div><div><div className="text-xs uppercase text-gray-400">{t("tb.portfolio.payment")}</div><div className={`mt-1 font-semibold ${overdue ? "text-red-700" : item.payment_status === "paid" ? "text-emerald-700" : "text-gray-700"}`}>{overdue ? t("tb.portfolio.overdue") : t(`tb.workspace.payment_${item.payment_status || "unpaid"}`)}</div>{item.booking_reference && <div className="mt-1 font-mono text-xs text-gray-500">{item.booking_reference}</div>}</div><ChevronRight size={20} className="text-gray-400" /></Link>;

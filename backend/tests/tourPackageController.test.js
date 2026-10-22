@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -37,6 +37,15 @@ test("normalizes private component operations", () => {
   });
   assert.equal(normalizeComponentOperations({ supplier_paid: true }).supplierPaid, true);
   assert.equal(normalizeComponentOperations({ supplier_payment_due_at: "tomorrow" }).supplierPaymentDueAt, null);
+});
+
+test("normalizes operational tour tasks", () => {
+  assert.deepEqual(normalizeTourTask({ title: " Call hotel ", assigned_to: " Aziza ", due_at: "2026-11-03", priority: "high", completed: true }), {
+    title: "Call hotel", assignedTo: "Aziza", dueAt: "2026-11-03", priority: "high", completed: true,
+  });
+  assert.deepEqual(normalizeTourTask({ title: "Check", due_at: "tomorrow", priority: "urgent" }), {
+    title: "Check", assignedTo: null, dueAt: null, priority: "normal", completed: false,
+  });
 });
 
 test("hashes proposal tokens deterministically without storing the raw token", () => {
@@ -131,13 +140,14 @@ test("requires every operational milestone before departure", () => {
 
 test("orders tour operations by urgency and omits completed payments", () => {
   const timeline = packageOperationsTimeline({
-    status: "booked", paymentStatus: "partial", paymentDueAt: "2026-11-05", startDate: "2026-11-10",
+    status: "booked", paymentStatus: "partial", paymentDueAt: "2026-11-05", startDate: "2026-11-10", nextTaskDueAt: "2026-11-01",
   }, [
     { id: 12, service_title: "Hotel", supplier_payment_due_at: "2026-10-30", supplier_paid: false },
     { id: 13, service_title: "Guide", supplier_payment_due_at: "2026-10-20", supplier_paid: true },
   ], new Date("2026-11-01T12:00:00Z"));
   assert.deepEqual(timeline.map((item) => [item.type, item.urgency, item.days]), [
     ["supplier_payment", "overdue", -2],
+    ["manual_task", "today", 0],
     ["client_payment", "soon", 4],
     ["departure", "upcoming", 9],
   ]);
