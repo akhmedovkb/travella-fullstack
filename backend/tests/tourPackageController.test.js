@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -77,6 +77,17 @@ test("builds a supplier-safe service order", () => {
   assert.match(message, /CNF-7/);
   assert.match(message, /Meet &amp; greet/);
   assert.doesNotMatch(message, /gross_total|client_phone|марж/i);
+});
+
+test("builds a safe supplier reminder without commercial data", () => {
+  const message = buildSupplierServiceOrderReminderMessage({
+    tourPackage: { title: "Silk <Road>", booking_reference: "TVL-9", gross_total: 500 },
+    component: { service_title: "Guide & car" },
+  });
+  assert.match(message, /Silk &lt;Road&gt;/);
+  assert.match(message, /Guide &amp; car/);
+  assert.match(message, /TVL-9/);
+  assert.doesNotMatch(message, /500|gross_total/);
 });
 
 test("revision snapshots never retain a share token", () => {

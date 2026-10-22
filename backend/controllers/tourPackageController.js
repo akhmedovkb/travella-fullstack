@@ -180,6 +180,16 @@ function buildSupplierServiceOrderMessage({ tourPackage = {}, component = {}, tr
   ].filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== "")).join("\n");
 }
 
+function buildSupplierServiceOrderReminderMessage({ tourPackage = {}, component = {} } = {}) {
+  return [
+    "⏰ <b>Напоминание об ожидающем заказе</b>",
+    `Тур: <b>${escapeTelegramHtml(tourPackage.title || "—")}</b>`,
+    tourPackage.booking_reference ? `Номер тура: ${escapeTelegramHtml(tourPackage.booking_reference)}` : "",
+    `Услуга: <b>${escapeTelegramHtml(component.service_title || "—")}</b>`,
+    "Пожалуйста, примите или отклоните заказ кнопкой ниже.",
+  ].filter(Boolean).join("\n");
+}
+
 async function notifyAgencyProposalResponse(item) {
   try {
     const provider = await pool.query(`SELECT to_jsonb(p) AS profile FROM providers p WHERE id=$1 LIMIT 1`, [item.owner_provider_id]);
@@ -352,6 +362,7 @@ async function ensureTourPackagesTable() {
       service_order_sent_at TIMESTAMPTZ,
       service_order_status VARCHAR(16),
       service_order_responded_at TIMESTAMPTZ,
+      service_order_last_reminded_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(package_id, booking_id)
@@ -361,6 +372,7 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_sent_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_status VARCHAR(16)`);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_responded_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_last_reminded_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_component_events (
@@ -422,6 +434,7 @@ async function packageBookings(packageId) {
             ops.confirmation_reference, ops.supplier_payment_due_at,
             COALESCE(ops.supplier_paid,FALSE) AS supplier_paid, ops.operational_note,
             ops.service_order_sent_at,ops.service_order_status,ops.service_order_responded_at,
+            ops.service_order_last_reminded_at,
             COALESCE((
               SELECT jsonb_agg(jsonb_build_object(
                 'id',event.id,'event_type',event.event_type,'actor_type',event.actor_type,
@@ -1053,6 +1066,62 @@ async function sendTourPackageServiceOrder(req, res) {
   }
 }
 
+async function remindTourPackageServiceOrder(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const packageId = req.params.id;
+    const bookingId = Number(req.params.bookingId);
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
+    const result = await pool.query(
+      `SELECT tp.title,tp.booking_reference,b.id,s.title AS service_title,
+              to_jsonb(supplier) AS supplier_profile,ops.service_order_status,
+              ops.service_order_last_reminded_at
+         FROM tour_packages tp
+         JOIN bookings b ON b.group_id=tp.id AND b.id=$3
+         LEFT JOIN services s ON s.id=b.service_id
+         LEFT JOIN providers supplier ON supplier.id=b.provider_id
+         JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+        WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
+      [packageId, ownerId, bookingId]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Tour package component not found" });
+    const item = result.rows[0];
+    if (item.service_order_status !== "sent") return res.status(409).json({ message: "Supplier order is not awaiting a response" });
+    const remindedAt = item.service_order_last_reminded_at ? new Date(item.service_order_last_reminded_at).getTime() : 0;
+    const cooldownMs = 60 * 60 * 1000;
+    if (remindedAt && Date.now() - remindedAt < cooldownMs) {
+      return res.status(429).json({ message: "Supplier reminder is available once per hour", retry_after_seconds: Math.ceil((cooldownMs - (Date.now() - remindedAt)) / 1000) });
+    }
+    const profile = item.supplier_profile || {};
+    const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
+    if (!chatId) return res.status(409).json({ message: "Supplier Telegram is not connected" });
+    const keyboard = { inline_keyboard: [[
+      { text: "✅ Принять заказ", callback_data: `tour_order:${bookingId}:accepted` },
+      { text: "❌ Отклонить", callback_data: `tour_order:${bookingId}:declined` },
+    ]] };
+    const message = buildSupplierServiceOrderReminderMessage({ tourPackage: item, component: item });
+    if (!(await tgSend(chatId, message, { reply_markup: keyboard }))) return res.status(502).json({ message: "Failed to send supplier reminder" });
+    const saved = await pool.query(
+      `UPDATE tour_package_component_ops SET service_order_last_reminded_at=NOW(),updated_at=NOW()
+       WHERE package_id=$1::uuid AND booking_id=$2
+       RETURNING service_order_last_reminded_at`,
+      [packageId, bookingId]
+    );
+    const event = await pool.query(
+      `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type)
+       VALUES($1::uuid,$2,'reminder_sent','dmc')
+       RETURNING id,event_type,actor_type,created_at,metadata`,
+      [packageId, bookingId]
+    );
+    return res.json({ reminded: true, ...saved.rows[0], service_order_event: event.rows[0] });
+  } catch (error) {
+    console.error("remindTourPackageServiceOrder error:", error);
+    return res.status(500).json({ message: "Failed to send supplier reminder" });
+  }
+}
+
 async function createTourPackageTask(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -1197,6 +1266,7 @@ module.exports = {
   createBookingReference,
   escapeTelegramHtml,
   buildSupplierServiceOrderMessage,
+  buildSupplierServiceOrderReminderMessage,
   publicPackageView,
   packageSnapshot,
   createTourPackage,
@@ -1212,6 +1282,7 @@ module.exports = {
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
   sendTourPackageServiceOrder,
+  remindTourPackageServiceOrder,
   createTourPackageTask,
   updateTourPackageTask,
   deleteTourPackageTask,
