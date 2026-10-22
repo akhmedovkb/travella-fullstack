@@ -107,6 +107,7 @@ function packageOperationsReadiness(input = {}) {
   const checks = {
     sale_confirmed: ["booked", "paid"].includes(String(input.status || "").toLowerCase()),
     suppliers_confirmed: componentCount > 0 && Number(input.confirmedCount || 0) === componentCount,
+    supplier_orders_accepted: componentCount > 0 && Number(input.supplierOrderAcceptedCount || 0) === componentCount,
     references_complete: componentCount > 0 && Number(input.confirmationCount || 0) === componentCount,
     suppliers_paid: componentCount > 0 && Number(input.supplierPaidCount || 0) === componentCount,
     travelers_complete: paxCount > 0 && Number(input.travelerCount || 0) === paxCount,
@@ -534,6 +535,16 @@ async function listTourPackages(req, res) {
               COUNT(b.id) FILTER (WHERE b.status IN ('confirmed','paid','completed'))::int AS confirmed_count,
               COUNT(b.id) FILTER (WHERE NULLIF(TRIM(ops.confirmation_reference),'') IS NOT NULL)::int AS confirmation_count,
               COUNT(b.id) FILTER (WHERE COALESCE(ops.supplier_paid,FALSE)=TRUE)::int AS supplier_paid_count,
+              COUNT(b.id) FILTER (WHERE ops.service_order_status='accepted')::int AS supplier_order_accepted_count,
+              COUNT(b.id) FILTER (WHERE ops.service_order_status='sent')::int AS supplier_order_pending_count,
+              COUNT(b.id) FILTER (WHERE ops.service_order_status='declined')::int AS supplier_order_declined_count,
+              COUNT(b.id) FILTER (
+                WHERE tp.status IN ('booked','paid') AND (
+                  ops.service_order_status IS NULL OR
+                  ops.service_order_status IN ('declined','failed') OR
+                  (ops.service_order_status='sent' AND ops.service_order_sent_at < NOW() - INTERVAL '24 hours')
+                )
+              )::int AS supplier_order_attention_count,
               (SELECT COUNT(*)::int FROM tour_package_travelers tr WHERE tr.package_id=tp.id) AS traveler_count,
               (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS open_task_count,
               (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE AND task.due_at < CURRENT_DATE) AS overdue_task_count,
@@ -592,6 +603,7 @@ async function listTourPackages(req, res) {
           confirmedCount: item.confirmed_count,
           confirmationCount: item.confirmation_count,
           supplierPaidCount: item.supplier_paid_count,
+          supplierOrderAcceptedCount: item.supplier_order_accepted_count,
         }),
         next_action: timeline[0] || null,
       };
@@ -663,6 +675,7 @@ async function getTourPackage(req, res) {
         confirmedCount: bookings.filter((row) => ["confirmed", "paid", "completed"].includes(String(row.status).toLowerCase())).length,
         confirmationCount: bookings.filter((row) => String(row.confirmation_reference || "").trim()).length,
         supplierPaidCount: bookings.filter((row) => row.supplier_paid === true).length,
+        supplierOrderAcceptedCount: bookings.filter((row) => row.service_order_status === "accepted").length,
       }),
       operations_timeline: packageOperationsTimeline({
         status: derivePackageStatus(bookings, item.status),

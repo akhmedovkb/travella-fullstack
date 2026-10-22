@@ -115,7 +115,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, 
 }
 
 function DepartureReadiness({ checks, percent, t }) {
-  const items = ["sale_confirmed", "suppliers_confirmed", "references_complete", "suppliers_paid", "travelers_complete", "client_paid"];
+  const items = ["sale_confirmed", "suppliers_confirmed", "supplier_orders_accepted", "references_complete", "suppliers_paid", "travelers_complete", "client_paid"];
   return <section className="border-y border-gray-200 py-5">
     <div className="flex flex-wrap items-end justify-between gap-3"><div><div className="text-xs font-bold uppercase text-orange-600">{t("tb.operations.eyebrow")}</div><h2 className="mt-1 text-xl font-bold">{t("tb.operations.title")}</h2></div><div className={`text-3xl font-bold ${percent === 100 ? "text-emerald-700" : "text-gray-950"}`}>{percent}%</div></div>
     <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className={`h-full ${percent === 100 ? "bg-emerald-500" : "bg-orange-500"}`} style={{ width: `${percent}%` }} /></div>
@@ -323,6 +323,7 @@ export default function TourPackageWorkspace() {
   const operationChecks = {
     sale_confirmed: ["booked", "paid"].includes(String(tourPackage.status || "").toLowerCase()),
     suppliers_confirmed: components.length > 0 && confirmed === components.length,
+    supplier_orders_accepted: components.length > 0 && components.every((item) => item.service_order_status === "accepted"),
     references_complete: components.length > 0 && components.every((item) => String(item.confirmation_reference || "").trim()),
     suppliers_paid: components.length > 0 && components.every((item) => item.supplier_paid === true),
     travelers_complete: paxCount > 0 && travelers.length === paxCount,
