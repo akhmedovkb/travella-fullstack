@@ -1,5 +1,6 @@
 const crypto = require("crypto");
 const pool = require("../db");
+const { tgSend } = require("../utils/telegram");
 
 const PACKAGE_STATUSES = new Set([
   "draft", "request_sent", "partially_confirmed", "confirmed",
@@ -52,6 +53,32 @@ function createShareToken() {
 function createBookingReference(date = new Date(), bytes = crypto.randomBytes(3)) {
   const stamp = date.toISOString().slice(2, 10).replace(/-/g, "");
   return `TVL-${stamp}-${Buffer.from(bytes).toString("hex").toUpperCase()}`;
+}
+
+function escapeTelegramHtml(value) {
+  return String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+async function notifyAgencyProposalResponse(item) {
+  try {
+    const provider = await pool.query(`SELECT to_jsonb(p) AS profile FROM providers p WHERE id=$1 LIMIT 1`, [item.owner_provider_id]);
+    const profile = provider.rows[0]?.profile || {};
+    const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
+    if (!chatId) return false;
+    const accepted = item.proposal_response === "accepted";
+    const site = String(process.env.SITE_PUBLIC_URL || process.env.FRONTEND_URL || "https://travella.uz").replace(/\/+$/, "");
+    const lines = [
+      accepted ? "✅ <b>Клиент принял предложение</b>" : "✏️ <b>Клиент запросил изменения</b>",
+      `Тур: <b>${escapeTelegramHtml(item.title)}</b>`,
+      item.client_name ? `Клиент: ${escapeTelegramHtml(item.client_name)}` : "",
+      item.proposal_response_message ? `Комментарий: ${escapeTelegramHtml(item.proposal_response_message)}` : "",
+      `<a href="${site}/dashboard/bookings?tab=outgoing&amp;package=${encodeURIComponent(item.id)}">Открыть пакет</a>`,
+    ].filter(Boolean);
+    return tgSend(chatId, lines.join("\n"));
+  } catch (error) {
+    console.warn("notifyAgencyProposalResponse failed:", error?.message || error);
+    return false;
+  }
 }
 
 function publicPackageView(row = {}) {
@@ -365,12 +392,18 @@ async function respondToTourProposal(req, res) {
       `UPDATE tour_packages SET proposal_response=$2,
          proposal_response_message=$3, proposal_responded_at=NOW(), updated_at=NOW()
        WHERE share_token_hash=$1 AND share_expires_at > NOW()
-       RETURNING proposal_response,proposal_response_message,proposal_responded_at`,
+       RETURNING id,owner_provider_id,title,client_name,proposal_response,
+         proposal_response_message,proposal_responded_at`,
       [hashShareToken(token), response, message]
     );
     if (!result.rowCount) return res.status(404).json({ message: "Proposal not found or expired" });
+    setImmediate(() => { notifyAgencyProposalResponse(result.rows[0]); });
     res.set("Cache-Control", "no-store");
-    return res.json(result.rows[0]);
+    return res.json({
+      proposal_response: result.rows[0].proposal_response,
+      proposal_response_message: result.rows[0].proposal_response_message,
+      proposal_responded_at: result.rows[0].proposal_responded_at,
+    });
   } catch (error) {
     console.error("respondToTourProposal error:", error);
     return res.status(500).json({ message: "Failed to save proposal response" });
@@ -465,6 +498,7 @@ module.exports = {
   packageSaleReadiness,
   hashShareToken,
   createBookingReference,
+  escapeTelegramHtml,
   publicPackageView,
   createTourPackage,
   listTourPackages,

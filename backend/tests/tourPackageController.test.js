@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, createBookingReference, derivePackageStatus, hashShareToken, packageSaleReadiness, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, packageSaleReadiness, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -18,6 +18,10 @@ test("hashes proposal tokens deterministically without storing the raw token", (
 test("creates a readable booking reference", () => {
   const reference = createBookingReference(new Date("2026-10-22T00:00:00Z"), Buffer.from([0xab, 0xcd, 0xef]));
   assert.equal(reference, "TVL-261022-ABCDEF");
+});
+
+test("escapes untrusted client text before Telegram HTML delivery", () => {
+  assert.equal(escapeTelegramHtml("<b>A & B</b>"), "&lt;b&gt;A &amp; B&lt;/b&gt;");
 });
 
 test("public proposal omits agency costs, markup and client contacts", () => {
