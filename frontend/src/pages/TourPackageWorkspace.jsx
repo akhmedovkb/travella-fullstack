@@ -96,6 +96,15 @@ function ComponentOperationsCard({ item, currency, saving, onSave, t }) {
   </article>;
 }
 
+function DepartureReadiness({ checks, percent, t }) {
+  const items = ["sale_confirmed", "suppliers_confirmed", "references_complete", "suppliers_paid", "travelers_complete", "client_paid"];
+  return <section className="border-y border-gray-200 py-5">
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><div className="text-xs font-bold uppercase text-orange-600">{t("tb.operations.eyebrow")}</div><h2 className="mt-1 text-xl font-bold">{t("tb.operations.title")}</h2></div><div className={`text-3xl font-bold ${percent === 100 ? "text-emerald-700" : "text-gray-950"}`}>{percent}%</div></div>
+    <div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className={`h-full ${percent === 100 ? "bg-emerald-500" : "bg-orange-500"}`} style={{ width: `${percent}%` }} /></div>
+    <div className="mt-4 grid gap-x-6 gap-y-3 sm:grid-cols-2">{items.map((key) => <div key={key} className={`flex items-center gap-2 text-sm font-semibold ${checks[key] ? "text-emerald-700" : "text-gray-500"}`}>{checks[key] ? <CheckCircle2 size={17} /> : <CircleDashed size={17} />}<span>{t(`tb.operations.${key}`)}</span></div>)}</div>
+  </section>;
+}
+
 export default function TourPackageWorkspace() {
   const { id } = useParams();
   const { t } = useTranslation();
@@ -205,6 +214,16 @@ export default function TourPackageWorkspace() {
   const confirmed = components.filter((item) => confirmedStatuses.has(String(item.status || "").toLowerCase())).length;
   const readinessPercent = components.length ? Math.round((confirmed / components.length) * 100) : 0;
   const locked = lockedStatuses.has(String(tourPackage.status || "").toLowerCase());
+  const paxCount = Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0);
+  const operationChecks = {
+    sale_confirmed: ["booked", "paid"].includes(String(tourPackage.status || "").toLowerCase()),
+    suppliers_confirmed: components.length > 0 && confirmed === components.length,
+    references_complete: components.length > 0 && components.every((item) => String(item.confirmation_reference || "").trim()),
+    suppliers_paid: components.length > 0 && components.every((item) => item.supplier_paid === true),
+    travelers_complete: paxCount > 0 && travelers.length === paxCount,
+    client_paid: tourPackage.payment_status === "paid",
+  };
+  const operationPercent = Math.round((Object.values(operationChecks).filter(Boolean).length / Object.keys(operationChecks).length) * 100);
 
   return <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
     <Link to="/dashboard/bookings" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-950"><ArrowLeft size={17} />{t("tb.workspace.back")}</Link>
@@ -234,6 +253,7 @@ export default function TourPackageWorkspace() {
 
     <section className="grid border-b border-gray-200 lg:grid-cols-4">{[["NET", money(tourPackage.net_total, currency), ""], [t("tb.summary.markup"), tourPackage.markup_type === "percent" ? `${tourPackage.markup_value}%` : money(tourPackage.markup_value, currency), "text-orange-600"], [t("tb.workspace.margin"), money(margin, currency), "text-emerald-700"], ["PAX", Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0), ""]].map(([label, value, color]) => <div key={label} className="border-b border-gray-200 py-5 lg:border-b-0 lg:border-r lg:px-5 first:pl-0 last:border-r-0"><div className="text-xs font-semibold uppercase text-gray-400">{label}</div><div className={`mt-1 text-xl font-bold ${color}`}>{value}</div></div>)}</section>
     <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_340px]"><div className="space-y-8">
+      <DepartureReadiness checks={operationChecks} percent={operationPercent} t={t} />
       <section><div className="flex items-center justify-between"><div><h2 className="text-xl font-bold">{t("tb.workspace.components")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.workspace.components_hint")}</p></div><span className="text-sm font-semibold text-gray-600">{confirmed}/{components.length}</span></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className="h-full bg-emerald-500" style={{ width: `${readinessPercent}%` }} /></div><div className="mt-4 space-y-3">{components.map((item) => <ComponentOperationsCard key={item.id} item={item} currency={currency} saving={saving} onSave={saveComponentOperations} t={t} />)}{!components.length && <div className="border-y border-gray-200 py-6 text-gray-500">{t("tb.workspace.no_components")}</div>}</div></section>
       <TravelerSection travelers={travelers} setTravelers={setTravelers} capacity={Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0)} onSave={saveTravelers} saving={saving} t={t} />
       <section><h2 className="text-xl font-bold">{t("tb.workspace.revisions")}</h2><div className="mt-4 divide-y border-y border-gray-200">{revisions.map((revision) => <div key={revision.version} className="flex items-center justify-between gap-4 py-4"><div className="flex items-center gap-3"><Clock3 size={18} className="text-gray-400" /><div><div className="font-bold">{t("tb.workspace.version", { version: revision.version })}{Number(tourPackage.accepted_revision) === Number(revision.version) ? ` · ${t("tb.workspace.accepted")}` : ""}</div><div className="text-sm text-gray-500">{dateText(revision.created_at)}</div></div></div><div className="font-bold">{money(revision.gross_total, revision.currency || currency)}</div></div>)}{!revisions.length && <div className="py-6 text-gray-500">{t("tb.workspace.no_revisions")}</div>}</div></section>

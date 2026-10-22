@@ -1675,6 +1675,16 @@
       "amount_received": "Received",
       "payment_due": "Payment due"
     },
+    "operations": {
+      "eyebrow": "Operational readiness",
+      "title": "Pre-departure checklist",
+      "sale_confirmed": "Sale confirmed",
+      "suppliers_confirmed": "All suppliers confirmed",
+      "references_complete": "Confirmation references received",
+      "suppliers_paid": "All suppliers paid",
+      "travelers_complete": "Traveler manifest completed",
+      "client_paid": "Client paid in full"
+    },
     "workspace": {
       "load_error": "Could not load the tour package",
       "back": "Back to bookings",
@@ -1760,6 +1770,7 @@
       "all_statuses": "All stages",
       "all_payments": "All payments",
       "suppliers": "Suppliers",
+      "readiness": "Readiness",
       "sale": "Sale",
       "payment": "Payment",
       "overdue": "Payment overdue",

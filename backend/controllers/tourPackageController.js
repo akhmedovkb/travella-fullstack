@@ -89,6 +89,22 @@ function packageSaleReadiness(rows = [], proposalResponse = null) {
   };
 }
 
+function packageOperationsReadiness(input = {}) {
+  const componentCount = Number(input.componentCount || 0);
+  const paxCount = Number(input.paxAdult || 0) + Number(input.paxChild || 0);
+  const checks = {
+    sale_confirmed: ["booked", "paid"].includes(String(input.status || "").toLowerCase()),
+    suppliers_confirmed: componentCount > 0 && Number(input.confirmedCount || 0) === componentCount,
+    references_complete: componentCount > 0 && Number(input.confirmationCount || 0) === componentCount,
+    suppliers_paid: componentCount > 0 && Number(input.supplierPaidCount || 0) === componentCount,
+    travelers_complete: paxCount > 0 && Number(input.travelerCount || 0) === paxCount,
+    client_paid: String(input.paymentStatus || "unpaid").toLowerCase() === "paid",
+  };
+  const complete = Object.values(checks).filter(Boolean).length;
+  const total = Object.keys(checks).length;
+  return { checks, complete, total, percent: Math.round((complete / total) * 100), ready: complete === total };
+}
+
 function hashShareToken(token) {
   return crypto.createHash("sha256").update(String(token || "")).digest("hex");
 }
@@ -437,6 +453,9 @@ async function listTourPackages(req, res) {
       `SELECT tp.*,
               COUNT(b.id)::int AS component_count,
               COUNT(b.id) FILTER (WHERE b.status IN ('confirmed','paid','completed'))::int AS confirmed_count,
+              COUNT(b.id) FILTER (WHERE NULLIF(TRIM(ops.confirmation_reference),'') IS NOT NULL)::int AS confirmation_count,
+              COUNT(b.id) FILTER (WHERE COALESCE(ops.supplier_paid,FALSE)=TRUE)::int AS supplier_paid_count,
+              (SELECT COUNT(*)::int FROM tour_package_travelers tr WHERE tr.package_id=tp.id) AS traveler_count,
               COUNT(b.id) FILTER (
                 WHERE b.status IN ('confirmed','paid','completed')
                   AND tp.status <> 'cancelled'
@@ -470,6 +489,17 @@ async function listTourPackages(req, res) {
         is_shared: Boolean(item.share_token_hash),
         share_token_hash: undefined,
         status: derivePackageStatus(bookings, item.status),
+        operations_readiness: packageOperationsReadiness({
+          status: derivePackageStatus(bookings, item.status),
+          paymentStatus: item.payment_status,
+          paxAdult: item.pax_adult,
+          paxChild: item.pax_child,
+          travelerCount: item.traveler_count,
+          componentCount: item.component_count,
+          confirmedCount: item.confirmed_count,
+          confirmationCount: item.confirmation_count,
+          supplierPaidCount: item.supplier_paid_count,
+        }),
       };
     });
     return res.json(items);
@@ -522,6 +552,17 @@ async function getTourPackage(req, res) {
       payment_events: paymentEvents.rows,
       travelers: travelers.rows,
       readiness: packageSaleReadiness(bookings, item.proposal_response),
+      operations_readiness: packageOperationsReadiness({
+        status: derivePackageStatus(bookings, item.status),
+        paymentStatus: item.payment_status,
+        paxAdult: item.pax_adult,
+        paxChild: item.pax_child,
+        travelerCount: travelers.rowCount,
+        componentCount: bookings.length,
+        confirmedCount: bookings.filter((row) => ["confirmed", "paid", "completed"].includes(String(row.status).toLowerCase())).length,
+        confirmationCount: bookings.filter((row) => String(row.confirmation_reference || "").trim()).length,
+        supplierPaidCount: bookings.filter((row) => row.supplier_paid === true).length,
+      }),
     });
   } catch (error) {
     console.error("getTourPackage error:", error);
@@ -859,6 +900,7 @@ module.exports = {
   normalizeComponentOperations,
   derivePackageStatus,
   packageSaleReadiness,
+  packageOperationsReadiness,
   hashShareToken,
   createBookingReference,
   escapeTelegramHtml,

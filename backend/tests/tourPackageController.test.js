@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTraveler, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTraveler, packageOperationsReadiness, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -112,5 +112,20 @@ test("requires client acceptance and every supplier confirmation before booking 
     { id: 1, status: "confirmed" },
     { id: 2, status: "paid" },
   ], "accepted").ready, true);
+});
+
+test("requires every operational milestone before departure", () => {
+  const readiness = packageOperationsReadiness({
+    status: "booked", paymentStatus: "paid", paxAdult: 2, paxChild: 0,
+    travelerCount: 2, componentCount: 3, confirmedCount: 3,
+    confirmationCount: 3, supplierPaidCount: 2,
+  });
+  assert.equal(readiness.percent, 83);
+  assert.equal(readiness.ready, false);
+  assert.equal(readiness.checks.suppliers_paid, false);
+  assert.equal(packageOperationsReadiness({
+    status: "paid", paymentStatus: "paid", paxAdult: 2, travelerCount: 2,
+    componentCount: 3, confirmedCount: 3, confirmationCount: 3, supplierPaidCount: 3,
+  }).ready, true);
 });
 

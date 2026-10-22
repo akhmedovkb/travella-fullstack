@@ -1593,6 +1593,16 @@
       "amount_received": "Получено",
       "payment_due": "Оплатить до"
     },
+    "operations": {
+      "eyebrow": "Операционная готовность",
+      "title": "Чеклист перед выездом",
+      "sale_confirmed": "Продажа подтверждена",
+      "suppliers_confirmed": "Все поставщики подтвердили услуги",
+      "references_complete": "Получены номера подтверждений",
+      "suppliers_paid": "Все поставщики оплачены",
+      "travelers_complete": "Список туристов заполнен",
+      "client_paid": "Клиент полностью оплатил тур"
+    },
     "workspace": {
       "load_error": "Не удалось загрузить пакет тура",
       "back": "К бронированиям",
@@ -1678,6 +1688,7 @@
       "all_statuses": "Все этапы",
       "all_payments": "Все оплаты",
       "suppliers": "Поставщики",
+      "readiness": "Готовность",
       "sale": "Продажа",
       "payment": "Оплата",
       "overdue": "Оплата просрочена",

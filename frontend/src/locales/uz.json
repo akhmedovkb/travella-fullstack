@@ -1673,6 +1673,16 @@
       "amount_received": "Qabul qilindi",
       "payment_due": "To‘lov muddati"
     },
+    "operations": {
+      "eyebrow": "Operatsion tayyorgarlik",
+      "title": "Safar oldidan tekshiruv",
+      "sale_confirmed": "Sotuv tasdiqlangan",
+      "suppliers_confirmed": "Barcha yetkazib beruvchilar tasdiqlagan",
+      "references_complete": "Tasdiqlash raqamlari olingan",
+      "suppliers_paid": "Barcha yetkazib beruvchilarga to‘langan",
+      "travelers_complete": "Sayohatchilar ro‘yxati to‘ldirilgan",
+      "client_paid": "Mijoz to‘liq to‘lagan"
+    },
     "workspace": {
       "load_error": "Tur paketini yuklab bo‘lmadi",
       "back": "Bronlarga qaytish",
@@ -1758,6 +1768,7 @@
       "all_statuses": "Barcha bosqichlar",
       "all_payments": "Barcha to‘lovlar",
       "suppliers": "Yetkazib beruvchilar",
+      "readiness": "Tayyorgarlik",
       "sale": "Sotuv",
       "payment": "To‘lov",
       "overdue": "To‘lov muddati o‘tgan",
