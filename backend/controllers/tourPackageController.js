@@ -60,6 +60,7 @@ function normalizeComponentOperations(body = {}) {
   return {
     confirmationReference: String(body.confirmation_reference || "").trim().slice(0, 120) || null,
     supplierPaymentDueAt: /^\d{4}-\d{2}-\d{2}$/.test(dueAt) ? dueAt : null,
+    supplierPaid: body.supplier_paid === true,
     operationalNote: String(body.operational_note || "").trim().slice(0, 1000) || null,
   };
 }
@@ -272,12 +273,14 @@ async function ensureTourPackagesTable() {
       booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
       confirmation_reference TEXT,
       supplier_payment_due_at DATE,
+      supplier_paid BOOLEAN NOT NULL DEFAULT FALSE,
       operational_note TEXT,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(package_id, booking_id)
     )
   `);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_paid BOOLEAN NOT NULL DEFAULT FALSE`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
 }
 
@@ -303,7 +306,8 @@ async function packageBookings(packageId) {
             s.title AS service_title,
             p.name AS provider_name, p.type AS provider_type, p.phone AS provider_phone,
             p.social AS provider_telegram,
-            ops.confirmation_reference, ops.supplier_payment_due_at, ops.operational_note
+            ops.confirmation_reference, ops.supplier_payment_due_at,
+            COALESCE(ops.supplier_paid,FALSE) AS supplier_paid, ops.operational_note
        FROM bookings b
        LEFT JOIN providers p ON p.id = b.provider_id
        LEFT JOIN services s ON s.id = b.service_id
@@ -335,15 +339,16 @@ async function updateTourPackageComponentOperations(req, res) {
     const value = normalizeComponentOperations(req.body);
     const result = await pool.query(
       `INSERT INTO tour_package_component_ops(
-         package_id,booking_id,confirmation_reference,supplier_payment_due_at,operational_note
-       ) VALUES($1::uuid,$2,$3,$4::date,$5)
+         package_id,booking_id,confirmation_reference,supplier_payment_due_at,supplier_paid,operational_note
+       ) VALUES($1::uuid,$2,$3,$4::date,$5,$6)
        ON CONFLICT(package_id,booking_id) DO UPDATE SET
          confirmation_reference=EXCLUDED.confirmation_reference,
          supplier_payment_due_at=EXCLUDED.supplier_payment_due_at,
+         supplier_paid=EXCLUDED.supplier_paid,
          operational_note=EXCLUDED.operational_note,
          updated_at=NOW()
-       RETURNING booking_id,confirmation_reference,supplier_payment_due_at,operational_note,updated_at`,
-      [packageId, bookingId, value.confirmationReference, value.supplierPaymentDueAt, value.operationalNote]
+       RETURNING booking_id,confirmation_reference,supplier_payment_due_at,supplier_paid,operational_note,updated_at`,
+      [packageId, bookingId, value.confirmationReference, value.supplierPaymentDueAt, value.supplierPaid, value.operationalNote]
     );
     return res.json(result.rows[0]);
   } catch (error) {
@@ -432,9 +437,26 @@ async function listTourPackages(req, res) {
       `SELECT tp.*,
               COUNT(b.id)::int AS component_count,
               COUNT(b.id) FILTER (WHERE b.status IN ('confirmed','paid','completed'))::int AS confirmed_count,
+              COUNT(b.id) FILTER (
+                WHERE b.status IN ('confirmed','paid','completed')
+                  AND tp.status <> 'cancelled'
+                  AND (tp.end_date IS NULL OR tp.end_date >= CURRENT_DATE)
+                  AND NULLIF(TRIM(ops.confirmation_reference),'') IS NULL
+              )::int AS missing_confirmation_count,
+              COUNT(b.id) FILTER (
+                WHERE ops.supplier_payment_due_at < CURRENT_DATE
+                  AND tp.status <> 'cancelled'
+                  AND COALESCE(ops.supplier_paid,FALSE)=FALSE
+              )::int AS supplier_overdue_count,
+              COUNT(b.id) FILTER (
+                WHERE ops.supplier_payment_due_at IS NOT NULL
+                  AND tp.status <> 'cancelled'
+                  AND COALESCE(ops.supplier_paid,FALSE)=FALSE
+              )::int AS supplier_unpaid_count,
               COALESCE(ARRAY_AGG(b.status::text) FILTER (WHERE b.id IS NOT NULL), ARRAY[]::text[]) AS component_statuses
          FROM tour_packages tp
          LEFT JOIN bookings b ON b.group_id=tp.id
+         LEFT JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
         WHERE tp.owner_provider_id=$1
         GROUP BY tp.id
         ORDER BY tp.updated_at DESC`,

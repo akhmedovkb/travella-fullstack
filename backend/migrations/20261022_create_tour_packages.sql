@@ -112,6 +112,7 @@ CREATE TABLE IF NOT EXISTS tour_package_component_ops (
   booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
   confirmation_reference TEXT,
   supplier_payment_due_at DATE,
+  supplier_paid BOOLEAN NOT NULL DEFAULT FALSE,
   operational_note TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

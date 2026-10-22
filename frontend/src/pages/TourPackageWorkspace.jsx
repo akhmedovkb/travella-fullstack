@@ -68,6 +68,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, t }) {
   const [form, setForm] = useState({
     confirmation_reference: item.confirmation_reference || "",
     supplier_payment_due_at: dateValue(item.supplier_payment_due_at),
+    supplier_paid: Boolean(item.supplier_paid),
     operational_note: item.operational_note || "",
   });
   const ready = confirmedStatuses.has(String(item.status || "").toLowerCase());
@@ -91,6 +92,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, t }) {
       <LabeledField label={t("tb.workspace.operational_note")}><input value={form.operational_note} onChange={(e) => setField("operational_note", e.target.value)} placeholder={t("tb.workspace.operational_note_ph")} className={fieldClass} /></LabeledField>
       <button type="button" disabled={saving} onClick={() => onSave(item.id, form)} className="inline-flex h-11 items-center justify-center gap-2 bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-40"><Save size={16} />{t("common.save")}</button>
     </div>
+    <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.supplier_paid} onChange={(e) => setField("supplier_paid", e.target.checked)} className="h-4 w-4 accent-emerald-600" />{t("tb.workspace.supplier_paid")}</label>
   </article>;
 }
 
