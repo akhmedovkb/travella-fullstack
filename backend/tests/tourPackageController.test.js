@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { calculateGross, derivePackageStatus, hashShareToken, publicPackageView } = require("../controllers/tourPackageController");
+const { calculateGross, derivePackageStatus, hashShareToken, packageSaleReadiness, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -48,5 +48,22 @@ test("derives package sourcing status from supplier components", () => {
   assert.equal(derivePackageStatus([{ status: "quoted" }, { status: "pending" }], "request_sent"), "partially_confirmed");
   assert.equal(derivePackageStatus([{ status: "confirmed" }, { status: "paid" }], "request_sent"), "confirmed");
   assert.equal(derivePackageStatus([{ status: "pending" }], "proposed"), "proposed");
+});
+
+test("requires client acceptance and every supplier confirmation before booking the package", () => {
+  assert.deepEqual(packageSaleReadiness([], "accepted"), {
+    ready: false, client_accepted: true, component_count: 0, confirmed_count: 0, blocker_ids: [],
+  });
+  assert.equal(packageSaleReadiness([{ id: 1, status: "confirmed" }], null).ready, false);
+  assert.deepEqual(packageSaleReadiness([
+    { id: 1, status: "confirmed" },
+    { id: 2, status: "quoted" },
+  ], "accepted"), {
+    ready: false, client_accepted: true, component_count: 2, confirmed_count: 1, blocker_ids: [2],
+  });
+  assert.equal(packageSaleReadiness([
+    { id: 1, status: "confirmed" },
+    { id: 2, status: "paid" },
+  ], "accepted").ready, true);
 });
 

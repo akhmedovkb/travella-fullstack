@@ -1654,7 +1654,14 @@
       "response_changes_requested": "Client requested changes",
       "response_saved": "Your response was sent to the agency. They will contact you about the next step.",
       "response_error": "Could not send your response",
-      "client_comment": "Client comment"
+      "client_comment": "Client comment",
+      "supplier_readiness": "Supplier readiness",
+      "confirm_sale": "Confirm sale",
+      "confirm_suppliers_first": "Confirm every component booking first",
+      "sale_confirmed": "Package moved to Booked",
+      "acceptance_required": "Client acceptance is required first",
+      "components_required": "The package has no component bookings yet",
+      "components_pending": "{{confirmed}} of {{total}} components confirmed"
     },
     "title": "Tour builder",
     "dates": "Tour dates",

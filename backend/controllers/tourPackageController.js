@@ -28,6 +28,19 @@ function derivePackageStatus(rows = [], storedStatus = "draft") {
   return "request_sent";
 }
 
+function packageSaleReadiness(rows = [], proposalResponse = null) {
+  const accepted = proposalResponse === "accepted";
+  const confirmedStatuses = new Set(["confirmed", "paid", "completed"]);
+  const blockers = rows.filter((row) => !confirmedStatuses.has(String(row.status || "").toLowerCase()));
+  return {
+    ready: accepted && rows.length > 0 && blockers.length === 0,
+    client_accepted: accepted,
+    component_count: rows.length,
+    confirmed_count: rows.length - blockers.length,
+    blocker_ids: blockers.map((row) => row.id),
+  };
+}
+
 function hashShareToken(token) {
   return crypto.createHash("sha256").update(String(token || "")).digest("hex");
 }
@@ -346,6 +359,40 @@ async function respondToTourProposal(req, res) {
   }
 }
 
+async function confirmTourPackageSale(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const current = await pool.query(
+      `SELECT * FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2`,
+      [req.params.id, ownerId]
+    );
+    if (!current.rowCount) return res.status(404).json({ message: "Tour package not found" });
+    const bookings = await packageBookings(req.params.id);
+    const readiness = packageSaleReadiness(bookings, current.rows[0].proposal_response);
+    if (!readiness.client_accepted) {
+      return res.status(409).json({ message: "Client acceptance is required", readiness });
+    }
+    if (!readiness.component_count) {
+      return res.status(409).json({ message: "The package has no booking components", readiness });
+    }
+    if (!readiness.ready) {
+      return res.status(409).json({ message: "All supplier components must be confirmed", readiness });
+    }
+    const result = await pool.query(
+      `UPDATE tour_packages SET status='booked', updated_at=NOW()
+       WHERE id=$1::uuid AND owner_provider_id=$2
+       RETURNING *`,
+      [req.params.id, ownerId]
+    );
+    return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash), readiness });
+  } catch (error) {
+    console.error("confirmTourPackageSale error:", error);
+    return res.status(500).json({ message: "Failed to confirm package sale" });
+  }
+}
+
 async function revokeTourPackageShare(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -390,6 +437,7 @@ async function getPublicTourProposal(req, res) {
 module.exports = {
   calculateGross,
   derivePackageStatus,
+  packageSaleReadiness,
   hashShareToken,
   publicPackageView,
   createTourPackage,
@@ -400,5 +448,6 @@ module.exports = {
   revokeTourPackageShare,
   getPublicTourProposal,
   respondToTourProposal,
+  confirmTourPackageSale,
 };
 

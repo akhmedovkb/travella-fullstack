@@ -1652,7 +1652,14 @@
       "response_changes_requested": "Mijoz o‘zgartirish so‘radi",
       "response_saved": "Javob agentlikka yuborildi. Keyingi qadam uchun siz bilan bog‘lanishadi.",
       "response_error": "Javobni yuborib bo‘lmadi",
-      "client_comment": "Mijoz izohi"
+      "client_comment": "Mijoz izohi",
+      "supplier_readiness": "Yetkazib beruvchilar tayyorligi",
+      "confirm_sale": "Sotuvni tasdiqlash",
+      "confirm_suppliers_first": "Avval barcha komponent bronlarini tasdiqlang",
+      "sale_confirmed": "Paket «Bron qilingan» holatiga o‘tkazildi",
+      "acceptance_required": "Avval mijozning roziligi kerak",
+      "components_required": "Paketda hali komponent bronlari yo‘q",
+      "components_pending": "{{total}} komponentdan {{confirmed}} tasi tasdiqlangan"
     },
     "title": "Tur konstruktori",
     "dates": "Tur sanalari",

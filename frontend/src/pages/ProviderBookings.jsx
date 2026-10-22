@@ -222,6 +222,7 @@ export default function ProviderBookings() {
   const [proposalForm, setProposalForm] = useState({ client_name: "", client_phone: "", client_email: "", client_company: "", quote_valid_until: "" });
   const [proposalUrl, setProposalUrl] = useState("");
   const [proposalBusy, setProposalBusy] = useState(false);
+  const [packageActionBusy, setPackageActionBusy] = useState(null);
     // --- Модалка отмены поставщиком ---
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -313,6 +314,26 @@ export default function ProviderBookings() {
       tError(error?.response?.data?.message || t("tb.proposal.revoke_error"));
     } finally {
       setProposalBusy(false);
+    }
+  };
+
+  const confirmPackageSale = async (tourPackage) => {
+    if (!tourPackage?.id || packageActionBusy) return;
+    setPackageActionBusy(tourPackage.id);
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${tourPackage.id}/confirm-sale`, {}, cfg());
+      setTourPackages((items) => items.map((item) => item.id === tourPackage.id ? { ...item, ...data } : item));
+      tSuccess(t("tb.proposal.sale_confirmed"));
+    } catch (error) {
+      const readiness = error?.response?.data?.readiness;
+      const message = !readiness?.client_accepted
+        ? t("tb.proposal.acceptance_required")
+        : readiness?.component_count === 0
+        ? t("tb.proposal.components_required")
+        : t("tb.proposal.components_pending", { confirmed: readiness?.confirmed_count || 0, total: readiness?.component_count || 0 });
+      tError(message);
+    } finally {
+      setPackageActionBusy(null);
     }
   };
 
@@ -676,6 +697,9 @@ export default function ProviderBookings() {
     const currency = tourPackage?.currency || "UZS";
     const status = String(tourPackage?.status || "request_sent");
     const validUntil = tourPackage?.quote_valid_until ? new Date(tourPackage.quote_valid_until) : null;
+    const componentCount = Number(tourPackage?.component_count || group.items.length || 0);
+    const confirmedCount = Number(tourPackage?.confirmed_count || 0);
+    const componentsReady = componentCount > 0 && confirmedCount === componentCount;
     const formatMoney = (value) => Number(value || 0).toLocaleString(currency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 });
     return (
       <div className="border-b border-gray-200 bg-white px-5 py-4">
@@ -705,10 +729,21 @@ export default function ProviderBookings() {
               <div><div className="text-[11px] font-semibold uppercase text-gray-400">{t("tb.summary.markup")}</div><div className="font-bold text-orange-600">{tourPackage.markup_type === "percent" ? `${formatMoney(tourPackage.markup_value)}%` : `${formatMoney(tourPackage.markup_value)} ${currency}`}</div></div>
               <div><div className="text-[11px] font-semibold uppercase text-gray-400">GROSS</div><div className="font-bold text-emerald-700">{formatMoney(tourPackage.gross_total)} {currency}</div></div>
               {validUntil && Number.isFinite(validUntil.getTime()) ? <div className="col-span-3 text-xs text-gray-500">{t("tb.quote_valid_until")}: {validUntil.toLocaleDateString()}</div> : null}
+              <div className="col-span-3">
+                <div className="mb-1 flex items-center justify-between text-xs text-gray-500"><span>{t("tb.proposal.supplier_readiness")}</span><span>{confirmedCount}/{componentCount}</span></div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-gray-200"><div className={`h-full ${componentsReady ? "bg-emerald-500" : "bg-orange-500"}`} style={{ width: `${componentCount ? Math.round((confirmedCount / componentCount) * 100) : 0}%` }} /></div>
+              </div>
               {tab === "outgoing" ? (
-                <button type="button" onClick={() => openProposal(tourPackage)} className="col-span-3 ml-auto inline-flex h-9 items-center gap-2 rounded-md border border-gray-300 px-3 text-sm font-semibold text-gray-800 hover:border-orange-400 hover:text-orange-700">
-                  <Link2 size={16} /> {tourPackage.is_shared ? t("tb.proposal.manage_link") : t("tb.proposal.create_link")}
-                </button>
+                <div className="col-span-3 flex flex-wrap justify-end gap-2">
+                  <button type="button" onClick={() => openProposal(tourPackage)} className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-300 px-3 text-sm font-semibold text-gray-800 hover:border-orange-400 hover:text-orange-700">
+                    <Link2 size={16} /> {tourPackage.is_shared ? t("tb.proposal.manage_link") : t("tb.proposal.create_link")}
+                  </button>
+                  {tourPackage.proposal_response === "accepted" && status !== "booked" ? (
+                    <button type="button" onClick={() => confirmPackageSale(tourPackage)} disabled={!componentsReady || packageActionBusy === tourPackage.id} title={!componentsReady ? t("tb.proposal.confirm_suppliers_first") : ""} className="h-9 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300">
+                      {packageActionBusy === tourPackage.id ? t("common.loading") : t("tb.proposal.confirm_sale")}
+                    </button>
+                  ) : null}
+                </div>
               ) : null}
             </div>
           ) : (

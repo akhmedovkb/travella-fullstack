@@ -9,6 +9,7 @@ const {
   revokeTourPackageShare,
   getPublicTourProposal,
   respondToTourProposal,
+  confirmTourPackageSale,
 } = require("../controllers/tourPackageController");
 
 const router = express.Router();
@@ -20,6 +21,7 @@ router.get("/", listTourPackages);
 router.post("/", createTourPackage);
 router.post("/:id/share", shareTourPackage);
 router.delete("/:id/share", revokeTourPackageShare);
+router.post("/:id/confirm-sale", confirmTourPackageSale);
 router.get("/:id", getTourPackage);
 router.patch("/:id", updateTourPackage);
 
