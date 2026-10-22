@@ -1711,6 +1711,8 @@
       "complete": "Bajarildi deb belgilash",
       "reopen": "Qayta ochish",
       "overdue": "Muddati o‘tgan",
+      "automatic": "Avto",
+      "replace_declined_supplier": "Ta’minotchini almashtirish: {{service}}",
       "empty": "Bu tur uchun vazifalar hozircha yo‘q",
       "created": "Vazifa qo‘shildi",
       "save_error": "Vazifani saqlab bo‘lmadi",

@@ -50,6 +50,25 @@ async function respondToSupplierServiceOrder({ actorTelegramId, bookingId, decis
      VALUES($1::uuid,$2,$3,'supplier',$4)`,
     [item.package_id, Number(bookingId), normalizedDecision, String(actorTelegramId)]
   );
+  if (normalizedDecision === "declined") {
+    await pool.query(
+      `INSERT INTO tour_package_tasks(package_id,title,task_type,booking_id,due_at,priority)
+       SELECT $1::uuid,$2,'replace_declined_supplier',$3,CURRENT_DATE,'high'
+       WHERE NOT EXISTS (
+         SELECT 1 FROM tour_package_tasks
+         WHERE package_id=$1::uuid AND booking_id=$3
+           AND task_type='replace_declined_supplier' AND completed=FALSE
+       )`,
+      [item.package_id, `Replace supplier: ${item.service_title || `#${bookingId}`}`, Number(bookingId)]
+    );
+  } else {
+    await pool.query(
+      `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
+       WHERE package_id=$1::uuid AND booking_id=$2
+         AND task_type='replace_declined_supplier' AND completed=FALSE`,
+      [item.package_id, Number(bookingId)]
+    );
+  }
   const agencyChatId = profileChatId(item.agency_profile || {});
   if (agencyChatId) {
     const symbol = normalizedDecision === "accepted" ? "✅" : "❌";

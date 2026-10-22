@@ -1713,6 +1713,8 @@
       "complete": "Mark complete",
       "reopen": "Reopen task",
       "overdue": "Overdue",
+      "automatic": "Auto",
+      "replace_declined_supplier": "Replace supplier: {{service}}",
       "empty": "No tasks for this tour yet",
       "created": "Task added",
       "save_error": "Could not save task",

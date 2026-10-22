@@ -380,6 +380,8 @@ async function ensureTourPackagesTable() {
       id BIGSERIAL PRIMARY KEY,
       package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
       title TEXT NOT NULL,
+      task_type VARCHAR(32),
+      booking_id BIGINT REFERENCES bookings(id) ON DELETE CASCADE,
       assigned_to TEXT,
       due_at DATE,
       priority VARCHAR(16) NOT NULL DEFAULT 'normal',
@@ -389,7 +391,10 @@ async function ensureTourPackagesTable() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
   `);
+  await pool.query(`ALTER TABLE tour_package_tasks ADD COLUMN IF NOT EXISTS task_type VARCHAR(32)`);
+  await pool.query(`ALTER TABLE tour_package_tasks ADD COLUMN IF NOT EXISTS booking_id BIGINT REFERENCES bookings(id) ON DELETE CASCADE`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_tasks_package ON tour_package_tasks(package_id, completed, due_at)`);
+  await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_package_tasks_open_system ON tour_package_tasks(package_id, booking_id, task_type) WHERE completed=FALSE AND task_type IS NOT NULL`);
 }
 
 function packageSnapshot(row = {}) {
@@ -670,9 +675,14 @@ async function getTourPackage(req, res) {
       [req.params.id]
     );
     const tasks = await pool.query(
-      `SELECT id,title,assigned_to,due_at,priority,completed,completed_at,created_at,updated_at
-         FROM tour_package_tasks WHERE package_id=$1::uuid
-        ORDER BY completed ASC, due_at ASC NULLS LAST, created_at DESC`,
+      `SELECT task.id,task.title,task.task_type,task.booking_id,task.assigned_to,task.due_at,
+              task.priority,task.completed,task.completed_at,task.created_at,task.updated_at,
+              service.title AS service_title
+         FROM tour_package_tasks task
+         LEFT JOIN bookings booking ON booking.id=task.booking_id
+         LEFT JOIN services service ON service.id=booking.service_id
+        WHERE task.package_id=$1::uuid
+        ORDER BY task.completed ASC, task.due_at ASC NULLS LAST, task.created_at DESC`,
       [req.params.id]
     );
     return res.json({
