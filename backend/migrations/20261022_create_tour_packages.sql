@@ -23,6 +23,9 @@ CREATE TABLE IF NOT EXISTS tour_packages (
   share_token_hash VARCHAR(64),
   shared_at TIMESTAMPTZ,
   share_expires_at TIMESTAMPTZ,
+  proposal_response VARCHAR(32),
+  proposal_response_message TEXT,
+  proposal_responded_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT tour_packages_status_chk CHECK (status IN (

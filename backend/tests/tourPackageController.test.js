@@ -25,6 +25,8 @@ test("public proposal omits agency costs, markup and client contacts", () => {
     client_name: "Alex",
     client_phone: "+998900000000",
     client_email: "alex@example.com",
+    proposal_response: "changes_requested",
+    proposal_response_message: "Please change the hotel",
     route: { from: "Tashkent", to: "Samarkand" },
     itinerary: [{ day: 1, city: "Tashkent" }],
     agency_name: "Example DMC",
@@ -33,6 +35,7 @@ test("public proposal omits agency costs, markup and client contacts", () => {
   assert.equal(view.gross_total, "1250.00");
   assert.equal(view.client_name, "Alex");
   assert.equal(view.agency.name, "Example DMC");
+  assert.equal(view.proposal_response, "changes_requested");
   assert.equal("net_total" in view, false);
   assert.equal("markup_value" in view, false);
   assert.equal("client_phone" in view, false);

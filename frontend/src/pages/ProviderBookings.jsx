@@ -692,6 +692,11 @@ export default function ProviderBookings() {
               <span className="text-xs text-gray-500">
                 {group.items.length} {t("bookings.services_count", { defaultValue: "услуг" })}
               </span>
+              {tourPackage?.proposal_response ? (
+                <span className={`rounded-full px-2 py-1 text-xs font-semibold ring-1 ${tourPackage.proposal_response === "accepted" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>
+                  {t(`tb.proposal.response_${tourPackage.proposal_response}`)}
+                </span>
+              ) : null}
             </div>
           </div>
           {tourPackage ? (
@@ -710,6 +715,12 @@ export default function ProviderBookings() {
             <div className="max-w-[280px] truncate font-mono text-right text-xs text-gray-400" title={group.group_id}>{group.group_id}</div>
           )}
         </div>
+
+        {tourPackage?.proposal_response_message ? (
+          <div className="mt-3 border-l-2 border-orange-400 bg-orange-50 px-3 py-2 text-sm text-gray-700">
+            <span className="font-semibold">{t("tb.proposal.client_comment")}:</span> {tourPackage.proposal_response_message}
+          </div>
+        ) : null}
 
         {rows.length ? (
           <div className="mt-4 grid gap-x-6 gap-y-2 border-t border-gray-100 pt-3 md:grid-cols-2">

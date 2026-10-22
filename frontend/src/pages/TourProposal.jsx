@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, MapPin, Printer, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, MapPin, MessageSquare, Printer, Users } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -21,6 +21,10 @@ export default function TourProposal() {
   const { t, i18n } = useTranslation();
   const [proposal, setProposal] = useState(null);
   const [state, setState] = useState("loading");
+  const [responseMode, setResponseMode] = useState("");
+  const [responseMessage, setResponseMessage] = useState("");
+  const [responseBusy, setResponseBusy] = useState(false);
+  const [responseError, setResponseError] = useState("");
   const token = window.location.pathname.split("/").filter(Boolean).pop();
   const language = i18n.resolvedLanguage || i18n.language || "ru";
 
@@ -40,6 +44,24 @@ export default function TourProposal() {
     const route = proposal?.route || {};
     return [route.from, route.to].filter(Boolean).join(" — ") || proposal?.title || "";
   }, [proposal]);
+
+  const submitResponse = async (response) => {
+    if (responseBusy) return;
+    setResponseBusy(true);
+    setResponseError("");
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/public/${encodeURIComponent(token)}/respond`, {
+        response,
+        message: responseMessage,
+      });
+      setProposal((value) => ({ ...value, ...data }));
+      setResponseMode("");
+    } catch (error) {
+      setResponseError(error?.response?.data?.message || t("tb.proposal.response_error"));
+    } finally {
+      setResponseBusy(false);
+    }
+  };
 
   if (state === "loading") {
     return <main className="min-h-[70vh] bg-gray-50 px-4 py-16 text-center text-gray-500">{t("tb.proposal.loading")}</main>;
@@ -120,6 +142,43 @@ export default function TourProposal() {
             ))}
             {!itinerary.length ? <p className="border-t border-gray-200 py-6 text-gray-500">{t("tb.proposal.program_pending")}</p> : null}
           </div>
+        </section>
+
+        <section className="proposal-actions border-t border-gray-200 bg-gray-50 px-6 py-8 sm:px-10">
+          {proposal.proposal_response ? (
+            <div className={`border p-5 ${proposal.proposal_response === "accepted" ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`}>
+              <div className="flex items-start gap-3">
+                {proposal.proposal_response === "accepted" ? <CheckCircle2 className="mt-0.5 text-emerald-700" /> : <MessageSquare className="mt-0.5 text-amber-700" />}
+                <div>
+                  <h2 className="font-bold text-gray-950">{t(`tb.proposal.response_${proposal.proposal_response}`)}</h2>
+                  <p className="mt-1 text-sm text-gray-700">{t("tb.proposal.response_saved")}</p>
+                  {proposal.proposal_response_message ? <p className="mt-3 whitespace-pre-line border-t border-current/20 pt-3 text-sm text-gray-800">{proposal.proposal_response_message}</p> : null}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <h2 className="text-xl font-bold text-gray-950">{t("tb.proposal.decision_title")}</h2>
+              <p className="mt-1 text-sm text-gray-600">{t("tb.proposal.decision_text")}</p>
+              {responseMode === "changes_requested" ? (
+                <div className="mt-5 max-w-2xl">
+                  <label className="block text-sm font-semibold text-gray-800">{t("tb.proposal.change_comment")}
+                    <textarea rows={4} value={responseMessage} onChange={(event) => setResponseMessage(event.target.value)} placeholder={t("tb.proposal.change_comment_ph")} className="mt-2 w-full border border-gray-300 bg-white p-3 font-normal outline-none focus:border-orange-500" />
+                  </label>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" disabled={responseBusy || !responseMessage.trim()} onClick={() => submitResponse("changes_requested")} className="h-11 bg-orange-600 px-5 font-semibold text-white hover:bg-orange-700 disabled:opacity-50">{responseBusy ? t("common.loading") : t("tb.proposal.send_changes")}</button>
+                    <button type="button" onClick={() => setResponseMode("")} className="h-11 border border-gray-300 bg-white px-5 font-semibold text-gray-700">{t("actions.cancel")}</button>
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button type="button" disabled={responseBusy} onClick={() => submitResponse("accepted")} className="inline-flex h-12 items-center gap-2 bg-emerald-600 px-6 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"><CheckCircle2 size={20} />{t("tb.proposal.accept")}</button>
+                  <button type="button" onClick={() => setResponseMode("changes_requested")} className="inline-flex h-12 items-center gap-2 border border-gray-300 bg-white px-6 font-bold text-gray-800 hover:border-orange-400"><MessageSquare size={20} />{t("tb.proposal.request_changes")}</button>
+                </div>
+              )}
+              {responseError ? <p className="mt-3 text-sm font-medium text-red-600">{responseError}</p> : null}
+            </div>
+          )}
         </section>
 
         <footer className="proposal-footer flex flex-wrap items-center justify-between gap-4 border-t border-gray-200 bg-gray-50 px-6 py-6 sm:px-10">

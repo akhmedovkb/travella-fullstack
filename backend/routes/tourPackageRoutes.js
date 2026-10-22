@@ -8,11 +8,13 @@ const {
   shareTourPackage,
   revokeTourPackageShare,
   getPublicTourProposal,
+  respondToTourProposal,
 } = require("../controllers/tourPackageController");
 
 const router = express.Router();
 
 router.get("/public/:token", getPublicTourProposal);
+router.post("/public/:token/respond", respondToTourProposal);
 router.use(authenticateToken);
 router.get("/", listTourPackages);
 router.post("/", createTourPackage);

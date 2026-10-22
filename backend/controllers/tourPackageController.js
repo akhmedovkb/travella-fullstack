@@ -50,6 +50,9 @@ function publicPackageView(row = {}) {
     route: row.route || {},
     itinerary: Array.isArray(row.itinerary) ? row.itinerary : [],
     client_name: row.client_name || null,
+    proposal_response: row.proposal_response || null,
+    proposal_response_message: row.proposal_response_message || null,
+    proposal_responded_at: row.proposal_responded_at || null,
     agency: {
       name: row.agency_name || "Travella partner",
       phone: row.agency_phone || null,
@@ -85,6 +88,9 @@ async function ensureTourPackagesTable() {
       share_token_hash VARCHAR(64),
       shared_at TIMESTAMPTZ,
       share_expires_at TIMESTAMPTZ,
+      proposal_response VARCHAR(32),
+      proposal_response_message TEXT,
+      proposal_responded_at TIMESTAMPTZ,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     )
@@ -96,6 +102,9 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS share_token_hash VARCHAR(64)`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS shared_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_response VARCHAR(32)`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_response_message TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_responded_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated ON tour_packages(owner_provider_id, updated_at DESC)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_share_token ON tour_packages(share_token_hash) WHERE share_token_hash IS NOT NULL`);
 }
@@ -297,6 +306,7 @@ async function shareTourPackage(req, res) {
       `UPDATE tour_packages SET title=$3, client_name=$4, client_phone=$5,
          client_email=$6, client_company=$7, quote_valid_until=$8,
          share_token_hash=$9, shared_at=NOW(), share_expires_at=$8,
+         proposal_response=NULL, proposal_response_message=NULL, proposal_responded_at=NULL,
          status='proposed', updated_at=NOW()
        WHERE id=$1::uuid AND owner_provider_id=$2
        RETURNING id,status,shared_at,share_expires_at`,
@@ -307,6 +317,32 @@ async function shareTourPackage(req, res) {
   } catch (error) {
     console.error("shareTourPackage error:", error);
     return res.status(500).json({ message: "Failed to create proposal link" });
+  }
+}
+
+async function respondToTourProposal(req, res) {
+  try {
+    const token = String(req.params.token || "");
+    const response = String(req.body?.response || "").trim().toLowerCase();
+    const message = String(req.body?.message || "").trim().slice(0, 2000) || null;
+    if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) return res.status(404).json({ message: "Proposal not found" });
+    if (!new Set(["accepted", "changes_requested"]).has(response)) {
+      return res.status(400).json({ message: "Valid proposal response is required" });
+    }
+    await ensureTourPackagesTable();
+    const result = await pool.query(
+      `UPDATE tour_packages SET proposal_response=$2,
+         proposal_response_message=$3, proposal_responded_at=NOW(), updated_at=NOW()
+       WHERE share_token_hash=$1 AND share_expires_at > NOW()
+       RETURNING proposal_response,proposal_response_message,proposal_responded_at`,
+      [hashShareToken(token), response, message]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Proposal not found or expired" });
+    res.set("Cache-Control", "no-store");
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("respondToTourProposal error:", error);
+    return res.status(500).json({ message: "Failed to save proposal response" });
   }
 }
 
@@ -363,5 +399,6 @@ module.exports = {
   shareTourPackage,
   revokeTourPackageShare,
   getPublicTourProposal,
+  respondToTourProposal,
 };
 
