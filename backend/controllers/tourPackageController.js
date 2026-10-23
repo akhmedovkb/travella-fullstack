@@ -857,6 +857,14 @@ async function listTourPackages(req, res) {
                   AND ops.supplier_payment_due_at BETWEEN CURRENT_DATE AND CURRENT_DATE + 30
               ),0) AS supplier_due_30d_total,
               COUNT(b.id) FILTER (
+                WHERE COALESCE(ops.supplier_paid,FALSE)=FALSE
+                  AND ops.supplier_payment_due_at IS NULL
+              )::int AS supplier_missing_due_count,
+              COALESCE(SUM(COALESCE(ops.actual_supplier_cost,b.provider_price,0)) FILTER (
+                WHERE COALESCE(ops.supplier_paid,FALSE)=FALSE
+                  AND ops.supplier_payment_due_at IS NULL
+              ),0) AS supplier_missing_due_total,
+              COUNT(b.id) FILTER (
                 WHERE tp.status IN ('booked','paid') AND (
                   ops.service_order_status IS NULL OR
                   ops.service_order_status IN ('declined','failed','cancelled') OR
