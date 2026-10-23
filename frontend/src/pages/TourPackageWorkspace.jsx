@@ -284,6 +284,23 @@ function OperationsIssueCenter({ components, t }) {
   </section>;
 }
 
+function IncidentRow({ item, saving, onSave, t }) {
+  const [status, setStatus] = useState(item.status || "open");
+  const [assignedTo, setAssignedTo] = useState(item.assigned_to || "");
+  const [resolution, setResolution] = useState(item.resolution || "");
+  const severityTone = { critical: "text-red-700", high: "text-orange-700", medium: "text-amber-700", low: "text-sky-700" };
+  return <div className={`border-l-4 py-4 pl-4 ${item.status === "resolved" ? "border-emerald-400 opacity-70" : item.severity === "critical" ? "border-red-500" : "border-amber-400"}`}><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-bold">{item.title}</div><div className="mt-1 text-xs text-gray-500">{item.service_title || t("tb.incidents.general")} · {dateTimeText(item.created_at)}</div></div><span className={`text-xs font-bold uppercase ${severityTone[item.severity]}`}>{t(`tb.incidents.severity_${item.severity}`)}</span></div>{item.description && <div className="mt-2 whitespace-pre-wrap text-sm text-gray-700">{item.description}</div>}<div className="mt-3 grid gap-2 sm:grid-cols-[150px_1fr_1.5fr_auto]"><select value={status} onChange={(event) => setStatus(event.target.value)} className="h-10 border border-gray-300 bg-white px-2 text-sm"><option value="open">{t("tb.incidents.status_open")}</option><option value="monitoring">{t("tb.incidents.status_monitoring")}</option><option value="resolved">{t("tb.incidents.status_resolved")}</option></select><input value={assignedTo} onChange={(event) => setAssignedTo(event.target.value)} placeholder={t("tb.incidents.assigned_to")} className="h-10 border border-gray-300 px-3 text-sm" /><input value={resolution} onChange={(event) => setResolution(event.target.value)} placeholder={status === "resolved" ? t("tb.incidents.resolution_required") : t("tb.incidents.resolution")} className="h-10 border border-gray-300 px-3 text-sm" /><button type="button" disabled={saving || (status === "resolved" && !resolution.trim())} onClick={() => onSave(item.id, { status, assigned_to: assignedTo, resolution })} className="inline-flex h-10 items-center justify-center gap-2 bg-gray-950 px-4 text-sm font-semibold text-white disabled:opacity-40"><Save size={15} />{t("common.save")}</button></div></div>;
+}
+
+function IncidentJournal({ incidents, components, saving, onCreate, onUpdate, t }) {
+  const [showForm, setShowForm] = useState(false);
+  const [filter, setFilter] = useState("active");
+  const [form, setForm] = useState({ title: "", description: "", severity: "medium", booking_id: "", assigned_to: "" });
+  const visible = incidents.filter((item) => filter === "all" || (filter === "active" ? item.status !== "resolved" : item.status === "resolved"));
+  const submit = async () => { if (await onCreate(form)) { setForm({ title: "", description: "", severity: "medium", booking_id: "", assigned_to: "" }); setShowForm(false); } };
+  return <section><div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="text-xl font-bold">{t("tb.incidents.title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.incidents.hint")}</p></div><button type="button" onClick={() => setShowForm((value) => !value)} className="inline-flex h-10 items-center gap-2 bg-orange-600 px-4 text-sm font-semibold text-white hover:bg-orange-700"><Plus size={16} />{t("tb.incidents.add")}</button></div>{showForm && <div className="mt-4 border-y border-gray-200 bg-gray-50 py-4"><div className="grid gap-3 sm:grid-cols-2"><input value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder={t("tb.incidents.title_ph")} className={fieldClass} /><select value={form.booking_id} onChange={(event) => setForm({ ...form, booking_id: event.target.value })} className={fieldClass}><option value="">{t("tb.incidents.general")}</option>{components.map((component) => <option key={component.id} value={component.id}>{component.service_title || component.provider_name || `#${component.id}`}</option>)}</select><select value={form.severity} onChange={(event) => setForm({ ...form, severity: event.target.value })} className={fieldClass}>{["low", "medium", "high", "critical"].map((value) => <option key={value} value={value}>{t(`tb.incidents.severity_${value}`)}</option>)}</select><input value={form.assigned_to} onChange={(event) => setForm({ ...form, assigned_to: event.target.value })} placeholder={t("tb.incidents.assigned_to")} className={fieldClass} /></div><textarea value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder={t("tb.incidents.description_ph")} rows="3" className="mt-3 w-full border border-gray-300 bg-white px-3 py-2 text-sm" /><div className="mt-3 flex justify-end"><button type="button" disabled={saving || !form.title.trim()} onClick={submit} className="h-10 bg-gray-950 px-5 text-sm font-semibold text-white disabled:opacity-40">{t("tb.incidents.create")}</button></div></div>}<div className="mt-4 flex border-b border-gray-200">{["active", "resolved", "all"].map((value) => <button key={value} type="button" onClick={() => setFilter(value)} className={`h-10 border-b-2 px-4 text-sm font-semibold ${filter === value ? "border-orange-600 text-gray-950" : "border-transparent text-gray-500"}`}>{t(`tb.incidents.filter_${value}`)}</button>)}</div><div className="divide-y border-b border-gray-200">{visible.map((item) => <IncidentRow key={item.id} item={item} saving={saving} onSave={onUpdate} t={t} />)}{!visible.length && <div className="py-7 text-center text-sm text-gray-500">{t("tb.incidents.empty")}</div>}</div></section>;
+}
+
 export default function TourPackageWorkspace() {
   const { id } = useParams();
   const { t } = useTranslation();
@@ -559,6 +576,26 @@ export default function TourPackageWorkspace() {
     finally { setSaving(false); }
   };
 
+  const createIncident = async (values) => {
+    setSaving(true); setError("");
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/incidents`, values, cfg());
+      const component = components.find((item) => Number(item.id) === Number(data.booking_id));
+      setTourPackage((current) => ({ ...current, incidents: [{ ...data, service_title: component?.service_title }, ...(current.incidents || [])] }));
+      setNotice(t("tb.incidents.created")); return true;
+    } catch (requestError) { setError(requestError?.response?.data?.message || t("tb.incidents.save_error")); return false; }
+    finally { setSaving(false); }
+  };
+  const updateIncident = async (incidentId, values) => {
+    setSaving(true); setError("");
+    try {
+      const { data } = await axios.patch(`${API_BASE}/api/tour-packages/${id}/incidents/${incidentId}`, values, cfg());
+      setTourPackage((current) => ({ ...current, incidents: (current.incidents || []).map((item) => Number(item.id) === Number(incidentId) ? { ...item, ...data } : item) }));
+      setNotice(t("tb.incidents.saved"));
+    } catch (requestError) { setError(requestError?.response?.data?.message || t("tb.incidents.save_error")); }
+    finally { setSaving(false); }
+  };
+
   if (loading) return <main className="mx-auto max-w-7xl p-6 text-gray-500">{t("common.loading")}</main>;
   if (!tourPackage) return <main className="mx-auto max-w-3xl p-6"><div className="border border-red-200 bg-red-50 p-5 text-red-800">{error || t("tb.workspace.load_error")}</div></main>;
 
@@ -617,6 +654,7 @@ export default function TourPackageWorkspace() {
       <OperationsIssueCenter components={components} t={t} />
       <OperationsTimeline items={operationsTimeline} t={t} />
       <OperationsTasks items={tourPackage.tasks} saving={saving} onCreate={createTask} onToggle={toggleTask} onDelete={deleteTask} t={t} />
+      <IncidentJournal incidents={tourPackage.incidents || []} components={components} saving={saving} onCreate={createIncident} onUpdate={updateIncident} t={t} />
       <SupplierDocumentCenter components={components} packageId={id} saving={saving} onClassify={classifyAttachment} onReview={reviewAttachment} t={t} />
       <section><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">{t("tb.workspace.components")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.workspace.components_hint")}</p></div><div className="flex flex-wrap items-center gap-3"><span className="text-sm font-semibold text-gray-600">{confirmed}/{components.length}</span>{missingDocumentCount > 0 && <button type="button" disabled={saving} onClick={requestAllSupplierDocuments} className="inline-flex h-10 items-center gap-2 border border-orange-300 bg-white px-4 text-sm font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-50"><Paperclip size={16} />{t("tb.documents.request_all_documents", { count: missingDocumentCount })}</button>}{canIssueOrders && bulkOrderCount > 0 && <button type="button" disabled={saving} onClick={sendAllServiceOrders} className="inline-flex h-10 items-center gap-2 bg-orange-600 px-4 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"><Send size={16} />{t("tb.documents.send_all_service_orders", { count: bulkOrderCount })}</button>}</div></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className="h-full bg-emerald-500" style={{ width: `${readinessPercent}%` }} /></div><div className="mt-4 space-y-3">{components.map((item) => <ComponentOperationsCard key={item.id} item={item} currency={currency} saving={saving} onSave={saveComponentOperations} onSendOrder={sendServiceOrder} onRemindOrder={remindServiceOrder} onCancelOrder={cancelServiceOrder} onMessageOrder={messageServiceOrder} onMarkRead={markSupplierMessagesRead} onClassifyAttachment={classifyAttachment} onRequestDocuments={requestSupplierDocuments} packageId={id} canIssueOrder={canIssueOrders} t={t} />)}{!components.length && <div className="border-y border-gray-200 py-6 text-gray-500">{t("tb.workspace.no_components")}</div>}</div></section>
       <TravelerSection travelers={travelers} setTravelers={setTravelers} capacity={Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0)} onSave={saveTravelers} saving={saving} t={t} />

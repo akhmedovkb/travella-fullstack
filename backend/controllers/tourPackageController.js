@@ -443,6 +443,23 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_package_tasks ADD COLUMN IF NOT EXISTS booking_id BIGINT REFERENCES bookings(id) ON DELETE CASCADE`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_tasks_package ON tour_package_tasks(package_id, completed, due_at)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_package_tasks_open_system ON tour_package_tasks(package_id, booking_id, task_type) WHERE completed=FALSE AND task_type IS NOT NULL`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_incidents (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      booking_id BIGINT REFERENCES bookings(id) ON DELETE SET NULL,
+      title TEXT NOT NULL,
+      description TEXT,
+      severity VARCHAR(16) NOT NULL DEFAULT 'medium',
+      status VARCHAR(16) NOT NULL DEFAULT 'open',
+      assigned_to TEXT,
+      resolution TEXT,
+      resolved_at TIMESTAMPTZ,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_incidents_package ON tour_package_incidents(package_id, status, created_at DESC)`);
 }
 
 function packageSnapshot(row = {}) {
@@ -810,6 +827,7 @@ async function listTourPackages(req, res) {
               (SELECT COUNT(*)::int FROM tour_package_travelers tr WHERE tr.package_id=tp.id) AS traveler_count,
               (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS open_task_count,
               (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE AND task.due_at < CURRENT_DATE) AS overdue_task_count,
+              (SELECT COUNT(*)::int FROM tour_package_incidents incident WHERE incident.package_id=tp.id AND incident.status<>'resolved') AS open_incident_count,
               (SELECT MIN(task.due_at) FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS next_task_due_at,
               (SELECT COUNT(*)::int FROM tour_package_component_events event
                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','attachment_received') AND event.read_at IS NULL) AS unread_supplier_reply_count,
@@ -961,6 +979,19 @@ async function getTourPackage(req, res) {
         ORDER BY task.completed ASC, task.due_at ASC NULLS LAST, task.created_at DESC`,
       [req.params.id]
     );
+    const incidents = await pool.query(
+      `SELECT incident.id,incident.booking_id,incident.title,incident.description,incident.severity,
+              incident.status,incident.assigned_to,incident.resolution,incident.resolved_at,
+              incident.created_at,incident.updated_at,service.title AS service_title
+         FROM tour_package_incidents incident
+         LEFT JOIN bookings booking ON booking.id=incident.booking_id
+         LEFT JOIN services service ON service.id=booking.service_id
+        WHERE incident.package_id=$1::uuid
+        ORDER BY CASE incident.status WHEN 'open' THEN 0 WHEN 'monitoring' THEN 1 ELSE 2 END,
+                 CASE incident.severity WHEN 'critical' THEN 0 WHEN 'high' THEN 1 WHEN 'medium' THEN 2 ELSE 3 END,
+                 incident.created_at DESC`,
+      [req.params.id]
+    );
     return res.json({
       ...item,
       share_token_hash: undefined,
@@ -971,6 +1002,7 @@ async function getTourPackage(req, res) {
       payment_events: paymentEvents.rows,
       travelers: travelers.rows,
       tasks: tasks.rows,
+      incidents: incidents.rows,
       readiness: packageSaleReadiness(bookings, item.proposal_response),
       operations_readiness: packageOperationsReadiness({
         status: derivePackageStatus(bookings, item.status),
@@ -1616,6 +1648,55 @@ async function deleteTourPackageTask(req, res) {
   }
 }
 
+async function createTourPackageIncident(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const title = String(req.body.title || "").trim().slice(0, 240);
+    const severity = ["low", "medium", "high", "critical"].includes(req.body.severity) ? req.body.severity : "medium";
+    const bookingId = Number(req.body.booking_id) || null;
+    if (!title) return res.status(400).json({ message: "Incident title is required" });
+    const result = await pool.query(
+      `INSERT INTO tour_package_incidents(package_id,booking_id,title,description,severity,assigned_to)
+       SELECT tp.id,$3,$4,$5,$6,$7 FROM tour_packages tp
+       WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2
+         AND ($3::bigint IS NULL OR EXISTS (SELECT 1 FROM bookings b WHERE b.group_id=tp.id AND b.id=$3))
+       RETURNING *`,
+      [req.params.id, ownerId, bookingId, title, String(req.body.description || "").trim().slice(0, 2000) || null, severity, String(req.body.assigned_to || "").trim().slice(0, 160) || null]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Tour package or component not found" });
+    return res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("createTourPackageIncident error:", error);
+    return res.status(500).json({ message: "Failed to create incident" });
+  }
+}
+
+async function updateTourPackageIncident(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const status = ["open", "monitoring", "resolved"].includes(req.body.status) ? req.body.status : "open";
+    const resolution = String(req.body.resolution || "").trim().slice(0, 2000) || null;
+    if (status === "resolved" && !resolution) return res.status(400).json({ message: "Resolution is required" });
+    const result = await pool.query(
+      `UPDATE tour_package_incidents incident SET status=$4,resolution=$5,assigned_to=$6,
+         resolved_at=CASE WHEN $4='resolved' THEN COALESCE(incident.resolved_at,NOW()) ELSE NULL END,updated_at=NOW()
+       FROM tour_packages tp WHERE incident.id=$3 AND incident.package_id=$1::uuid
+         AND tp.id=incident.package_id AND tp.owner_provider_id=$2
+       RETURNING incident.*`,
+      [req.params.id, ownerId, req.params.incidentId, status, resolution, String(req.body.assigned_to || "").trim().slice(0, 160) || null]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Incident not found" });
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("updateTourPackageIncident error:", error);
+    return res.status(500).json({ message: "Failed to update incident" });
+  }
+}
+
 async function revokeTourPackageShare(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -1724,5 +1805,7 @@ module.exports = {
   createTourPackageTask,
   updateTourPackageTask,
   deleteTourPackageTask,
+  createTourPackageIncident,
+  updateTourPackageIncident,
 };
 
