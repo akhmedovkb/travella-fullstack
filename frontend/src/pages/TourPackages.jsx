@@ -36,6 +36,8 @@ export default function TourPackages() {
   const [payment, setPayment] = useState("all");
   const [manager, setManager] = useState("all");
   const [operations, setOperations] = useState("all");
+  const [financeFrom, setFinanceFrom] = useState("");
+  const [financeTo, setFinanceTo] = useState("");
 
   useEffect(() => {
     axios.get(`${API_BASE}/api/tour-packages`, cfg())
@@ -61,9 +63,18 @@ export default function TourPackages() {
     attention: items.filter(hasOperationalRisk).length,
   }), [items]);
 
+  const financialItems = useMemo(() => items.filter((item) => {
+    if (!["booked", "paid"].includes(String(item.status))) return false;
+    const start = String(item.start_date || "").slice(0, 10);
+    if (financeFrom && (!start || start < financeFrom)) return false;
+    if (financeTo && (!start || start > financeTo)) return false;
+    return true;
+  }), [financeFrom, financeTo, items]);
+  const hasFinancialTours = items.some((item) => ["booked", "paid"].includes(String(item.status)));
+
   const finances = useMemo(() => {
     const groups = new Map();
-    items.filter((item) => ["booked", "paid"].includes(String(item.status))).forEach((item) => {
+    financialItems.forEach((item) => {
       const currency = item.currency || "UZS";
       const group = groups.get(currency) || { currency, sales: 0, received: 0, receivables: 0, overdueReceivables: 0, payables: 0, overduePayables: 0, undatedClient: 0, undatedSupplier: 0, clientDue7: 0, clientDue30: 0, supplierDue7: 0, supplierDue30: 0, plannedMargin: 0, actualMargin: 0, reconciled: 0, total: 0 };
       const gross = Number(item.gross_total || 0);
@@ -91,7 +102,7 @@ export default function TourPackages() {
       groups.set(currency, group);
     });
     return [...groups.values()];
-  }, [items]);
+  }, [financialItems]);
   const managers = useMemo(() => [...new Set(items.map((item) => String(item.manager_name || "").trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)), [items]);
   const managerWorkload = useMemo(() => {
     const today = localDateKey();
@@ -113,7 +124,7 @@ export default function TourPackages() {
 
   const exportFinances = () => {
     const columns = ["reference", "tour", "manager", "client", "start", "end", "currency", "sale", "received", "receivable", "planned_cost", "actual_cost", "actual_margin", "supplier_payable", "client_due", "supplier_due", "payment_status"];
-    const rows = items.filter((item) => ["booked", "paid"].includes(String(item.status))).map((item) => {
+    const rows = financialItems.map((item) => {
       const gross = Number(item.gross_total || 0);
       const paid = Math.min(gross, Number(item.paid_amount || 0));
       const actualCost = Number(item.actual_cost_total ?? item.net_total ?? 0);
@@ -123,9 +134,25 @@ export default function TourPackages() {
     const url = URL.createObjectURL(new Blob([content], { type: "text/csv;charset=utf-8" }));
     const link = document.createElement("a");
     link.href = url;
-    link.download = `travella-tour-finance-${localDateKey()}.csv`;
+    link.download = `travella-tour-finance-${financeFrom || "all"}-${financeTo || localDateKey()}.csv`;
     link.click();
     URL.revokeObjectURL(url);
+  };
+
+  const setFinancePeriod = (period) => {
+    const now = new Date();
+    if (period === "month") {
+      setFinanceFrom(localDateKey(new Date(now.getFullYear(), now.getMonth(), 1)));
+      setFinanceTo(localDateKey(new Date(now.getFullYear(), now.getMonth() + 1, 0)));
+      return;
+    }
+    if (period === "next30") {
+      setFinanceFrom(localDateKey(now));
+      setFinanceTo(localDateKey(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 30)));
+      return;
+    }
+    setFinanceFrom("");
+    setFinanceTo("");
   };
 
   const filtered = useMemo(() => {
@@ -162,6 +189,7 @@ export default function TourPackages() {
     {stats.review > 0 && <button type="button" onClick={() => setOperations("document_review")} className="mt-5 inline-flex items-center gap-2 border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800"><AlertTriangle size={16} />{t("tb.portfolio.documents_to_review", { count: stats.review })}</button>}
     {stats.missingFinanceDates > 0 && <button type="button" onClick={() => setOperations("finance_dates_missing")} className="mt-5 ml-2 inline-flex items-center gap-2 border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-800"><CalendarDays size={16} />{t("tb.portfolio.finance_dates_missing_count", { count: stats.missingFinanceDates })}</button>}
     {stats.lossMaking > 0 && <button type="button" onClick={() => setOperations("loss_making")} className="mt-5 ml-2 inline-flex items-center gap-2 bg-red-700 px-4 py-2 text-sm font-bold text-white"><AlertTriangle size={16} />{t("tb.portfolio.loss_making_count", { count: stats.lossMaking })}</button>}
+    {hasFinancialTours && <section className="mt-5 border border-gray-200 bg-gray-50 p-4"><div className="flex flex-wrap items-end justify-between gap-4"><div><div className="text-xs font-semibold uppercase text-gray-400">{t("tb.portfolio.finance_period")}</div><div className="mt-2 flex flex-wrap gap-2"><button type="button" onClick={() => setFinancePeriod("month")} className="h-9 border border-gray-300 bg-white px-3 text-sm font-semibold hover:border-orange-500">{t("tb.portfolio.period_current_month")}</button><button type="button" onClick={() => setFinancePeriod("next30")} className="h-9 border border-gray-300 bg-white px-3 text-sm font-semibold hover:border-orange-500">{t("tb.portfolio.period_next_30")}</button><button type="button" onClick={() => setFinancePeriod("all")} className={`h-9 border px-3 text-sm font-semibold ${!financeFrom && !financeTo ? "border-gray-950 bg-gray-950 text-white" : "border-gray-300 bg-white hover:border-orange-500"}`}>{t("tb.portfolio.period_all")}</button></div></div><div className="flex flex-wrap items-end gap-3"><label className="text-xs font-semibold uppercase text-gray-500"><span className="mb-1 block">{t("tb.portfolio.finance_from")}</span><input type="date" value={financeFrom} max={financeTo || undefined} onChange={(event) => setFinanceFrom(event.target.value)} className="h-10 border border-gray-300 bg-white px-3 text-sm font-normal text-gray-950 outline-none focus:border-orange-500" /></label><label className="text-xs font-semibold uppercase text-gray-500"><span className="mb-1 block">{t("tb.portfolio.finance_to")}</span><input type="date" value={financeTo} min={financeFrom || undefined} onChange={(event) => setFinanceTo(event.target.value)} className="h-10 border border-gray-300 bg-white px-3 text-sm font-normal text-gray-950 outline-none focus:border-orange-500" /></label><div className="pb-2 text-sm font-semibold text-gray-600">{t("tb.portfolio.period_tours", { count: financialItems.length })}</div></div></div>{financialItems.length === 0 && <div className="mt-4 border-t border-gray-200 pt-4 text-sm text-gray-500">{t("tb.portfolio.no_finance_in_period")}</div>}</section>}
     {finances.length > 0 && <section className="mt-5 border-y border-gray-200"><div className="flex flex-wrap items-center justify-between gap-4 py-4"><div><h2 className="text-lg font-bold">{t("tb.portfolio.finance_title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.portfolio.finance_hint")}</p></div><div className="flex items-center gap-4">{stats.unreconciled > 0 && <button type="button" onClick={() => setOperations("unreconciled")} className="text-sm font-bold text-orange-700 hover:underline">{t("tb.portfolio.unreconciled_count", { count: stats.unreconciled })}</button>}<button type="button" onClick={exportFinances} className="inline-flex h-10 items-center gap-2 border border-gray-300 bg-white px-3 text-sm font-bold hover:bg-gray-50"><Download size={16} />{t("tb.portfolio.export_finance")}</button></div></div>{finances.map((group) => <div key={group.currency} className="border-t border-gray-200"><div className="grid gap-px bg-gray-200 sm:grid-cols-2 lg:grid-cols-6"><div className="bg-gray-950 px-4 py-4 text-white"><div className="text-xs font-semibold uppercase text-gray-400">{t("tb.portfolio.booked_sales")}</div><div className="mt-1 text-xl font-bold">{money(group.sales, group.currency)}</div><div className="mt-1 text-xs text-gray-400">{t("tb.portfolio.tours_count", { count: group.total })}</div></div>{[["received_total", group.received, "text-emerald-700"], ["receivables_total", group.receivables, group.receivables > 0 ? "text-red-700" : "text-emerald-700"], ["payables_total", group.payables, group.payables > group.receivables ? "text-red-700" : "text-gray-950"], ["planned_margin", group.plannedMargin, "text-gray-950"], ["actual_margin", group.actualMargin, group.actualMargin < 0 ? "text-red-700" : "text-emerald-700"]].map(([key, value, tone]) => <div key={key} className="bg-white px-4 py-4"><div className="text-xs font-semibold uppercase text-gray-400">{t(`tb.portfolio.${key}`)}</div><div className={`mt-1 text-xl font-bold ${tone}`}>{money(value, group.currency)}</div>{key === "receivables_total" && group.overdueReceivables > 0 && <div className="mt-1 text-xs font-semibold text-red-600">{t("tb.portfolio.overdue_amount", { amount: money(group.overdueReceivables, group.currency) })}</div>}{key === "payables_total" && group.overduePayables > 0 && <div className="mt-1 text-xs font-semibold text-red-600">{t("tb.portfolio.overdue_amount", { amount: money(group.overduePayables, group.currency) })}</div>}{key === "actual_margin" && <div className="mt-1 text-xs text-gray-400">{t("tb.portfolio.reconciled_count", { count: group.reconciled, total: group.total })}</div>}</div>)}</div><div className="grid border-t border-gray-200 bg-white md:grid-cols-2">{[[7, group.clientDue7, group.supplierDue7], [30, group.clientDue30, group.supplierDue30]].map(([days, incoming, outgoing]) => <div key={days} className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 md:border-r md:last:border-r-0"><div className="text-sm font-bold">{t("tb.portfolio.cash_forecast", { days })}</div><div className="flex flex-wrap gap-x-5 gap-y-1 text-sm"><span className="text-emerald-700">{t("tb.portfolio.cash_in")}: <strong>{money(incoming, group.currency)}</strong></span><span className="text-red-700">{t("tb.portfolio.cash_out")}: <strong>{money(outgoing, group.currency)}</strong></span><span className={incoming - outgoing < 0 ? "font-bold text-red-700" : "font-bold text-gray-950"}>{t("tb.portfolio.cash_net")}: {money(incoming - outgoing, group.currency)}</span></div></div>)}</div>{(group.undatedClient > 0 || group.undatedSupplier > 0) && <button type="button" onClick={() => setOperations("finance_dates_missing")} className="flex w-full flex-wrap items-center gap-x-5 gap-y-1 border-t border-red-200 bg-red-50 px-4 py-3 text-left text-sm text-red-800"><AlertTriangle size={16} /><strong>{t("tb.portfolio.without_due_date")}</strong>{group.undatedClient > 0 && <span>{t("tb.portfolio.cash_in")}: {money(group.undatedClient, group.currency)}</span>}{group.undatedSupplier > 0 && <span>{t("tb.portfolio.cash_out")}: {money(group.undatedSupplier, group.currency)}</span>}</button>}</div>)}</section>}
     <section className="mt-5 grid gap-px bg-gray-200 border border-gray-200 sm:grid-cols-4">{[["departing_today", stats.departingToday, CalendarDays], ["in_trip", stats.inTrip, Users], ["post_tour", stats.postTour, Clock3], ["unreconciled", stats.unreconciled, CircleDollarSign]].map(([key, count, Icon]) => <button key={key} type="button" onClick={() => setOperations(key)} className={`flex items-center justify-between bg-white px-4 py-4 text-left hover:bg-gray-50 ${operations === key ? "ring-2 ring-inset ring-orange-500" : ""}`}><div><div className="text-xs font-semibold uppercase text-gray-400">{t(`tb.portfolio.${key}`)}</div><div className={`mt-1 text-2xl font-bold ${count ? "text-gray-950" : "text-gray-400"}`}>{count}</div></div><Icon size={20} className={count ? "text-orange-600" : "text-gray-300"} /></button>)}</section>
     {managerWorkload.length > 0 && <section className="mt-5 border-y border-gray-200"><div className="py-4"><h2 className="text-lg font-bold">{t("tb.portfolio.team_workload")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.portfolio.team_workload_hint")}</p></div><div className="overflow-x-auto"><div className="min-w-[620px]"><div className="grid grid-cols-[minmax(220px,1fr)_100px_130px_100px_120px] border-t border-gray-200 bg-gray-50 px-4 py-2 text-xs font-semibold uppercase text-gray-400"><span>{t("tb.portfolio.manager")}</span><span>{t("tb.portfolio.active_tours")}</span><span>{t("tb.portfolio.departures_7d")}</span><span>{t("tb.portfolio.in_trip")}</span><span>{t("tb.portfolio.attention")}</span></div>{managerWorkload.map((row) => <button key={row.key} type="button" onClick={() => setManager(row.key)} className={`grid w-full grid-cols-[minmax(220px,1fr)_100px_130px_100px_120px] items-center border-t border-gray-200 px-4 py-3 text-left text-sm hover:bg-gray-50 ${manager === row.key ? "bg-orange-50" : "bg-white"}`}><strong>{row.name || t("tb.portfolio.manager_unassigned")}</strong><span>{row.active}</span><span>{row.upcoming}</span><span>{row.inTrip}</span><span className={row.attention ? "font-bold text-red-700" : "text-gray-500"}>{row.attention}</span></button>)}</div></div></section>}
