@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -111,6 +111,16 @@ test("builds a contextual supplier note without commercial data", () => {
   assert.match(message, /Guide &amp; car/);
   assert.match(message, /08:00 &amp; bring a sign &lt;ACME&gt;/);
   assert.doesNotMatch(message, /900|400|gross_total|provider_price/);
+});
+
+test("builds a safe supplier document request", () => {
+  const message = buildSupplierDocumentRequestMessage({
+    tourPackage: { title: "Silk <Road>", booking_reference: "TVL-12" },
+    component: { service_title: "Hotel & transfer" },
+  });
+  assert.match(message, /Silk &lt;Road&gt;/);
+  assert.match(message, /Hotel &amp; transfer/);
+  assert.match(message, /подтверждение, счёт или ваучер/);
 });
 
 test("revision snapshots never retain a share token", () => {

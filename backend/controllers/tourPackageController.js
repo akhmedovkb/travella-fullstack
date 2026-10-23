@@ -212,6 +212,16 @@ function buildSupplierServiceOrderNoteMessage({ tourPackage = {}, component = {}
   ].filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== "")).join("\n");
 }
 
+function buildSupplierDocumentRequestMessage({ tourPackage = {}, component = {} } = {}) {
+  return [
+    "📎 <b>DMC запрашивает документы по заказу</b>",
+    `Тур: <b>${escapeTelegramHtml(tourPackage.title || "—")}</b>`,
+    tourPackage.booking_reference ? `Номер тура: ${escapeTelegramHtml(tourPackage.booking_reference)}` : "",
+    `Услуга: <b>${escapeTelegramHtml(component.service_title || "—")}</b>`,
+    "Пожалуйста, приложите подтверждение, счёт или ваучер кнопкой ниже.",
+  ].filter(Boolean).join("\n");
+}
+
 async function notifyAgencyProposalResponse(item) {
   try {
     const provider = await pool.query(`SELECT to_jsonb(p) AS profile FROM providers p WHERE id=$1 LIMIT 1`, [item.owner_provider_id]);
@@ -1319,6 +1329,54 @@ async function remindTourPackageServiceOrder(req, res) {
   }
 }
 
+async function requestTourPackageSupplierDocuments(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const packageId = req.params.id;
+    const bookingId = Number(req.params.bookingId);
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
+    const result = await pool.query(
+      `SELECT tp.title,tp.booking_reference,b.id,s.title AS service_title,
+              to_jsonb(supplier) AS supplier_profile,ops.service_order_status,
+              (SELECT MAX(event.created_at) FROM tour_package_component_events event
+                WHERE event.package_id=tp.id AND event.booking_id=b.id AND event.event_type='document_request_sent') AS last_document_request_at,
+              EXISTS(SELECT 1 FROM tour_package_component_events event
+                WHERE event.package_id=tp.id AND event.booking_id=b.id AND event.event_type='attachment_received') AS has_document
+         FROM tour_packages tp
+         JOIN bookings b ON b.group_id=tp.id AND b.id=$3
+         LEFT JOIN services s ON s.id=b.service_id
+         LEFT JOIN providers supplier ON supplier.id=b.provider_id
+         JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+        WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
+      [packageId, ownerId, bookingId]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Tour package component not found" });
+    const item = result.rows[0];
+    if (item.service_order_status !== "accepted") return res.status(409).json({ message: "Supplier must accept the order before documents can be requested" });
+    if (item.has_document) return res.status(409).json({ message: "Supplier document has already been received" });
+    const lastRequestAt = item.last_document_request_at ? new Date(item.last_document_request_at).getTime() : 0;
+    const cooldownMs = 60 * 60 * 1000;
+    if (lastRequestAt && Date.now() - lastRequestAt < cooldownMs) return res.status(429).json({ message: "Document request is available once per hour", retry_after_seconds: Math.ceil((cooldownMs - (Date.now() - lastRequestAt)) / 1000) });
+    const profile = item.supplier_profile || {};
+    const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
+    if (!chatId) return res.status(409).json({ message: "Supplier Telegram is not connected" });
+    const keyboard = { inline_keyboard: [[{ text: "📎 Отправить документ DMC", callback_data: `tour_order_reply:${bookingId}` }]] };
+    if (!(await tgSend(chatId, buildSupplierDocumentRequestMessage({ tourPackage: item, component: item }), { reply_markup: keyboard }))) return res.status(502).json({ message: "Failed to request supplier documents" });
+    const event = await pool.query(
+      `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type)
+       VALUES($1::uuid,$2,'document_request_sent','dmc')
+       RETURNING id,event_type,actor_type,created_at,metadata`,
+      [packageId, bookingId]
+    );
+    return res.json({ requested: true, service_order_event: event.rows[0] });
+  } catch (error) {
+    console.error("requestTourPackageSupplierDocuments error:", error);
+    return res.status(500).json({ message: "Failed to request supplier documents" });
+  }
+}
+
 async function cancelTourPackageServiceOrder(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -1566,6 +1624,7 @@ module.exports = {
   buildSupplierServiceOrderReminderMessage,
   buildSupplierServiceOrderCancellationMessage,
   buildSupplierServiceOrderNoteMessage,
+  buildSupplierDocumentRequestMessage,
   publicPackageView,
   packageSnapshot,
   createTourPackage,
@@ -1585,6 +1644,7 @@ module.exports = {
   updateTourPackageComponentAttachment,
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
+  requestTourPackageSupplierDocuments,
   cancelTourPackageServiceOrder,
   messageTourPackageServiceOrder,
   createTourPackageTask,

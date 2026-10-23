@@ -18,6 +18,7 @@ const {
   updateTourPackageComponentAttachment,
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
+  requestTourPackageSupplierDocuments,
   cancelTourPackageServiceOrder,
   messageTourPackageServiceOrder,
   createTourPackageTask,
@@ -43,6 +44,7 @@ router.get("/:id/components/:bookingId/events/:eventId/attachment", downloadTour
 router.patch("/:id/components/:bookingId/events/:eventId/attachment", updateTourPackageComponentAttachment);
 router.post("/:id/components/:bookingId/send-service-order", sendTourPackageServiceOrder);
 router.post("/:id/components/:bookingId/remind-service-order", remindTourPackageServiceOrder);
+router.post("/:id/components/:bookingId/request-documents", requestTourPackageSupplierDocuments);
 router.post("/:id/components/:bookingId/cancel-service-order", cancelTourPackageServiceOrder);
 router.post("/:id/components/:bookingId/message-service-order", messageTourPackageServiceOrder);
 router.post("/:id/tasks", createTourPackageTask);
