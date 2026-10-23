@@ -1727,6 +1727,16 @@
       "saved": "Hodisa yangilandi",
       "save_error": "Hodisani saqlab bo‘lmadi"
     },
+    "performance": {
+      "title": "Ta’minotchilar faoliyati",
+      "hint": "Turning {{total}} komponentidan {{reviewed}} tasi baholandi.",
+      "review_supplier": "Turdan keyingi ta’minotchi bahosi",
+      "quality": "Sifat",
+      "reliability": "Ishonchlilik",
+      "note": "Ichki izoh",
+      "note_ph": "Keyingi bron qilishda nimani hisobga olish kerak",
+      "strongest": "Eng yaxshi natija"
+    },
     "action_timeline": {
       "title": "Yaqin vazifalar",
       "subtitle": "To‘lov muddatlari va tur boshlanish sanasi shoshilinchlik bo‘yicha.",

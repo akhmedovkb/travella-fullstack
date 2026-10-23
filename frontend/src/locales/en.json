@@ -1729,6 +1729,16 @@
       "saved": "Incident updated",
       "save_error": "Could not save the incident"
     },
+    "performance": {
+      "title": "Supplier performance",
+      "hint": "{{reviewed}} of {{total}} tour components reviewed.",
+      "review_supplier": "Post-tour supplier review",
+      "quality": "Quality",
+      "reliability": "Reliability",
+      "note": "Internal note",
+      "note_ph": "What to consider for the next booking",
+      "strongest": "Best result"
+    },
     "action_timeline": {
       "title": "Upcoming actions",
       "subtitle": "Payment deadlines and departure date ordered by urgency.",

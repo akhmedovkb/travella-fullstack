@@ -58,11 +58,15 @@ function normalizeTraveler(body = {}, index = 0) {
 
 function normalizeComponentOperations(body = {}) {
   const dueAt = String(body.supplier_payment_due_at || "").trim();
+  const rating = (value) => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 5 ? Number(value) : null;
   return {
     confirmationReference: String(body.confirmation_reference || "").trim().slice(0, 120) || null,
     supplierPaymentDueAt: /^\d{4}-\d{2}-\d{2}$/.test(dueAt) ? dueAt : null,
     supplierPaid: body.supplier_paid === true,
     operationalNote: String(body.operational_note || "").trim().slice(0, 1000) || null,
+    qualityRating: rating(body.quality_rating),
+    reliabilityRating: rating(body.reliability_rating),
+    performanceNote: String(body.performance_note || "").trim().slice(0, 1000) || null,
   };
 }
 
@@ -406,6 +410,9 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_status VARCHAR(16)`);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_responded_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS service_order_last_reminded_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS quality_rating SMALLINT CHECK (quality_rating BETWEEN 1 AND 5)`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS reliability_rating SMALLINT CHECK (reliability_rating BETWEEN 1 AND 5)`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS performance_note TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_component_events (
@@ -488,6 +495,7 @@ async function packageBookings(packageId) {
             COALESCE(ops.supplier_paid,FALSE) AS supplier_paid, ops.operational_note,
             ops.service_order_sent_at,ops.service_order_status,ops.service_order_responded_at,
             ops.service_order_last_reminded_at,
+            ops.quality_rating,ops.reliability_rating,ops.performance_note,
             COALESCE((
               SELECT jsonb_agg(jsonb_build_object(
                 'id',event.id,'event_type',event.event_type,'actor_type',event.actor_type,
@@ -557,16 +565,21 @@ async function updateTourPackageComponentOperations(req, res) {
     const value = normalizeComponentOperations(req.body);
     const result = await pool.query(
       `INSERT INTO tour_package_component_ops(
-         package_id,booking_id,confirmation_reference,supplier_payment_due_at,supplier_paid,operational_note
-       ) VALUES($1::uuid,$2,$3,$4::date,$5,$6)
+         package_id,booking_id,confirmation_reference,supplier_payment_due_at,supplier_paid,operational_note,
+         quality_rating,reliability_rating,performance_note
+       ) VALUES($1::uuid,$2,$3,$4::date,$5,$6,$7,$8,$9)
        ON CONFLICT(package_id,booking_id) DO UPDATE SET
          confirmation_reference=EXCLUDED.confirmation_reference,
          supplier_payment_due_at=EXCLUDED.supplier_payment_due_at,
          supplier_paid=EXCLUDED.supplier_paid,
          operational_note=EXCLUDED.operational_note,
+         quality_rating=EXCLUDED.quality_rating,
+         reliability_rating=EXCLUDED.reliability_rating,
+         performance_note=EXCLUDED.performance_note,
          updated_at=NOW()
-       RETURNING booking_id,confirmation_reference,supplier_payment_due_at,supplier_paid,operational_note,updated_at`,
-      [packageId, bookingId, value.confirmationReference, value.supplierPaymentDueAt, value.supplierPaid, value.operationalNote]
+       RETURNING booking_id,confirmation_reference,supplier_payment_due_at,supplier_paid,operational_note,
+                 quality_rating,reliability_rating,performance_note,updated_at`,
+      [packageId, bookingId, value.confirmationReference, value.supplierPaymentDueAt, value.supplierPaid, value.operationalNote, value.qualityRating, value.reliabilityRating, value.performanceNote]
     );
     return res.json(result.rows[0]);
   } catch (error) {
