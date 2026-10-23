@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizeProposalResponseReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -69,6 +69,12 @@ test("accepts all supported client proposal decisions", () => {
   assert.equal(isValidProposalResponse("changes_requested"), true);
   assert.equal(isValidProposalResponse("declined"), true);
   assert.equal(isValidProposalResponse("pending"), false);
+});
+
+test("normalizes structured proposal decline reasons", () => {
+  assert.equal(normalizeProposalResponseReason(" budget "), "budget");
+  assert.equal(normalizeProposalResponseReason("plans_changed"), "plans_changed");
+  assert.equal(normalizeProposalResponseReason("unknown"), null);
 });
 
 test("creates a readable booking reference", () => {

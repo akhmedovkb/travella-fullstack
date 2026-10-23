@@ -254,11 +254,17 @@ async function notifyAgencyProposalResponse(item) {
       changes_requested: "✏️ <b>Клиент запросил изменения</b>",
       declined: "❌ <b>Клиент отклонил предложение</b>",
     };
+    const declineReasonLabels = {
+      budget: "бюджет", dates: "даты поездки", itinerary: "программа тура",
+      accommodation: "размещение", competitor: "выбран другой вариант",
+      plans_changed: "изменились планы", other: "другая причина",
+    };
     const site = String(process.env.SITE_PUBLIC_URL || process.env.FRONTEND_URL || "https://travella.uz").replace(/\/+$/, "");
     const lines = [
       responseLabels[item.proposal_response] || "💬 <b>Клиент ответил на предложение</b>",
       `Тур: <b>${escapeTelegramHtml(item.title)}</b>`,
       item.client_name ? `Клиент: ${escapeTelegramHtml(item.client_name)}` : "",
+      item.proposal_response_reason ? `Причина: ${declineReasonLabels[item.proposal_response_reason] || escapeTelegramHtml(item.proposal_response_reason)}` : "",
       item.proposal_response_message ? `Комментарий: ${escapeTelegramHtml(item.proposal_response_message)}` : "",
       `<a href="${site}/dashboard/bookings?tab=outgoing&amp;package=${encodeURIComponent(item.id)}">Открыть пакет</a>`,
     ].filter(Boolean);
@@ -284,6 +290,7 @@ function publicPackageView(row = {}) {
     itinerary: Array.isArray(row.itinerary) ? row.itinerary : [],
     client_name: row.client_name || null,
     proposal_response: row.proposal_response || null,
+    proposal_response_reason: row.proposal_response_reason || null,
     proposal_response_message: row.proposal_response_message || null,
     proposal_responded_at: row.proposal_responded_at || null,
     booking_reference: row.booking_reference || null,
@@ -330,6 +337,7 @@ async function ensureTourPackagesTable() {
       shared_at TIMESTAMPTZ,
       share_expires_at TIMESTAMPTZ,
       proposal_response VARCHAR(32),
+      proposal_response_reason VARCHAR(32),
       proposal_response_message TEXT,
       proposal_responded_at TIMESTAMPTZ,
       last_client_followup_at TIMESTAMPTZ,
@@ -355,6 +363,7 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS shared_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_response VARCHAR(32)`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_response_reason VARCHAR(32)`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_response_message TEXT`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_responded_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS last_client_followup_at TIMESTAMPTZ`);
@@ -387,15 +396,17 @@ async function ensureTourPackagesTable() {
       package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
       revision INTEGER NOT NULL,
       response VARCHAR(32) NOT NULL,
+      reason VARCHAR(32),
       message TEXT,
       responded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       UNIQUE(package_id, revision)
     )
   `);
+  await pool.query(`ALTER TABLE tour_package_proposal_responses ADD COLUMN IF NOT EXISTS reason VARCHAR(32)`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_proposal_responses_package ON tour_package_proposal_responses(package_id, revision DESC)`);
   await pool.query(`
-    INSERT INTO tour_package_proposal_responses(package_id,revision,response,message,responded_at)
-    SELECT id,current_revision,proposal_response,proposal_response_message,COALESCE(proposal_responded_at,NOW())
+    INSERT INTO tour_package_proposal_responses(package_id,revision,response,reason,message,responded_at)
+    SELECT id,current_revision,proposal_response,proposal_response_reason,proposal_response_message,COALESCE(proposal_responded_at,NOW())
       FROM tour_packages
      WHERE proposal_response IS NOT NULL AND current_revision > 0
     ON CONFLICT(package_id,revision) DO NOTHING
@@ -927,6 +938,12 @@ async function listTourPackages(req, res) {
               (SELECT COUNT(*)::int FROM tour_package_incidents incident WHERE incident.package_id=tp.id AND incident.status<>'resolved') AS open_incident_count,
               (SELECT COUNT(*)::int FROM tour_package_proposal_responses response
                 WHERE response.package_id=tp.id) AS proposal_response_count,
+              (SELECT COALESCE(jsonb_object_agg(reasons.reason,reasons.total),'{}'::jsonb) FROM (
+                SELECT response.reason,COUNT(*)::int AS total
+                  FROM tour_package_proposal_responses response
+                 WHERE response.package_id=tp.id AND response.response='declined' AND response.reason IS NOT NULL
+                 GROUP BY response.reason
+              ) reasons) AS proposal_decline_reasons,
               (SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (response.responded_at-revision.created_at))),0)::float
                  FROM tour_package_proposal_responses response
                  JOIN tour_package_revisions revision
@@ -1086,7 +1103,7 @@ async function getTourPackage(req, res) {
               rev.snapshot->>'title' AS title,
               rev.snapshot->>'gross_total' AS gross_total,
               rev.snapshot->>'currency' AS currency,
-              response.response,response.message AS response_message,response.responded_at
+              response.response,response.reason AS response_reason,response.message AS response_message,response.responded_at
          FROM tour_package_revisions rev
          LEFT JOIN tour_package_proposal_responses response
            ON response.package_id=rev.package_id AND response.revision=rev.version
@@ -1292,6 +1309,7 @@ async function shareTourPackage(req, res) {
            THEN GREATEST($8::timestamptz, COALESCE(end_date::timestamptz + INTERVAL '7 days', NOW() + INTERVAL '30 days'))
            ELSE $8::timestamptz END,
          proposal_response=CASE WHEN status IN ('booked','paid') THEN proposal_response ELSE NULL END,
+         proposal_response_reason=CASE WHEN status IN ('booked','paid') THEN proposal_response_reason ELSE NULL END,
          proposal_response_message=CASE WHEN status IN ('booked','paid') THEN proposal_response_message ELSE NULL END,
          proposal_responded_at=CASE WHEN status IN ('booked','paid') THEN proposal_responded_at ELSE NULL END,
          status=CASE WHEN status IN ('booked','paid') THEN status ELSE 'proposed' END,
@@ -1329,39 +1347,44 @@ async function respondToTourProposal(req, res) {
   try {
     const token = String(req.params.token || "");
     const response = String(req.body?.response || "").trim().toLowerCase();
+    const reason = normalizeProposalResponseReason(req.body?.reason);
     const message = String(req.body?.message || "").trim().slice(0, 2000) || null;
     if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) return res.status(404).json({ message: "Proposal not found" });
     if (!isValidProposalResponse(response)) {
       return res.status(400).json({ message: "Valid proposal response is required" });
     }
+    if (response === "declined" && !reason) {
+      return res.status(400).json({ message: "Valid decline reason is required" });
+    }
     await ensureTourPackagesTable();
     await client.query("BEGIN");
     const result = await client.query(
       `UPDATE tour_packages SET proposal_response=$2,
-         proposal_response_message=$3, proposal_responded_at=NOW(), updated_at=NOW()
+         proposal_response_message=$3, proposal_response_reason=$4, proposal_responded_at=NOW(), updated_at=NOW()
          ,accepted_revision=CASE WHEN $2='accepted' THEN current_revision ELSE NULL END
        WHERE share_token_hash=$1 AND share_expires_at > NOW() AND proposal_response IS NULL
-       RETURNING id,owner_provider_id,title,client_name,current_revision,proposal_response,
+       RETURNING id,owner_provider_id,title,client_name,current_revision,proposal_response,proposal_response_reason,
          proposal_response_message,proposal_responded_at`,
-      [hashShareToken(token), response, message]
+      [hashShareToken(token), response, message, response === "declined" ? reason : null]
     );
     if (!result.rowCount) {
       await client.query("ROLLBACK");
       return res.status(404).json({ message: "Proposal not found, expired or already answered" });
     }
     await client.query(
-      `INSERT INTO tour_package_proposal_responses(package_id,revision,response,message,responded_at)
-       VALUES($1::uuid,$2,$3,$4,$5)
+      `INSERT INTO tour_package_proposal_responses(package_id,revision,response,reason,message,responded_at)
+       VALUES($1::uuid,$2,$3,$4,$5,$6)
        ON CONFLICT(package_id,revision) DO UPDATE SET
-         response=EXCLUDED.response,message=EXCLUDED.message,responded_at=EXCLUDED.responded_at`,
+         response=EXCLUDED.response,reason=EXCLUDED.reason,message=EXCLUDED.message,responded_at=EXCLUDED.responded_at`,
       [result.rows[0].id, result.rows[0].current_revision, result.rows[0].proposal_response,
-        result.rows[0].proposal_response_message, result.rows[0].proposal_responded_at]
+        result.rows[0].proposal_response_reason, result.rows[0].proposal_response_message, result.rows[0].proposal_responded_at]
     );
     await client.query("COMMIT");
     setImmediate(() => { notifyAgencyProposalResponse(result.rows[0]); });
     res.set("Cache-Control", "no-store");
     return res.json({
       proposal_response: result.rows[0].proposal_response,
+      proposal_response_reason: result.rows[0].proposal_response_reason,
       proposal_response_message: result.rows[0].proposal_response_message,
       proposal_responded_at: result.rows[0].proposal_responded_at,
     });
@@ -1374,6 +1397,11 @@ async function respondToTourProposal(req, res) {
 
 function isValidProposalResponse(value) {
   return new Set(["accepted", "changes_requested", "declined"]).has(String(value || "").trim().toLowerCase());
+}
+
+function normalizeProposalResponseReason(value) {
+  const reason = String(value || "").trim().toLowerCase();
+  return new Set(["budget", "dates", "itinerary", "accommodation", "competitor", "plans_changed", "other"]).has(reason) ? reason : null;
 }
 
 async function confirmTourPackageSale(req, res) {
@@ -1959,6 +1987,7 @@ async function getPublicTourProposal(req, res) {
       ...published,
       status: item.status,
       proposal_response: item.proposal_response,
+      proposal_response_reason: item.proposal_response_reason,
       proposal_response_message: item.proposal_response_message,
       proposal_responded_at: item.proposal_responded_at,
       booking_reference: item.booking_reference,
@@ -1999,6 +2028,7 @@ module.exports = {
   buildSupplierDocumentRequestMessage,
   publicPackageView,
   isValidProposalResponse,
+  normalizeProposalResponseReason,
   packageSnapshot,
   createTourPackage,
   listTourPackages,

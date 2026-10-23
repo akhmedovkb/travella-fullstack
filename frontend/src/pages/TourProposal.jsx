@@ -23,6 +23,7 @@ export default function TourProposal() {
   const [state, setState] = useState("loading");
   const [responseMode, setResponseMode] = useState("");
   const [responseMessage, setResponseMessage] = useState("");
+  const [responseReason, setResponseReason] = useState("");
   const [responseBusy, setResponseBusy] = useState(false);
   const [responseError, setResponseError] = useState("");
   const token = window.location.pathname.split("/").filter(Boolean).pop();
@@ -52,6 +53,7 @@ export default function TourProposal() {
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/public/${encodeURIComponent(token)}/respond`, {
         response,
+        reason: response === "declined" ? responseReason : null,
         message: responseMessage,
       });
       setProposal((value) => ({ ...value, ...data }));
@@ -171,6 +173,7 @@ export default function TourProposal() {
                 <div>
                   <h2 className="font-bold text-gray-950">{t(`tb.proposal.response_${proposal.proposal_response}`)}</h2>
                   <p className="mt-1 text-sm text-gray-700">{t("tb.proposal.response_saved")}</p>
+                  {proposal.proposal_response_reason ? <p className="mt-3 font-semibold text-red-700">{t(`tb.proposal.decline_reason_${proposal.proposal_response_reason}`)}</p> : null}
                   {proposal.proposal_response_message ? <p className="mt-3 whitespace-pre-line border-t border-current/20 pt-3 text-sm text-gray-800">{proposal.proposal_response_message}</p> : null}
                 </div>
               </div>
@@ -181,11 +184,14 @@ export default function TourProposal() {
               <p className="mt-1 text-sm text-gray-600">{t("tb.proposal.decision_text")}</p>
               {["changes_requested", "declined"].includes(responseMode) ? (
                 <div className="mt-5 max-w-2xl">
+                  {responseMode === "declined" && <label className="mb-4 block text-sm font-semibold text-gray-800">{t("tb.proposal.decline_reason")}
+                    <select value={responseReason} onChange={(event) => setResponseReason(event.target.value)} className="mt-2 h-12 w-full border border-gray-300 bg-white px-3 font-normal outline-none focus:border-red-500"><option value="">{t("tb.proposal.decline_reason_ph")}</option>{["budget", "dates", "itinerary", "accommodation", "competitor", "plans_changed", "other"].map((reason) => <option key={reason} value={reason}>{t(`tb.proposal.decline_reason_${reason}`)}</option>)}</select>
+                  </label>}
                   <label className="block text-sm font-semibold text-gray-800">{t(responseMode === "declined" ? "tb.proposal.decline_comment" : "tb.proposal.change_comment")}
                     <textarea rows={4} value={responseMessage} onChange={(event) => setResponseMessage(event.target.value)} placeholder={t(responseMode === "declined" ? "tb.proposal.decline_comment_ph" : "tb.proposal.change_comment_ph")} className="mt-2 w-full border border-gray-300 bg-white p-3 font-normal outline-none focus:border-orange-500" />
                   </label>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" disabled={responseBusy || !responseMessage.trim()} onClick={() => submitResponse(responseMode)} className={`h-11 px-5 font-semibold text-white disabled:opacity-50 ${responseMode === "declined" ? "bg-red-700 hover:bg-red-800" : "bg-orange-600 hover:bg-orange-700"}`}>{responseBusy ? t("common.loading") : t(responseMode === "declined" ? "tb.proposal.send_decline" : "tb.proposal.send_changes")}</button>
+                    <button type="button" disabled={responseBusy || !responseMessage.trim() || (responseMode === "declined" && !responseReason)} onClick={() => submitResponse(responseMode)} className={`h-11 px-5 font-semibold text-white disabled:opacity-50 ${responseMode === "declined" ? "bg-red-700 hover:bg-red-800" : "bg-orange-600 hover:bg-orange-700"}`}>{responseBusy ? t("common.loading") : t(responseMode === "declined" ? "tb.proposal.send_decline" : "tb.proposal.send_changes")}</button>
                     <button type="button" onClick={() => setResponseMode("")} className="h-11 border border-gray-300 bg-white px-5 font-semibold text-gray-700">{t("actions.cancel")}</button>
                   </div>
                 </div>
