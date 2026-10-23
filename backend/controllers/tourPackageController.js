@@ -1004,6 +1004,19 @@ async function listTourPackages(req, res) {
               COUNT(b.id) FILTER (WHERE ops.quality_rating IS NOT NULL AND ops.reliability_rating IS NOT NULL)::int AS supplier_reviewed_count,
               COUNT(b.id) FILTER (WHERE ops.actual_supplier_cost IS NOT NULL)::int AS actual_cost_count,
               COALESCE(SUM(COALESCE(ops.actual_supplier_cost,b.provider_price,0)),0) AS actual_cost_total,
+              COUNT(b.id) FILTER (
+                WHERE ops.supplier_refund_status IN ('pending','partial')
+              )::int AS supplier_refund_pending_count,
+              COUNT(b.id) FILTER (
+                WHERE ops.supplier_refund_status IN ('pending','partial')
+                  AND ops.supplier_refund_due_at < CURRENT_DATE
+              )::int AS supplier_refund_overdue_count,
+              COALESCE(SUM(GREATEST(
+                COALESCE(ops.supplier_refund_due_amount,0) - COALESCE(ops.supplier_refunded_amount,0),0
+              )) FILTER (
+                WHERE ops.supplier_refund_status IN ('pending','partial')
+              ),0) AS supplier_refund_outstanding_total,
+              COALESCE(SUM(COALESCE(ops.supplier_refunded_amount,0)),0) AS supplier_refunded_total,
               COALESCE(SUM(COALESCE(ops.actual_supplier_cost,b.provider_price,0)) FILTER (
                 WHERE COALESCE(ops.supplier_paid,FALSE)=FALSE
               ),0) AS supplier_payable_total,
