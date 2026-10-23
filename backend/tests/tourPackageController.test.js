@@ -219,3 +219,22 @@ test("orders tour operations by urgency and omits completed payments", () => {
   assert.deepEqual(packageOperationsTimeline({ status: "booked", paymentStatus: "paid", startDate: "2026-10-31" }, [], new Date("2026-11-01T12:00:00Z")), []);
 });
 
+test("schedules client follow-up and proposal expiry while awaiting a response", () => {
+  const timeline = packageOperationsTimeline({
+    status: "proposed",
+    proposalResponse: null,
+    sharedAt: "2026-11-01T09:00:00Z",
+    quoteValidUntil: "2026-11-08T18:00:00Z",
+  }, [], new Date("2026-11-04T12:00:00Z"));
+  assert.deepEqual(timeline.map((item) => [item.type, item.urgency, item.days]), [
+    ["client_follow_up", "overdue", -1],
+    ["proposal_expiry", "soon", 4],
+  ]);
+  assert.deepEqual(packageOperationsTimeline({
+    status: "proposed",
+    proposalResponse: "accepted",
+    sharedAt: "2026-11-01T09:00:00Z",
+    quoteValidUntil: "2026-11-08T18:00:00Z",
+  }, [], new Date("2026-11-04T12:00:00Z")), []);
+});
+

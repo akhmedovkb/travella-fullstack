@@ -1754,7 +1754,9 @@
     },
     "action_timeline": {
       "title": "Upcoming actions",
-      "subtitle": "Payment deadlines and departure date ordered by urgency.",
+      "subtitle": "Proposals, payment deadlines, and departure ordered by urgency.",
+      "client_follow_up": "Follow up with client about proposal",
+      "proposal_expiry": "Proposal expires",
       "client_payment": "Collect client payment",
       "supplier_payment": "Pay supplier",
       "manual_task": "Team task",

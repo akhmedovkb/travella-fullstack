@@ -145,6 +145,10 @@ function packageOperationsTimeline(input = {}, components = [], today = new Date
       label: component.service_title || component.provider_name || null,
     });
   });
+  if (String(input.status || "").toLowerCase() === "proposed" && !input.proposalResponse) {
+    if (input.sharedAt) add("client_follow_up", new Date(new Date(input.sharedAt).getTime() + 48 * 60 * 60 * 1000).toISOString());
+    add("proposal_expiry", input.quoteValidUntil);
+  }
   add("manual_task", input.nextTaskDueAt);
   if (String(input.startDate || "").slice(0, 10) >= todayKey) add("departure", input.startDate);
   const priority = { overdue: 0, today: 1, soon: 2, upcoming: 3 };
@@ -953,6 +957,9 @@ async function listTourPackages(req, res) {
         paymentDueAt: item.payment_due_at,
         startDate: item.start_date,
         nextTaskDueAt: item.next_task_due_at,
+        proposalResponse: item.proposal_response,
+        sharedAt: item.shared_at,
+        quoteValidUntil: item.quote_valid_until,
       }, item.next_supplier_due_at ? [{ supplier_payment_due_at: item.next_supplier_due_at }] : []);
       return {
         ...item,
@@ -1095,6 +1102,9 @@ async function getTourPackage(req, res) {
         paymentStatus: item.payment_status,
         paymentDueAt: item.payment_due_at,
         startDate: item.start_date,
+        proposalResponse: item.proposal_response,
+        sharedAt: item.shared_at,
+        quoteValidUntil: item.quote_valid_until,
       }, bookings),
     });
   } catch (error) {
