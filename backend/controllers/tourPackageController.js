@@ -39,6 +39,20 @@ function normalizePackagePayment(body = {}, grossTotal = 0) {
   };
 }
 
+function normalizePackageRefund(body = {}, paidAmount = 0) {
+  const received = cleanMoney(paidAmount);
+  const dueAmount = Math.min(cleanMoney(body.refund_due_amount), received);
+  const refundedAmount = Math.min(cleanMoney(body.refunded_amount), dueAmount);
+  const status = dueAmount <= 0 ? "not_required" : refundedAmount >= dueAmount ? "refunded" : refundedAmount > 0 ? "partial" : "pending";
+  return {
+    refundStatus: status,
+    refundDueAmount: dueAmount,
+    refundedAmount,
+    refundDueAt: status === "refunded" || status === "not_required" ? null : body.refund_due_at || null,
+    refundNote: String(body.refund_note || "").trim().slice(0, 1000) || null,
+  };
+}
+
 function normalizeTraveler(body = {}, index = 0) {
   const isoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim())
     ? String(value).trim()
@@ -378,6 +392,12 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS accepted_revision INTEGER`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS cancellation_reason TEXT`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refund_status VARCHAR(16) NOT NULL DEFAULT 'not_required'`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refund_due_amount NUMERIC(18,2) NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refunded_amount NUMERIC(18,2) NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refund_due_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refund_note TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ`);
   await pool.query(`UPDATE tour_packages SET status='accepted',updated_at=NOW() WHERE status='proposed' AND proposal_response='accepted'`);
   await pool.query(`UPDATE tour_packages SET status='lost',updated_at=NOW() WHERE status='proposed' AND proposal_response='declined'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated ON tour_packages(owner_provider_id, updated_at DESC)`);
@@ -427,6 +447,19 @@ async function ensureTourPackagesTable() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_payment_events_package ON tour_package_payment_events(package_id, created_at DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_refund_events (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      refund_status VARCHAR(16) NOT NULL,
+      refund_due_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      refunded_amount NUMERIC(18,2) NOT NULL DEFAULT 0,
+      refund_due_at TIMESTAMPTZ,
+      refund_note TEXT,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_refund_events_package ON tour_package_refund_events(package_id, created_at DESC)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_client_contacts (
       id BIGSERIAL PRIMARY KEY,
@@ -1119,6 +1152,11 @@ async function getTourPackage(req, res) {
          FROM tour_package_payment_events WHERE package_id=$1::uuid ORDER BY created_at DESC,id DESC`,
       [req.params.id]
     );
+    const refundEvents = await pool.query(
+      `SELECT id,refund_status,refund_due_amount,refunded_amount,refund_due_at,refund_note,created_at
+         FROM tour_package_refund_events WHERE package_id=$1::uuid ORDER BY created_at DESC,id DESC`,
+      [req.params.id]
+    );
     const clientContacts = await pool.query(
       `SELECT id,channel,note,contacted_at FROM tour_package_client_contacts
         WHERE package_id=$1::uuid ORDER BY contacted_at DESC,id DESC LIMIT 50`,
@@ -1162,6 +1200,7 @@ async function getTourPackage(req, res) {
       components: bookings,
       revisions: revisions.rows,
       payment_events: paymentEvents.rows,
+      refund_events: refundEvents.rows,
       client_contacts: clientContacts.rows,
       travelers: travelers.rows,
       tasks: tasks.rows,
@@ -1543,9 +1582,13 @@ async function cancelTourPackage(req, res) {
       [req.params.id]
     );
     const saved = await client.query(
-      `UPDATE tour_packages SET status='cancelled',cancellation_reason=$3,cancelled_at=NOW(),updated_at=NOW()
+      `UPDATE tour_packages SET status='cancelled',cancellation_reason=$3,cancelled_at=NOW(),
+         refund_due_amount=paid_amount,refunded_amount=0,
+         refund_status=CASE WHEN paid_amount > 0 THEN 'pending' ELSE 'not_required' END,
+         refund_due_at=NULL,refund_note=NULL,refunded_at=NULL,updated_at=NOW()
         WHERE id=$1::uuid AND owner_provider_id=$2
-        RETURNING id,status,booking_reference,cancellation_reason,cancelled_at,updated_at`,
+        RETURNING id,status,booking_reference,cancellation_reason,cancelled_at,refund_status,
+          refund_due_amount,refunded_amount,refund_due_at,refund_note,refunded_at,updated_at`,
       [req.params.id, ownerId, reason]
     );
     await client.query("COMMIT");
@@ -1564,6 +1607,43 @@ async function cancelTourPackage(req, res) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("cancelTourPackage error:", error);
     return res.status(500).json({ message: "Failed to cancel tour package" });
+  } finally { if (client) client.release(); }
+}
+
+async function updateTourPackageRefund(req, res) {
+  let client;
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const current = await pool.query(
+      `SELECT status,paid_amount FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2`,
+      [req.params.id, ownerId]
+    );
+    if (!current.rowCount) return res.status(404).json({ message: "Tour package not found" });
+    if (String(current.rows[0].status) !== "cancelled") return res.status(409).json({ message: "Refunds can only be recorded for cancelled tours" });
+    const refund = normalizePackageRefund(req.body, current.rows[0].paid_amount);
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const saved = await client.query(
+      `UPDATE tour_packages SET refund_status=$3,refund_due_amount=$4,refunded_amount=$5,
+         refund_due_at=$6,refund_note=$7,refunded_at=CASE WHEN $3='refunded' THEN COALESCE(refunded_at,NOW()) ELSE NULL END,updated_at=NOW()
+        WHERE id=$1::uuid AND owner_provider_id=$2
+        RETURNING refund_status,refund_due_amount,refunded_amount,refund_due_at,refund_note,refunded_at,updated_at`,
+      [req.params.id, ownerId, refund.refundStatus, refund.refundDueAmount, refund.refundedAmount, refund.refundDueAt, refund.refundNote]
+    );
+    const event = await client.query(
+      `INSERT INTO tour_package_refund_events(package_id,refund_status,refund_due_amount,refunded_amount,refund_due_at,refund_note)
+       VALUES($1::uuid,$2,$3,$4,$5,$6)
+       RETURNING id,refund_status,refund_due_amount,refunded_amount,refund_due_at,refund_note,created_at`,
+      [req.params.id, refund.refundStatus, refund.refundDueAmount, refund.refundedAmount, refund.refundDueAt, refund.refundNote]
+    );
+    await client.query("COMMIT");
+    return res.json({ ...saved.rows[0], refund_event: event.rows[0] });
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    console.error("updateTourPackageRefund error:", error);
+    return res.status(500).json({ message: "Failed to update client refund" });
   } finally { if (client) client.release(); }
 }
 
@@ -2089,6 +2169,7 @@ module.exports = {
   calculateGross,
   canEditTourPackage,
   normalizePackagePayment,
+  normalizePackageRefund,
   normalizeTraveler,
   normalizeComponentOperations,
   normalizeTourTask,
@@ -2124,6 +2205,7 @@ module.exports = {
   confirmTourPackageSale,
   updateTourPackagePayment,
   cancelTourPackage,
+  updateTourPackageRefund,
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
   markTourPackageComponentMessagesRead,

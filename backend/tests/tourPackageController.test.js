@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizeProposalResponseReason, normalizeTourCancellationReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizePackageRefund, normalizeProposalResponseReason, normalizeTourCancellationReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -22,6 +22,15 @@ test("derives package payment status from the received amount", () => {
   assert.deepEqual(normalizePackagePayment({ paid_amount: 250 }, 1000).paymentStatus, "partial");
   assert.deepEqual(normalizePackagePayment({ paid_amount: 1500 }, 1000), {
     paymentStatus: "paid", paidAmount: 1000, paymentDueAt: null, paymentNote: null,
+  });
+});
+
+test("derives a cancelled tour refund status without exceeding received funds", () => {
+  assert.deepEqual(normalizePackageRefund({ refund_due_amount: 800, refunded_amount: 200, refund_due_at: "2026-11-01", refund_note: " Bank transfer " }, 1000), {
+    refundStatus: "partial", refundDueAmount: 800, refundedAmount: 200, refundDueAt: "2026-11-01", refundNote: "Bank transfer",
+  });
+  assert.deepEqual(normalizePackageRefund({ refund_due_amount: 1200, refunded_amount: 1200 }, 1000), {
+    refundStatus: "refunded", refundDueAmount: 1000, refundedAmount: 1000, refundDueAt: null, refundNote: null,
   });
 });
 
