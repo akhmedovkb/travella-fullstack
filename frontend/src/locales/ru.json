@@ -1600,6 +1600,7 @@
       "suppliers_confirmed": "Все поставщики подтвердили услуги",
       "supplier_orders_accepted": "Все поставщики приняли заказ-наряды",
       "references_complete": "Получены номера подтверждений",
+      "documents_approved": "Документы поставщиков проверены",
       "suppliers_paid": "Все поставщики оплачены",
       "travelers_complete": "Список туристов заполнен",
       "client_paid": "Клиент полностью оплатил тур"
@@ -1732,6 +1733,7 @@
       "supplier_declined_count": "Отклонено заказов: {{count}}",
       "missing_confirmation": "Нет номера подтверждения",
       "missing_supplier_documents": "Нет документов поставщика",
+      "documents_to_review": "Документы на проверке · {{count}}",
       "issues": "Проблем: {{count}}",
       "supplier_unpaid": "Не оплачено поставщиков: {{count}}",
       "search": "Тур, клиент, компания или номер брони",

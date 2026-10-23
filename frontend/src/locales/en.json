@@ -1682,6 +1682,7 @@
       "suppliers_confirmed": "All suppliers confirmed",
       "supplier_orders_accepted": "All suppliers accepted their service orders",
       "references_complete": "Confirmation references received",
+      "documents_approved": "Supplier documents approved",
       "suppliers_paid": "All suppliers paid",
       "travelers_complete": "Traveler manifest completed",
       "client_paid": "Client paid in full"
@@ -1810,6 +1811,7 @@
       "supplier_declined_count": "Declined orders: {{count}}",
       "missing_confirmation": "Missing confirmation reference",
       "missing_supplier_documents": "Missing supplier documents",
+      "documents_to_review": "Documents to review · {{count}}",
       "issues": "Issues: {{count}}",
       "supplier_unpaid": "Suppliers unpaid: {{count}}",
       "search": "Tour, client, company or booking reference",

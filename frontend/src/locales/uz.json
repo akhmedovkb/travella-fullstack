@@ -1680,6 +1680,7 @@
       "suppliers_confirmed": "Barcha yetkazib beruvchilar tasdiqlagan",
       "supplier_orders_accepted": "Barcha yetkazib beruvchilar buyurtmalarni qabul qilgan",
       "references_complete": "Tasdiqlash raqamlari olingan",
+      "documents_approved": "Ta’minotchi hujjatlari tekshirildi",
       "suppliers_paid": "Barcha yetkazib beruvchilarga to‘langan",
       "travelers_complete": "Sayohatchilar ro‘yxati to‘ldirilgan",
       "client_paid": "Mijoz to‘liq to‘lagan"
@@ -1808,6 +1809,7 @@
       "supplier_declined_count": "Rad etilgan buyurtmalar: {{count}}",
       "missing_confirmation": "Tasdiqlash raqami yo‘q",
       "missing_supplier_documents": "Ta’minotchi hujjatlari yo‘q",
+      "documents_to_review": "Tekshiriladigan hujjatlar · {{count}}",
       "issues": "Muammolar: {{count}}",
       "supplier_unpaid": "To‘lanmagan yetkazib beruvchilar: {{count}}",
       "search": "Tur, mijoz, kompaniya yoki bron raqami",

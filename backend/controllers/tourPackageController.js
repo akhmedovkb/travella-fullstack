@@ -110,6 +110,7 @@ function packageOperationsReadiness(input = {}) {
     suppliers_confirmed: componentCount > 0 && Number(input.confirmedCount || 0) === componentCount,
     supplier_orders_accepted: componentCount > 0 && Number(input.supplierOrderAcceptedCount || 0) === componentCount,
     references_complete: componentCount > 0 && Number(input.confirmationCount || 0) === componentCount,
+    documents_approved: componentCount > 0 && Number(input.approvedDocumentCount || 0) === componentCount,
     suppliers_paid: componentCount > 0 && Number(input.supplierPaidCount || 0) === componentCount,
     travelers_complete: paxCount > 0 && Number(input.travelerCount || 0) === paxCount,
     client_paid: String(input.paymentStatus || "unpaid").toLowerCase() === "paid",
@@ -817,6 +818,9 @@ async function listTourPackages(req, res) {
                 ORDER BY event.created_at DESC,event.id DESC LIMIT 1) AS latest_supplier_reply_booking_id,
               (SELECT COUNT(*)::int FROM tour_package_component_events event
                 WHERE event.package_id=tp.id AND event.event_type='attachment_received') AS supplier_document_count,
+              (SELECT COUNT(DISTINCT event.booking_id)::int FROM tour_package_component_events event
+                WHERE event.package_id=tp.id AND event.event_type='attachment_received'
+                  AND event.metadata->>'review_status'='approved') AS supplier_document_approved_count,
               (SELECT COUNT(*)::int FROM tour_package_component_events event
                 WHERE event.package_id=tp.id AND event.event_type='attachment_received'
                   AND COALESCE(event.metadata->>'review_status','pending')='pending') AS supplier_document_review_count,
@@ -824,7 +828,7 @@ async function listTourPackages(req, res) {
                 WHERE tp.status IN ('booked','paid') AND ops.service_order_status='accepted'
                   AND NOT EXISTS (SELECT 1 FROM tour_package_component_events event
                     WHERE event.package_id=tp.id AND event.booking_id=b.id AND event.event_type='attachment_received'
-                      AND event.metadata->>'review_status'='approved')
+                      AND COALESCE(event.metadata->>'review_status','pending') IN ('approved','pending'))
               )::int AS missing_supplier_document_count,
               (SELECT COUNT(*)::int FROM (
                 SELECT DISTINCT ON (event.booking_id) event.booking_id,event.event_type,event.created_at
@@ -900,6 +904,7 @@ async function listTourPackages(req, res) {
           confirmationCount: item.confirmation_count,
           supplierPaidCount: item.supplier_paid_count,
           supplierOrderAcceptedCount: item.supplier_order_accepted_count,
+          approvedDocumentCount: item.supplier_document_approved_count,
         }),
         next_action: timeline[0] || null,
       };
@@ -978,6 +983,7 @@ async function getTourPackage(req, res) {
         confirmationCount: bookings.filter((row) => String(row.confirmation_reference || "").trim()).length,
         supplierPaidCount: bookings.filter((row) => row.supplier_paid === true).length,
         supplierOrderAcceptedCount: bookings.filter((row) => row.service_order_status === "accepted").length,
+        approvedDocumentCount: bookings.filter((row) => (row.service_order_events || []).some((event) => event.event_type === "attachment_received" && event.metadata?.review_status === "approved")).length,
       }),
       operations_timeline: packageOperationsTimeline({
         status: derivePackageStatus(bookings, item.status),

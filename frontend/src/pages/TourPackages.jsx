@@ -34,6 +34,7 @@ export default function TourPackages() {
     booked: items.filter((item) => ["booked", "paid"].includes(String(item.status))).length,
     outstanding: items.filter((item) => item.status === "booked" && item.payment_status !== "paid").length,
     replies: items.reduce((total, item) => total + Number(item.unread_supplier_reply_count || 0), 0),
+    review: items.reduce((total, item) => total + Number(item.supplier_document_review_count || 0), 0),
     attention: items.filter((item) => item.status !== "cancelled" && (Number(item.missing_confirmation_count || 0) > 0 || Number(item.missing_supplier_document_count || 0) > 0 || Number(item.supplier_document_review_count || 0) > 0 || Number(item.supplier_overdue_count || 0) > 0 || Number(item.overdue_task_count || 0) > 0 || Number(item.supplier_order_attention_count || 0) > 0 || Number(item.supplier_reply_pending_count || 0) > 0)).length,
   }), [items]);
 
@@ -60,6 +61,7 @@ export default function TourPackages() {
   return <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
     <header className="flex flex-wrap items-end justify-between gap-5 border-b border-gray-200 pb-6"><div><div className="text-xs font-bold uppercase text-orange-600">Tour Builder</div><h1 className="mt-1 text-3xl font-bold">{t("tb.portfolio.title")}</h1><p className="mt-2 text-gray-600">{t("tb.portfolio.subtitle")}</p></div><Link to="/tour-builder" className="inline-flex h-11 items-center gap-2 bg-orange-600 px-5 font-bold text-white hover:bg-orange-700"><Plus size={18} />{t("tb.portfolio.create")}</Link></header>
     {error && <div className="mt-5 border border-red-200 bg-red-50 p-4 text-red-800">{error}</div>}
+    {stats.review > 0 && <button type="button" onClick={() => setOperations("document_review")} className="mt-5 inline-flex items-center gap-2 border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800"><AlertTriangle size={16} />{t("tb.portfolio.documents_to_review", { count: stats.review })}</button>}
     <section className="grid border-b border-gray-200 sm:grid-cols-2 lg:grid-cols-7">
       {[[t("tb.portfolio.all"), stats.total, Users], [t("tb.portfolio.in_progress"), stats.pipeline, Clock3], [t("tb.portfolio.awaiting_client"), stats.awaiting, CalendarDays], [t("tb.portfolio.booked"), stats.booked, CalendarDays], [t("tb.portfolio.receivables"), stats.outstanding, CircleDollarSign], [t("tb.portfolio.new_supplier_replies"), stats.replies, MessageCircle], [t("tb.portfolio.attention"), stats.attention, AlertTriangle]].map(([label, value, Icon]) => <div key={label} className="border-b border-gray-200 py-5 sm:px-4 lg:border-b-0 lg:border-r first:pl-0 last:border-r-0"><Icon size={20} className={(label === t("tb.portfolio.attention") || label === t("tb.portfolio.new_supplier_replies")) && value ? "text-red-600" : "text-gray-400"} /><div className={`mt-3 text-2xl font-bold ${(label === t("tb.portfolio.attention") || label === t("tb.portfolio.new_supplier_replies")) && value ? "text-red-700" : ""}`}>{value}</div><div className="mt-1 text-xs font-semibold uppercase text-gray-400">{label}</div></div>)}
     </section>

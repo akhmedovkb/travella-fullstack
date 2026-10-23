@@ -186,14 +186,14 @@ test("requires every operational milestone before departure", () => {
   const readiness = packageOperationsReadiness({
     status: "booked", paymentStatus: "paid", paxAdult: 2, paxChild: 0,
     travelerCount: 2, componentCount: 3, confirmedCount: 3,
-    confirmationCount: 3, supplierPaidCount: 2, supplierOrderAcceptedCount: 3,
+    confirmationCount: 3, approvedDocumentCount: 3, supplierPaidCount: 2, supplierOrderAcceptedCount: 3,
   });
-  assert.equal(readiness.percent, 86);
+  assert.equal(readiness.percent, 88);
   assert.equal(readiness.ready, false);
   assert.equal(readiness.checks.suppliers_paid, false);
   assert.equal(packageOperationsReadiness({
     status: "paid", paymentStatus: "paid", paxAdult: 2, travelerCount: 2,
-    componentCount: 3, confirmedCount: 3, confirmationCount: 3, supplierPaidCount: 3, supplierOrderAcceptedCount: 3,
+    componentCount: 3, confirmedCount: 3, confirmationCount: 3, approvedDocumentCount: 3, supplierPaidCount: 3, supplierOrderAcceptedCount: 3,
   }).ready, true);
 });
 
