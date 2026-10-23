@@ -830,6 +830,7 @@ async function listTourPackages(req, res) {
               COUNT(b.id) FILTER (WHERE ops.service_order_status='accepted')::int AS supplier_order_accepted_count,
               COUNT(b.id) FILTER (WHERE ops.service_order_status='sent')::int AS supplier_order_pending_count,
               COUNT(b.id) FILTER (WHERE ops.service_order_status='declined')::int AS supplier_order_declined_count,
+              COUNT(b.id) FILTER (WHERE ops.quality_rating IS NOT NULL AND ops.reliability_rating IS NOT NULL)::int AS supplier_reviewed_count,
               COUNT(b.id) FILTER (
                 WHERE tp.status IN ('booked','paid') AND (
                   ops.service_order_status IS NULL OR
