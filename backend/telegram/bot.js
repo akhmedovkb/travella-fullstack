@@ -47,7 +47,7 @@ const {
 } = require("../utils/providerTelegramResolver");
 const { verifyProviderTelegramLinkPayload } = require("../utils/providerTelegramLink");
 const { isRegistrationCallbackData } = require("../utils/telegramRegistration");
-const { respondToSupplierServiceOrder } = require("../utils/tourServiceOrderResponse");
+const { respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply } = require("../utils/tourServiceOrderResponse");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -3938,10 +3938,28 @@ bot.action(/^tour_order:(\d+):(accepted|declined)$/, async (ctx) => {
     }
     await ctx.answerCbQuery(result.service_order_status === "accepted" ? "Заказ принят" : "Заказ отклонён");
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
-    await safeReply(ctx, result.service_order_status === "accepted" ? "✅ Вы приняли заказ. DMC получил уведомление." : "❌ Вы отклонили заказ. DMC получил уведомление.");
+    await safeReply(ctx, result.service_order_status === "accepted" ? "✅ Вы приняли заказ. DMC получил уведомление." : "❌ Вы отклонили заказ. DMC получил уведомление.", {
+      reply_markup: { inline_keyboard: [[{ text: "💬 Ответить DMC", callback_data: `tour_order_reply:${match?.[1]}` }]] },
+    });
   } catch (error) {
     console.error("[tg-bot] tour order response error:", error?.message || error);
     try { await ctx.answerCbQuery("Не удалось сохранить ответ", { show_alert: true }); } catch {}
+  }
+});
+
+bot.action(/^tour_order_reply:(\d+)$/, async (ctx) => {
+  try {
+    const match = String(ctx.callbackQuery?.data || "").match(/^tour_order_reply:(\d+)$/);
+    const result = await beginSupplierServiceOrderReply({ actorTelegramId: ctx.from?.id, bookingId: Number(match?.[1]) });
+    if (!result.ok) {
+      await ctx.answerCbQuery("Этот заказ недоступен", { show_alert: true });
+      return;
+    }
+    await ctx.answerCbQuery("Напишите ответ следующим сообщением");
+    await safeReply(ctx, `💬 Напишите ответ DMC по услуге «${result.service_title || `#${result.booking_id}`}». Ответ нужно отправить в течение 30 минут.`);
+  } catch (error) {
+    console.error("[tg-bot] begin tour order reply error:", error?.message || error);
+    try { await ctx.answerCbQuery("Не удалось начать ответ", { show_alert: true }); } catch {}
   }
 });
 
@@ -16161,6 +16179,12 @@ bot.on("text", async (ctx, next) => {
     // Важно: bot.on("text") стоит раньше bot.hears(/готово/), поэтому
     // сообщение «ГОТОВО» нужно обработать здесь, иначе оно уходит в wizard.
     const rawText = String(ctx.message?.text || "").trim();
+
+    const supplierReply = await consumeSupplierServiceOrderReply({ actorTelegramId: ctx.from?.id, text: rawText });
+    if (supplierReply.ok) {
+      await safeReply(ctx, "✅ Ответ отправлен DMC и сохранён в истории заказа.");
+      return;
+    }
 
     if (ctx.session?.state === "awaiting_provider_support_click_phone" || ctx.session?.pendingProviderSupportClick) {
       await handleProviderSupportClickPhoneInput(ctx, rawText);

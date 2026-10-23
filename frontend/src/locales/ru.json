@@ -1791,6 +1791,7 @@
       "service_order_event_delivery_failed": "Ошибка доставки",
       "service_order_event_reminder_sent": "Отправлено напоминание",
       "service_order_event_message_sent": "Сообщение отправлено поставщику",
+      "service_order_event_message_received": "Получен ответ поставщика",
       "supplier_message": "Сообщение поставщику",
       "supplier_message_ph": "Например: уточните время встречи или место подачи",
       "send_supplier_message": "Отправить сообщение",

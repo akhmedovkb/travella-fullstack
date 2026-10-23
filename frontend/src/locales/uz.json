@@ -1867,6 +1867,7 @@
       "service_order_event_delivery_failed": "Yetkazib berishda xato",
       "service_order_event_reminder_sent": "Eslatma yuborildi",
       "service_order_event_message_sent": "Ta’minotchiga xabar yuborildi",
+      "service_order_event_message_received": "Ta’minotchidan javob olindi",
       "supplier_message": "Ta’minotchiga xabar",
       "supplier_message_ph": "Masalan: uchrashuv vaqtini yoki olib ketish joyini aniqlashtiring",
       "send_supplier_message": "Xabar yuborish",

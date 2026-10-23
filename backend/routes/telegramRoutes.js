@@ -9,7 +9,7 @@ const pool = require("../db");
 const telegramClientController = require("../controllers/telegramClientController");
 const telegramProviderController = require("../controllers/telegramProviderController");
 const { loginWithTelegram } = require("../controllers/telegramWebAuthController");
-const { respondToSupplierServiceOrder } = require("../utils/tourServiceOrderResponse");
+const { respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply } = require("../utils/tourServiceOrderResponse");
 
 let sharp = null;
 try {
@@ -123,6 +123,13 @@ async function handleWebhook(req, res) {
     if (update.callback_query) {
       const cq = update.callback_query;
       const data = String(cq.data || "");
+      const orderReply = data.match(/^tour_order_reply:(\d+)$/);
+      if (orderReply) {
+        const result = await beginSupplierServiceOrderReply({ actorTelegramId: cq.from?.id, bookingId: Number(orderReply[1]) });
+        await tgAnswerCallbackQuery(cq.id, result.ok ? "Напишите ответ следующим сообщением" : "Этот заказ недоступен", { show_alert: !result.ok });
+        if (result.ok && cq.message?.chat?.id) await tgSend(cq.message.chat.id, `💬 Напишите ответ DMC по услуге «${result.service_title || `#${result.booking_id}`}». Ответ нужно отправить в течение 30 минут.`);
+        return res.json({ ok: true });
+      }
       const orderResponse = data.match(/^tour_order:(\d+):(accepted|declined)$/);
       if (orderResponse) {
         const result = await respondToSupplierServiceOrder({
@@ -140,7 +147,9 @@ async function handleWebhook(req, res) {
             message_id: cq.message.message_id,
             reply_markup: { inline_keyboard: [] },
           });
-          await tgSend(cq.message.chat.id, result.service_order_status === "accepted" ? "✅ Вы приняли заказ. DMC получил уведомление." : "❌ Вы отклонили заказ. DMC получил уведомление.");
+          await tgSend(cq.message.chat.id, result.service_order_status === "accepted" ? "✅ Вы приняли заказ. DMC получил уведомление." : "❌ Вы отклонили заказ. DMC получил уведомление.", {
+            reply_markup: { inline_keyboard: [[{ text: "💬 Ответить DMC", callback_data: `tour_order_reply:${orderResponse[1]}` }]] },
+          });
         }
         return res.json({ ok: true });
       }
@@ -269,6 +278,12 @@ async function handleWebhook(req, res) {
       const chatId = msg.chat.id;
       const username = msg.from?.username || msg.chat?.username || null;
       const text = String(msg.text || "").trim();
+
+      const supplierReply = await consumeSupplierServiceOrderReply({ actorTelegramId: msg.from?.id || chatId, text });
+      if (supplierReply.ok) {
+        await tgSend(chatId, "✅ Ответ отправлен DMC и сохранён в истории заказа.");
+        return res.json({ ok: true, supplier_reply: true });
+      }
 
       const mStart = text.match(/^\/start(?:@\S+)?(?:\s+(.+))?$/i);
       const payload = (mStart && mStart[1] ? mStart[1] : "").trim();

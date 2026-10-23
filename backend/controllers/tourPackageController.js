@@ -1084,7 +1084,7 @@ async function sendTourPackageServiceOrder(req, res) {
     const keyboard = { inline_keyboard: [[
       { text: "✅ Принять заказ", callback_data: `tour_order:${bookingId}:accepted` },
       { text: "❌ Отклонить", callback_data: `tour_order:${bookingId}:declined` },
-    ]] };
+    ], [{ text: "💬 Ответить DMC", callback_data: `tour_order_reply:${bookingId}` }]] };
     const saved = await pool.query(
       `INSERT INTO tour_package_component_ops(package_id,booking_id,service_order_sent_at,service_order_status,service_order_responded_at)
        VALUES($1::uuid,$2,NOW(),'sent',NULL)
@@ -1160,7 +1160,7 @@ async function remindTourPackageServiceOrder(req, res) {
     const keyboard = { inline_keyboard: [[
       { text: "✅ Принять заказ", callback_data: `tour_order:${bookingId}:accepted` },
       { text: "❌ Отклонить", callback_data: `tour_order:${bookingId}:declined` },
-    ]] };
+    ], [{ text: "💬 Ответить DMC", callback_data: `tour_order_reply:${bookingId}` }]] };
     const message = buildSupplierServiceOrderReminderMessage({ tourPackage: item, component: item });
     if (!(await tgSend(chatId, message, { reply_markup: keyboard }))) return res.status(502).json({ message: "Failed to send supplier reminder" });
     const saved = await pool.query(
@@ -1267,7 +1267,8 @@ async function messageTourPackageServiceOrder(req, res) {
     const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
     if (!chatId) return res.status(409).json({ message: "Supplier Telegram is not connected" });
     const message = buildSupplierServiceOrderNoteMessage({ tourPackage: item, component: item, note });
-    if (!(await tgSend(chatId, message))) return res.status(502).json({ message: "Failed to send supplier message" });
+    const keyboard = { inline_keyboard: [[{ text: "💬 Ответить DMC", callback_data: `tour_order_reply:${bookingId}` }]] };
+    if (!(await tgSend(chatId, message, { reply_markup: keyboard }))) return res.status(502).json({ message: "Failed to send supplier message" });
     const event = await pool.query(
       `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,metadata)
        VALUES($1::uuid,$2,'message_sent','dmc',jsonb_build_object('message',$3::text))

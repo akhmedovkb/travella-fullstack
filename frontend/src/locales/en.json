@@ -1869,6 +1869,7 @@
       "service_order_event_delivery_failed": "Delivery failed",
       "service_order_event_reminder_sent": "Reminder sent",
       "service_order_event_message_sent": "Message sent to supplier",
+      "service_order_event_message_received": "Supplier reply received",
       "supplier_message": "Message to supplier",
       "supplier_message_ph": "For example: confirm the meeting time or pickup point",
       "send_supplier_message": "Send message",

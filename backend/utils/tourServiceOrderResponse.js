@@ -2,6 +2,7 @@ const pool = require("../db");
 const { tgSend } = require("./telegram");
 
 const chatFields = ["telegram_web_chat_id", "telegram_chat_id", "tg_chat_id", "telegram_refused_chat_id"];
+let supplierReplyTableReady = null;
 
 function profileChatId(profile = {}) {
   return chatFields.map((field) => profile[field]).find(Boolean) || null;
@@ -89,4 +90,97 @@ async function respondToSupplierServiceOrder({ actorTelegramId, bookingId, decis
   return { ok: true, ...updated.rows[0] };
 }
 
-module.exports = { actorMatchesProfile, profileChatId, respondToSupplierServiceOrder };
+async function ensureSupplierReplyTable() {
+  if (!supplierReplyTableReady) supplierReplyTableReady = pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_supplier_reply_pending (
+      actor_telegram_id TEXT PRIMARY KEY,
+      booking_id BIGINT NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
+      expires_at TIMESTAMPTZ NOT NULL DEFAULT NOW() + INTERVAL '30 minutes',
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `).catch((error) => {
+    supplierReplyTableReady = null;
+    throw error;
+  });
+  await supplierReplyTableReady;
+}
+
+async function beginSupplierServiceOrderReply({ actorTelegramId, bookingId }) {
+  const actor = String(actorTelegramId || "").trim();
+  const id = Number(bookingId);
+  if (!actor || !Number.isInteger(id) || id <= 0) return { ok: false, code: "invalid" };
+  await ensureSupplierReplyTable();
+  const found = await pool.query(
+    `SELECT b.id,tp.title,s.title AS service_title,to_jsonb(supplier) AS supplier_profile
+       FROM bookings b
+       JOIN tour_packages tp ON tp.id=b.group_id
+       JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+       LEFT JOIN services s ON s.id=b.service_id
+       LEFT JOIN providers supplier ON supplier.id=b.provider_id
+      WHERE b.id=$1 AND ops.service_order_status IN ('sent','accepted')
+      LIMIT 1`,
+    [id]
+  );
+  if (!found.rowCount) return { ok: false, code: "not_found" };
+  const item = found.rows[0];
+  if (!actorMatchesProfile(actor, item.supplier_profile || {})) return { ok: false, code: "forbidden" };
+  await pool.query(
+    `INSERT INTO tour_package_supplier_reply_pending(actor_telegram_id,booking_id,expires_at,created_at)
+     VALUES($1,$2,NOW() + INTERVAL '30 minutes',NOW())
+     ON CONFLICT(actor_telegram_id) DO UPDATE SET booking_id=EXCLUDED.booking_id,expires_at=EXCLUDED.expires_at,created_at=NOW()`,
+    [actor, id]
+  );
+  return { ok: true, booking_id: id, tour_title: item.title, service_title: item.service_title };
+}
+
+async function consumeSupplierServiceOrderReply({ actorTelegramId, text }) {
+  const actor = String(actorTelegramId || "").trim();
+  const message = String(text || "").trim().slice(0, 1000);
+  if (!actor || !message || message.startsWith("/")) return { ok: false, code: "not_pending" };
+  await ensureSupplierReplyTable();
+  const pending = await pool.query(
+    `SELECT b.id AS booking_id,tp.id AS package_id,tp.title,tp.booking_reference,
+            s.title AS service_title,to_jsonb(supplier) AS supplier_profile,to_jsonb(agency) AS agency_profile
+       FROM tour_package_supplier_reply_pending pending
+       JOIN bookings b ON b.id=pending.booking_id
+       JOIN tour_packages tp ON tp.id=b.group_id
+       JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+       LEFT JOIN services s ON s.id=b.service_id
+       JOIN providers supplier ON supplier.id=b.provider_id
+       JOIN providers agency ON agency.id=tp.owner_provider_id
+      WHERE pending.actor_telegram_id=$1 AND pending.expires_at>NOW()
+      LIMIT 1`,
+    [actor]
+  );
+  if (!pending.rowCount) return { ok: false, code: "not_pending" };
+  const item = pending.rows[0];
+  if (!actorMatchesProfile(actor, item.supplier_profile || {})) return { ok: false, code: "forbidden" };
+  const consumed = await pool.query(
+    `DELETE FROM tour_package_supplier_reply_pending
+      WHERE actor_telegram_id=$1 AND booking_id=$2 AND expires_at>NOW()
+      RETURNING actor_telegram_id`,
+    [actor, item.booking_id]
+  );
+  if (!consumed.rowCount) return { ok: false, code: "not_pending" };
+  const event = await pool.query(
+    `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,actor_telegram_id,metadata)
+     VALUES($1::uuid,$2,'message_received','supplier',$3,jsonb_build_object('message',$4::text))
+     RETURNING id,event_type,actor_type,created_at,metadata`,
+    [item.package_id, item.booking_id, actor, message]
+  );
+  const agencyChatId = profileChatId(item.agency_profile || {});
+  if (agencyChatId) {
+    const safe = (value) => String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    await tgSend(agencyChatId, [
+      "💬 <b>Ответ поставщика по заказу</b>",
+      `Тур: <b>${safe(item.title || "—")}</b>`,
+      item.booking_reference ? `Номер тура: ${safe(item.booking_reference)}` : "",
+      `Услуга: <b>${safe(item.service_title || "—")}</b>`,
+      "",
+      safe(message),
+    ].filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== "")).join("\n"));
+  }
+  return { ok: true, booking_id: item.booking_id, service_order_event: event.rows[0] };
+}
+
+module.exports = { actorMatchesProfile, profileChatId, respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply };

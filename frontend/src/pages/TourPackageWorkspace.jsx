@@ -115,7 +115,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, 
     </div>
     <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.supplier_paid} onChange={(e) => setField("supplier_paid", e.target.checked)} className="h-4 w-4 accent-emerald-600" />{t("tb.workspace.supplier_paid")}</label>
     {["sent", "accepted"].includes(orderStatus) && <div className="mt-4 flex items-end gap-2 border-t border-gray-200 pt-4"><LabeledField label={t("tb.documents.supplier_message")} wide><textarea rows={2} maxLength={1000} value={supplierMessage} onChange={(e) => setSupplierMessage(e.target.value)} placeholder={t("tb.documents.supplier_message_ph")} className="min-h-20 w-full resize-y border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" /></LabeledField><button type="button" disabled={saving || !supplierMessage.trim()} onClick={async () => { if (await onMessageOrder(item.id, supplierMessage)) setSupplierMessage(""); }} title={t("tb.documents.send_supplier_message")} className="inline-flex h-11 w-11 shrink-0 items-center justify-center bg-sky-700 text-white hover:bg-sky-800 disabled:opacity-40"><Send size={17} /></button></div>}
-    {item.service_order_events?.length > 0 && <details className="mt-4 border-t border-gray-200 pt-3"><summary className="cursor-pointer text-sm font-semibold text-gray-600">{t("tb.documents.service_order_history")} · {item.service_order_events.length}</summary><div className="mt-3 space-y-2">{item.service_order_events.map((event) => <div key={event.id} className="flex items-start justify-between gap-4 text-xs"><div><span className={`font-semibold ${event.event_type === "accepted" ? "text-emerald-700" : ["declined", "cancelled", "delivery_failed"].includes(event.event_type) ? "text-red-700" : "text-gray-700"}`}>{t(`tb.documents.service_order_event_${event.event_type}`)}</span>{event.event_type === "message_sent" && event.metadata?.message && <div className="mt-1 whitespace-pre-wrap text-gray-600">{event.metadata.message}</div>}</div><span className="shrink-0 text-gray-400">{dateTimeText(event.created_at)}</span></div>)}</div></details>}
+    {item.service_order_events?.length > 0 && <details className="mt-4 border-t border-gray-200 pt-3"><summary className="cursor-pointer text-sm font-semibold text-gray-600">{t("tb.documents.service_order_history")} · {item.service_order_events.length}</summary><div className="mt-3 space-y-2">{item.service_order_events.map((event) => <div key={event.id} className="flex items-start justify-between gap-4 text-xs"><div><span className={`font-semibold ${["accepted", "message_received"].includes(event.event_type) ? "text-emerald-700" : ["declined", "cancelled", "delivery_failed"].includes(event.event_type) ? "text-red-700" : "text-gray-700"}`}>{t(`tb.documents.service_order_event_${event.event_type}`)}</span>{["message_sent", "message_received"].includes(event.event_type) && event.metadata?.message && <div className="mt-1 whitespace-pre-wrap text-gray-600">{event.metadata.message}</div>}</div><span className="shrink-0 text-gray-400">{dateTimeText(event.created_at)}</span></div>)}</div></details>}
   </article>;
 }
 
@@ -197,9 +197,9 @@ export default function TourPackageWorkspace() {
 
   useEffect(() => { loadPackage(); }, [loadPackage]);
 
-  const hasPendingSupplierResponse = (tourPackage?.components || []).some((item) => item.service_order_status === "sent");
+  const hasSupplierConversation = (tourPackage?.components || []).some((item) => ["sent", "accepted"].includes(item.service_order_status));
   useEffect(() => {
-    if (!hasPendingSupplierResponse) return undefined;
+    if (!hasSupplierConversation) return undefined;
     const timer = window.setInterval(async () => {
       if (document.visibilityState !== "visible") return;
       try {
@@ -208,7 +208,7 @@ export default function TourPackageWorkspace() {
       } catch {}
     }, 15000);
     return () => window.clearInterval(timer);
-  }, [hasPendingSupplierResponse, id]);
+  }, [hasSupplierConversation, id]);
 
   const setField = (name, value) => {
     setForm((current) => ({ ...current, [name]: value })); setDirty(true); setNotice("");
