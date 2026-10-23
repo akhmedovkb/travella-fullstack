@@ -1735,7 +1735,9 @@
       "reliability": "Ishonchlilik",
       "note": "Ichki izoh",
       "note_ph": "Keyingi bron qilishda nimani hisobga olish kerak",
-      "strongest": "Eng yaxshi natija"
+      "strongest": "Eng yaxshi natija",
+      "history_score": "Sizning turlar tarixingiz",
+      "review_count": "baholar: {{count}}"
     },
     "action_timeline": {
       "title": "Yaqin vazifalar",

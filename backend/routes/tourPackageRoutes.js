@@ -3,6 +3,7 @@ const authenticateToken = require("../middleware/authenticateToken");
 const {
   createTourPackage,
   listTourPackages,
+  listSupplierPerformance,
   getTourPackage,
   updateTourPackage,
   shareTourPackage,
@@ -35,6 +36,7 @@ router.get("/public/:token", getPublicTourProposal);
 router.post("/public/:token/respond", respondToTourProposal);
 router.use(authenticateToken);
 router.get("/", listTourPackages);
+router.get("/supplier-performance", listSupplierPerformance);
 router.post("/", createTourPackage);
 router.post("/:id/share", shareTourPackage);
 router.delete("/:id/share", revokeTourPackageShare);

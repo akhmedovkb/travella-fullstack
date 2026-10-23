@@ -750,6 +750,27 @@ const normalizeProvider = (row, kind) => ({
   currency: row.currency || "UZS",
   languages: row.languages || [],
   telegram: row.telegram || row.social || row.telegram_handle || "",
+  quality_rating: Number(row.quality_rating || 0),
+  reliability_rating: Number(row.reliability_rating || 0),
+  performance_review_count: Number(row.performance_review_count || 0),
+});
+
+let supplierPerformanceCache = null;
+let supplierPerformanceRequest = null;
+async function loadSupplierPerformance() {
+  if (supplierPerformanceCache) return supplierPerformanceCache;
+  if (!supplierPerformanceRequest) supplierPerformanceRequest = fetchJSON("/api/tour-packages/supplier-performance")
+    .then((data) => new Map((data?.items || []).map((item) => [String(item.provider_id), item])))
+    .catch(() => new Map())
+    .then((value) => { supplierPerformanceCache = value; return value; });
+  return supplierPerformanceRequest;
+}
+
+const withSupplierPerformance = (row, performance) => ({
+  ...row,
+  quality_rating: performance?.quality_rating,
+  reliability_rating: performance?.reliability_rating,
+  performance_review_count: performance?.review_count,
 });
 
 const normalizeService = (row) => {
@@ -792,6 +813,7 @@ const serviceListSignature = (services = []) =>
 
 
 async function fetchProvidersSmart({ kind, city, date, startTime = "", endTime = "", language, q = "", limit = 30 }) {
+  const performance = await loadSupplierPerformance();
   // Пробуем строго /available
   try {
     const j = await fetchJSON("/api/providers/available", {
@@ -799,7 +821,7 @@ async function fetchProvidersSmart({ kind, city, date, startTime = "", endTime =
     });
     const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
     // Возвращаем как есть (даже если пусто) — это и есть «нет свободных»
-    return arr.map((x) => normalizeProvider(x, kind));
+    return arr.map((x) => normalizeProvider(withSupplierPerformance(x, performance.get(String(x.id))), kind));
   } catch (_) {
     // Фоллбек только при сетевой/HTTP ошибке
     try {
@@ -807,7 +829,7 @@ async function fetchProvidersSmart({ kind, city, date, startTime = "", endTime =
         type: kind, location: city, language, q, limit,
       });
       const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
-      return arr.map((x) => normalizeProvider(x, kind));
+      return arr.map((x) => normalizeProvider(withSupplierPerformance(x, performance.get(String(x.id))), kind));
     } catch {
       return [];
     }
@@ -998,6 +1020,7 @@ const ProviderOption = (props) => {
       {Number(p.price_per_day) > 0 && (
         <div className="mt-1"><b>{t("tb.profile.price_per_day")}:</b> {p.price_per_day} {p.currency || "UZS"}</div>
       )}
+      {p.performance_review_count > 0 && <div className="mt-1"><b>{t("tb.performance.history_score")}:</b> {((p.quality_rating + p.reliability_rating) / 2).toFixed(1)}/5 · {t("tb.performance.review_count", { count: p.performance_review_count })}</div>}
       {url && (
         <div className="mt-2">
           <a
@@ -1702,7 +1725,7 @@ export default function TourBuilder() {
     )
   );
   const filtered = rows.filter((_, i) => okMask[i]);
-  return filtered.map((p) => ({ value: p.id, label: p.name, raw: p }));
+  return filtered.map((p) => ({ value: p.id, label: p.performance_review_count ? `${p.name} · ${((p.quality_rating + p.reliability_rating) / 2).toFixed(1)}/5` : p.name, raw: p }));
 };
  
 
@@ -1742,7 +1765,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     )
   );
   const filtered = rows.filter((_, i) => okMask[i]);
-  return filtered.map((p) => ({ value: p.id, label: p.name, raw: p }));
+  return filtered.map((p) => ({ value: p.id, label: p.performance_review_count ? `${p.name} · ${((p.quality_rating + p.reliability_rating) / 2).toFixed(1)}/5` : p.name, raw: p }));
 };
 
   /* ----- totals (entry fees по видам дня) ----- */

@@ -947,6 +947,30 @@ async function listTourPackages(req, res) {
   }
 }
 
+async function listSupplierPerformance(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const result = await pool.query(
+      `SELECT b.provider_id,
+              ROUND(AVG(ops.quality_rating)::numeric,2)::float AS quality_rating,
+              ROUND(AVG(ops.reliability_rating)::numeric,2)::float AS reliability_rating,
+              COUNT(*) FILTER (WHERE ops.quality_rating IS NOT NULL AND ops.reliability_rating IS NOT NULL)::int AS review_count
+         FROM tour_package_component_ops ops
+         JOIN tour_packages tp ON tp.id=ops.package_id AND tp.owner_provider_id=$1
+         JOIN bookings b ON b.id=ops.booking_id
+        WHERE ops.quality_rating IS NOT NULL OR ops.reliability_rating IS NOT NULL
+        GROUP BY b.provider_id`,
+      [ownerId]
+    );
+    return res.json({ items: result.rows });
+  } catch (error) {
+    console.error("listSupplierPerformance error:", error);
+    return res.status(500).json({ message: "Failed to load supplier performance" });
+  }
+}
+
 async function getTourPackage(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -1796,6 +1820,7 @@ module.exports = {
   packageSnapshot,
   createTourPackage,
   listTourPackages,
+  listSupplierPerformance,
   getTourPackage,
   updateTourPackage,
   shareTourPackage,

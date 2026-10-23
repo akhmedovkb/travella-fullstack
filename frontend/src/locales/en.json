@@ -1737,7 +1737,9 @@
       "reliability": "Reliability",
       "note": "Internal note",
       "note_ph": "What to consider for the next booking",
-      "strongest": "Best result"
+      "strongest": "Best result",
+      "history_score": "Your tour history",
+      "review_count": "reviews: {{count}}"
     },
     "action_timeline": {
       "title": "Upcoming actions",
