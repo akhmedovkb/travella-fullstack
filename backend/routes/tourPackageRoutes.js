@@ -16,6 +16,7 @@ const {
   markTourPackageComponentMessagesRead,
   downloadTourPackageComponentAttachment,
   updateTourPackageComponentAttachment,
+  reviewTourPackageComponentAttachment,
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
   requestTourPackageSupplierDocuments,
@@ -42,6 +43,7 @@ router.patch("/:id/components/:bookingId", updateTourPackageComponentOperations)
 router.post("/:id/components/:bookingId/read-messages", markTourPackageComponentMessagesRead);
 router.get("/:id/components/:bookingId/events/:eventId/attachment", downloadTourPackageComponentAttachment);
 router.patch("/:id/components/:bookingId/events/:eventId/attachment", updateTourPackageComponentAttachment);
+router.post("/:id/components/:bookingId/events/:eventId/review", reviewTourPackageComponentAttachment);
 router.post("/:id/components/:bookingId/send-service-order", sendTourPackageServiceOrder);
 router.post("/:id/components/:bookingId/remind-service-order", remindTourPackageServiceOrder);
 router.post("/:id/components/:bookingId/request-documents", requestTourPackageSupplierDocuments);

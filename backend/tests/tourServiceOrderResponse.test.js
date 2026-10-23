@@ -19,7 +19,7 @@ test("normalizes supplier documents without exposing unsafe file names", () => {
   assert.deepEqual(normalizeSupplierAttachment({
     kind: "document", file_id: "abc", file_unique_id: "unique", file_name: "invoice\r\n.pdf", mime_type: "application/pdf", file_size: 1200, caption: "Invoice",
   }), {
-    kind: "document", file_id: "abc", file_unique_id: "unique", file_name: "invoice  .pdf", mime_type: "application/pdf", file_size: 1200, caption: "Invoice", document_type: "invoice",
+    kind: "document", file_id: "abc", file_unique_id: "unique", file_name: "invoice  .pdf", mime_type: "application/pdf", file_size: 1200, caption: "Invoice", document_type: "invoice", review_status: "pending",
   });
 });
 

@@ -34,7 +34,7 @@ export default function TourPackages() {
     booked: items.filter((item) => ["booked", "paid"].includes(String(item.status))).length,
     outstanding: items.filter((item) => item.status === "booked" && item.payment_status !== "paid").length,
     replies: items.reduce((total, item) => total + Number(item.unread_supplier_reply_count || 0), 0),
-    attention: items.filter((item) => item.status !== "cancelled" && (Number(item.missing_confirmation_count || 0) > 0 || Number(item.missing_supplier_document_count || 0) > 0 || Number(item.supplier_overdue_count || 0) > 0 || Number(item.overdue_task_count || 0) > 0 || Number(item.supplier_order_attention_count || 0) > 0 || Number(item.supplier_reply_pending_count || 0) > 0)).length,
+    attention: items.filter((item) => item.status !== "cancelled" && (Number(item.missing_confirmation_count || 0) > 0 || Number(item.missing_supplier_document_count || 0) > 0 || Number(item.supplier_document_review_count || 0) > 0 || Number(item.supplier_overdue_count || 0) > 0 || Number(item.overdue_task_count || 0) > 0 || Number(item.supplier_order_attention_count || 0) > 0 || Number(item.supplier_reply_pending_count || 0) > 0)).length,
   }), [items]);
 
   const filtered = useMemo(() => {
@@ -48,6 +48,7 @@ export default function TourPackages() {
       if (operations === "overdue" && Number(item.supplier_overdue_count || 0) <= 0) return false;
       if (operations === "missing" && Number(item.missing_confirmation_count || 0) <= 0) return false;
       if (operations === "documents" && Number(item.missing_supplier_document_count || 0) <= 0) return false;
+      if (operations === "document_review" && Number(item.supplier_document_review_count || 0) <= 0) return false;
       if (operations === "supplier_orders" && Number(item.supplier_order_pending_count || 0) <= 0 && Number(item.supplier_order_declined_count || 0) <= 0 && Number(item.supplier_order_attention_count || 0) <= 0) return false;
       if (operations === "supplier_declined" && Number(item.supplier_order_declined_count || 0) <= 0) return false;
       if (needle && ![item.title, item.client_name, item.client_company, item.booking_reference].some((value) => String(value || "").toLowerCase().includes(needle))) return false;
@@ -67,7 +68,7 @@ export default function TourPackages() {
       {filtered.map((item) => {
         const due = item.payment_due_at ? new Date(item.payment_due_at) : null;
         const overdue = item.status === "booked" && item.payment_status !== "paid" && due && due < new Date();
-        const supplierAlerts = Number(item.missing_confirmation_count || 0) + Number(item.missing_supplier_document_count || 0) + Number(item.supplier_overdue_count || 0) + Number(item.overdue_task_count || 0) + Number(item.supplier_order_attention_count || 0) + Number(item.supplier_reply_overdue_count || 0);
+        const supplierAlerts = Number(item.missing_confirmation_count || 0) + Number(item.missing_supplier_document_count || 0) + Number(item.supplier_document_review_count || 0) + Number(item.supplier_overdue_count || 0) + Number(item.overdue_task_count || 0) + Number(item.supplier_order_attention_count || 0) + Number(item.supplier_reply_overdue_count || 0);
         const unreadReplies = Number(item.unread_supplier_reply_count || 0);
         const pendingReplies = Number(item.supplier_reply_pending_count || 0);
         const replyBookingId = item.latest_supplier_reply_booking_id || item.latest_supplier_reply_pending_booking_id;

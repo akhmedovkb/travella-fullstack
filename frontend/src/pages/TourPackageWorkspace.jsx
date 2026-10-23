@@ -97,8 +97,12 @@ function TravelerSection({ travelers, setTravelers, capacity, onSave, saving, t 
   </section>;
 }
 
-function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, onRemindOrder, onCancelOrder, onMessageOrder, onMarkRead, onClassifyAttachment, onRequestDocuments, packageId, canIssueOrder, t }) {
+function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, onRemindOrder, onCancelOrder, onMessageOrder, onMarkRead, onClassifyAttachment, onReviewAttachment, onRequestDocuments, packageId, canIssueOrder, t }) {
   const cardRef = useRef(null);
+  onReviewAttachment ||= async (bookingId, eventId, reviewStatus) => {
+    await axios.post(`${API_BASE}/api/tour-packages/${packageId}/components/${bookingId}/events/${eventId}/review`, { review_status: reviewStatus }, cfg());
+    window.location.reload();
+  };
   const [form, setForm] = useState({
     confirmation_reference: item.confirmation_reference || "",
     supplier_payment_due_at: dateValue(item.supplier_payment_due_at),
@@ -109,7 +113,8 @@ function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, 
   const ready = confirmedStatuses.has(String(item.status || "").toLowerCase());
   const orderStatus = String(item.service_order_status || "").toLowerCase();
   const unreadReplyCount = (item.service_order_events || []).filter((event) => ["message_received", "attachment_received"].includes(event.event_type) && !event.read_at).length;
-  const hasSupplierDocument = (item.service_order_events || []).some((event) => event.event_type === "attachment_received");
+  const supplierAttachments = (item.service_order_events || []).filter((event) => event.event_type === "attachment_received");
+  const hasSupplierDocument = supplierAttachments.some((event) => event.metadata?.review_status === "approved");
   const lastDocumentRequest = (item.service_order_events || []).find((event) => event.event_type === "document_request_sent");
   const documentRequestCoolingDown = lastDocumentRequest && Date.now() - new Date(lastDocumentRequest.created_at).getTime() < 60 * 60 * 1000;
   const reminderCoolingDown = item.service_order_last_reminded_at && Date.now() - new Date(item.service_order_last_reminded_at).getTime() < 60 * 60 * 1000;
@@ -139,6 +144,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, 
     </div>
     {item.provider_note && <div className="mt-3 border-l-2 border-sky-300 bg-sky-50 px-3 py-2 text-sm text-gray-700"><span className="font-semibold">{t("tb.workspace.supplier_note")}:</span> {item.provider_note}</div>}
     {orderStatus === "accepted" && <div className={`mt-3 flex flex-wrap items-center justify-between gap-3 border px-3 py-2 text-sm ${hasSupplierDocument ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-amber-200 bg-amber-50 text-amber-800"}`}><span className="inline-flex items-center gap-2 font-semibold"><Paperclip size={16} />{hasSupplierDocument ? t("tb.documents.supplier_documents_received") : t("tb.documents.supplier_documents_missing")}</span>{!hasSupplierDocument && <button type="button" disabled={saving || documentRequestCoolingDown} onClick={() => onRequestDocuments(item.id)} className="font-bold text-orange-700 hover:underline disabled:cursor-not-allowed disabled:opacity-40">{documentRequestCoolingDown ? t("tb.documents.document_request_cooldown") : t("tb.documents.request_documents")}</button>}</div>}
+    {supplierAttachments.some((event) => !event.metadata?.review_status || event.metadata.review_status === "pending") && <div className="mt-3 border border-amber-200 bg-amber-50 p-3"><div className="text-xs font-bold uppercase text-amber-800">{t("tb.documents.review_attachments")}</div><div className="mt-2 space-y-2">{supplierAttachments.filter((event) => !event.metadata?.review_status || event.metadata.review_status === "pending").map((event) => <div key={`review-${event.id}`} className="flex flex-wrap items-center gap-3 text-xs"><button type="button" onClick={() => openAttachment(packageId, item.id, event.id).catch(() => window.alert(t("tb.documents.attachment_error")))} className="inline-flex items-center gap-1 font-semibold text-sky-700 hover:underline"><Paperclip size={13} />{event.metadata?.file_name || t("tb.documents.open_attachment")}</button><button type="button" disabled={saving} onClick={() => onReviewAttachment(item.id, event.id, "approved")} className="font-bold text-emerald-700 hover:underline">{t("tb.documents.approve_attachment")}</button><button type="button" disabled={saving} onClick={() => onReviewAttachment(item.id, event.id, "rejected")} className="font-bold text-red-700 hover:underline">{t("tb.documents.reject_attachment")}</button></div>)}</div></div>}
     <div className="mt-4 grid gap-3 border-t border-gray-200 pt-4 md:grid-cols-[1fr_180px_1.5fr_auto] md:items-end">
       <LabeledField label={t("tb.workspace.confirmation_reference")}><input value={form.confirmation_reference} onChange={(e) => setField("confirmation_reference", e.target.value)} placeholder={t("tb.workspace.confirmation_reference_ph")} className={fieldClass} /></LabeledField>
       <LabeledField label={t("tb.workspace.supplier_payment_due")}><input type="date" value={form.supplier_payment_due_at} onChange={(e) => setField("supplier_payment_due_at", e.target.value)} className={fieldClass} /></LabeledField>
@@ -440,6 +446,16 @@ export default function TourPackageWorkspace() {
     }
   };
 
+  const reviewAttachment = async (bookingId, eventId, reviewStatus) => {
+    setSaving(true); setError("");
+    try {
+      await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/events/${eventId}/review`, { review_status: reviewStatus }, cfg());
+      await loadPackage();
+      setNotice(t(reviewStatus === "approved" ? "tb.documents.attachment_approved_notice" : "tb.documents.attachment_rejected_notice"));
+    } catch (requestError) { setError(requestError?.response?.data?.message || t("tb.documents.attachment_review_error")); }
+    finally { setSaving(false); }
+  };
+
   const createTask = async (values) => {
     setSaving(true); setError("");
     try {
@@ -474,7 +490,7 @@ export default function TourPackageWorkspace() {
   const components = Array.isArray(tourPackage.components) ? tourPackage.components : [];
   const canIssueOrders = ["booked", "paid"].includes(String(tourPackage.status));
   const bulkOrderCount = components.filter((item) => !["sent", "accepted"].includes(String(item.service_order_status || "").toLowerCase())).length;
-  const missingDocumentCount = components.filter((item) => item.service_order_status === "accepted" && !(item.service_order_events || []).some((event) => event.event_type === "attachment_received")).length;
+  const missingDocumentCount = components.filter((item) => item.service_order_status === "accepted" && !(item.service_order_events || []).some((event) => event.event_type === "attachment_received" && event.metadata?.review_status === "approved")).length;
   const revisions = Array.isArray(tourPackage.revisions) ? tourPackage.revisions : [];
   const confirmed = components.filter((item) => confirmedStatuses.has(String(item.status || "").toLowerCase())).length;
   const readinessPercent = components.length ? Math.round((confirmed / components.length) * 100) : 0;

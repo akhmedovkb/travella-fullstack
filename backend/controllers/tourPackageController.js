@@ -659,6 +659,60 @@ async function updateTourPackageComponentAttachment(req, res) {
   }
 }
 
+async function reviewTourPackageComponentAttachment(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const bookingId = Number(req.params.bookingId);
+    const eventId = Number(req.params.eventId);
+    const reviewStatus = String(req.body?.review_status || "").trim();
+    if (![bookingId, eventId].every((value) => Number.isInteger(value) && value > 0) || !["approved", "rejected"].includes(reviewStatus)) return res.status(400).json({ message: "Valid review status is required" });
+    const found = await pool.query(
+      `SELECT event.metadata,tp.id AS package_id,tp.title,tp.booking_reference,s.title AS service_title,to_jsonb(supplier) AS supplier_profile
+         FROM tour_package_component_events event
+         JOIN tour_packages tp ON tp.id=event.package_id
+         JOIN bookings booking ON booking.id=event.booking_id AND booking.group_id=tp.id
+         LEFT JOIN services s ON s.id=booking.service_id
+         LEFT JOIN providers supplier ON supplier.id=booking.provider_id
+        WHERE event.id=$1 AND event.package_id=$2::uuid AND event.booking_id=$3
+          AND event.event_type='attachment_received' AND tp.owner_provider_id=$4 LIMIT 1`,
+      [eventId, req.params.id, bookingId, ownerId]
+    );
+    if (!found.rowCount) return res.status(404).json({ message: "Attachment not found" });
+    const item = found.rows[0];
+    const updated = await pool.query(
+      `UPDATE tour_package_component_events SET metadata=jsonb_set(COALESCE(metadata,'{}'::jsonb),'{review_status}',to_jsonb($1::text),TRUE)
+        WHERE id=$2 RETURNING id,metadata`,
+      [reviewStatus, eventId]
+    );
+    if (reviewStatus === "approved") {
+      await pool.query(`UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW() WHERE package_id=$1::uuid AND booking_id=$2 AND task_type='follow_up_supplier_documents' AND completed=FALSE`, [item.package_id, bookingId]);
+    } else {
+      await pool.query(
+        `INSERT INTO tour_package_tasks(package_id,title,task_type,booking_id,due_at,priority)
+         VALUES($1::uuid,$2,'follow_up_supplier_documents',$3,CURRENT_DATE + 1,'high')
+         ON CONFLICT (package_id,booking_id,task_type) WHERE completed=FALSE AND task_type IS NOT NULL
+         DO UPDATE SET due_at=EXCLUDED.due_at,priority='high',updated_at=NOW()`,
+        [item.package_id, `Replace supplier document: ${item.service_title || `#${bookingId}`}`, bookingId]
+      );
+      const profile = item.supplier_profile || {};
+      const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
+      if (chatId) await tgSend(chatId, buildSupplierDocumentRequestMessage({ tourPackage: item, component: item }), { reply_markup: { inline_keyboard: [[{ text: "📎 Отправить замену DMC", callback_data: `tour_order_reply:${bookingId}` }]] } });
+    }
+    const audit = await pool.query(
+      `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,metadata)
+       VALUES($1::uuid,$2,$3,'dmc',jsonb_build_object('attachment_event_id',$4::bigint))
+       RETURNING id,event_type,actor_type,created_at,metadata`,
+      [item.package_id, bookingId, reviewStatus === "approved" ? "attachment_approved" : "attachment_rejected", eventId]
+    );
+    return res.json({ ...updated.rows[0], review_event: audit.rows[0] });
+  } catch (error) {
+    console.error("reviewTourPackageComponentAttachment error:", error);
+    return res.status(500).json({ message: "Failed to review attachment" });
+  }
+}
+
 function normalizePackageBody(body = {}) {
   const markupType = body.markup_type === "fixed" ? "fixed" : "percent";
   const netTotal = cleanMoney(body.net_total);
@@ -763,10 +817,14 @@ async function listTourPackages(req, res) {
                 ORDER BY event.created_at DESC,event.id DESC LIMIT 1) AS latest_supplier_reply_booking_id,
               (SELECT COUNT(*)::int FROM tour_package_component_events event
                 WHERE event.package_id=tp.id AND event.event_type='attachment_received') AS supplier_document_count,
+              (SELECT COUNT(*)::int FROM tour_package_component_events event
+                WHERE event.package_id=tp.id AND event.event_type='attachment_received'
+                  AND COALESCE(event.metadata->>'review_status','pending')='pending') AS supplier_document_review_count,
               COUNT(b.id) FILTER (
                 WHERE tp.status IN ('booked','paid') AND ops.service_order_status='accepted'
                   AND NOT EXISTS (SELECT 1 FROM tour_package_component_events event
-                    WHERE event.package_id=tp.id AND event.booking_id=b.id AND event.event_type='attachment_received')
+                    WHERE event.package_id=tp.id AND event.booking_id=b.id AND event.event_type='attachment_received'
+                      AND event.metadata->>'review_status'='approved')
               )::int AS missing_supplier_document_count,
               (SELECT COUNT(*)::int FROM (
                 SELECT DISTINCT ON (event.booking_id) event.booking_id,event.event_type,event.created_at
@@ -1343,7 +1401,8 @@ async function requestTourPackageSupplierDocuments(req, res) {
               (SELECT MAX(event.created_at) FROM tour_package_component_events event
                 WHERE event.package_id=tp.id AND event.booking_id=b.id AND event.event_type='document_request_sent') AS last_document_request_at,
               EXISTS(SELECT 1 FROM tour_package_component_events event
-                WHERE event.package_id=tp.id AND event.booking_id=b.id AND event.event_type='attachment_received') AS has_document
+                WHERE event.package_id=tp.id AND event.booking_id=b.id AND event.event_type='attachment_received'
+                  AND event.metadata->>'review_status'='approved') AS has_document
          FROM tour_packages tp
          JOIN bookings b ON b.group_id=tp.id AND b.id=$3
          LEFT JOIN services s ON s.id=b.service_id
@@ -1650,6 +1709,7 @@ module.exports = {
   markTourPackageComponentMessagesRead,
   downloadTourPackageComponentAttachment,
   updateTourPackageComponentAttachment,
+  reviewTourPackageComponentAttachment,
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
   requestTourPackageSupplierDocuments,

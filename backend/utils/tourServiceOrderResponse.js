@@ -37,6 +37,7 @@ function normalizeSupplierAttachment(input = {}) {
     file_size: fileSize || null,
     caption: String(input.caption || "").trim().slice(0, 1000) || null,
     document_type: inferSupplierDocumentType(input),
+    review_status: "pending",
   };
 }
 
@@ -244,12 +245,6 @@ async function consumeSupplierServiceOrderAttachment({ actorTelegramId, attachme
      VALUES($1::uuid,$2,'attachment_received','supplier',$3,$4::jsonb)
      RETURNING id,event_type,actor_type,created_at,metadata`,
     [item.package_id, item.booking_id, actor, JSON.stringify(normalized)]
-  );
-  await pool.query(
-    `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
-      WHERE package_id=$1::uuid AND booking_id=$2
-        AND task_type='follow_up_supplier_documents' AND completed=FALSE`,
-    [item.package_id, item.booking_id]
   );
   const agencyChatId = profileChatId(item.agency_profile || {});
   if (agencyChatId) {
