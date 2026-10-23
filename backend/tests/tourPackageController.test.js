@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -29,6 +29,11 @@ test("normalizes private traveler details", () => {
     fullName: "Jane Doe", travelerType: "child", birthDate: null, citizenship: null,
     passportNumber: "AB 123", passportExpiry: null, roomType: null, notes: "Vegan", sortOrder: 2,
   });
+});
+
+test("normalizes client follow-up details", () => {
+  assert.deepEqual(normalizeClientFollowup({ channel: "telegram", note: "  Sent revised offer  " }), { channel: "telegram", note: "Sent revised offer" });
+  assert.deepEqual(normalizeClientFollowup({ channel: "unsupported", note: " " }), { channel: "phone", note: null });
 });
 
 test("normalizes private component operations", () => {

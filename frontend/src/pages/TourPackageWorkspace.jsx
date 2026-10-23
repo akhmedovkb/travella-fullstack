@@ -178,14 +178,28 @@ function DepartureReadiness({ checks, percent, t }) {
 }
 
 function OperationsTimeline({ items = [], saving, onClientFollowup, t }) {
+  const [followupOpen, setFollowupOpen] = useState(false);
+  const [followup, setFollowup] = useState({ channel: "phone", note: "" });
   const tone = { overdue: "border-red-200 bg-red-50 text-red-800", today: "border-orange-200 bg-orange-50 text-orange-800", soon: "border-amber-200 bg-amber-50 text-amber-800", upcoming: "border-gray-200 bg-white text-gray-700" };
+  const submitFollowup = async () => {
+    if (await onClientFollowup(followup)) {
+      setFollowup({ channel: "phone", note: "" });
+      setFollowupOpen(false);
+    }
+  };
   return <section className="border-b border-gray-200 pb-5">
     <div className="flex items-center gap-2"><Clock3 size={20} /><h2 className="text-xl font-bold">{t("tb.action_timeline.title")}</h2></div>
     <p className="mt-1 text-sm text-gray-500">{t("tb.action_timeline.subtitle")}</p>
-    <div className="mt-4 space-y-2">{items.map((item, index) => <div key={`${item.type}-${item.booking_id || index}`} className={`flex flex-wrap items-center justify-between gap-3 border px-4 py-3 ${tone[item.urgency] || tone.upcoming}`}><div><div className="font-semibold">{t(`tb.action_timeline.${item.type}`)}{item.label ? ` · ${item.label}` : ""}</div><div className="mt-0.5 text-xs opacity-75">{dateText(item.due_at)}</div></div><div className="flex items-center gap-3"><span className="text-xs font-bold uppercase">{item.urgency === "overdue" ? t("tb.action_timeline.overdue_days", { count: Math.abs(item.days) }) : item.urgency === "today" ? t("tb.action_timeline.today") : t("tb.action_timeline.days_left", { count: item.days })}</span>{item.type === "client_follow_up" && <button type="button" disabled={saving} onClick={onClientFollowup} className="inline-flex h-8 items-center gap-1.5 bg-white px-3 text-xs font-bold text-gray-950 shadow-sm disabled:opacity-40"><CheckCircle2 size={14} />{t("tb.action_timeline.mark_contacted")}</button>}</div></div>)}
+    <div className="mt-4 space-y-2">{items.map((item, index) => <div key={`${item.type}-${item.booking_id || index}`} className={`flex flex-wrap items-center justify-between gap-3 border px-4 py-3 ${tone[item.urgency] || tone.upcoming}`}><div><div className="font-semibold">{t(`tb.action_timeline.${item.type}`)}{item.label ? ` · ${item.label}` : ""}</div><div className="mt-0.5 text-xs opacity-75">{dateText(item.due_at)}</div></div><div className="flex items-center gap-3"><span className="text-xs font-bold uppercase">{item.urgency === "overdue" ? t("tb.action_timeline.overdue_days", { count: Math.abs(item.days) }) : item.urgency === "today" ? t("tb.action_timeline.today") : t("tb.action_timeline.days_left", { count: item.days })}</span>{item.type === "client_follow_up" && <button type="button" disabled={saving} onClick={() => setFollowupOpen((value) => !value)} className="inline-flex h-8 items-center gap-1.5 bg-white px-3 text-xs font-bold text-gray-950 shadow-sm disabled:opacity-40"><CheckCircle2 size={14} />{t("tb.action_timeline.mark_contacted")}</button>}</div></div>)}
       {!items.length && <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{t("tb.action_timeline.empty")}</div>}
     </div>
+    {followupOpen && <div className="mt-3 grid gap-2 border border-sky-200 bg-sky-50 p-3 sm:grid-cols-[150px_1fr_auto]"><select value={followup.channel} onChange={(event) => setFollowup((value) => ({ ...value, channel: event.target.value }))} className={fieldClass}>{["phone", "telegram", "whatsapp", "email", "other"].map((channel) => <option key={channel} value={channel}>{t(`tb.action_timeline.channel_${channel}`)}</option>)}</select><input value={followup.note} maxLength={1000} onChange={(event) => setFollowup((value) => ({ ...value, note: event.target.value }))} placeholder={t("tb.action_timeline.contact_note_ph")} className={fieldClass} /><button type="button" disabled={saving} onClick={submitFollowup} className="h-11 bg-gray-950 px-4 text-sm font-bold text-white disabled:opacity-40">{t("common.save")}</button></div>}
   </section>;
+}
+
+function ClientContactHistory({ items = [], t }) {
+  if (!items.length) return null;
+  return <section className="border-b border-gray-200 pb-5"><h2 className="text-xl font-bold">{t("tb.action_timeline.contact_history")}</h2><div className="mt-3 divide-y border-y border-gray-200">{items.map((item) => <div key={item.id} className="flex flex-wrap items-start justify-between gap-3 py-3 text-sm"><div><div className="font-semibold">{t(`tb.action_timeline.channel_${item.channel}`)}</div>{item.note && <div className="mt-1 text-gray-600">{item.note}</div>}</div><span className="text-xs text-gray-500">{dateTimeText(item.contacted_at)}</span></div>)}</div></section>;
 }
 
 function OperationsTasks({ items = [], saving, onCreate, onToggle, onDelete, t }) {
@@ -443,14 +457,16 @@ export default function TourPackageWorkspace() {
     } finally { setSaving(false); }
   };
 
-  const recordClientFollowup = async () => {
+  const recordClientFollowup = async (values) => {
     setSaving(true); setError("");
     try {
-      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/client-followup`, {}, cfg());
-      setTourPackage((current) => ({ ...current, ...data }));
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/client-followup`, values, cfg());
+      setTourPackage((current) => ({ ...current, ...data, client_contacts: [data.contact, ...(current.client_contacts || [])] }));
       setNotice(t("tb.workspace.client_followup_saved"));
+      return true;
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.workspace.client_followup_error"));
+      return false;
     } finally { setSaving(false); }
   };
 
@@ -710,6 +726,7 @@ export default function TourPackageWorkspace() {
       <FinancialReconciliation components={components} grossTotal={tourPackage.gross_total} currency={currency} t={t} />
       <SupplierPerformanceSummary components={components} t={t} />
       <OperationsTimeline items={operationsTimeline} saving={saving} onClientFollowup={recordClientFollowup} t={t} />
+      <ClientContactHistory items={tourPackage.client_contacts || []} t={t} />
       <OperationsTasks items={tourPackage.tasks} saving={saving} onCreate={createTask} onToggle={toggleTask} onDelete={deleteTask} t={t} />
       <IncidentJournal incidents={tourPackage.incidents || []} components={components} saving={saving} onCreate={createIncident} onUpdate={updateIncident} t={t} />
       <SupplierDocumentCenter components={components} packageId={id} saving={saving} onClassify={classifyAttachment} onReview={reviewAttachment} t={t} />

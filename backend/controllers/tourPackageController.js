@@ -85,6 +85,14 @@ function normalizeTourTask(body = {}) {
   };
 }
 
+function normalizeClientFollowup(body = {}) {
+  const supportedChannels = new Set(["phone", "email", "telegram", "whatsapp", "other"]);
+  return {
+    channel: supportedChannels.has(body.channel) ? body.channel : "phone",
+    note: String(body.note || "").trim().slice(0, 1000) || null,
+  };
+}
+
 function derivePackageStatus(rows = [], storedStatus = "draft") {
   if (["proposed", "booked", "paid", "cancelled"].includes(storedStatus)) return storedStatus;
   if (!rows.length) return storedStatus || "draft";
@@ -381,6 +389,16 @@ async function ensureTourPackagesTable() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_payment_events_package ON tour_package_payment_events(package_id, created_at DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_client_contacts (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      channel VARCHAR(16) NOT NULL,
+      note TEXT,
+      contacted_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_client_contacts_package ON tour_package_client_contacts(package_id, contacted_at DESC)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_travelers (
       id BIGSERIAL PRIMARY KEY,
@@ -1046,6 +1064,11 @@ async function getTourPackage(req, res) {
          FROM tour_package_payment_events WHERE package_id=$1::uuid ORDER BY created_at DESC,id DESC`,
       [req.params.id]
     );
+    const clientContacts = await pool.query(
+      `SELECT id,channel,note,contacted_at FROM tour_package_client_contacts
+        WHERE package_id=$1::uuid ORDER BY contacted_at DESC,id DESC LIMIT 50`,
+      [req.params.id]
+    );
     const travelers = await pool.query(
       `SELECT id,full_name,traveler_type,birth_date,citizenship,passport_number,
               passport_expiry,room_type,notes,sort_order
@@ -1084,6 +1107,7 @@ async function getTourPackage(req, res) {
       components: bookings,
       revisions: revisions.rows,
       payment_events: paymentEvents.rows,
+      client_contacts: clientContacts.rows,
       travelers: travelers.rows,
       tasks: tasks.rows,
       incidents: incidents.rows,
@@ -1175,22 +1199,35 @@ async function updateTourPackageManager(req, res) {
 }
 
 async function recordTourPackageClientFollowup(req, res) {
+  const client = await pool.connect();
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
-    const result = await pool.query(
+    const followup = normalizeClientFollowup(req.body);
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_packages SET last_client_followup_at=NOW(),updated_at=NOW()
         WHERE id=$1::uuid AND owner_provider_id=$2 AND status='proposed' AND proposal_response IS NULL
         RETURNING id,last_client_followup_at,updated_at`,
       [req.params.id, ownerId]
     );
-    if (!result.rowCount) return res.status(409).json({ message: "Tour proposal is not awaiting a client response" });
-    return res.json(result.rows[0]);
+    if (!result.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Tour proposal is not awaiting a client response" });
+    }
+    const contact = await client.query(
+      `INSERT INTO tour_package_client_contacts(package_id,channel,note,contacted_at)
+       VALUES($1::uuid,$2,$3,$4) RETURNING id,channel,note,contacted_at`,
+      [req.params.id, followup.channel, followup.note, result.rows[0].last_client_followup_at]
+    );
+    await client.query("COMMIT");
+    return res.json({ ...result.rows[0], contact: contact.rows[0] });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("recordTourPackageClientFollowup error:", error);
     return res.status(500).json({ message: "Failed to record client follow-up" });
-  }
+  } finally { client.release(); }
 }
 
 async function shareTourPackage(req, res) {
@@ -1894,6 +1931,7 @@ module.exports = {
   normalizeTraveler,
   normalizeComponentOperations,
   normalizeTourTask,
+  normalizeClientFollowup,
   derivePackageStatus,
   packageSaleReadiness,
   packageOperationsReadiness,
