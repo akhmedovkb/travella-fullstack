@@ -841,6 +841,13 @@ async function listTourPackages(req, res) {
               COUNT(b.id) FILTER (WHERE ops.quality_rating IS NOT NULL AND ops.reliability_rating IS NOT NULL)::int AS supplier_reviewed_count,
               COUNT(b.id) FILTER (WHERE ops.actual_supplier_cost IS NOT NULL)::int AS actual_cost_count,
               COALESCE(SUM(COALESCE(ops.actual_supplier_cost,b.provider_price,0)),0) AS actual_cost_total,
+              COALESCE(SUM(COALESCE(ops.actual_supplier_cost,b.provider_price,0)) FILTER (
+                WHERE COALESCE(ops.supplier_paid,FALSE)=FALSE
+              ),0) AS supplier_payable_total,
+              COALESCE(SUM(COALESCE(ops.actual_supplier_cost,b.provider_price,0)) FILTER (
+                WHERE COALESCE(ops.supplier_paid,FALSE)=FALSE
+                  AND ops.supplier_payment_due_at < CURRENT_DATE
+              ),0) AS supplier_overdue_total,
               COUNT(b.id) FILTER (
                 WHERE tp.status IN ('booked','paid') AND (
                   ops.service_order_status IS NULL OR
