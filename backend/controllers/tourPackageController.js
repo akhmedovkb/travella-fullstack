@@ -408,6 +408,8 @@ async function ensureTourPackagesTable() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_events_booking ON tour_package_component_events(package_id, booking_id, created_at DESC)`);
+  await pool.query(`ALTER TABLE tour_package_component_events ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_events_unread ON tour_package_component_events(package_id, created_at DESC) WHERE event_type='message_received' AND read_at IS NULL`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_tasks (
       id BIGSERIAL PRIMARY KEY,
@@ -459,7 +461,7 @@ async function packageBookings(packageId) {
             COALESCE((
               SELECT jsonb_agg(jsonb_build_object(
                 'id',event.id,'event_type',event.event_type,'actor_type',event.actor_type,
-                'created_at',event.created_at,'metadata',event.metadata
+                'created_at',event.created_at,'metadata',event.metadata,'read_at',event.read_at
               ) ORDER BY event.created_at DESC,event.id DESC)
               FROM tour_package_component_events event
               WHERE event.package_id=$1::uuid AND event.booking_id=b.id
@@ -540,6 +542,30 @@ async function updateTourPackageComponentOperations(req, res) {
   } catch (error) {
     console.error("updateTourPackageComponentOperations error:", error);
     return res.status(500).json({ message: "Failed to update component operations" });
+  }
+}
+
+async function markTourPackageComponentMessagesRead(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const bookingId = Number(req.params.bookingId);
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
+    const result = await pool.query(
+      `UPDATE tour_package_component_events event SET read_at=NOW()
+        FROM tour_packages tp,bookings booking
+       WHERE event.package_id=$1::uuid AND event.booking_id=$2
+         AND event.event_type='message_received' AND event.read_at IS NULL
+         AND tp.id=event.package_id AND tp.owner_provider_id=$3
+         AND booking.id=event.booking_id AND booking.group_id=tp.id
+       RETURNING event.id,event.read_at`,
+      [req.params.id, bookingId, ownerId]
+    );
+    return res.json({ read: result.rowCount, read_at: result.rows[0]?.read_at || null });
+  } catch (error) {
+    console.error("markTourPackageComponentMessagesRead error:", error);
+    return res.status(500).json({ message: "Failed to mark supplier messages as read" });
   }
 }
 
@@ -640,6 +666,30 @@ async function listTourPackages(req, res) {
               (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS open_task_count,
               (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE AND task.due_at < CURRENT_DATE) AS overdue_task_count,
               (SELECT MIN(task.due_at) FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS next_task_due_at,
+              (SELECT COUNT(*)::int FROM tour_package_component_events event
+                WHERE event.package_id=tp.id AND event.event_type='message_received' AND event.read_at IS NULL) AS unread_supplier_reply_count,
+              (SELECT event.booking_id FROM tour_package_component_events event
+                WHERE event.package_id=tp.id AND event.event_type='message_received' AND event.read_at IS NULL
+                ORDER BY event.created_at DESC,event.id DESC LIMIT 1) AS latest_supplier_reply_booking_id,
+              (SELECT COUNT(*)::int FROM (
+                SELECT DISTINCT ON (event.booking_id) event.booking_id,event.event_type,event.created_at
+                  FROM tour_package_component_events event
+                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','message_sent')
+                 ORDER BY event.booking_id,event.created_at DESC,event.id DESC
+              ) dialogue WHERE dialogue.event_type='message_received') AS supplier_reply_pending_count,
+              (SELECT dialogue.booking_id FROM (
+                SELECT DISTINCT ON (event.booking_id) event.booking_id,event.event_type,event.created_at,event.id
+                  FROM tour_package_component_events event
+                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','message_sent')
+                 ORDER BY event.booking_id,event.created_at DESC,event.id DESC
+              ) dialogue WHERE dialogue.event_type='message_received'
+                ORDER BY dialogue.created_at DESC,dialogue.id DESC LIMIT 1) AS latest_supplier_reply_pending_booking_id,
+              (SELECT COUNT(*)::int FROM (
+                SELECT DISTINCT ON (event.booking_id) event.booking_id,event.event_type,event.created_at
+                  FROM tour_package_component_events event
+                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','message_sent')
+                 ORDER BY event.booking_id,event.created_at DESC,event.id DESC
+              ) dialogue WHERE dialogue.event_type='message_received' AND dialogue.created_at < NOW() - INTERVAL '24 hours') AS supplier_reply_overdue_count,
               COUNT(b.id) FILTER (
                 WHERE b.status IN ('confirmed','paid','completed')
                   AND tp.status <> 'cancelled'
@@ -1443,6 +1493,7 @@ module.exports = {
   updateTourPackagePayment,
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
+  markTourPackageComponentMessagesRead,
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
   cancelTourPackageServiceOrder,
