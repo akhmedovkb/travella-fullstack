@@ -24,7 +24,27 @@ const tripStage = (item, today = localDateKey()) => {
   return "upcoming";
 };
 const actualMargin = (item) => Number(item.gross_total || 0) - Number(item.actual_cost_total ?? item.net_total ?? 0);
+const actualMarginRate = (item) => {
+  const gross = Number(item.gross_total || 0);
+  return gross > 0 ? actualMargin(item) / gross : Number.NEGATIVE_INFINITY;
+};
 const hasOperationalRisk = (item) => item.status !== "cancelled" && (Number(item.open_incident_count || 0) > 0 || Number(item.missing_confirmation_count || 0) > 0 || Number(item.missing_supplier_document_count || 0) > 0 || Number(item.supplier_document_review_count || 0) > 0 || Number(item.supplier_overdue_count || 0) > 0 || Number(item.overdue_task_count || 0) > 0 || Number(item.supplier_order_attention_count || 0) > 0 || Number(item.supplier_reply_pending_count || 0) > 0);
+const operationalPriority = (item) => (
+  Number(item.open_incident_count || 0) * 100
+  + Number(item.supplier_order_declined_count || 0) * 80
+  + Number(item.supplier_overdue_count || 0) * 60
+  + Number(item.overdue_task_count || 0) * 50
+  + Number(item.supplier_order_attention_count || 0) * 40
+  + Number(item.missing_confirmation_count || 0) * 30
+  + Number(item.missing_supplier_document_count || 0) * 20
+  + Number(item.supplier_document_review_count || 0) * 15
+  + Number(item.unread_supplier_reply_count || 0) * 10
+  + Number(item.supplier_reply_pending_count || 0) * 5
+);
+const timeValue = (value, fallback) => {
+  const parsed = value ? new Date(value).getTime() : NaN;
+  return Number.isFinite(parsed) ? parsed : fallback;
+};
 
 export default function TourPackages() {
   const { t } = useTranslation();
@@ -36,6 +56,7 @@ export default function TourPackages() {
   const [payment, setPayment] = useState("all");
   const [manager, setManager] = useState("all");
   const [operations, setOperations] = useState("all");
+  const [sortBy, setSortBy] = useState("attention");
   const [financeFrom, setFinanceFrom] = useState("");
   const [financeTo, setFinanceTo] = useState("");
 
@@ -182,6 +203,15 @@ export default function TourPackages() {
     });
   }, [items, manager, operations, payment, query, status]);
 
+  const sortedItems = useMemo(() => [...filtered].sort((left, right) => {
+    if (sortBy === "departure") return timeValue(left.start_date, Number.MAX_SAFE_INTEGER) - timeValue(right.start_date, Number.MAX_SAFE_INTEGER);
+    if (sortBy === "margin") return actualMarginRate(left) - actualMarginRate(right);
+    if (sortBy === "recent") return timeValue(right.updated_at, 0) - timeValue(left.updated_at, 0);
+    const priorityDifference = operationalPriority(right) - operationalPriority(left);
+    if (priorityDifference) return priorityDifference;
+    return timeValue(left.start_date, Number.MAX_SAFE_INTEGER) - timeValue(right.start_date, Number.MAX_SAFE_INTEGER);
+  }), [filtered, sortBy]);
+
   if (loading) return <main className="mx-auto max-w-7xl p-6 text-gray-500">{t("common.loading")}</main>;
   return <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
     <header className="flex flex-wrap items-end justify-between gap-5 border-b border-gray-200 pb-6"><div><div className="text-xs font-bold uppercase text-orange-600">Tour Builder</div><h1 className="mt-1 text-3xl font-bold">{t("tb.portfolio.title")}</h1><p className="mt-2 text-gray-600">{t("tb.portfolio.subtitle")}</p></div><Link to="/tour-builder" className="inline-flex h-11 items-center gap-2 bg-orange-600 px-5 font-bold text-white hover:bg-orange-700"><Plus size={18} />{t("tb.portfolio.create")}</Link></header>
@@ -197,9 +227,9 @@ export default function TourPackages() {
       {[[t("tb.portfolio.all"), stats.total, Users], [t("tb.portfolio.in_progress"), stats.pipeline, Clock3], [t("tb.portfolio.awaiting_client"), stats.awaiting, CalendarDays], [t("tb.portfolio.booked"), stats.booked, CalendarDays], [t("tb.portfolio.receivables"), stats.outstanding, CircleDollarSign], [t("tb.portfolio.new_supplier_replies"), stats.replies, MessageCircle], [t("tb.portfolio.attention"), stats.attention, AlertTriangle]].map(([label, value, Icon]) => <div key={label} className="border-b border-gray-200 py-5 sm:px-4 lg:border-b-0 lg:border-r first:pl-0 last:border-r-0"><Icon size={20} className={(label === t("tb.portfolio.attention") || label === t("tb.portfolio.new_supplier_replies")) && value ? "text-red-600" : "text-gray-400"} /><div className={`mt-3 text-2xl font-bold ${(label === t("tb.portfolio.attention") || label === t("tb.portfolio.new_supplier_replies")) && value ? "text-red-700" : ""}`}>{value}</div><div className="mt-1 text-xs font-semibold uppercase text-gray-400">{label}</div></div>)}
     </section>
     <section className="mt-6 flex flex-col gap-3 border-b border-gray-200 pb-5 lg:flex-row"><label className="relative min-w-0 flex-1"><Search className="absolute left-3 top-3 text-gray-400" size={18} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("tb.portfolio.search")} className="h-11 w-full border border-gray-300 bg-white pl-10 pr-3 outline-none focus:border-orange-500" /></label><select value={status} onChange={(event) => setStatus(event.target.value)} className="h-11 border border-gray-300 bg-white px-3"><option value="all">{t("tb.portfolio.all_statuses")}</option><option value="pipeline">{t("tb.portfolio.in_progress")}</option><option value="proposed">{t("tb.package_status.proposed")}</option><option value="booked">{t("tb.package_status.booked")}</option><option value="paid">{t("tb.package_status.paid")}</option><option value="cancelled">{t("tb.package_status.cancelled")}</option></select><select value={payment} onChange={(event) => setPayment(event.target.value)} className="h-11 border border-gray-300 bg-white px-3"><option value="all">{t("tb.portfolio.all_payments")}</option><option value="unpaid">{t("tb.workspace.payment_unpaid")}</option><option value="partial">{t("tb.workspace.payment_partial")}</option><option value="paid">{t("tb.workspace.payment_paid")}</option></select><select value={operations} onChange={(event) => setOperations(event.target.value)} className="h-11 border border-gray-300 bg-white px-3"><option value="all">{t("tb.portfolio.all_operations")}</option><option value="departing_today">{t("tb.portfolio.departing_today")}</option><option value="in_trip">{t("tb.portfolio.in_trip")}</option><option value="post_tour">{t("tb.portfolio.post_tour")}</option><option value="unreconciled">{t("tb.portfolio.unreconciled")}</option><option value="finance_dates_missing">{t("tb.portfolio.finance_dates_missing")}</option><option value="loss_making">{t("tb.portfolio.loss_making")}</option><option value="attention">{t("tb.portfolio.attention")}</option><option value="incidents">{t("tb.portfolio.open_incidents")}</option><option value="unread_replies">{t("tb.portfolio.new_supplier_replies")}</option><option value="supplier_replies">{t("tb.portfolio.requires_reply")}</option><option value="documents">{t("tb.portfolio.missing_supplier_documents")}</option><option value="supplier_orders">{t("tb.portfolio.supplier_orders")}</option><option value="supplier_declined">{t("tb.portfolio.supplier_declined")}</option><option value="overdue">{t("tb.portfolio.supplier_overdue")}</option><option value="missing">{t("tb.portfolio.missing_confirmation")}</option></select></section>
-    <section className="flex flex-wrap items-center gap-3 border-b border-gray-200 py-3"><span className="text-xs font-semibold uppercase text-gray-400">{t("tb.portfolio.manager")}</span><select value={manager} onChange={(event) => setManager(event.target.value)} className="h-10 border border-gray-300 bg-white px-3 text-sm"><option value="all">{t("tb.portfolio.all_managers")}</option><option value="unassigned">{t("tb.portfolio.manager_unassigned")}</option>{managers.map((name) => <option key={name} value={name}>{name}</option>)}</select></section>
+    <section className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 py-3"><div className="flex flex-wrap items-center gap-3"><span className="text-xs font-semibold uppercase text-gray-400">{t("tb.portfolio.manager")}</span><select value={manager} onChange={(event) => setManager(event.target.value)} className="h-10 border border-gray-300 bg-white px-3 text-sm"><option value="all">{t("tb.portfolio.all_managers")}</option><option value="unassigned">{t("tb.portfolio.manager_unassigned")}</option>{managers.map((name) => <option key={name} value={name}>{name}</option>)}</select></div><label className="flex items-center gap-3"><span className="text-xs font-semibold uppercase text-gray-400">{t("tb.portfolio.sort_by")}</span><select value={sortBy} onChange={(event) => setSortBy(event.target.value)} className="h-10 border border-gray-300 bg-white px-3 text-sm"><option value="attention">{t("tb.portfolio.sort_attention")}</option><option value="departure">{t("tb.portfolio.sort_departure")}</option><option value="recent">{t("tb.portfolio.sort_recent")}</option><option value="margin">{t("tb.portfolio.sort_margin")}</option></select></label></section>
     <section className="mt-2 divide-y border-b border-gray-200">
-      {filtered.map((item) => {
+      {sortedItems.map((item) => {
         const due = item.payment_due_at ? new Date(item.payment_due_at) : null;
         const overdue = item.status === "booked" && item.payment_status !== "paid" && due && due < new Date();
         const supplierAlerts = Number(item.open_incident_count || 0) + Number(item.missing_confirmation_count || 0) + Number(item.missing_supplier_document_count || 0) + Number(item.supplier_document_review_count || 0) + Number(item.supplier_overdue_count || 0) + Number(item.overdue_task_count || 0) + Number(item.supplier_order_attention_count || 0) + Number(item.supplier_reply_overdue_count || 0);
