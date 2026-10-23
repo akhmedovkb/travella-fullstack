@@ -9,7 +9,7 @@ const pool = require("../db");
 const telegramClientController = require("../controllers/telegramClientController");
 const telegramProviderController = require("../controllers/telegramProviderController");
 const { loginWithTelegram } = require("../controllers/telegramWebAuthController");
-const { respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply } = require("../utils/tourServiceOrderResponse");
+const { respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply, consumeSupplierServiceOrderAttachment } = require("../utils/tourServiceOrderResponse");
 
 let sharp = null;
 try {
@@ -127,7 +127,7 @@ async function handleWebhook(req, res) {
       if (orderReply) {
         const result = await beginSupplierServiceOrderReply({ actorTelegramId: cq.from?.id, bookingId: Number(orderReply[1]) });
         await tgAnswerCallbackQuery(cq.id, result.ok ? "Напишите ответ следующим сообщением" : "Этот заказ недоступен", { show_alert: !result.ok });
-        if (result.ok && cq.message?.chat?.id) await tgSend(cq.message.chat.id, `💬 Напишите ответ DMC по услуге «${result.service_title || `#${result.booking_id}`}». Ответ нужно отправить в течение 30 минут.`);
+        if (result.ok && cq.message?.chat?.id) await tgSend(cq.message.chat.id, `💬 Напишите ответ или приложите документ/фото для DMC по услуге «${result.service_title || `#${result.booking_id}`}». Ответ нужно отправить в течение 30 минут.`);
         return res.json({ ok: true });
       }
       const orderResponse = data.match(/^tour_order:(\d+):(accepted|declined)$/);
@@ -278,6 +278,24 @@ async function handleWebhook(req, res) {
       const chatId = msg.chat.id;
       const username = msg.from?.username || msg.chat?.username || null;
       const text = String(msg.text || "").trim();
+
+      const bestPhoto = Array.isArray(msg.photo) && msg.photo.length ? msg.photo[msg.photo.length - 1] : null;
+      const media = msg.document ? {
+        kind: "document", ...msg.document, caption: msg.caption,
+      } : bestPhoto ? {
+        kind: "photo", ...bestPhoto, file_name: `photo-${msg.message_id || Date.now()}.jpg`, mime_type: "image/jpeg", caption: msg.caption,
+      } : null;
+      if (media) {
+        const supplierAttachment = await consumeSupplierServiceOrderAttachment({ actorTelegramId: msg.from?.id || chatId, attachment: media });
+        if (supplierAttachment.ok) {
+          await tgSend(chatId, "✅ Файл отправлен DMC и сохранён в истории заказа.");
+          return res.json({ ok: true, supplier_attachment: true });
+        }
+        if (supplierAttachment.code === "invalid_attachment") {
+          await tgSend(chatId, "⚠️ Не удалось принять файл. Максимальный размер — 20 МБ.");
+          return res.json({ ok: true, supplier_attachment: false });
+        }
+      }
 
       const supplierReply = await consumeSupplierServiceOrderReply({ actorTelegramId: msg.from?.id || chatId, text });
       if (supplierReply.ok) {

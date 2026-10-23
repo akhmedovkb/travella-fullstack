@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Bell, CalendarDays, CheckCircle2, CircleDashed, Clock3, Copy, CreditCard, FileText, ListTodo, Pencil, Plus, Save, Send, Trash2, UserRound, Users, X } from "lucide-react";
+import { ArrowLeft, Bell, CalendarDays, CheckCircle2, CircleDashed, Clock3, Copy, CreditCard, ExternalLink, FileText, ListTodo, Paperclip, Pencil, Plus, Save, Send, Trash2, UserRound, Users, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -13,6 +13,21 @@ const dateValue = (value) => value ? String(value).slice(0, 10) : "";
 const confirmedStatuses = new Set(["confirmed", "paid", "completed"]);
 const lockedStatuses = new Set(["booked", "paid", "cancelled"]);
 const fieldClass = "h-11 w-full border border-gray-300 bg-white px-3 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100";
+
+async function openAttachment(packageId, bookingId, eventId) {
+  const target = window.open("about:blank", "_blank");
+  if (target) target.opener = null;
+  try {
+    const response = await axios.get(`${API_BASE}/api/tour-packages/${packageId}/components/${bookingId}/events/${eventId}/attachment`, { ...cfg(), responseType: "blob" });
+    const url = URL.createObjectURL(response.data);
+    if (target) target.location.href = url;
+    else window.open(url, "_blank", "noopener,noreferrer");
+    window.setTimeout(() => URL.revokeObjectURL(url), 60000);
+  } catch (error) {
+    if (target) target.close();
+    throw error;
+  }
+}
 
 function currentOperationsTimeline(tourPackage, components) {
   if (String(tourPackage.status || "").toLowerCase() === "cancelled") return [];
@@ -93,7 +108,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, 
   const [supplierMessage, setSupplierMessage] = useState("");
   const ready = confirmedStatuses.has(String(item.status || "").toLowerCase());
   const orderStatus = String(item.service_order_status || "").toLowerCase();
-  const unreadReplyCount = (item.service_order_events || []).filter((event) => event.event_type === "message_received" && !event.read_at).length;
+  const unreadReplyCount = (item.service_order_events || []).filter((event) => ["message_received", "attachment_received"].includes(event.event_type) && !event.read_at).length;
   const reminderCoolingDown = item.service_order_last_reminded_at && Date.now() - new Date(item.service_order_last_reminded_at).getTime() < 60 * 60 * 1000;
   const setField = (name, value) => setForm((current) => ({ ...current, [name]: value }));
   useEffect(() => {
@@ -128,7 +143,7 @@ function ComponentOperationsCard({ item, currency, saving, onSave, onSendOrder, 
     </div>
     <label className="mt-3 inline-flex cursor-pointer items-center gap-2 text-sm font-semibold"><input type="checkbox" checked={form.supplier_paid} onChange={(e) => setField("supplier_paid", e.target.checked)} className="h-4 w-4 accent-emerald-600" />{t("tb.workspace.supplier_paid")}</label>
     {["sent", "accepted"].includes(orderStatus) && <div className="mt-4 flex items-end gap-2 border-t border-gray-200 pt-4"><LabeledField label={t("tb.documents.supplier_message")} wide><textarea rows={2} maxLength={1000} value={supplierMessage} onChange={(e) => setSupplierMessage(e.target.value)} placeholder={t("tb.documents.supplier_message_ph")} className="min-h-20 w-full resize-y border border-gray-300 bg-white px-3 py-2 text-sm outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" /></LabeledField><button type="button" disabled={saving || !supplierMessage.trim()} onClick={async () => { if (await onMessageOrder(item.id, supplierMessage)) setSupplierMessage(""); }} title={t("tb.documents.send_supplier_message")} className="inline-flex h-11 w-11 shrink-0 items-center justify-center bg-sky-700 text-white hover:bg-sky-800 disabled:opacity-40"><Send size={17} /></button></div>}
-    {item.service_order_events?.length > 0 && <details className="mt-4 border-t border-gray-200 pt-3"><summary className="cursor-pointer text-sm font-semibold text-gray-600">{t("tb.documents.service_order_history")} · {item.service_order_events.length}</summary><div className="mt-3 space-y-2">{item.service_order_events.map((event) => <div key={event.id} className="flex items-start justify-between gap-4 text-xs"><div><span className={`font-semibold ${["accepted", "message_received"].includes(event.event_type) ? "text-emerald-700" : ["declined", "cancelled", "delivery_failed"].includes(event.event_type) ? "text-red-700" : "text-gray-700"}`}>{t(`tb.documents.service_order_event_${event.event_type}`)}</span>{["message_sent", "message_received"].includes(event.event_type) && event.metadata?.message && <div className="mt-1 whitespace-pre-wrap text-gray-600">{event.metadata.message}</div>}</div><span className="shrink-0 text-gray-400">{dateTimeText(event.created_at)}</span></div>)}</div></details>}
+    {item.service_order_events?.length > 0 && <details className="mt-4 border-t border-gray-200 pt-3"><summary className="cursor-pointer text-sm font-semibold text-gray-600">{t("tb.documents.service_order_history")} · {item.service_order_events.length}</summary><div className="mt-3 space-y-2">{item.service_order_events.map((event) => <div key={event.id} className="flex items-start justify-between gap-4 text-xs"><div><span className={`font-semibold ${["accepted", "message_received", "attachment_received"].includes(event.event_type) ? "text-emerald-700" : ["declined", "cancelled", "delivery_failed"].includes(event.event_type) ? "text-red-700" : "text-gray-700"}`}>{t(`tb.documents.service_order_event_${event.event_type}`)}</span>{["message_sent", "message_received"].includes(event.event_type) && event.metadata?.message && <div className="mt-1 whitespace-pre-wrap text-gray-600">{event.metadata.message}</div>}{event.event_type === "attachment_received" && <div className="mt-1"><button type="button" onClick={() => openAttachment(packageId, item.id, event.id).catch(() => window.alert(t("tb.documents.attachment_error")))} className="inline-flex items-center gap-1.5 font-semibold text-sky-700 hover:underline"><Paperclip size={14} />{event.metadata?.file_name || t("tb.documents.open_attachment")}<ExternalLink size={12} /></button>{event.metadata?.caption && <div className="mt-1 whitespace-pre-wrap text-gray-600">{event.metadata.caption}</div>}</div>}</div><span className="shrink-0 text-gray-400">{dateTimeText(event.created_at)}</span></div>)}</div></details>}
   </article>;
 }
 
@@ -380,7 +395,7 @@ export default function TourPackageWorkspace() {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/read-messages`, {}, cfg());
       if (!data.read) return;
       const readAt = data.read_at || new Date().toISOString();
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: (item.service_order_events || []).map((event) => event.event_type === "message_received" && !event.read_at ? { ...event, read_at: readAt } : event) } : item) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: (item.service_order_events || []).map((event) => ["message_received", "attachment_received"].includes(event.event_type) && !event.read_at ? { ...event, read_at: readAt } : event) } : item) }));
     } catch {}
   }, [id]);
 

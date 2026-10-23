@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { actorMatchesProfile, profileChatId } = require("../utils/tourServiceOrderResponse");
+const { actorMatchesProfile, profileChatId, normalizeSupplierAttachment } = require("../utils/tourServiceOrderResponse");
 
 test("matches a supplier against every supported Telegram chat field", () => {
   assert.equal(actorMatchesProfile(123, { telegram_chat_id: "123" }), true);
@@ -13,4 +13,17 @@ test("selects the highest-priority Telegram chat field", () => {
   assert.equal(profileChatId({ telegram_web_chat_id: 10, telegram_chat_id: 20 }), 10);
   assert.equal(profileChatId({ tg_chat_id: 30 }), 30);
   assert.equal(profileChatId({}), null);
+});
+
+test("normalizes supplier documents without exposing unsafe file names", () => {
+  assert.deepEqual(normalizeSupplierAttachment({
+    kind: "document", file_id: "abc", file_unique_id: "unique", file_name: "invoice\r\n.pdf", mime_type: "application/pdf", file_size: 1200, caption: "Invoice",
+  }), {
+    kind: "document", file_id: "abc", file_unique_id: "unique", file_name: "invoice  .pdf", mime_type: "application/pdf", file_size: 1200, caption: "Invoice",
+  });
+});
+
+test("rejects missing and oversized supplier attachments", () => {
+  assert.equal(normalizeSupplierAttachment({ file_size: 100 }), null);
+  assert.equal(normalizeSupplierAttachment({ file_id: "abc", file_size: 20 * 1024 * 1024 + 1 }), null);
 });

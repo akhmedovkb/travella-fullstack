@@ -1,4 +1,5 @@
 const crypto = require("crypto");
+const axios = require("axios");
 const pool = require("../db");
 const { tgSend } = require("../utils/telegram");
 
@@ -410,6 +411,7 @@ async function ensureTourPackagesTable() {
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_events_booking ON tour_package_component_events(package_id, booking_id, created_at DESC)`);
   await pool.query(`ALTER TABLE tour_package_component_events ADD COLUMN IF NOT EXISTS read_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_events_unread ON tour_package_component_events(package_id, created_at DESC) WHERE event_type='message_received' AND read_at IS NULL`);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_events_supplier_unread ON tour_package_component_events(package_id, created_at DESC) WHERE event_type IN ('message_received','attachment_received') AND read_at IS NULL`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_tasks (
       id BIGSERIAL PRIMARY KEY,
@@ -556,7 +558,7 @@ async function markTourPackageComponentMessagesRead(req, res) {
       `UPDATE tour_package_component_events event SET read_at=NOW()
         FROM tour_packages tp,bookings booking
        WHERE event.package_id=$1::uuid AND event.booking_id=$2
-         AND event.event_type='message_received' AND event.read_at IS NULL
+         AND event.event_type IN ('message_received','attachment_received') AND event.read_at IS NULL
          AND tp.id=event.package_id AND tp.owner_provider_id=$3
          AND booking.id=event.booking_id AND booking.group_id=tp.id
        RETURNING event.id,event.read_at`,
@@ -566,6 +568,55 @@ async function markTourPackageComponentMessagesRead(req, res) {
   } catch (error) {
     console.error("markTourPackageComponentMessagesRead error:", error);
     return res.status(500).json({ message: "Failed to mark supplier messages as read" });
+  }
+}
+
+async function downloadTourPackageComponentAttachment(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const bookingId = Number(req.params.bookingId);
+    const eventId = Number(req.params.eventId);
+    if (![bookingId, eventId].every((value) => Number.isInteger(value) && value > 0)) {
+      return res.status(400).json({ message: "Valid booking and event IDs are required" });
+    }
+    const found = await pool.query(
+      `SELECT event.metadata
+         FROM tour_package_component_events event
+         JOIN tour_packages tp ON tp.id=event.package_id
+         JOIN bookings booking ON booking.id=event.booking_id AND booking.group_id=tp.id
+        WHERE event.id=$1 AND event.package_id=$2::uuid AND event.booking_id=$3
+          AND event.event_type='attachment_received' AND tp.owner_provider_id=$4
+        LIMIT 1`,
+      [eventId, req.params.id, bookingId, ownerId]
+    );
+    if (!found.rowCount) return res.status(404).json({ message: "Attachment not found" });
+    const metadata = found.rows[0].metadata || {};
+    const fileId = String(metadata.file_id || "").trim();
+    const token = String(process.env.TELEGRAM_CLIENT_BOT_TOKEN || process.env.TELEGRAM_BOT_TOKEN || "").trim();
+    if (!fileId || !token) return res.status(503).json({ message: "Attachment storage is unavailable" });
+    const fileInfo = await axios.get(`https://api.telegram.org/bot${token}/getFile`, {
+      params: { file_id: fileId }, timeout: 15000,
+    });
+    const filePath = String(fileInfo.data?.result?.file_path || "");
+    if (!filePath) return res.status(502).json({ message: "Telegram did not return the attachment" });
+    const file = await axios.get(`https://api.telegram.org/file/bot${token}/${filePath}`, {
+      responseType: "stream", timeout: 30000, maxContentLength: 20 * 1024 * 1024,
+    });
+    const fileName = String(metadata.file_name || "attachment").replace(/[\r\n"\\/]/g, "_").slice(0, 180) || "attachment";
+    res.set("Content-Type", String(metadata.mime_type || file.headers["content-type"] || "application/octet-stream"));
+    res.set("Content-Disposition", `inline; filename="${fileName.replace(/[^\x20-\x7E]/g, "_")}"; filename*=UTF-8''${encodeURIComponent(fileName)}`);
+    res.set("Cache-Control", "private, no-store");
+    file.data.on("error", (error) => {
+      console.error("attachment stream error:", error?.message || error);
+      if (!res.headersSent) res.status(502).end(); else res.destroy(error);
+    });
+    return file.data.pipe(res);
+  } catch (error) {
+    console.error("downloadTourPackageComponentAttachment error:", error?.response?.data || error?.message || error);
+    if (!res.headersSent) return res.status(502).json({ message: "Failed to download attachment" });
+    return res.end();
   }
 }
 
@@ -667,29 +718,29 @@ async function listTourPackages(req, res) {
               (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE AND task.due_at < CURRENT_DATE) AS overdue_task_count,
               (SELECT MIN(task.due_at) FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS next_task_due_at,
               (SELECT COUNT(*)::int FROM tour_package_component_events event
-                WHERE event.package_id=tp.id AND event.event_type='message_received' AND event.read_at IS NULL) AS unread_supplier_reply_count,
+                WHERE event.package_id=tp.id AND event.event_type IN ('message_received','attachment_received') AND event.read_at IS NULL) AS unread_supplier_reply_count,
               (SELECT event.booking_id FROM tour_package_component_events event
-                WHERE event.package_id=tp.id AND event.event_type='message_received' AND event.read_at IS NULL
+                WHERE event.package_id=tp.id AND event.event_type IN ('message_received','attachment_received') AND event.read_at IS NULL
                 ORDER BY event.created_at DESC,event.id DESC LIMIT 1) AS latest_supplier_reply_booking_id,
               (SELECT COUNT(*)::int FROM (
                 SELECT DISTINCT ON (event.booking_id) event.booking_id,event.event_type,event.created_at
                   FROM tour_package_component_events event
-                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','message_sent')
+                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','attachment_received','message_sent')
                  ORDER BY event.booking_id,event.created_at DESC,event.id DESC
-              ) dialogue WHERE dialogue.event_type='message_received') AS supplier_reply_pending_count,
+              ) dialogue WHERE dialogue.event_type IN ('message_received','attachment_received')) AS supplier_reply_pending_count,
               (SELECT dialogue.booking_id FROM (
                 SELECT DISTINCT ON (event.booking_id) event.booking_id,event.event_type,event.created_at,event.id
                   FROM tour_package_component_events event
-                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','message_sent')
+                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','attachment_received','message_sent')
                  ORDER BY event.booking_id,event.created_at DESC,event.id DESC
-              ) dialogue WHERE dialogue.event_type='message_received'
+              ) dialogue WHERE dialogue.event_type IN ('message_received','attachment_received')
                 ORDER BY dialogue.created_at DESC,dialogue.id DESC LIMIT 1) AS latest_supplier_reply_pending_booking_id,
               (SELECT COUNT(*)::int FROM (
                 SELECT DISTINCT ON (event.booking_id) event.booking_id,event.event_type,event.created_at
                   FROM tour_package_component_events event
-                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','message_sent')
+                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','attachment_received','message_sent')
                  ORDER BY event.booking_id,event.created_at DESC,event.id DESC
-              ) dialogue WHERE dialogue.event_type='message_received' AND dialogue.created_at < NOW() - INTERVAL '24 hours') AS supplier_reply_overdue_count,
+              ) dialogue WHERE dialogue.event_type IN ('message_received','attachment_received') AND dialogue.created_at < NOW() - INTERVAL '24 hours') AS supplier_reply_overdue_count,
               COUNT(b.id) FILTER (
                 WHERE b.status IN ('confirmed','paid','completed')
                   AND tp.status <> 'cancelled'
@@ -1494,6 +1545,7 @@ module.exports = {
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
   markTourPackageComponentMessagesRead,
+  downloadTourPackageComponentAttachment,
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
   cancelTourPackageServiceOrder,

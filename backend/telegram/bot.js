@@ -47,7 +47,7 @@ const {
 } = require("../utils/providerTelegramResolver");
 const { verifyProviderTelegramLinkPayload } = require("../utils/providerTelegramLink");
 const { isRegistrationCallbackData } = require("../utils/telegramRegistration");
-const { respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply } = require("../utils/tourServiceOrderResponse");
+const { respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply, consumeSupplierServiceOrderAttachment } = require("../utils/tourServiceOrderResponse");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -3955,12 +3955,35 @@ bot.action(/^tour_order_reply:(\d+)$/, async (ctx) => {
       await ctx.answerCbQuery("Этот заказ недоступен", { show_alert: true });
       return;
     }
-    await ctx.answerCbQuery("Напишите ответ следующим сообщением");
-    await safeReply(ctx, `💬 Напишите ответ DMC по услуге «${result.service_title || `#${result.booking_id}`}». Ответ нужно отправить в течение 30 минут.`);
+    await ctx.answerCbQuery("Отправьте сообщение или файл");
+    await safeReply(ctx, `💬 Напишите ответ или приложите документ/фото для DMC по услуге «${result.service_title || `#${result.booking_id}`}». Ответ нужно отправить в течение 30 минут.`);
   } catch (error) {
     console.error("[tg-bot] begin tour order reply error:", error?.message || error);
     try { await ctx.answerCbQuery("Не удалось начать ответ", { show_alert: true }); } catch {}
   }
+});
+
+bot.on(["document", "photo"], async (ctx, next) => {
+  try {
+    const bestPhoto = Array.isArray(ctx.message?.photo) && ctx.message.photo.length ? ctx.message.photo[ctx.message.photo.length - 1] : null;
+    const attachment = ctx.message?.document ? {
+      kind: "document", ...ctx.message.document, caption: ctx.message.caption,
+    } : bestPhoto ? {
+      kind: "photo", ...bestPhoto, file_name: `photo-${ctx.message?.message_id || Date.now()}.jpg`, mime_type: "image/jpeg", caption: ctx.message.caption,
+    } : null;
+    const result = await consumeSupplierServiceOrderAttachment({ actorTelegramId: ctx.from?.id, attachment });
+    if (result.ok) {
+      await safeReply(ctx, "✅ Файл отправлен DMC и сохранён в истории заказа.");
+      return;
+    }
+    if (result.code === "invalid_attachment") {
+      await safeReply(ctx, "⚠️ Не удалось принять файл. Максимальный размер — 20 МБ.");
+      return;
+    }
+  } catch (error) {
+    console.error("[tg-bot] supplier attachment error:", error?.message || error);
+  }
+  return next();
 });
 
 // ===================== ACTUAL REMINDER CALLBACK (svc_actual:...) =====================

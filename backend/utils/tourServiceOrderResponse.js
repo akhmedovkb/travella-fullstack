@@ -13,6 +13,24 @@ function actorMatchesProfile(actorTelegramId, profile = {}) {
   return Boolean(actor) && chatFields.some((field) => String(profile[field] || "").trim() === actor);
 }
 
+function normalizeSupplierAttachment(input = {}) {
+  const kind = input.kind === "photo" ? "photo" : "document";
+  const fileId = String(input.file_id || "").trim();
+  const fileSize = Math.max(0, Number(input.file_size) || 0);
+  if (!fileId || fileSize > 20 * 1024 * 1024) return null;
+  const fallbackName = kind === "photo" ? `photo-${Date.now()}.jpg` : "attachment";
+  const fileName = String(input.file_name || fallbackName).replace(/[\r\n]/g, " ").trim().slice(0, 180) || fallbackName;
+  return {
+    kind,
+    file_id: fileId,
+    file_unique_id: String(input.file_unique_id || "").trim().slice(0, 180) || null,
+    file_name: fileName,
+    mime_type: String(input.mime_type || (kind === "photo" ? "image/jpeg" : "application/octet-stream")).trim().slice(0, 120),
+    file_size: fileSize || null,
+    caption: String(input.caption || "").trim().slice(0, 1000) || null,
+  };
+}
+
 async function respondToSupplierServiceOrder({ actorTelegramId, bookingId, decision }) {
   const normalizedDecision = decision === "accepted" ? "accepted" : decision === "declined" ? "declined" : null;
   if (!normalizedDecision || !Number.isInteger(Number(bookingId)) || Number(bookingId) <= 0) {
@@ -183,4 +201,54 @@ async function consumeSupplierServiceOrderReply({ actorTelegramId, text }) {
   return { ok: true, booking_id: item.booking_id, service_order_event: event.rows[0] };
 }
 
-module.exports = { actorMatchesProfile, profileChatId, respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply };
+async function consumeSupplierServiceOrderAttachment({ actorTelegramId, attachment }) {
+  const actor = String(actorTelegramId || "").trim();
+  const normalized = normalizeSupplierAttachment(attachment);
+  if (!actor || !normalized) return { ok: false, code: normalized ? "not_pending" : "invalid_attachment" };
+  await ensureSupplierReplyTable();
+  const pending = await pool.query(
+    `SELECT b.id AS booking_id,tp.id AS package_id,tp.title,tp.booking_reference,
+            s.title AS service_title,to_jsonb(supplier) AS supplier_profile,to_jsonb(agency) AS agency_profile
+       FROM tour_package_supplier_reply_pending pending
+       JOIN bookings b ON b.id=pending.booking_id
+       JOIN tour_packages tp ON tp.id=b.group_id
+       JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+       LEFT JOIN services s ON s.id=b.service_id
+       JOIN providers supplier ON supplier.id=b.provider_id
+       JOIN providers agency ON agency.id=tp.owner_provider_id
+      WHERE pending.actor_telegram_id=$1 AND pending.expires_at>NOW()
+      LIMIT 1`,
+    [actor]
+  );
+  if (!pending.rowCount) return { ok: false, code: "not_pending" };
+  const item = pending.rows[0];
+  if (!actorMatchesProfile(actor, item.supplier_profile || {})) return { ok: false, code: "forbidden" };
+  const consumed = await pool.query(
+    `DELETE FROM tour_package_supplier_reply_pending
+      WHERE actor_telegram_id=$1 AND booking_id=$2 AND expires_at>NOW()
+      RETURNING actor_telegram_id`,
+    [actor, item.booking_id]
+  );
+  if (!consumed.rowCount) return { ok: false, code: "not_pending" };
+  const event = await pool.query(
+    `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,actor_telegram_id,metadata)
+     VALUES($1::uuid,$2,'attachment_received','supplier',$3,$4::jsonb)
+     RETURNING id,event_type,actor_type,created_at,metadata`,
+    [item.package_id, item.booking_id, actor, JSON.stringify(normalized)]
+  );
+  const agencyChatId = profileChatId(item.agency_profile || {});
+  if (agencyChatId) {
+    const safe = (value) => String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    await tgSend(agencyChatId, [
+      "📎 <b>Поставщик приложил файл к заказу</b>",
+      `Тур: <b>${safe(item.title || "—")}</b>`,
+      item.booking_reference ? `Номер тура: ${safe(item.booking_reference)}` : "",
+      `Услуга: <b>${safe(item.service_title || "—")}</b>`,
+      `Файл: ${safe(normalized.file_name)}`,
+      normalized.caption ? `Комментарий: ${safe(normalized.caption)}` : "",
+    ].filter(Boolean).join("\n"));
+  }
+  return { ok: true, booking_id: item.booking_id, service_order_event: event.rows[0] };
+}
+
+module.exports = { actorMatchesProfile, profileChatId, normalizeSupplierAttachment, respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply, consumeSupplierServiceOrderAttachment };
