@@ -382,6 +382,25 @@ async function ensureTourPackagesTable() {
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_revisions_package ON tour_package_revisions(package_id, version DESC)`);
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_proposal_responses (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      revision INTEGER NOT NULL,
+      response VARCHAR(32) NOT NULL,
+      message TEXT,
+      responded_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      UNIQUE(package_id, revision)
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_proposal_responses_package ON tour_package_proposal_responses(package_id, revision DESC)`);
+  await pool.query(`
+    INSERT INTO tour_package_proposal_responses(package_id,revision,response,message,responded_at)
+    SELECT id,current_revision,proposal_response,proposal_response_message,COALESCE(proposal_responded_at,NOW())
+      FROM tour_packages
+     WHERE proposal_response IS NOT NULL AND current_revision > 0
+    ON CONFLICT(package_id,revision) DO NOTHING
+  `);
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_payment_events (
       id BIGSERIAL PRIMARY KEY,
       package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
@@ -1056,11 +1075,15 @@ async function getTourPackage(req, res) {
     const bookings = await packageBookings(req.params.id);
     const item = result.rows[0];
     const revisions = await pool.query(
-      `SELECT version,created_at,
-              snapshot->>'title' AS title,
-              snapshot->>'gross_total' AS gross_total,
-              snapshot->>'currency' AS currency
-         FROM tour_package_revisions WHERE package_id=$1::uuid ORDER BY version DESC`,
+      `SELECT rev.version,rev.created_at,
+              rev.snapshot->>'title' AS title,
+              rev.snapshot->>'gross_total' AS gross_total,
+              rev.snapshot->>'currency' AS currency,
+              response.response,response.message AS response_message,response.responded_at
+         FROM tour_package_revisions rev
+         LEFT JOIN tour_package_proposal_responses response
+           ON response.package_id=rev.package_id AND response.revision=rev.version
+        WHERE rev.package_id=$1::uuid ORDER BY rev.version DESC`,
       [req.params.id]
     );
     const paymentEvents = await pool.query(
@@ -1295,6 +1318,7 @@ async function shareTourPackage(req, res) {
 }
 
 async function respondToTourProposal(req, res) {
+  const client = await pool.connect();
   try {
     const token = String(req.params.token || "");
     const response = String(req.body?.response || "").trim().toLowerCase();
@@ -1304,16 +1328,29 @@ async function respondToTourProposal(req, res) {
       return res.status(400).json({ message: "Valid proposal response is required" });
     }
     await ensureTourPackagesTable();
-    const result = await pool.query(
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_packages SET proposal_response=$2,
          proposal_response_message=$3, proposal_responded_at=NOW(), updated_at=NOW()
          ,accepted_revision=CASE WHEN $2='accepted' THEN current_revision ELSE NULL END
-       WHERE share_token_hash=$1 AND share_expires_at > NOW()
-       RETURNING id,owner_provider_id,title,client_name,proposal_response,
+       WHERE share_token_hash=$1 AND share_expires_at > NOW() AND proposal_response IS NULL
+       RETURNING id,owner_provider_id,title,client_name,current_revision,proposal_response,
          proposal_response_message,proposal_responded_at`,
       [hashShareToken(token), response, message]
     );
-    if (!result.rowCount) return res.status(404).json({ message: "Proposal not found or expired" });
+    if (!result.rowCount) {
+      await client.query("ROLLBACK");
+      return res.status(404).json({ message: "Proposal not found, expired or already answered" });
+    }
+    await client.query(
+      `INSERT INTO tour_package_proposal_responses(package_id,revision,response,message,responded_at)
+       VALUES($1::uuid,$2,$3,$4,$5)
+       ON CONFLICT(package_id,revision) DO UPDATE SET
+         response=EXCLUDED.response,message=EXCLUDED.message,responded_at=EXCLUDED.responded_at`,
+      [result.rows[0].id, result.rows[0].current_revision, result.rows[0].proposal_response,
+        result.rows[0].proposal_response_message, result.rows[0].proposal_responded_at]
+    );
+    await client.query("COMMIT");
     setImmediate(() => { notifyAgencyProposalResponse(result.rows[0]); });
     res.set("Cache-Control", "no-store");
     return res.json({
@@ -1322,9 +1359,10 @@ async function respondToTourProposal(req, res) {
       proposal_responded_at: result.rows[0].proposal_responded_at,
     });
   } catch (error) {
+    await client.query("ROLLBACK").catch(() => {});
     console.error("respondToTourProposal error:", error);
     return res.status(500).json({ message: "Failed to save proposal response" });
-  }
+  } finally { client.release(); }
 }
 
 function isValidProposalResponse(value) {

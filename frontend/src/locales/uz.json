@@ -1822,6 +1822,7 @@
       "revisions": "Takliflar tarixi",
       "version": "{{version}}-versiya",
       "accepted": "mijoz tomonidan qabul qilingan",
+      "responded_at": "Javob olindi",
       "no_revisions": "Mijozga hali taklif yuborilmagan.",
       "client": "Mijoz",
       "client_missing": "Mijoz ko‘rsatilmagan",
