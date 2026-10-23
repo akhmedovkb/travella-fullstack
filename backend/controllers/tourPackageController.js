@@ -925,6 +925,13 @@ async function listTourPackages(req, res) {
               (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS open_task_count,
               (SELECT COUNT(*)::int FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE AND task.due_at < CURRENT_DATE) AS overdue_task_count,
               (SELECT COUNT(*)::int FROM tour_package_incidents incident WHERE incident.package_id=tp.id AND incident.status<>'resolved') AS open_incident_count,
+              (SELECT COUNT(*)::int FROM tour_package_proposal_responses response
+                WHERE response.package_id=tp.id) AS proposal_response_count,
+              (SELECT COALESCE(AVG(EXTRACT(EPOCH FROM (response.responded_at-revision.created_at))),0)::float
+                 FROM tour_package_proposal_responses response
+                 JOIN tour_package_revisions revision
+                   ON revision.package_id=response.package_id AND revision.version=response.revision
+                WHERE response.package_id=tp.id AND response.responded_at >= revision.created_at) AS proposal_avg_response_seconds,
               (SELECT MIN(task.due_at) FROM tour_package_tasks task WHERE task.package_id=tp.id AND task.completed=FALSE) AS next_task_due_at,
               (SELECT COUNT(*)::int FROM tour_package_component_events event
                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','attachment_received') AND event.read_at IS NULL) AS unread_supplier_reply_count,
