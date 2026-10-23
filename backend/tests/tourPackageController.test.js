@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizePackageRefund, normalizeProposalResponseReason, normalizeTourCancellationReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizePackageRefund, normalizeProposalResponseReason, normalizeSupplierRefund, normalizeTourCancellationReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -32,6 +32,13 @@ test("derives a cancelled tour refund status without exceeding received funds", 
   assert.deepEqual(normalizePackageRefund({ refund_due_amount: 1200, refunded_amount: 1200 }, 1000), {
     refundStatus: "refunded", refundDueAmount: 1000, refundedAmount: 1000, refundDueAt: null, refundNote: null,
   });
+});
+
+test("derives supplier recovery status without exceeding paid cost", () => {
+  assert.deepEqual(normalizeSupplierRefund({ supplier_refund_due_amount: 700, supplier_refunded_amount: 250, supplier_refund_due_at: "2026-11-05", supplier_refund_note: " Hotel refund " }, 800), {
+    status: "partial", dueAmount: 700, receivedAmount: 250, dueAt: "2026-11-05", note: "Hotel refund",
+  });
+  assert.equal(normalizeSupplierRefund({ supplier_refund_due_amount: 900, supplier_refunded_amount: 900 }, 800).receivedAmount, 800);
 });
 
 test("normalizes private traveler details", () => {

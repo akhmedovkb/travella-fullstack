@@ -53,6 +53,20 @@ function normalizePackageRefund(body = {}, paidAmount = 0) {
   };
 }
 
+function normalizeSupplierRefund(body = {}, supplierCost = 0) {
+  const paid = cleanMoney(supplierCost);
+  const dueAmount = Math.min(cleanMoney(body.supplier_refund_due_amount), paid);
+  const receivedAmount = Math.min(cleanMoney(body.supplier_refunded_amount), dueAmount);
+  const status = dueAmount <= 0 ? "not_required" : receivedAmount >= dueAmount ? "refunded" : receivedAmount > 0 ? "partial" : "pending";
+  return {
+    status,
+    dueAmount,
+    receivedAmount,
+    dueAt: status === "refunded" || status === "not_required" ? null : body.supplier_refund_due_at || null,
+    note: String(body.supplier_refund_note || "").trim().slice(0, 1000) || null,
+  };
+}
+
 function normalizeTraveler(body = {}, index = 0) {
   const isoDate = (value) => /^\d{4}-\d{2}-\d{2}$/.test(String(value || "").trim())
     ? String(value).trim()
@@ -516,6 +530,12 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS performance_note TEXT`);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS actual_supplier_cost NUMERIC(18,2)`);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS cost_variance_note TEXT`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_refund_status VARCHAR(16) NOT NULL DEFAULT 'not_required'`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_refund_due_amount NUMERIC(18,2) NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_refunded_amount NUMERIC(18,2) NOT NULL DEFAULT 0`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_refund_due_at DATE`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_refund_note TEXT`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS supplier_refunded_at TIMESTAMPTZ`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_component_events (
@@ -600,6 +620,8 @@ async function packageBookings(packageId) {
             ops.service_order_last_reminded_at,
             ops.quality_rating,ops.reliability_rating,ops.performance_note,
             ops.actual_supplier_cost,ops.cost_variance_note,
+            ops.supplier_refund_status,ops.supplier_refund_due_amount,ops.supplier_refunded_amount,
+            ops.supplier_refund_due_at,ops.supplier_refund_note,ops.supplier_refunded_at,
             COALESCE((
               SELECT jsonb_agg(jsonb_build_object(
                 'id',event.id,'event_type',event.event_type,'actor_type',event.actor_type,
@@ -691,6 +713,49 @@ async function updateTourPackageComponentOperations(req, res) {
   } catch (error) {
     console.error("updateTourPackageComponentOperations error:", error);
     return res.status(500).json({ message: "Failed to update component operations" });
+  }
+}
+
+async function updateTourPackageSupplierRefund(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const bookingId = Number(req.params.bookingId);
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
+    const current = await pool.query(
+      `SELECT tp.status,b.provider_price,COALESCE(ops.actual_supplier_cost,b.provider_price,0) AS supplier_cost,
+              COALESCE(ops.supplier_paid,FALSE) AS supplier_paid
+         FROM tour_packages tp
+         JOIN bookings b ON b.group_id=tp.id AND b.id=$3
+         LEFT JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+        WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
+      [req.params.id, ownerId, bookingId]
+    );
+    if (!current.rowCount) return res.status(404).json({ message: "Tour package component not found" });
+    if (String(current.rows[0].status) !== "cancelled") return res.status(409).json({ message: "Supplier refunds can only be recorded for cancelled tours" });
+    if (!current.rows[0].supplier_paid) return res.status(409).json({ message: "Supplier payment must be recorded before a refund" });
+    const refund = normalizeSupplierRefund(req.body, current.rows[0].supplier_cost);
+    const result = await pool.query(
+      `UPDATE tour_package_component_ops SET supplier_refund_status=$3,supplier_refund_due_amount=$4,
+         supplier_refunded_amount=$5,supplier_refund_due_at=$6::date,supplier_refund_note=$7,
+         supplier_refunded_at=CASE WHEN $3='refunded' THEN COALESCE(supplier_refunded_at,NOW()) ELSE NULL END,updated_at=NOW()
+        WHERE package_id=$1::uuid AND booking_id=$2
+        RETURNING booking_id,supplier_refund_status,supplier_refund_due_amount,supplier_refunded_amount,
+          supplier_refund_due_at,supplier_refund_note,supplier_refunded_at,updated_at`,
+      [req.params.id, bookingId, refund.status, refund.dueAmount, refund.receivedAmount, refund.dueAt, refund.note]
+    );
+    const event = await pool.query(
+      `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,metadata)
+       VALUES($1::uuid,$2,'supplier_refund_updated','dmc',jsonb_build_object(
+         'status',$3::text,'due_amount',$4::numeric,'received_amount',$5::numeric,'due_at',$6::text,'note',$7::text))
+       RETURNING id,event_type,actor_type,created_at,metadata`,
+      [req.params.id, bookingId, refund.status, refund.dueAmount, refund.receivedAmount, refund.dueAt, refund.note]
+    );
+    return res.json({ ...result.rows[0], service_order_event: event.rows[0] });
+  } catch (error) {
+    console.error("updateTourPackageSupplierRefund error:", error);
+    return res.status(500).json({ message: "Failed to update supplier refund" });
   }
 }
 
@@ -1577,6 +1642,15 @@ async function cancelTourPackage(req, res) {
       [req.params.id]
     );
     await client.query(
+      `UPDATE tour_package_component_ops ops SET
+         supplier_refund_status='pending',
+         supplier_refund_due_amount=COALESCE(ops.actual_supplier_cost,booking.provider_price,0),
+         supplier_refunded_amount=0,supplier_refund_due_at=NULL,supplier_refund_note=NULL,supplier_refunded_at=NULL,updated_at=NOW()
+        FROM bookings booking
+       WHERE ops.package_id=$1::uuid AND booking.id=ops.booking_id AND COALESCE(ops.supplier_paid,FALSE)=TRUE`,
+      [req.params.id]
+    );
+    await client.query(
       `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
         WHERE package_id=$1::uuid AND completed=FALSE`,
       [req.params.id]
@@ -2170,6 +2244,7 @@ module.exports = {
   canEditTourPackage,
   normalizePackagePayment,
   normalizePackageRefund,
+  normalizeSupplierRefund,
   normalizeTraveler,
   normalizeComponentOperations,
   normalizeTourTask,
@@ -2208,6 +2283,7 @@ module.exports = {
   updateTourPackageRefund,
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
+  updateTourPackageSupplierRefund,
   markTourPackageComponentMessagesRead,
   downloadTourPackageComponentAttachment,
   updateTourPackageComponentAttachment,

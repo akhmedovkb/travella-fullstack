@@ -18,6 +18,7 @@ const {
   updateTourPackageRefund,
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
+  updateTourPackageSupplierRefund,
   markTourPackageComponentMessagesRead,
   downloadTourPackageComponentAttachment,
   updateTourPackageComponentAttachment,
@@ -52,6 +53,7 @@ router.patch("/:id/manager", updateTourPackageManager);
 router.post("/:id/client-followup", recordTourPackageClientFollowup);
 router.put("/:id/travelers", replaceTourPackageTravelers);
 router.patch("/:id/components/:bookingId", updateTourPackageComponentOperations);
+router.patch("/:id/components/:bookingId/refund", updateTourPackageSupplierRefund);
 router.post("/:id/components/:bookingId/read-messages", markTourPackageComponentMessagesRead);
 router.get("/:id/components/:bookingId/events/:eventId/attachment", downloadTourPackageComponentAttachment);
 router.patch("/:id/components/:bookingId/events/:eventId/attachment", updateTourPackageComponentAttachment);
