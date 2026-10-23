@@ -245,6 +245,12 @@ async function consumeSupplierServiceOrderAttachment({ actorTelegramId, attachme
      RETURNING id,event_type,actor_type,created_at,metadata`,
     [item.package_id, item.booking_id, actor, JSON.stringify(normalized)]
   );
+  await pool.query(
+    `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
+      WHERE package_id=$1::uuid AND booking_id=$2
+        AND task_type='follow_up_supplier_documents' AND completed=FALSE`,
+    [item.package_id, item.booking_id]
+  );
   const agencyChatId = profileChatId(item.agency_profile || {});
   if (agencyChatId) {
     const safe = (value) => String(value || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

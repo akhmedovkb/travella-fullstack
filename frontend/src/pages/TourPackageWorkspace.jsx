@@ -194,6 +194,8 @@ function OperationsTasks({ items = [], saving, onCreate, onToggle, onDelete, t }
         ? t("tb.tasks.replace_declined_supplier", { service: item.service_title || `#${item.booking_id}` })
         : item.task_type === "follow_up_supplier_order"
           ? t("tb.tasks.follow_up_supplier_order", { service: item.service_title || `#${item.booking_id}` })
+          : item.task_type === "follow_up_supplier_documents"
+            ? t("tb.tasks.follow_up_supplier_documents", { service: item.service_title || `#${item.booking_id}` })
           : item.title;
       return <div key={item.id} className={`flex flex-wrap items-center gap-3 px-2 py-3 ${item.completed ? "opacity-55" : ""}`}><button type="button" onClick={() => onToggle(item)} title={item.completed ? t("tb.tasks.reopen") : t("tb.tasks.complete")} className={item.completed ? "text-emerald-600" : "text-gray-400 hover:text-emerald-600"}>{item.completed ? <CheckCircle2 size={21} /> : <CircleDashed size={21} />}</button><div className="min-w-[220px] flex-1"><div className={`font-semibold ${item.completed ? "line-through" : ""}`}>{title}{item.task_type && <span className="ml-2 bg-sky-50 px-1.5 py-0.5 text-[10px] font-bold uppercase text-sky-700">{t("tb.tasks.automatic")}</span>}</div><div className="mt-0.5 text-xs text-gray-500">{item.assigned_to || t("tb.tasks.unassigned")}{item.due_at ? ` · ${dateText(item.due_at)}` : ""}</div></div><span className={`px-2 py-1 text-xs font-bold ${priorityTone[item.priority] || priorityTone.normal}`}>{t(`tb.tasks.priority_${item.priority || "normal"}`)}</span>{overdue && <span className="text-xs font-bold text-red-700">{t("tb.tasks.overdue")}</span>}<button type="button" onClick={() => onDelete(item.id)} title={t("common.delete")} className="inline-flex h-9 w-9 items-center justify-center text-red-600 hover:bg-red-50"><Trash2 size={16} /></button></div>;
     })}{!items.length && <div className="py-6 text-center text-sm text-gray-500">{t("tb.tasks.empty")}</div>}</div>
@@ -375,7 +377,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/request-documents`, {}, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), tasks: data.task ? [data.task, ...(current.tasks || []).filter((task) => !(task.task_type === data.task.task_type && Number(task.booking_id) === Number(data.task.booking_id) && !task.completed))] : current.tasks }));
       setNotice(t("tb.documents.document_request_sent")); return true;
     } catch (requestError) {
       setError(requestError?.response?.status === 429 ? t("tb.documents.document_request_cooldown") : requestError?.response?.data?.message || t("tb.documents.document_request_error")); return false;
@@ -389,7 +391,8 @@ export default function TourPackageWorkspace() {
     const results = await Promise.allSettled(targets.map(async (item) => ({ bookingId: item.id, data: (await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${item.id}/request-documents`, {}, cfg())).data })));
     const sent = results.filter((result) => result.status === "fulfilled").map((result) => result.value);
     const updates = new Map(sent.map((entry) => [Number(entry.bookingId), entry.data.service_order_event]));
-    setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => updates.has(Number(item.id)) ? { ...item, service_order_events: [updates.get(Number(item.id)), ...(item.service_order_events || [])] } : item) }));
+    const tasks = sent.map((entry) => entry.data.task).filter(Boolean);
+    setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => updates.has(Number(item.id)) ? { ...item, service_order_events: [updates.get(Number(item.id)), ...(item.service_order_events || [])] } : item), tasks: [...tasks, ...(current.tasks || []).filter((task) => !tasks.some((fresh) => fresh.task_type === task.task_type && Number(fresh.booking_id) === Number(task.booking_id) && !task.completed))] }));
     setNotice(t("tb.documents.request_all_documents_result", { sent: sent.length, total: targets.length }));
     if (sent.length < targets.length) setError(t("tb.documents.document_request_failed_count", { count: targets.length - sent.length }));
     setSaving(false);

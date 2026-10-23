@@ -1638,6 +1638,7 @@
       "automatic": "Авто",
       "replace_declined_supplier": "Заменить поставщика: {{service}}",
       "follow_up_supplier_order": "Связаться с поставщиком: {{service}}",
+      "follow_up_supplier_documents": "Получить документы от поставщика: {{service}}",
       "empty": "Задач по туру пока нет",
       "created": "Задача добавлена",
       "save_error": "Не удалось сохранить задачу",

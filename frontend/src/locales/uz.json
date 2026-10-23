@@ -1714,6 +1714,7 @@
       "automatic": "Avto",
       "replace_declined_supplier": "Ta’minotchini almashtirish: {{service}}",
       "follow_up_supplier_order": "Ta’minotchi bilan bog‘lanish: {{service}}",
+      "follow_up_supplier_documents": "Ta’minotchi hujjatlarini olish: {{service}}",
       "empty": "Bu tur uchun vazifalar hozircha yo‘q",
       "created": "Vazifa qo‘shildi",
       "save_error": "Vazifani saqlab bo‘lmadi",

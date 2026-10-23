@@ -1370,7 +1370,15 @@ async function requestTourPackageSupplierDocuments(req, res) {
        RETURNING id,event_type,actor_type,created_at,metadata`,
       [packageId, bookingId]
     );
-    return res.json({ requested: true, service_order_event: event.rows[0] });
+    const task = await pool.query(
+      `INSERT INTO tour_package_tasks(package_id,title,task_type,booking_id,due_at,priority)
+       VALUES($1::uuid,$2,'follow_up_supplier_documents',$3,CURRENT_DATE + 1,'high')
+       ON CONFLICT (package_id,booking_id,task_type) WHERE completed=FALSE AND task_type IS NOT NULL
+       DO UPDATE SET title=EXCLUDED.title,due_at=EXCLUDED.due_at,priority='high',updated_at=NOW()
+       RETURNING id,title,task_type,booking_id,assigned_to,due_at,priority,completed,created_at,updated_at`,
+      [packageId, `Follow up supplier documents: ${item.service_title || `#${bookingId}`}`, bookingId]
+    );
+    return res.json({ requested: true, service_order_event: event.rows[0], task: task.rows[0] });
   } catch (error) {
     console.error("requestTourPackageSupplierDocuments error:", error);
     return res.status(500).json({ message: "Failed to request supplier documents" });
@@ -1415,7 +1423,7 @@ async function cancelTourPackageServiceOrder(req, res) {
     const closedTasks = await pool.query(
       `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
        WHERE package_id=$1::uuid AND booking_id=$2
-         AND task_type='follow_up_supplier_order' AND completed=FALSE
+         AND task_type IN ('follow_up_supplier_order','follow_up_supplier_documents') AND completed=FALSE
        RETURNING id`,
       [packageId, bookingId]
     );
