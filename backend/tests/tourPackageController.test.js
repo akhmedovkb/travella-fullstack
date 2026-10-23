@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizeProposalResponseReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizeProposalResponseReason, normalizeTourCancellationReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -76,6 +76,11 @@ test("normalizes structured proposal decline reasons", () => {
   assert.equal(normalizeProposalResponseReason(" budget "), "budget");
   assert.equal(normalizeProposalResponseReason("plans_changed"), "plans_changed");
   assert.equal(normalizeProposalResponseReason("unknown"), null);
+});
+
+test("normalizes a required tour cancellation reason", () => {
+  assert.equal(normalizeTourCancellationReason("  Client   cancelled the trip  "), "Client cancelled the trip");
+  assert.equal(normalizeTourCancellationReason("x".repeat(1200)).length, 1000);
 });
 
 test("creates a readable booking reference", () => {

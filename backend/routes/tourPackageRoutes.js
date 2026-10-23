@@ -14,6 +14,7 @@ const {
   respondToTourProposal,
   confirmTourPackageSale,
   updateTourPackagePayment,
+  cancelTourPackage,
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
   markTourPackageComponentMessagesRead,
@@ -44,6 +45,7 @@ router.post("/:id/share", shareTourPackage);
 router.delete("/:id/share", revokeTourPackageShare);
 router.post("/:id/confirm-sale", confirmTourPackageSale);
 router.patch("/:id/payment", updateTourPackagePayment);
+router.post("/:id/cancel", cancelTourPackage);
 router.patch("/:id/manager", updateTourPackageManager);
 router.post("/:id/client-followup", recordTourPackageClientFollowup);
 router.put("/:id/travelers", replaceTourPackageTravelers);

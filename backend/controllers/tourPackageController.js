@@ -376,6 +376,8 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS current_revision INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS accepted_revision INTEGER`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS cancellation_reason TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ`);
   await pool.query(`UPDATE tour_packages SET status='accepted',updated_at=NOW() WHERE status='proposed' AND proposal_response='accepted'`);
   await pool.query(`UPDATE tour_packages SET status='lost',updated_at=NOW() WHERE status='proposed' AND proposal_response='declined'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated ON tour_packages(owner_provider_id, updated_at DESC)`);
@@ -1407,6 +1409,10 @@ function normalizeProposalResponseReason(value) {
   return new Set(["budget", "dates", "itinerary", "accommodation", "competitor", "plans_changed", "other"]).has(reason) ? reason : null;
 }
 
+function normalizeTourCancellationReason(value) {
+  return String(value || "").trim().replace(/\s+/g, " ").slice(0, 1000);
+}
+
 async function confirmTourPackageSale(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -1489,6 +1495,76 @@ async function updateTourPackagePayment(req, res) {
   } finally {
     client?.release();
   }
+}
+
+async function cancelTourPackage(req, res) {
+  let client;
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    const reason = normalizeTourCancellationReason(req.body?.reason);
+    if (reason.length < 5) return res.status(400).json({ message: "Cancellation reason is required" });
+    await ensureTourPackagesTable();
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const current = await client.query(
+      `SELECT * FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2 FOR UPDATE`,
+      [req.params.id, ownerId]
+    );
+    if (!current.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Tour package not found" }); }
+    if (!new Set(["booked", "paid"]).has(String(current.rows[0].status || "").toLowerCase())) {
+      await client.query("ROLLBACK");
+      return res.status(409).json({ message: "Only booked tours can be cancelled" });
+    }
+    const activeOrders = await client.query(
+      `SELECT b.id,s.title AS service_title,to_jsonb(supplier) AS supplier_profile,ops.service_order_status
+         FROM bookings b
+         LEFT JOIN services s ON s.id=b.service_id
+         LEFT JOIN providers supplier ON supplier.id=b.provider_id
+         JOIN tour_package_component_ops ops ON ops.package_id=$1::uuid AND ops.booking_id=b.id
+        WHERE b.group_id=$1::uuid AND ops.service_order_status IN ('sent','accepted')`,
+      [req.params.id]
+    );
+    await client.query(
+      `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,metadata)
+       SELECT package_id,booking_id,'cancelled','dmc',jsonb_build_object('previous_status',service_order_status,'package_cancelled',true)
+         FROM tour_package_component_ops
+        WHERE package_id=$1::uuid AND service_order_status IN ('sent','accepted')`,
+      [req.params.id]
+    );
+    await client.query(
+      `UPDATE tour_package_component_ops SET service_order_status='cancelled',service_order_responded_at=NOW(),updated_at=NOW()
+        WHERE package_id=$1::uuid AND service_order_status IN ('sent','accepted')`,
+      [req.params.id]
+    );
+    await client.query(
+      `UPDATE tour_package_tasks SET completed=TRUE,completed_at=NOW(),updated_at=NOW()
+        WHERE package_id=$1::uuid AND completed=FALSE`,
+      [req.params.id]
+    );
+    const saved = await client.query(
+      `UPDATE tour_packages SET status='cancelled',cancellation_reason=$3,cancelled_at=NOW(),updated_at=NOW()
+        WHERE id=$1::uuid AND owner_provider_id=$2
+        RETURNING id,status,booking_reference,cancellation_reason,cancelled_at,updated_at`,
+      [req.params.id, ownerId, reason]
+    );
+    await client.query("COMMIT");
+    const notificationResults = await Promise.all(activeOrders.rows.map(async (item) => {
+      const profile = item.supplier_profile || {};
+      const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
+      if (!chatId) return false;
+      return Boolean(await tgSend(chatId, buildSupplierServiceOrderCancellationMessage({ tourPackage: current.rows[0], component: item })).catch(() => false));
+    }));
+    return res.json({
+      ...saved.rows[0],
+      cancelled_supplier_order_count: activeOrders.rowCount,
+      supplier_notifications_failed: notificationResults.filter((sent) => !sent).length,
+    });
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
+    console.error("cancelTourPackage error:", error);
+    return res.status(500).json({ message: "Failed to cancel tour package" });
+  } finally { if (client) client.release(); }
 }
 
 async function replaceTourPackageTravelers(req, res) {
@@ -2032,6 +2108,7 @@ module.exports = {
   publicPackageView,
   isValidProposalResponse,
   normalizeProposalResponseReason,
+  normalizeTourCancellationReason,
   packageSnapshot,
   createTourPackage,
   listTourPackages,
@@ -2046,6 +2123,7 @@ module.exports = {
   respondToTourProposal,
   confirmTourPackageSale,
   updateTourPackagePayment,
+  cancelTourPackage,
   replaceTourPackageTravelers,
   updateTourPackageComponentOperations,
   markTourPackageComponentMessagesRead,

@@ -380,6 +380,8 @@ export default function TourPackageWorkspace() {
   const [paymentForm, setPaymentForm] = useState({ paid_amount: 0, payment_due_at: "", payment_note: "" });
   const [managerName, setManagerName] = useState("");
   const [travelers, setTravelers] = useState([]);
+  const [showCancellation, setShowCancellation] = useState(false);
+  const [cancellationReason, setCancellationReason] = useState("");
 
   const loadPackage = useCallback(async () => {
     setLoading(true); setError("");
@@ -460,6 +462,24 @@ export default function TourPackageWorkspace() {
       setNotice(t("tb.proposal.sale_confirmed", { reference: data.booking_reference }));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.workspace.save_error"));
+    } finally { setSaving(false); }
+  };
+
+  const cancelTour = async () => {
+    setSaving(true); setError(""); setNotice("");
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/cancel`, { reason: cancellationReason }, cfg());
+      setTourPackage((current) => ({
+        ...current, ...data,
+        components: (current.components || []).map((item) => ["sent", "accepted"].includes(item.service_order_status) ? { ...item, service_order_status: "cancelled", service_order_responded_at: data.cancelled_at } : item),
+        tasks: (current.tasks || []).map((item) => item.completed ? item : { ...item, completed: true, completed_at: data.cancelled_at }),
+      }));
+      setShowCancellation(false); setCancellationReason("");
+      setNotice(data.supplier_notifications_failed
+        ? t("tb.workspace.cancellation_saved_with_warnings", { count: data.supplier_notifications_failed })
+        : t("tb.workspace.cancellation_saved"));
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || t("tb.workspace.cancellation_error"));
     } finally { setSaving(false); }
   };
 
@@ -728,12 +748,14 @@ export default function TourPackageWorkspace() {
     <Link to="/dashboard/bookings" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-950"><ArrowLeft size={17} />{t("tb.workspace.back")}</Link>
     <header className="mt-5 flex flex-wrap items-start justify-between gap-5 border-b border-gray-200 pb-6">
       <div><div className="text-xs font-semibold uppercase text-orange-600">Tour Builder · {t("tb.workspace.package")}</div><h1 className="mt-2 text-3xl font-bold">{tourPackage.title}</h1><div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-600"><span className={`rounded-full px-2.5 py-1 font-semibold ring-1 ${tourPackage.status === "lost" ? "bg-red-50 text-red-700 ring-red-200" : tourPackage.status === "accepted" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-sky-50 text-sky-700 ring-sky-200"}`}>{t(`tb.package_status.${tourPackage.status}`, { defaultValue: tourPackage.status })}</span>{tourPackage.booking_reference && <span className="font-mono font-bold">{tourPackage.booking_reference}</span>}<span>{dateText(tourPackage.start_date)} — {dateText(tourPackage.end_date)}</span></div></div>
-      <div className="flex flex-wrap items-center gap-3"><div className="mr-2 text-right"><div className="text-xs font-semibold uppercase text-gray-400">GROSS</div><div className="text-3xl font-bold text-emerald-700">{money(tourPackage.gross_total, currency)}</div></div>{!locked && !editing && <button type="button" onClick={() => setEditing(true)} className="inline-flex h-11 items-center gap-2 border border-gray-300 bg-white px-4 font-semibold hover:bg-gray-50"><Pencil size={17} />{t("tb.workspace.edit")}</button>}</div>
+      <div className="flex flex-wrap items-center gap-3"><div className="mr-2 text-right"><div className="text-xs font-semibold uppercase text-gray-400">GROSS</div><div className="text-3xl font-bold text-emerald-700">{money(tourPackage.gross_total, currency)}</div></div>{["booked", "paid"].includes(String(tourPackage.status)) && <button type="button" onClick={() => setShowCancellation((value) => !value)} className="inline-flex h-11 items-center gap-2 border border-red-200 bg-white px-4 font-semibold text-red-700 hover:bg-red-50"><X size={17} />{t("tb.workspace.cancel_tour")}</button>}{!locked && !editing && <button type="button" onClick={() => setEditing(true)} className="inline-flex h-11 items-center gap-2 border border-gray-300 bg-white px-4 font-semibold hover:bg-gray-50"><Pencil size={17} />{t("tb.workspace.edit")}</button>}</div>
     </header>
     {error && <div className="mt-4 border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</div>}
     {notice && <div className="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{notice}</div>}
     {shareUrl && <div className="mt-4 flex flex-col gap-2 border border-sky-200 bg-sky-50 p-3 sm:flex-row"><input readOnly value={shareUrl} className="h-10 min-w-0 flex-1 border border-sky-200 bg-white px-3 text-sm" /><button type="button" onClick={async () => { await navigator.clipboard.writeText(shareUrl); setNotice(t("tb.workspace.link_copied")); }} className="inline-flex h-10 items-center justify-center gap-2 bg-gray-950 px-4 text-sm font-semibold text-white"><Copy size={16} />{t("tb.workspace.copy_link")}</button></div>}
     {tourPackage.status === "accepted" && <SaleConversionPanel confirmed={confirmed} total={components.length} saving={saving} onConfirm={confirmSale} t={t} />}
+    {showCancellation && <section className="mt-5 border border-red-200 bg-red-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-bold text-red-900">{t("tb.workspace.cancel_title")}</h2><p className="mt-1 text-sm text-red-800">{t("tb.workspace.cancel_hint")}</p></div><button type="button" onClick={() => { setShowCancellation(false); setCancellationReason(""); }} title={t("common.cancel")} className="inline-flex h-9 w-9 items-center justify-center text-red-700 hover:bg-red-100"><X size={18} /></button></div><label className="mt-4 block"><span className="mb-1.5 block text-sm font-semibold text-red-900">{t("tb.workspace.cancel_reason")}</span><textarea rows={3} maxLength={1000} value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)} placeholder={t("tb.workspace.cancel_reason_ph")} className="w-full border border-red-300 bg-white px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" /></label><div className="mt-4 flex justify-end"><button type="button" disabled={saving || cancellationReason.trim().length < 5} onClick={cancelTour} className="inline-flex h-11 items-center gap-2 bg-red-700 px-5 font-semibold text-white hover:bg-red-800 disabled:opacity-40"><X size={17} />{t("tb.workspace.confirm_cancel")}</button></div></section>}
+    {tourPackage.status === "cancelled" && <section className="mt-5 border border-red-200 bg-red-50 p-5"><div className="flex items-center gap-2 font-bold text-red-900"><X size={18} />{t("tb.workspace.cancelled_title")}</div><div className="mt-2 text-sm text-red-800">{tourPackage.cancellation_reason}</div>{tourPackage.cancelled_at && <div className="mt-2 text-xs font-semibold text-red-700">{t("tb.workspace.cancelled_on")}: {dateTimeText(tourPackage.cancelled_at)}</div>}</section>}
 
     {editing && <section className="mt-6 border border-orange-200 bg-orange-50/40 p-5 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-bold">{t("tb.workspace.edit_title")}</h2><p className="mt-1 text-sm text-gray-600">{t("tb.workspace.edit_hint")}</p></div><button type="button" onClick={() => { setForm(createForm(tourPackage)); setDirty(false); setEditing(false); }} className="inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold text-gray-600"><X size={17} />{t("common.cancel")}</button></div>
