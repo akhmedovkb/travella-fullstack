@@ -6,6 +6,7 @@ const {
   listSupplierPerformance,
   getTourPackage,
   updateTourPackage,
+  updateTourPackageManager,
   shareTourPackage,
   revokeTourPackageShare,
   getPublicTourProposal,
@@ -42,6 +43,7 @@ router.post("/:id/share", shareTourPackage);
 router.delete("/:id/share", revokeTourPackageShare);
 router.post("/:id/confirm-sale", confirmTourPackageSale);
 router.patch("/:id/payment", updateTourPackagePayment);
+router.patch("/:id/manager", updateTourPackageManager);
 router.put("/:id/travelers", replaceTourPackageTravelers);
 router.patch("/:id/components/:bookingId", updateTourPackageComponentOperations);
 router.post("/:id/components/:bookingId/read-messages", markTourPackageComponentMessagesRead);

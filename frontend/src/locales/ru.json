@@ -1774,7 +1774,11 @@
       "payment_paid": "Оплачено",
       "payment_saved": "Данные оплаты обновлены",
       "payment_error": "Не удалось обновить данные оплаты",
-      "payment_history": "История изменений"
+      "payment_history": "История изменений",
+      "manager": "Ответственный менеджер",
+      "manager_ph": "Имя сотрудника",
+      "manager_saved": "Ответственный менеджер сохранён",
+      "manager_error": "Не удалось назначить менеджера"
     },
     "portfolio": {
       "title": "Мои туры",
@@ -1796,9 +1800,13 @@
       "loss_making": "Убыточные туры",
       "loss_making_count": "Убыточных туров: {{count}}",
       "margin_short": "Маржа",
+      "manager": "Менеджер",
+      "all_managers": "Все менеджеры",
+      "manager_unassigned": "Не назначен",
       "export_finance": "Скачать CSV",
       "export_reference": "Номер брони",
       "export_tour": "Тур",
+      "export_manager": "Менеджер",
       "export_client": "Клиент",
       "export_start": "Начало",
       "export_end": "Окончание",

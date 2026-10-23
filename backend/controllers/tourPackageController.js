@@ -308,6 +308,7 @@ async function ensureTourPackagesTable() {
       client_phone TEXT,
       client_email TEXT,
       client_company TEXT,
+      manager_name TEXT,
       share_token_hash VARCHAR(64),
       shared_at TIMESTAMPTZ,
       share_expires_at TIMESTAMPTZ,
@@ -331,6 +332,7 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS client_phone TEXT`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS client_email TEXT`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS client_company TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS manager_name TEXT`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS share_token_hash VARCHAR(64)`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS shared_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS share_expires_at TIMESTAMPTZ`);
@@ -1137,6 +1139,26 @@ async function updateTourPackage(req, res) {
   }
 }
 
+async function updateTourPackageManager(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const managerName = String(req.body?.manager_name || "").trim().slice(0, 120) || null;
+    const result = await pool.query(
+      `UPDATE tour_packages SET manager_name=$3,updated_at=NOW()
+        WHERE id=$1::uuid AND owner_provider_id=$2
+        RETURNING id,manager_name,updated_at`,
+      [req.params.id, ownerId, managerName]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Tour package not found" });
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("updateTourPackageManager error:", error);
+    return res.status(500).json({ message: "Failed to assign tour manager" });
+  }
+}
+
 async function shareTourPackage(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -1857,6 +1879,7 @@ module.exports = {
   listSupplierPerformance,
   getTourPackage,
   updateTourPackage,
+  updateTourPackageManager,
   shareTourPackage,
   revokeTourPackageShare,
   getPublicTourProposal,

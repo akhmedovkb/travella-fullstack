@@ -1852,7 +1852,11 @@
       "payment_paid": "Paid",
       "payment_saved": "Payment details updated",
       "payment_error": "Could not update payment details",
-      "payment_history": "Change history"
+      "payment_history": "Change history",
+      "manager": "Responsible manager",
+      "manager_ph": "Team member name",
+      "manager_saved": "Tour manager saved",
+      "manager_error": "Could not assign tour manager"
     },
     "portfolio": {
       "title": "My tours",
@@ -1874,9 +1878,13 @@
       "loss_making": "Loss-making tours",
       "loss_making_count": "Loss-making tours: {{count}}",
       "margin_short": "Margin",
+      "manager": "Manager",
+      "all_managers": "All managers",
+      "manager_unassigned": "Unassigned",
       "export_finance": "Download CSV",
       "export_reference": "Booking reference",
       "export_tour": "Tour",
+      "export_manager": "Manager",
       "export_client": "Client",
       "export_start": "Start",
       "export_end": "End",

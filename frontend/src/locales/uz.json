@@ -1850,7 +1850,11 @@
       "payment_paid": "To‘langan",
       "payment_saved": "To‘lov ma’lumotlari yangilandi",
       "payment_error": "To‘lov ma’lumotlarini yangilab bo‘lmadi",
-      "payment_history": "O‘zgarishlar tarixi"
+      "payment_history": "O‘zgarishlar tarixi",
+      "manager": "Mas’ul menejer",
+      "manager_ph": "Xodim ismi",
+      "manager_saved": "Mas’ul menejer saqlandi",
+      "manager_error": "Menejerni tayinlab bo‘lmadi"
     },
     "portfolio": {
       "title": "Mening turlarim",
@@ -1872,9 +1876,13 @@
       "loss_making": "Zararli turlar",
       "loss_making_count": "Zararli turlar: {{count}}",
       "margin_short": "Marja",
+      "manager": "Menejer",
+      "all_managers": "Barcha menejerlar",
+      "manager_unassigned": "Tayinlanmagan",
       "export_finance": "CSV yuklab olish",
       "export_reference": "Bron raqami",
       "export_tour": "Tur",
+      "export_manager": "Menejer",
       "export_client": "Mijoz",
       "export_start": "Boshlanishi",
       "export_end": "Tugashi",
