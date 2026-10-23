@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -98,6 +98,18 @@ test("builds a safe supplier cancellation without commercial data", () => {
   assert.match(message, /Silk &lt;Road&gt;/);
   assert.match(message, /Hotel &amp; transfer/);
   assert.match(message, /TVL-10/);
+  assert.doesNotMatch(message, /900|400|gross_total|provider_price/);
+});
+
+test("builds a contextual supplier note without commercial data", () => {
+  const message = buildSupplierServiceOrderNoteMessage({
+    tourPackage: { title: "Silk <Road>", booking_reference: "TVL-11", gross_total: 900 },
+    component: { service_title: "Guide & car", provider_price: 400 },
+    note: "Please meet guests at 08:00 & bring a sign <ACME>",
+  });
+  assert.match(message, /Silk &lt;Road&gt;/);
+  assert.match(message, /Guide &amp; car/);
+  assert.match(message, /08:00 &amp; bring a sign &lt;ACME&gt;/);
   assert.doesNotMatch(message, /900|400|gross_total|provider_price/);
 });
 

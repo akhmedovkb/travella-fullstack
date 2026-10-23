@@ -200,6 +200,17 @@ function buildSupplierServiceOrderCancellationMessage({ tourPackage = {}, compon
   ].filter(Boolean).join("\n");
 }
 
+function buildSupplierServiceOrderNoteMessage({ tourPackage = {}, component = {}, note = "" } = {}) {
+  return [
+    "💬 <b>Сообщение от DMC по заказу</b>",
+    `Тур: <b>${escapeTelegramHtml(tourPackage.title || "—")}</b>`,
+    tourPackage.booking_reference ? `Номер тура: ${escapeTelegramHtml(tourPackage.booking_reference)}` : "",
+    `Услуга: <b>${escapeTelegramHtml(component.service_title || "—")}</b>`,
+    "",
+    escapeTelegramHtml(note),
+  ].filter((line, index, lines) => line !== "" || (index > 0 && lines[index - 1] !== "")).join("\n");
+}
+
 async function notifyAgencyProposalResponse(item) {
   try {
     const provider = await pool.query(`SELECT to_jsonb(p) AS profile FROM providers p WHERE id=$1 LIMIT 1`, [item.owner_provider_id]);
@@ -1226,6 +1237,50 @@ async function cancelTourPackageServiceOrder(req, res) {
   }
 }
 
+async function messageTourPackageServiceOrder(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const packageId = req.params.id;
+    const bookingId = Number(req.params.bookingId);
+    const note = String(req.body?.message || "").trim().slice(0, 1000);
+    if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
+    if (!note) return res.status(400).json({ message: "Supplier message is required" });
+    const result = await pool.query(
+      `SELECT tp.title,tp.booking_reference,b.id,s.title AS service_title,
+              to_jsonb(supplier) AS supplier_profile,ops.service_order_status
+         FROM tour_packages tp
+         JOIN bookings b ON b.group_id=tp.id AND b.id=$3
+         LEFT JOIN services s ON s.id=b.service_id
+         LEFT JOIN providers supplier ON supplier.id=b.provider_id
+         JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+        WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
+      [packageId, ownerId, bookingId]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Tour package component not found" });
+    const item = result.rows[0];
+    if (!["sent", "accepted"].includes(item.service_order_status)) {
+      return res.status(409).json({ message: "Send the supplier order before messaging the supplier" });
+    }
+    const profile = item.supplier_profile || {};
+    const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
+    if (!chatId) return res.status(409).json({ message: "Supplier Telegram is not connected" });
+    const message = buildSupplierServiceOrderNoteMessage({ tourPackage: item, component: item, note });
+    if (!(await tgSend(chatId, message))) return res.status(502).json({ message: "Failed to send supplier message" });
+    const event = await pool.query(
+      `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,metadata)
+       VALUES($1::uuid,$2,'message_sent','dmc',jsonb_build_object('message',$3::text))
+       RETURNING id,event_type,actor_type,created_at,metadata`,
+      [packageId, bookingId, note]
+    );
+    return res.json({ sent: true, service_order_event: event.rows[0] });
+  } catch (error) {
+    console.error("messageTourPackageServiceOrder error:", error);
+    return res.status(500).json({ message: "Failed to send supplier message" });
+  }
+}
+
 async function createTourPackageTask(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -1372,6 +1427,7 @@ module.exports = {
   buildSupplierServiceOrderMessage,
   buildSupplierServiceOrderReminderMessage,
   buildSupplierServiceOrderCancellationMessage,
+  buildSupplierServiceOrderNoteMessage,
   publicPackageView,
   packageSnapshot,
   createTourPackage,
@@ -1389,6 +1445,7 @@ module.exports = {
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
   cancelTourPackageServiceOrder,
+  messageTourPackageServiceOrder,
   createTourPackageTask,
   updateTourPackageTask,
   deleteTourPackageTask,
