@@ -33,13 +33,14 @@ test("normalizes private traveler details", () => {
 
 test("normalizes private component operations", () => {
   assert.deepEqual(normalizeComponentOperations({ confirmation_reference: " HTL-42 ", supplier_payment_due_at: "2026-11-05", operational_note: " Pay after invoice " }), {
-    confirmationReference: "HTL-42", supplierPaymentDueAt: "2026-11-05", supplierPaid: false, operationalNote: "Pay after invoice", qualityRating: null, reliabilityRating: null, performanceNote: null,
+    confirmationReference: "HTL-42", supplierPaymentDueAt: "2026-11-05", supplierPaid: false, operationalNote: "Pay after invoice", qualityRating: null, reliabilityRating: null, performanceNote: null, actualSupplierCost: null, costVarianceNote: null,
   });
   assert.equal(normalizeComponentOperations({ supplier_paid: true }).supplierPaid, true);
   assert.equal(normalizeComponentOperations({ supplier_payment_due_at: "tomorrow" }).supplierPaymentDueAt, null);
   assert.deepEqual(normalizeComponentOperations({ quality_rating: 5, reliability_rating: "4", performance_note: " On time " }), {
-    confirmationReference: null, supplierPaymentDueAt: null, supplierPaid: false, operationalNote: null, qualityRating: 5, reliabilityRating: 4, performanceNote: "On time",
+    confirmationReference: null, supplierPaymentDueAt: null, supplierPaid: false, operationalNote: null, qualityRating: 5, reliabilityRating: 4, performanceNote: "On time", actualSupplierCost: null, costVarianceNote: null,
   });
+  assert.equal(normalizeComponentOperations({ actual_supplier_cost: "125.50" }).actualSupplierCost, 125.5);
 });
 
 test("normalizes operational tour tasks", () => {

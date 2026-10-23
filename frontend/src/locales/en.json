@@ -1741,6 +1741,17 @@
       "history_score": "Your tour history",
       "review_count": "reviews: {{count}}"
     },
+    "reconciliation": {
+      "title": "Tour financial close",
+      "hint": "Actual costs entered for {{closed}} of {{total}} components.",
+      "actual_cost": "Actual supplier cost",
+      "variance_note": "Variance reason",
+      "variance_note_ph": "Surcharge, refund, or scope change",
+      "planned": "Planned cost",
+      "actual": "Actual cost",
+      "variance": "Variance",
+      "actual_margin": "Actual margin"
+    },
     "action_timeline": {
       "title": "Upcoming actions",
       "subtitle": "Payment deadlines and departure date ordered by urgency.",

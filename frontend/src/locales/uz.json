@@ -1739,6 +1739,17 @@
       "history_score": "Sizning turlar tarixingiz",
       "review_count": "baholar: {{count}}"
     },
+    "reconciliation": {
+      "title": "Turning moliyaviy yopilishi",
+      "hint": "{{total}} komponentdan {{closed}} tasi uchun haqiqiy xarajat kiritildi.",
+      "actual_cost": "Haqiqiy xarid narxi",
+      "variance_note": "Farq sababi",
+      "variance_note_ph": "Qo‘shimcha to‘lov, qaytarish yoki hajm o‘zgarishi",
+      "planned": "Rejadagi xarajat",
+      "actual": "Haqiqiy xarajat",
+      "variance": "Farq",
+      "actual_margin": "Haqiqiy marja"
+    },
     "action_timeline": {
       "title": "Yaqin vazifalar",
       "subtitle": "To‘lov muddatlari va tur boshlanish sanasi shoshilinchlik bo‘yicha.",

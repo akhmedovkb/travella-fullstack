@@ -59,6 +59,7 @@ function normalizeTraveler(body = {}, index = 0) {
 function normalizeComponentOperations(body = {}) {
   const dueAt = String(body.supplier_payment_due_at || "").trim();
   const rating = (value) => Number.isInteger(Number(value)) && Number(value) >= 1 && Number(value) <= 5 ? Number(value) : null;
+  const actualCost = body.actual_supplier_cost === "" || body.actual_supplier_cost == null ? null : cleanMoney(body.actual_supplier_cost);
   return {
     confirmationReference: String(body.confirmation_reference || "").trim().slice(0, 120) || null,
     supplierPaymentDueAt: /^\d{4}-\d{2}-\d{2}$/.test(dueAt) ? dueAt : null,
@@ -67,6 +68,8 @@ function normalizeComponentOperations(body = {}) {
     qualityRating: rating(body.quality_rating),
     reliabilityRating: rating(body.reliability_rating),
     performanceNote: String(body.performance_note || "").trim().slice(0, 1000) || null,
+    actualSupplierCost: actualCost,
+    costVarianceNote: String(body.cost_variance_note || "").trim().slice(0, 1000) || null,
   };
 }
 
@@ -413,6 +416,8 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS quality_rating SMALLINT CHECK (quality_rating BETWEEN 1 AND 5)`);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS reliability_rating SMALLINT CHECK (reliability_rating BETWEEN 1 AND 5)`);
   await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS performance_note TEXT`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS actual_supplier_cost NUMERIC(18,2)`);
+  await pool.query(`ALTER TABLE tour_package_component_ops ADD COLUMN IF NOT EXISTS cost_variance_note TEXT`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_component_ops_package ON tour_package_component_ops(package_id, booking_id)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_component_events (
@@ -496,6 +501,7 @@ async function packageBookings(packageId) {
             ops.service_order_sent_at,ops.service_order_status,ops.service_order_responded_at,
             ops.service_order_last_reminded_at,
             ops.quality_rating,ops.reliability_rating,ops.performance_note,
+            ops.actual_supplier_cost,ops.cost_variance_note,
             COALESCE((
               SELECT jsonb_agg(jsonb_build_object(
                 'id',event.id,'event_type',event.event_type,'actor_type',event.actor_type,
@@ -566,8 +572,8 @@ async function updateTourPackageComponentOperations(req, res) {
     const result = await pool.query(
       `INSERT INTO tour_package_component_ops(
          package_id,booking_id,confirmation_reference,supplier_payment_due_at,supplier_paid,operational_note,
-         quality_rating,reliability_rating,performance_note
-       ) VALUES($1::uuid,$2,$3,$4::date,$5,$6,$7,$8,$9)
+         quality_rating,reliability_rating,performance_note,actual_supplier_cost,cost_variance_note
+       ) VALUES($1::uuid,$2,$3,$4::date,$5,$6,$7,$8,$9,$10,$11)
        ON CONFLICT(package_id,booking_id) DO UPDATE SET
          confirmation_reference=EXCLUDED.confirmation_reference,
          supplier_payment_due_at=EXCLUDED.supplier_payment_due_at,
@@ -576,10 +582,12 @@ async function updateTourPackageComponentOperations(req, res) {
          quality_rating=EXCLUDED.quality_rating,
          reliability_rating=EXCLUDED.reliability_rating,
          performance_note=EXCLUDED.performance_note,
+         actual_supplier_cost=EXCLUDED.actual_supplier_cost,
+         cost_variance_note=EXCLUDED.cost_variance_note,
          updated_at=NOW()
        RETURNING booking_id,confirmation_reference,supplier_payment_due_at,supplier_paid,operational_note,
-                 quality_rating,reliability_rating,performance_note,updated_at`,
-      [packageId, bookingId, value.confirmationReference, value.supplierPaymentDueAt, value.supplierPaid, value.operationalNote, value.qualityRating, value.reliabilityRating, value.performanceNote]
+                 quality_rating,reliability_rating,performance_note,actual_supplier_cost,cost_variance_note,updated_at`,
+      [packageId, bookingId, value.confirmationReference, value.supplierPaymentDueAt, value.supplierPaid, value.operationalNote, value.qualityRating, value.reliabilityRating, value.performanceNote, value.actualSupplierCost, value.costVarianceNote]
     );
     return res.json(result.rows[0]);
   } catch (error) {
