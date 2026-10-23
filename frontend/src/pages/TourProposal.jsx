@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import { CalendarDays, CheckCircle2, CreditCard, MapPin, MessageSquare, Printer, Users } from "lucide-react";
+import { CalendarDays, CheckCircle2, CreditCard, MapPin, MessageSquare, Printer, Users, XCircle } from "lucide-react";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
 
@@ -165,9 +165,9 @@ export default function TourProposal() {
               </div>
             </div>
           ) : proposal.proposal_response ? (
-            <div className={`border p-5 ${proposal.proposal_response === "accepted" ? "border-emerald-300 bg-emerald-50" : "border-amber-300 bg-amber-50"}`}>
+            <div className={`border p-5 ${proposal.proposal_response === "accepted" ? "border-emerald-300 bg-emerald-50" : proposal.proposal_response === "declined" ? "border-red-300 bg-red-50" : "border-amber-300 bg-amber-50"}`}>
               <div className="flex items-start gap-3">
-                {proposal.proposal_response === "accepted" ? <CheckCircle2 className="mt-0.5 text-emerald-700" /> : <MessageSquare className="mt-0.5 text-amber-700" />}
+                {proposal.proposal_response === "accepted" ? <CheckCircle2 className="mt-0.5 text-emerald-700" /> : proposal.proposal_response === "declined" ? <XCircle className="mt-0.5 text-red-700" /> : <MessageSquare className="mt-0.5 text-amber-700" />}
                 <div>
                   <h2 className="font-bold text-gray-950">{t(`tb.proposal.response_${proposal.proposal_response}`)}</h2>
                   <p className="mt-1 text-sm text-gray-700">{t("tb.proposal.response_saved")}</p>
@@ -179,13 +179,13 @@ export default function TourProposal() {
             <div>
               <h2 className="text-xl font-bold text-gray-950">{t("tb.proposal.decision_title")}</h2>
               <p className="mt-1 text-sm text-gray-600">{t("tb.proposal.decision_text")}</p>
-              {responseMode === "changes_requested" ? (
+              {["changes_requested", "declined"].includes(responseMode) ? (
                 <div className="mt-5 max-w-2xl">
-                  <label className="block text-sm font-semibold text-gray-800">{t("tb.proposal.change_comment")}
-                    <textarea rows={4} value={responseMessage} onChange={(event) => setResponseMessage(event.target.value)} placeholder={t("tb.proposal.change_comment_ph")} className="mt-2 w-full border border-gray-300 bg-white p-3 font-normal outline-none focus:border-orange-500" />
+                  <label className="block text-sm font-semibold text-gray-800">{t(responseMode === "declined" ? "tb.proposal.decline_comment" : "tb.proposal.change_comment")}
+                    <textarea rows={4} value={responseMessage} onChange={(event) => setResponseMessage(event.target.value)} placeholder={t(responseMode === "declined" ? "tb.proposal.decline_comment_ph" : "tb.proposal.change_comment_ph")} className="mt-2 w-full border border-gray-300 bg-white p-3 font-normal outline-none focus:border-orange-500" />
                   </label>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <button type="button" disabled={responseBusy || !responseMessage.trim()} onClick={() => submitResponse("changes_requested")} className="h-11 bg-orange-600 px-5 font-semibold text-white hover:bg-orange-700 disabled:opacity-50">{responseBusy ? t("common.loading") : t("tb.proposal.send_changes")}</button>
+                    <button type="button" disabled={responseBusy || !responseMessage.trim()} onClick={() => submitResponse(responseMode)} className={`h-11 px-5 font-semibold text-white disabled:opacity-50 ${responseMode === "declined" ? "bg-red-700 hover:bg-red-800" : "bg-orange-600 hover:bg-orange-700"}`}>{responseBusy ? t("common.loading") : t(responseMode === "declined" ? "tb.proposal.send_decline" : "tb.proposal.send_changes")}</button>
                     <button type="button" onClick={() => setResponseMode("")} className="h-11 border border-gray-300 bg-white px-5 font-semibold text-gray-700">{t("actions.cancel")}</button>
                   </div>
                 </div>
@@ -193,6 +193,7 @@ export default function TourProposal() {
                 <div className="mt-5 flex flex-wrap gap-3">
                   <button type="button" disabled={responseBusy} onClick={() => submitResponse("accepted")} className="inline-flex h-12 items-center gap-2 bg-emerald-600 px-6 font-bold text-white hover:bg-emerald-700 disabled:opacity-50"><CheckCircle2 size={20} />{t("tb.proposal.accept")}</button>
                   <button type="button" onClick={() => setResponseMode("changes_requested")} className="inline-flex h-12 items-center gap-2 border border-gray-300 bg-white px-6 font-bold text-gray-800 hover:border-orange-400"><MessageSquare size={20} />{t("tb.proposal.request_changes")}</button>
+                  <button type="button" onClick={() => setResponseMode("declined")} className="inline-flex h-12 items-center gap-2 border border-red-300 bg-white px-6 font-bold text-red-700 hover:bg-red-50"><XCircle size={20} />{t("tb.proposal.decline")}</button>
                 </div>
               )}
               {responseError ? <p className="mt-3 text-sm font-medium text-red-600">{responseError}</p> : null}

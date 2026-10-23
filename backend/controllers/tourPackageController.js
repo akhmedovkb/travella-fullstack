@@ -249,10 +249,14 @@ async function notifyAgencyProposalResponse(item) {
     const profile = provider.rows[0]?.profile || {};
     const chatId = profile.telegram_web_chat_id || profile.telegram_chat_id || profile.tg_chat_id || profile.telegram_refused_chat_id;
     if (!chatId) return false;
-    const accepted = item.proposal_response === "accepted";
+    const responseLabels = {
+      accepted: "✅ <b>Клиент принял предложение</b>",
+      changes_requested: "✏️ <b>Клиент запросил изменения</b>",
+      declined: "❌ <b>Клиент отклонил предложение</b>",
+    };
     const site = String(process.env.SITE_PUBLIC_URL || process.env.FRONTEND_URL || "https://travella.uz").replace(/\/+$/, "");
     const lines = [
-      accepted ? "✅ <b>Клиент принял предложение</b>" : "✏️ <b>Клиент запросил изменения</b>",
+      responseLabels[item.proposal_response] || "💬 <b>Клиент ответил на предложение</b>",
       `Тур: <b>${escapeTelegramHtml(item.title)}</b>`,
       item.client_name ? `Клиент: ${escapeTelegramHtml(item.client_name)}` : "",
       item.proposal_response_message ? `Комментарий: ${escapeTelegramHtml(item.proposal_response_message)}` : "",
@@ -1296,7 +1300,7 @@ async function respondToTourProposal(req, res) {
     const response = String(req.body?.response || "").trim().toLowerCase();
     const message = String(req.body?.message || "").trim().slice(0, 2000) || null;
     if (!/^[A-Za-z0-9_-]{40,80}$/.test(token)) return res.status(404).json({ message: "Proposal not found" });
-    if (!new Set(["accepted", "changes_requested"]).has(response)) {
+    if (!isValidProposalResponse(response)) {
       return res.status(400).json({ message: "Valid proposal response is required" });
     }
     await ensureTourPackagesTable();
@@ -1321,6 +1325,10 @@ async function respondToTourProposal(req, res) {
     console.error("respondToTourProposal error:", error);
     return res.status(500).json({ message: "Failed to save proposal response" });
   }
+}
+
+function isValidProposalResponse(value) {
+  return new Set(["accepted", "changes_requested", "declined"]).has(String(value || "").trim().toLowerCase());
 }
 
 async function confirmTourPackageSale(req, res) {
@@ -1945,6 +1953,7 @@ module.exports = {
   buildSupplierServiceOrderNoteMessage,
   buildSupplierDocumentRequestMessage,
   publicPackageView,
+  isValidProposalResponse,
   packageSnapshot,
   createTourPackage,
   listTourPackages,

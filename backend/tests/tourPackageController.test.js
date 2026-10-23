@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -62,6 +62,13 @@ test("hashes proposal tokens deterministically without storing the raw token", (
   assert.equal(hash.length, 64);
   assert.equal(hash, hashShareToken("a-private-proposal-token"));
   assert.notEqual(hash, "a-private-proposal-token");
+});
+
+test("accepts all supported client proposal decisions", () => {
+  assert.equal(isValidProposalResponse("accepted"), true);
+  assert.equal(isValidProposalResponse("changes_requested"), true);
+  assert.equal(isValidProposalResponse("declined"), true);
+  assert.equal(isValidProposalResponse("pending"), false);
 });
 
 test("creates a readable booking reference", () => {
