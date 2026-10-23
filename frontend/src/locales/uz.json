@@ -1684,7 +1684,7 @@
       "travelers_complete": "Sayohatchilar ro‘yxati to‘ldirilgan",
       "client_paid": "Mijoz to‘liq to‘lagan"
     },
-    "timeline": {
+    "action_timeline": {
       "title": "Yaqin vazifalar",
       "subtitle": "To‘lov muddatlari va tur boshlanish sanasi shoshilinchlik bo‘yicha.",
       "client_payment": "Mijoz to‘lovini olish",

@@ -129,10 +129,10 @@ function DepartureReadiness({ checks, percent, t }) {
 function OperationsTimeline({ items = [], t }) {
   const tone = { overdue: "border-red-200 bg-red-50 text-red-800", today: "border-orange-200 bg-orange-50 text-orange-800", soon: "border-amber-200 bg-amber-50 text-amber-800", upcoming: "border-gray-200 bg-white text-gray-700" };
   return <section className="border-b border-gray-200 pb-5">
-    <div className="flex items-center gap-2"><Clock3 size={20} /><h2 className="text-xl font-bold">{t("tb.timeline.title")}</h2></div>
-    <p className="mt-1 text-sm text-gray-500">{t("tb.timeline.subtitle")}</p>
-    <div className="mt-4 space-y-2">{items.map((item, index) => <div key={`${item.type}-${item.booking_id || index}`} className={`flex flex-wrap items-center justify-between gap-3 border px-4 py-3 ${tone[item.urgency] || tone.upcoming}`}><div><div className="font-semibold">{t(`tb.timeline.${item.type}`)}{item.label ? ` · ${item.label}` : ""}</div><div className="mt-0.5 text-xs opacity-75">{dateText(item.due_at)}</div></div><span className="text-xs font-bold uppercase">{item.urgency === "overdue" ? t("tb.timeline.overdue_days", { count: Math.abs(item.days) }) : item.urgency === "today" ? t("tb.timeline.today") : t("tb.timeline.days_left", { count: item.days })}</span></div>)}
-      {!items.length && <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{t("tb.timeline.empty")}</div>}
+    <div className="flex items-center gap-2"><Clock3 size={20} /><h2 className="text-xl font-bold">{t("tb.action_timeline.title")}</h2></div>
+    <p className="mt-1 text-sm text-gray-500">{t("tb.action_timeline.subtitle")}</p>
+    <div className="mt-4 space-y-2">{items.map((item, index) => <div key={`${item.type}-${item.booking_id || index}`} className={`flex flex-wrap items-center justify-between gap-3 border px-4 py-3 ${tone[item.urgency] || tone.upcoming}`}><div><div className="font-semibold">{t(`tb.action_timeline.${item.type}`)}{item.label ? ` · ${item.label}` : ""}</div><div className="mt-0.5 text-xs opacity-75">{dateText(item.due_at)}</div></div><span className="text-xs font-bold uppercase">{item.urgency === "overdue" ? t("tb.action_timeline.overdue_days", { count: Math.abs(item.days) }) : item.urgency === "today" ? t("tb.action_timeline.today") : t("tb.action_timeline.days_left", { count: item.days })}</span></div>)}
+      {!items.length && <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{t("tb.action_timeline.empty")}</div>}
     </div>
   </section>;
 }

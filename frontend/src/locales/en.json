@@ -1686,7 +1686,7 @@
       "travelers_complete": "Traveler manifest completed",
       "client_paid": "Client paid in full"
     },
-    "timeline": {
+    "action_timeline": {
       "title": "Upcoming actions",
       "subtitle": "Payment deadlines and departure date ordered by urgency.",
       "client_payment": "Collect client payment",
