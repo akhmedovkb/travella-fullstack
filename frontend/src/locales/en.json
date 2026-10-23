@@ -1687,6 +1687,22 @@
       "travelers_complete": "Traveler manifest completed",
       "client_paid": "Client paid in full"
     },
+    "issues": {
+      "title": "Issue center",
+      "hint": "Tour components that require action from the DMC team.",
+      "filter_all": "All",
+      "filter_critical": "Critical",
+      "filter_warning": "Needs attention",
+      "filter_info": "New replies",
+      "supplier_declined": "Supplier declined the order or delivery failed",
+      "supplier_response": "Waiting for the supplier to respond to the order",
+      "confirmation": "Confirmation reference is missing",
+      "documents_missing": "No approved supplier document",
+      "documents_review": "Documents awaiting review: {{count}}",
+      "supplier_payment": "Supplier payment is overdue · {{date}}",
+      "supplier_reply": "New messages or files: {{count}}",
+      "empty": "There are no operational issues with tour components"
+    },
     "action_timeline": {
       "title": "Upcoming actions",
       "subtitle": "Payment deadlines and departure date ordered by urgency.",

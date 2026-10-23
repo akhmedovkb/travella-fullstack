@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import { ArrowLeft, Bell, CalendarDays, CheckCircle2, CircleDashed, Clock3, Copy, CreditCard, ExternalLink, FileText, ListTodo, Paperclip, Pencil, Plus, Save, Send, Trash2, UserRound, Users, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bell, CalendarDays, CheckCircle2, CircleDashed, Clock3, Copy, CreditCard, ExternalLink, FileText, ListTodo, Paperclip, Pencil, Plus, Save, Send, Trash2, UserRound, Users, X } from "lucide-react";
 import { Link, useParams } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -246,6 +246,41 @@ function SupplierDocumentCenter({ components, packageId, saving, onClassify, onR
       })}
       {!visibleDocuments.length && <div className="py-8 text-center text-sm text-gray-500">{documents.length ? t("tb.documents.no_documents_for_filter") : t("tb.documents.no_supplier_documents")}</div>}
     </div>
+  </section>;
+}
+
+function OperationsIssueCenter({ components, t }) {
+  const [filter, setFilter] = useState("all");
+  const issues = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
+    const priority = { critical: 0, warning: 1, info: 2 };
+    return components.flatMap((component) => {
+      const result = [];
+      const orderStatus = String(component.service_order_status || "").toLowerCase();
+      const attachments = (component.service_order_events || []).filter((event) => event.event_type === "attachment_received");
+      const pendingDocuments = attachments.filter((event) => !event.metadata?.review_status || event.metadata.review_status === "pending").length;
+      const rejectedDocuments = attachments.filter((event) => event.metadata?.review_status === "rejected").length;
+      const approvedDocuments = attachments.filter((event) => event.metadata?.review_status === "approved").length;
+      const unreadReplies = (component.service_order_events || []).filter((event) => ["message_received", "attachment_received"].includes(event.event_type) && !event.read_at).length;
+      const add = (type, severity, detail = {}) => result.push({ type, severity, component, ...detail });
+      if (["declined", "delivery_failed"].includes(orderStatus)) add("supplier_declined", "critical");
+      else if (orderStatus === "sent") add("supplier_response", "warning");
+      if (confirmedStatuses.has(String(component.status || "").toLowerCase()) && !String(component.confirmation_reference || "").trim()) add("confirmation", "warning");
+      if (orderStatus === "accepted" && !approvedDocuments) add("documents_missing", rejectedDocuments ? "critical" : "warning");
+      if (pendingDocuments) add("documents_review", "warning", { count: pendingDocuments });
+      if (component.supplier_payment_due_at && component.supplier_paid !== true && dateValue(component.supplier_payment_due_at) < today) add("supplier_payment", "critical", { dueAt: component.supplier_payment_due_at });
+      if (unreadReplies) add("supplier_reply", "info", { count: unreadReplies });
+      return result;
+    }).sort((left, right) => priority[left.severity] - priority[right.severity]);
+  }, [components]);
+  const counts = useMemo(() => issues.reduce((result, issue) => ({ ...result, [issue.severity]: result[issue.severity] + 1 }), { critical: 0, warning: 0, info: 0 }), [issues]);
+  const visibleIssues = filter === "all" ? issues : issues.filter((issue) => issue.severity === filter);
+  const tone = { critical: "border-red-200 bg-red-50 text-red-800", warning: "border-amber-200 bg-amber-50 text-amber-800", info: "border-sky-200 bg-sky-50 text-sky-800" };
+  const focusComponent = (id) => document.getElementById(`component-${id}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+
+  return <section>
+    <div className="flex flex-wrap items-end justify-between gap-4"><div><h2 className="flex items-center gap-2 text-xl font-bold"><AlertTriangle size={20} className={issues.length ? "text-orange-600" : "text-emerald-600"} />{t("tb.issues.title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.issues.hint")}</p></div>{issues.length > 0 && <div className="flex flex-wrap border border-gray-200 bg-gray-50 p-1">{["all", "critical", "warning", "info"].map((severity) => <button key={severity} type="button" onClick={() => setFilter(severity)} className={`h-9 px-3 text-sm font-semibold ${filter === severity ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-white"}`}>{t(`tb.issues.filter_${severity}`)} <span className="ml-1 opacity-70">{severity === "all" ? issues.length : counts[severity]}</span></button>)}</div>}</div>
+    {visibleIssues.length ? <div className="mt-4 grid gap-2 sm:grid-cols-2">{visibleIssues.map((issue, index) => <button key={`${issue.component.id}-${issue.type}-${index}`} type="button" onClick={() => focusComponent(issue.component.id)} className={`flex min-h-20 items-center justify-between gap-3 border px-4 py-3 text-left hover:brightness-95 ${tone[issue.severity]}`}><div className="min-w-0"><div className="truncate font-bold">{issue.component.service_title || issue.component.provider_name || `#${issue.component.id}`}</div><div className="mt-1 text-sm">{t(`tb.issues.${issue.type}`, { count: issue.count, date: dateText(issue.dueAt) })}</div></div><ExternalLink size={17} className="shrink-0" /></button>)}</div> : <div className="mt-4 flex items-center gap-3 border-y border-emerald-200 bg-emerald-50 px-4 py-4 text-sm font-semibold text-emerald-800"><CheckCircle2 size={19} />{t("tb.issues.empty")}</div>}
   </section>;
 }
 
@@ -579,6 +614,7 @@ export default function TourPackageWorkspace() {
     <section className="grid border-b border-gray-200 lg:grid-cols-4">{[["NET", money(tourPackage.net_total, currency), ""], [t("tb.summary.markup"), tourPackage.markup_type === "percent" ? `${tourPackage.markup_value}%` : money(tourPackage.markup_value, currency), "text-orange-600"], [t("tb.workspace.margin"), money(margin, currency), "text-emerald-700"], ["PAX", Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0), ""]].map(([label, value, color]) => <div key={label} className="border-b border-gray-200 py-5 lg:border-b-0 lg:border-r lg:px-5 first:pl-0 last:border-r-0"><div className="text-xs font-semibold uppercase text-gray-400">{label}</div><div className={`mt-1 text-xl font-bold ${color}`}>{value}</div></div>)}</section>
     <div className="mt-7 grid gap-7 lg:grid-cols-[1fr_340px]"><div className="space-y-8">
       <DepartureReadiness checks={operationChecks} percent={operationPercent} t={t} />
+      <OperationsIssueCenter components={components} t={t} />
       <OperationsTimeline items={operationsTimeline} t={t} />
       <OperationsTasks items={tourPackage.tasks} saving={saving} onCreate={createTask} onToggle={toggleTask} onDelete={deleteTask} t={t} />
       <SupplierDocumentCenter components={components} packageId={id} saving={saving} onClassify={classifyAttachment} onReview={reviewAttachment} t={t} />

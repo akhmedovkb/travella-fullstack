@@ -1685,6 +1685,22 @@
       "travelers_complete": "Sayohatchilar ro‘yxati to‘ldirilgan",
       "client_paid": "Mijoz to‘liq to‘lagan"
     },
+    "issues": {
+      "title": "Muammolar markazi",
+      "hint": "DMC jamoasi hal qilishi kerak bo‘lgan tur komponentlari.",
+      "filter_all": "Barchasi",
+      "filter_critical": "Muhim",
+      "filter_warning": "E’tibor talab qiladi",
+      "filter_info": "Yangi javoblar",
+      "supplier_declined": "Yetkazib beruvchi buyurtmani rad etdi yoki yetkazib berish amalga oshmadi",
+      "supplier_response": "Yetkazib beruvchining buyurtmaga javobi kutilmoqda",
+      "confirmation": "Tasdiqlash raqami ko‘rsatilmagan",
+      "documents_missing": "Qabul qilingan yetkazib beruvchi hujjati yo‘q",
+      "documents_review": "Tekshiruv kutilayotgan hujjatlar: {{count}}",
+      "supplier_payment": "Yetkazib beruvchiga to‘lov muddati o‘tgan · {{date}}",
+      "supplier_reply": "Yangi xabarlar yoki fayllar: {{count}}",
+      "empty": "Tur komponentlarida operatsion muammolar yo‘q"
+    },
     "action_timeline": {
       "title": "Yaqin vazifalar",
       "subtitle": "To‘lov muddatlari va tur boshlanish sanasi shoshilinchlik bo‘yicha.",
