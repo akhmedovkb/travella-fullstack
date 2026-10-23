@@ -13,6 +13,14 @@ function actorMatchesProfile(actorTelegramId, profile = {}) {
   return Boolean(actor) && chatFields.some((field) => String(profile[field] || "").trim() === actor);
 }
 
+function inferSupplierDocumentType(input = {}) {
+  const haystack = `${input.file_name || ""} ${input.caption || ""}`.toLowerCase();
+  if (/invoice|сч[её]т|hisob|factura|фактур/.test(haystack)) return "invoice";
+  if (/voucher|ваучер|vaucher/.test(haystack)) return "voucher";
+  if (/confirm|подтверж|tasdiq|booking/.test(haystack)) return "confirmation";
+  return "other";
+}
+
 function normalizeSupplierAttachment(input = {}) {
   const kind = input.kind === "photo" ? "photo" : "document";
   const fileId = String(input.file_id || "").trim();
@@ -28,6 +36,7 @@ function normalizeSupplierAttachment(input = {}) {
     mime_type: String(input.mime_type || (kind === "photo" ? "image/jpeg" : "application/octet-stream")).trim().slice(0, 120),
     file_size: fileSize || null,
     caption: String(input.caption || "").trim().slice(0, 1000) || null,
+    document_type: inferSupplierDocumentType(input),
   };
 }
 
@@ -251,4 +260,4 @@ async function consumeSupplierServiceOrderAttachment({ actorTelegramId, attachme
   return { ok: true, booking_id: item.booking_id, service_order_event: event.rows[0] };
 }
 
-module.exports = { actorMatchesProfile, profileChatId, normalizeSupplierAttachment, respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply, consumeSupplierServiceOrderAttachment };
+module.exports = { actorMatchesProfile, profileChatId, inferSupplierDocumentType, normalizeSupplierAttachment, respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply, consumeSupplierServiceOrderAttachment };

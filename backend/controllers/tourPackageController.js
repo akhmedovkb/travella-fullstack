@@ -620,6 +620,35 @@ async function downloadTourPackageComponentAttachment(req, res) {
   }
 }
 
+async function updateTourPackageComponentAttachment(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const bookingId = Number(req.params.bookingId);
+    const eventId = Number(req.params.eventId);
+    const documentType = String(req.body?.document_type || "").trim();
+    if (![bookingId, eventId].every((value) => Number.isInteger(value) && value > 0) || !["confirmation", "invoice", "voucher", "other"].includes(documentType)) {
+      return res.status(400).json({ message: "Valid attachment type is required" });
+    }
+    const result = await pool.query(
+      `UPDATE tour_package_component_events event
+          SET metadata=jsonb_set(COALESCE(event.metadata,'{}'::jsonb),'{document_type}',to_jsonb($1::text),TRUE)
+         FROM tour_packages tp,bookings booking
+        WHERE event.id=$2 AND event.package_id=$3::uuid AND event.booking_id=$4
+          AND event.event_type='attachment_received' AND tp.id=event.package_id
+          AND tp.owner_provider_id=$5 AND booking.id=event.booking_id AND booking.group_id=tp.id
+        RETURNING event.id,event.metadata`,
+      [documentType, eventId, req.params.id, bookingId, ownerId]
+    );
+    if (!result.rowCount) return res.status(404).json({ message: "Attachment not found" });
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("updateTourPackageComponentAttachment error:", error);
+    return res.status(500).json({ message: "Failed to update attachment" });
+  }
+}
+
 function normalizePackageBody(body = {}) {
   const markupType = body.markup_type === "fixed" ? "fixed" : "percent";
   const netTotal = cleanMoney(body.net_total);
@@ -722,6 +751,13 @@ async function listTourPackages(req, res) {
               (SELECT event.booking_id FROM tour_package_component_events event
                 WHERE event.package_id=tp.id AND event.event_type IN ('message_received','attachment_received') AND event.read_at IS NULL
                 ORDER BY event.created_at DESC,event.id DESC LIMIT 1) AS latest_supplier_reply_booking_id,
+              (SELECT COUNT(*)::int FROM tour_package_component_events event
+                WHERE event.package_id=tp.id AND event.event_type='attachment_received') AS supplier_document_count,
+              COUNT(b.id) FILTER (
+                WHERE tp.status IN ('booked','paid') AND ops.service_order_status='accepted'
+                  AND NOT EXISTS (SELECT 1 FROM tour_package_component_events event
+                    WHERE event.package_id=tp.id AND event.booking_id=b.id AND event.event_type='attachment_received')
+              )::int AS missing_supplier_document_count,
               (SELECT COUNT(*)::int FROM (
                 SELECT DISTINCT ON (event.booking_id) event.booking_id,event.event_type,event.created_at
                   FROM tour_package_component_events event
@@ -1546,6 +1582,7 @@ module.exports = {
   updateTourPackageComponentOperations,
   markTourPackageComponentMessagesRead,
   downloadTourPackageComponentAttachment,
+  updateTourPackageComponentAttachment,
   sendTourPackageServiceOrder,
   remindTourPackageServiceOrder,
   cancelTourPackageServiceOrder,
