@@ -30,7 +30,7 @@ async function openAttachment(packageId, bookingId, eventId) {
 }
 
 function currentOperationsTimeline(tourPackage, components) {
-  if (String(tourPackage.status || "").toLowerCase() === "cancelled") return [];
+  if (["cancelled", "lost"].includes(String(tourPackage.status || "").toLowerCase())) return [];
   const today = new Date().toISOString().slice(0, 10);
   const events = [];
   const add = (type, value, extra = {}) => {
@@ -696,7 +696,7 @@ export default function TourPackageWorkspace() {
   return <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
     <Link to="/dashboard/bookings" className="inline-flex items-center gap-2 text-sm font-semibold text-gray-600 hover:text-gray-950"><ArrowLeft size={17} />{t("tb.workspace.back")}</Link>
     <header className="mt-5 flex flex-wrap items-start justify-between gap-5 border-b border-gray-200 pb-6">
-      <div><div className="text-xs font-semibold uppercase text-orange-600">Tour Builder · {t("tb.workspace.package")}</div><h1 className="mt-2 text-3xl font-bold">{tourPackage.title}</h1><div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-600"><span className="rounded-full bg-sky-50 px-2.5 py-1 font-semibold text-sky-700 ring-1 ring-sky-200">{t(`tb.package_status.${tourPackage.status}`, { defaultValue: tourPackage.status })}</span>{tourPackage.booking_reference && <span className="font-mono font-bold">{tourPackage.booking_reference}</span>}<span>{dateText(tourPackage.start_date)} — {dateText(tourPackage.end_date)}</span></div></div>
+      <div><div className="text-xs font-semibold uppercase text-orange-600">Tour Builder · {t("tb.workspace.package")}</div><h1 className="mt-2 text-3xl font-bold">{tourPackage.title}</h1><div className="mt-3 flex flex-wrap items-center gap-2 text-sm text-gray-600"><span className={`rounded-full px-2.5 py-1 font-semibold ring-1 ${tourPackage.status === "lost" ? "bg-red-50 text-red-700 ring-red-200" : "bg-sky-50 text-sky-700 ring-sky-200"}`}>{t(`tb.package_status.${tourPackage.status}`, { defaultValue: tourPackage.status })}</span>{tourPackage.booking_reference && <span className="font-mono font-bold">{tourPackage.booking_reference}</span>}<span>{dateText(tourPackage.start_date)} — {dateText(tourPackage.end_date)}</span></div></div>
       <div className="flex flex-wrap items-center gap-3"><div className="mr-2 text-right"><div className="text-xs font-semibold uppercase text-gray-400">GROSS</div><div className="text-3xl font-bold text-emerald-700">{money(tourPackage.gross_total, currency)}</div></div>{!locked && !editing && <button type="button" onClick={() => setEditing(true)} className="inline-flex h-11 items-center gap-2 border border-gray-300 bg-white px-4 font-semibold hover:bg-gray-50"><Pencil size={17} />{t("tb.workspace.edit")}</button>}</div>
     </header>
     {error && <div className="mt-4 border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</div>}

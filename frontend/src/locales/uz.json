@@ -1603,6 +1603,7 @@
       "partially_confirmed": "Qisman tasdiqlangan",
       "confirmed": "Tasdiqlangan",
       "proposed": "Mijozga taklif qilindi",
+      "lost": "Bitim yo‘qotildi",
       "booked": "Bron qilingan",
       "paid": "To‘langan",
       "cancelled": "Bekor qilingan"

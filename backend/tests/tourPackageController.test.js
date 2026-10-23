@@ -14,6 +14,7 @@ test("only editable tour package states can be revised", () => {
   assert.equal(canEditTourPackage("booked"), false);
   assert.equal(canEditTourPackage("paid"), false);
   assert.equal(canEditTourPackage("cancelled"), false);
+  assert.equal(canEditTourPackage("lost"), true);
 });
 
 test("derives package payment status from the received amount", () => {
@@ -185,6 +186,7 @@ test("derives package sourcing status from supplier components", () => {
   assert.equal(derivePackageStatus([{ status: "quoted" }, { status: "pending" }], "request_sent"), "partially_confirmed");
   assert.equal(derivePackageStatus([{ status: "confirmed" }, { status: "paid" }], "request_sent"), "confirmed");
   assert.equal(derivePackageStatus([{ status: "pending" }], "proposed"), "proposed");
+  assert.equal(derivePackageStatus([{ status: "confirmed" }], "lost"), "lost");
 });
 
 test("requires client acceptance and every supplier confirmation before booking the package", () => {

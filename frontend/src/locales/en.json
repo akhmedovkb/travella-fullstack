@@ -1605,6 +1605,7 @@
       "partially_confirmed": "Partially confirmed",
       "confirmed": "Confirmed",
       "proposed": "Proposed to client",
+      "lost": "Deal lost",
       "booked": "Booked",
       "paid": "Paid",
       "cancelled": "Cancelled"

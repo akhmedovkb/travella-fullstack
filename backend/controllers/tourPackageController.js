@@ -5,7 +5,7 @@ const { tgSend } = require("../utils/telegram");
 
 const PACKAGE_STATUSES = new Set([
   "draft", "request_sent", "partially_confirmed", "confirmed",
-  "proposed", "booked", "paid", "cancelled",
+  "proposed", "lost", "booked", "paid", "cancelled",
 ]);
 const PACKAGE_PAYMENT_STATUSES = new Set(["unpaid", "partial", "paid"]);
 
@@ -94,7 +94,7 @@ function normalizeClientFollowup(body = {}) {
 }
 
 function derivePackageStatus(rows = [], storedStatus = "draft") {
-  if (["proposed", "booked", "paid", "cancelled"].includes(storedStatus)) return storedStatus;
+  if (["proposed", "lost", "booked", "paid", "cancelled"].includes(storedStatus)) return storedStatus;
   if (!rows.length) return storedStatus || "draft";
   const statuses = rows.map((row) => String(row.status || "pending").toLowerCase());
   if (statuses.every((status) => ["confirmed", "paid", "completed"].includes(status))) return "confirmed";
@@ -376,6 +376,7 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS paid_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS current_revision INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS accepted_revision INTEGER`);
+  await pool.query(`UPDATE tour_packages SET status='lost',updated_at=NOW() WHERE status='proposed' AND proposal_response='declined'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated ON tour_packages(owner_provider_id, updated_at DESC)`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_share_token ON tour_packages(share_token_hash) WHERE share_token_hash IS NOT NULL`);
   await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_tour_packages_booking_reference ON tour_packages(booking_reference) WHERE booking_reference IS NOT NULL`);
@@ -1361,7 +1362,8 @@ async function respondToTourProposal(req, res) {
     const result = await client.query(
       `UPDATE tour_packages SET proposal_response=$2,
          proposal_response_message=$3, proposal_response_reason=$4, proposal_responded_at=NOW(), updated_at=NOW()
-         ,accepted_revision=CASE WHEN $2='accepted' THEN current_revision ELSE NULL END
+         ,accepted_revision=CASE WHEN $2='accepted' THEN current_revision ELSE NULL END,
+         status=CASE WHEN $2='declined' THEN 'lost' ELSE status END
        WHERE share_token_hash=$1 AND share_expires_at > NOW() AND proposal_response IS NULL
        RETURNING id,owner_provider_id,title,client_name,current_revision,proposal_response,proposal_response_reason,
          proposal_response_message,proposal_responded_at`,
