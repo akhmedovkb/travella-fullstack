@@ -146,7 +146,8 @@ function packageOperationsTimeline(input = {}, components = [], today = new Date
     });
   });
   if (String(input.status || "").toLowerCase() === "proposed" && !input.proposalResponse) {
-    if (input.sharedAt) add("client_follow_up", new Date(new Date(input.sharedAt).getTime() + 48 * 60 * 60 * 1000).toISOString());
+    const followupBase = input.lastClientFollowupAt || input.sharedAt;
+    if (followupBase) add("client_follow_up", new Date(new Date(followupBase).getTime() + 48 * 60 * 60 * 1000).toISOString());
     add("proposal_expiry", input.quoteValidUntil);
   }
   add("manual_task", input.nextTaskDueAt);
@@ -319,6 +320,7 @@ async function ensureTourPackagesTable() {
       proposal_response VARCHAR(32),
       proposal_response_message TEXT,
       proposal_responded_at TIMESTAMPTZ,
+      last_client_followup_at TIMESTAMPTZ,
       booking_reference VARCHAR(32),
       booked_at TIMESTAMPTZ,
       payment_status VARCHAR(16) NOT NULL DEFAULT 'unpaid',
@@ -343,6 +345,7 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_response VARCHAR(32)`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_response_message TEXT`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS proposal_responded_at TIMESTAMPTZ`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS last_client_followup_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS booking_reference VARCHAR(32)`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS booked_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS payment_status VARCHAR(16) NOT NULL DEFAULT 'unpaid'`);
@@ -959,6 +962,7 @@ async function listTourPackages(req, res) {
         nextTaskDueAt: item.next_task_due_at,
         proposalResponse: item.proposal_response,
         sharedAt: item.shared_at,
+        lastClientFollowupAt: item.last_client_followup_at,
         quoteValidUntil: item.quote_valid_until,
       }, item.next_supplier_due_at ? [{ supplier_payment_due_at: item.next_supplier_due_at }] : []);
       return {
@@ -1104,6 +1108,7 @@ async function getTourPackage(req, res) {
         startDate: item.start_date,
         proposalResponse: item.proposal_response,
         sharedAt: item.shared_at,
+        lastClientFollowupAt: item.last_client_followup_at,
         quoteValidUntil: item.quote_valid_until,
       }, bookings),
     });
@@ -1166,6 +1171,25 @@ async function updateTourPackageManager(req, res) {
   } catch (error) {
     console.error("updateTourPackageManager error:", error);
     return res.status(500).json({ message: "Failed to assign tour manager" });
+  }
+}
+
+async function recordTourPackageClientFollowup(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const result = await pool.query(
+      `UPDATE tour_packages SET last_client_followup_at=NOW(),updated_at=NOW()
+        WHERE id=$1::uuid AND owner_provider_id=$2 AND status='proposed' AND proposal_response IS NULL
+        RETURNING id,last_client_followup_at,updated_at`,
+      [req.params.id, ownerId]
+    );
+    if (!result.rowCount) return res.status(409).json({ message: "Tour proposal is not awaiting a client response" });
+    return res.json(result.rows[0]);
+  } catch (error) {
+    console.error("recordTourPackageClientFollowup error:", error);
+    return res.status(500).json({ message: "Failed to record client follow-up" });
   }
 }
 
@@ -1890,6 +1914,7 @@ module.exports = {
   getTourPackage,
   updateTourPackage,
   updateTourPackageManager,
+  recordTourPackageClientFollowup,
   shareTourPackage,
   revokeTourPackageShare,
   getPublicTourProposal,

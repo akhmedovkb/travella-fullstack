@@ -236,5 +236,12 @@ test("schedules client follow-up and proposal expiry while awaiting a response",
     sharedAt: "2026-11-01T09:00:00Z",
     quoteValidUntil: "2026-11-08T18:00:00Z",
   }, [], new Date("2026-11-04T12:00:00Z")), []);
+  assert.deepEqual(packageOperationsTimeline({
+    status: "proposed",
+    sharedAt: "2026-11-01T09:00:00Z",
+    lastClientFollowupAt: "2026-11-04T09:00:00Z",
+  }, [], new Date("2026-11-04T12:00:00Z")).map((item) => [item.type, item.urgency, item.days]), [
+    ["client_follow_up", "soon", 2],
+  ]);
 });
 

@@ -41,6 +41,11 @@ function currentOperationsTimeline(tourPackage, components) {
   };
   if (tourPackage.payment_status !== "paid") add("client_payment", tourPackage.payment_due_at);
   components.filter((item) => item.supplier_paid !== true).forEach((item) => add("supplier_payment", item.supplier_payment_due_at, { booking_id: item.id, label: item.service_title || item.provider_name }));
+  if (tourPackage.status === "proposed" && !tourPackage.proposal_response) {
+    const followupBase = tourPackage.last_client_followup_at || tourPackage.shared_at;
+    if (followupBase) add("client_follow_up", new Date(new Date(followupBase).getTime() + 48 * 60 * 60 * 1000).toISOString());
+    add("proposal_expiry", tourPackage.quote_valid_until);
+  }
   if (dateValue(tourPackage.start_date) >= today) add("departure", tourPackage.start_date);
   const priority = { overdue: 0, today: 1, soon: 2, upcoming: 3 };
   return events.sort((a, b) => priority[a.urgency] - priority[b.urgency] || a.due_at.localeCompare(b.due_at));
@@ -172,12 +177,12 @@ function DepartureReadiness({ checks, percent, t }) {
   </section>;
 }
 
-function OperationsTimeline({ items = [], t }) {
+function OperationsTimeline({ items = [], saving, onClientFollowup, t }) {
   const tone = { overdue: "border-red-200 bg-red-50 text-red-800", today: "border-orange-200 bg-orange-50 text-orange-800", soon: "border-amber-200 bg-amber-50 text-amber-800", upcoming: "border-gray-200 bg-white text-gray-700" };
   return <section className="border-b border-gray-200 pb-5">
     <div className="flex items-center gap-2"><Clock3 size={20} /><h2 className="text-xl font-bold">{t("tb.action_timeline.title")}</h2></div>
     <p className="mt-1 text-sm text-gray-500">{t("tb.action_timeline.subtitle")}</p>
-    <div className="mt-4 space-y-2">{items.map((item, index) => <div key={`${item.type}-${item.booking_id || index}`} className={`flex flex-wrap items-center justify-between gap-3 border px-4 py-3 ${tone[item.urgency] || tone.upcoming}`}><div><div className="font-semibold">{t(`tb.action_timeline.${item.type}`)}{item.label ? ` · ${item.label}` : ""}</div><div className="mt-0.5 text-xs opacity-75">{dateText(item.due_at)}</div></div><span className="text-xs font-bold uppercase">{item.urgency === "overdue" ? t("tb.action_timeline.overdue_days", { count: Math.abs(item.days) }) : item.urgency === "today" ? t("tb.action_timeline.today") : t("tb.action_timeline.days_left", { count: item.days })}</span></div>)}
+    <div className="mt-4 space-y-2">{items.map((item, index) => <div key={`${item.type}-${item.booking_id || index}`} className={`flex flex-wrap items-center justify-between gap-3 border px-4 py-3 ${tone[item.urgency] || tone.upcoming}`}><div><div className="font-semibold">{t(`tb.action_timeline.${item.type}`)}{item.label ? ` · ${item.label}` : ""}</div><div className="mt-0.5 text-xs opacity-75">{dateText(item.due_at)}</div></div><div className="flex items-center gap-3"><span className="text-xs font-bold uppercase">{item.urgency === "overdue" ? t("tb.action_timeline.overdue_days", { count: Math.abs(item.days) }) : item.urgency === "today" ? t("tb.action_timeline.today") : t("tb.action_timeline.days_left", { count: item.days })}</span>{item.type === "client_follow_up" && <button type="button" disabled={saving} onClick={onClientFollowup} className="inline-flex h-8 items-center gap-1.5 bg-white px-3 text-xs font-bold text-gray-950 shadow-sm disabled:opacity-40"><CheckCircle2 size={14} />{t("tb.action_timeline.mark_contacted")}</button>}</div></div>)}
       {!items.length && <div className="border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{t("tb.action_timeline.empty")}</div>}
     </div>
   </section>;
@@ -438,6 +443,17 @@ export default function TourPackageWorkspace() {
     } finally { setSaving(false); }
   };
 
+  const recordClientFollowup = async () => {
+    setSaving(true); setError("");
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/client-followup`, {}, cfg());
+      setTourPackage((current) => ({ ...current, ...data }));
+      setNotice(t("tb.workspace.client_followup_saved"));
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || t("tb.workspace.client_followup_error"));
+    } finally { setSaving(false); }
+  };
+
   const saveTravelers = async () => {
     setSaving(true); setError("");
     try {
@@ -693,7 +709,7 @@ export default function TourPackageWorkspace() {
       <OperationsIssueCenter components={components} t={t} />
       <FinancialReconciliation components={components} grossTotal={tourPackage.gross_total} currency={currency} t={t} />
       <SupplierPerformanceSummary components={components} t={t} />
-      <OperationsTimeline items={operationsTimeline} t={t} />
+      <OperationsTimeline items={operationsTimeline} saving={saving} onClientFollowup={recordClientFollowup} t={t} />
       <OperationsTasks items={tourPackage.tasks} saving={saving} onCreate={createTask} onToggle={toggleTask} onDelete={deleteTask} t={t} />
       <IncidentJournal incidents={tourPackage.incidents || []} components={components} saving={saving} onCreate={createIncident} onUpdate={updateIncident} t={t} />
       <SupplierDocumentCenter components={components} packageId={id} saving={saving} onClassify={classifyAttachment} onReview={reviewAttachment} t={t} />

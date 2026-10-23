@@ -30,7 +30,10 @@ const actualMarginRate = (item) => {
 };
 const isAwaitingProposal = (item) => item.status === "proposed" && !item.proposal_response;
 const isProposalExpired = (item) => isAwaitingProposal(item) && item.quote_valid_until && new Date(item.quote_valid_until).getTime() < Date.now();
-const isProposalFollowupDue = (item) => isAwaitingProposal(item) && !isProposalExpired(item) && item.shared_at && new Date(item.shared_at).getTime() < Date.now() - 48 * 60 * 60 * 1000;
+const isProposalFollowupDue = (item) => {
+  const lastContact = item.last_client_followup_at || item.shared_at;
+  return isAwaitingProposal(item) && !isProposalExpired(item) && lastContact && new Date(lastContact).getTime() < Date.now() - 48 * 60 * 60 * 1000;
+};
 const hasOperationalRisk = (item) => item.status !== "cancelled" && (isProposalExpired(item) || isProposalFollowupDue(item) || Number(item.open_incident_count || 0) > 0 || Number(item.missing_confirmation_count || 0) > 0 || Number(item.missing_supplier_document_count || 0) > 0 || Number(item.supplier_document_review_count || 0) > 0 || Number(item.supplier_overdue_count || 0) > 0 || Number(item.overdue_task_count || 0) > 0 || Number(item.supplier_order_attention_count || 0) > 0 || Number(item.supplier_reply_pending_count || 0) > 0);
 const operationalPriority = (item) => (
   (isProposalExpired(item) ? 90 : 0)

@@ -1757,6 +1757,7 @@
       "subtitle": "Proposals, payment deadlines, and departure ordered by urgency.",
       "client_follow_up": "Follow up with client about proposal",
       "proposal_expiry": "Proposal expires",
+      "mark_contacted": "Contacted",
       "client_payment": "Collect client payment",
       "supplier_payment": "Pay supplier",
       "manual_task": "Team task",
@@ -1858,7 +1859,9 @@
       "manager": "Responsible manager",
       "manager_ph": "Team member name",
       "manager_saved": "Tour manager saved",
-      "manager_error": "Could not assign tour manager"
+      "manager_error": "Could not assign tour manager",
+      "client_followup_saved": "Client contact recorded. The next follow-up is scheduled.",
+      "client_followup_error": "Could not record client contact"
     },
     "portfolio": {
       "title": "My tours",
