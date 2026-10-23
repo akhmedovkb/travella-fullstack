@@ -68,6 +68,26 @@ function LabeledField({ label, children, wide = false }) {
   return <label className={wide ? "md:col-span-2" : ""}><span className="mb-1.5 block text-sm font-semibold">{label}</span>{children}</label>;
 }
 
+function SaleConversionPanel({ confirmed, total, saving, onConfirm, t }) {
+  const suppliersReady = total > 0 && confirmed === total;
+  return <section className={`mt-5 border p-5 ${suppliersReady ? "border-emerald-200 bg-emerald-50" : "border-amber-200 bg-amber-50"}`}>
+    <div className="flex flex-col gap-5 md:flex-row md:items-center md:justify-between">
+      <div>
+        <div className="flex items-center gap-2"><CheckCircle2 size={20} className="text-emerald-700" /><h2 className="text-lg font-bold">{t("tb.proposal.booking_action_title")}</h2></div>
+        <p className="mt-1 text-sm text-gray-600">{t("tb.proposal.booking_action_hint")}</p>
+        <div className="mt-3 flex flex-wrap gap-x-5 gap-y-2 text-sm font-semibold">
+          <span className="inline-flex items-center gap-1.5 text-emerald-700"><CheckCircle2 size={16} />{t("tb.proposal.response_accepted")}</span>
+          <span className={`inline-flex items-center gap-1.5 ${suppliersReady ? "text-emerald-700" : "text-amber-700"}`}>{suppliersReady ? <CheckCircle2 size={16} /> : <CircleDashed size={16} />}{total ? t("tb.proposal.components_pending", { confirmed, total }) : t("tb.proposal.components_required")}</span>
+        </div>
+      </div>
+      <div className="shrink-0 md:text-right">
+        <div className={`mb-2 text-xs font-bold uppercase ${suppliersReady ? "text-emerald-700" : "text-amber-700"}`}>{t(suppliersReady ? "tb.proposal.booking_ready" : "tb.proposal.booking_blocked")}</div>
+        <button type="button" disabled={saving || !suppliersReady} onClick={onConfirm} className="inline-flex h-11 w-full items-center justify-center gap-2 bg-gray-950 px-5 font-semibold text-white hover:bg-gray-800 disabled:cursor-not-allowed disabled:opacity-35 md:w-auto"><BriefcaseBusiness size={18} />{t("tb.proposal.confirm_sale")}</button>
+      </div>
+    </div>
+  </section>;
+}
+
 function TravelerSection({ travelers, setTravelers, capacity, onSave, saving, t }) {
   const addTraveler = () => {
     if (travelers.length >= capacity) return;
@@ -432,6 +452,17 @@ export default function TourPackageWorkspace() {
     } finally { setSaving(false); }
   };
 
+  const confirmSale = async () => {
+    setSaving(true); setError(""); setNotice("");
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/confirm-sale`, {}, cfg());
+      setTourPackage((current) => ({ ...current, ...data }));
+      setNotice(t("tb.proposal.sale_confirmed", { reference: data.booking_reference }));
+    } catch (requestError) {
+      setError(requestError?.response?.data?.message || t("tb.workspace.save_error"));
+    } finally { setSaving(false); }
+  };
+
   const savePayment = async () => {
     setSaving(true); setError("");
     try {
@@ -702,6 +733,7 @@ export default function TourPackageWorkspace() {
     {error && <div className="mt-4 border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</div>}
     {notice && <div className="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{notice}</div>}
     {shareUrl && <div className="mt-4 flex flex-col gap-2 border border-sky-200 bg-sky-50 p-3 sm:flex-row"><input readOnly value={shareUrl} className="h-10 min-w-0 flex-1 border border-sky-200 bg-white px-3 text-sm" /><button type="button" onClick={async () => { await navigator.clipboard.writeText(shareUrl); setNotice(t("tb.workspace.link_copied")); }} className="inline-flex h-10 items-center justify-center gap-2 bg-gray-950 px-4 text-sm font-semibold text-white"><Copy size={16} />{t("tb.workspace.copy_link")}</button></div>}
+    {tourPackage.status === "accepted" && <SaleConversionPanel confirmed={confirmed} total={components.length} saving={saving} onConfirm={confirmSale} t={t} />}
 
     {editing && <section className="mt-6 border border-orange-200 bg-orange-50/40 p-5 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-4"><div><h2 className="text-xl font-bold">{t("tb.workspace.edit_title")}</h2><p className="mt-1 text-sm text-gray-600">{t("tb.workspace.edit_hint")}</p></div><button type="button" onClick={() => { setForm(createForm(tourPackage)); setDirty(false); setEditing(false); }} className="inline-flex h-10 items-center gap-2 px-3 text-sm font-semibold text-gray-600"><X size={17} />{t("common.cancel")}</button></div>
