@@ -208,6 +208,47 @@ function OperationsTasks({ items = [], saving, onCreate, onToggle, onDelete, t }
   </section>;
 }
 
+function SupplierDocumentCenter({ components, packageId, saving, onClassify, onReview, t }) {
+  const [filter, setFilter] = useState("all");
+  const documents = useMemo(() => components.flatMap((component) => (component.service_order_events || [])
+    .filter((event) => event.event_type === "attachment_received")
+    .map((event) => ({
+      ...event,
+      bookingId: component.id,
+      serviceTitle: component.service_title,
+      providerName: component.provider_name,
+    })))
+    .sort((left, right) => new Date(right.created_at || 0) - new Date(left.created_at || 0)), [components]);
+  const counts = useMemo(() => documents.reduce((result, document) => {
+    const status = document.metadata?.review_status || "pending";
+    result[status] = (result[status] || 0) + 1;
+    return result;
+  }, { pending: 0, approved: 0, rejected: 0 }), [documents]);
+  const visibleDocuments = filter === "all" ? documents : documents.filter((document) => (document.metadata?.review_status || "pending") === filter);
+  const statusClass = { pending: "bg-amber-50 text-amber-800", approved: "bg-emerald-50 text-emerald-700", rejected: "bg-red-50 text-red-700" };
+
+  return <section>
+    <div className="flex flex-wrap items-end justify-between gap-4">
+      <div><h2 className="flex items-center gap-2 text-xl font-bold"><FileText size={20} />{t("tb.documents.center_title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.documents.center_hint")}</p></div>
+      <div className="flex flex-wrap border border-gray-200 bg-gray-50 p-1">
+        {["all", "pending", "approved", "rejected"].map((status) => <button key={status} type="button" onClick={() => setFilter(status)} className={`h-9 px-3 text-sm font-semibold ${filter === status ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-white"}`}>{t(`tb.documents.filter_${status}`)} <span className="ml-1 opacity-70">{status === "all" ? documents.length : counts[status]}</span></button>)}
+      </div>
+    </div>
+    <div className="mt-4 divide-y border-y border-gray-200">
+      {visibleDocuments.map((document) => {
+        const status = document.metadata?.review_status || "pending";
+        return <div key={`${document.bookingId}-${document.id}`} className="grid gap-3 py-4 lg:grid-cols-[minmax(220px,1fr)_minmax(180px,0.8fr)_170px_auto] lg:items-center">
+          <div className="min-w-0"><button type="button" onClick={() => openAttachment(packageId, document.bookingId, document.id).catch(() => window.alert(t("tb.documents.attachment_error")))} className="inline-flex max-w-full items-center gap-2 font-semibold text-sky-700 hover:underline"><Paperclip size={16} className="shrink-0" /><span className="truncate">{document.metadata?.file_name || t("tb.documents.open_attachment")}</span><ExternalLink size={13} className="shrink-0" /></button><div className="mt-1 text-xs text-gray-500">{dateTimeText(document.created_at)}</div></div>
+          <div className="min-w-0"><div className="truncate text-sm font-semibold">{document.providerName || t("tb.documents.provider_missing")}</div><div className="truncate text-xs text-gray-500">{document.serviceTitle || `#${document.bookingId}`}</div></div>
+          <select value={document.metadata?.document_type || "other"} onChange={(event) => onClassify(document.bookingId, document.id, event.target.value)} disabled={saving} className="h-10 border border-gray-300 bg-white px-3 text-sm disabled:opacity-50"><option value="confirmation">{t("tb.documents.attachment_confirmation")}</option><option value="invoice">{t("tb.documents.attachment_invoice")}</option><option value="voucher">{t("tb.documents.attachment_voucher")}</option><option value="other">{t("tb.documents.attachment_other")}</option></select>
+          <div className="flex flex-wrap items-center justify-start gap-2 lg:justify-end"><span className={`px-2 py-1 text-xs font-bold ${statusClass[status]}`}>{t(`tb.documents.attachment_${status}`)}</span>{status === "pending" && <><button type="button" disabled={saving} onClick={() => onReview(document.bookingId, document.id, "approved")} className="inline-flex h-9 items-center gap-1.5 bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"><CheckCircle2 size={15} />{t("tb.documents.approve_attachment")}</button><button type="button" disabled={saving} onClick={() => onReview(document.bookingId, document.id, "rejected")} className="inline-flex h-9 items-center gap-1.5 border border-red-300 bg-white px-3 text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-50"><X size={15} />{t("tb.documents.reject_attachment")}</button></>}</div>
+        </div>;
+      })}
+      {!visibleDocuments.length && <div className="py-8 text-center text-sm text-gray-500">{documents.length ? t("tb.documents.no_documents_for_filter") : t("tb.documents.no_supplier_documents")}</div>}
+    </div>
+  </section>;
+}
+
 export default function TourPackageWorkspace() {
   const { id } = useParams();
   const { t } = useTranslation();
@@ -540,6 +581,7 @@ export default function TourPackageWorkspace() {
       <DepartureReadiness checks={operationChecks} percent={operationPercent} t={t} />
       <OperationsTimeline items={operationsTimeline} t={t} />
       <OperationsTasks items={tourPackage.tasks} saving={saving} onCreate={createTask} onToggle={toggleTask} onDelete={deleteTask} t={t} />
+      <SupplierDocumentCenter components={components} packageId={id} saving={saving} onClassify={classifyAttachment} onReview={reviewAttachment} t={t} />
       <section><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-bold">{t("tb.workspace.components")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.workspace.components_hint")}</p></div><div className="flex flex-wrap items-center gap-3"><span className="text-sm font-semibold text-gray-600">{confirmed}/{components.length}</span>{missingDocumentCount > 0 && <button type="button" disabled={saving} onClick={requestAllSupplierDocuments} className="inline-flex h-10 items-center gap-2 border border-orange-300 bg-white px-4 text-sm font-semibold text-orange-700 hover:bg-orange-50 disabled:opacity-50"><Paperclip size={16} />{t("tb.documents.request_all_documents", { count: missingDocumentCount })}</button>}{canIssueOrders && bulkOrderCount > 0 && <button type="button" disabled={saving} onClick={sendAllServiceOrders} className="inline-flex h-10 items-center gap-2 bg-orange-600 px-4 text-sm font-semibold text-white hover:bg-orange-700 disabled:opacity-50"><Send size={16} />{t("tb.documents.send_all_service_orders", { count: bulkOrderCount })}</button>}</div></div><div className="mt-3 h-2 overflow-hidden rounded-full bg-gray-200"><div className="h-full bg-emerald-500" style={{ width: `${readinessPercent}%` }} /></div><div className="mt-4 space-y-3">{components.map((item) => <ComponentOperationsCard key={item.id} item={item} currency={currency} saving={saving} onSave={saveComponentOperations} onSendOrder={sendServiceOrder} onRemindOrder={remindServiceOrder} onCancelOrder={cancelServiceOrder} onMessageOrder={messageServiceOrder} onMarkRead={markSupplierMessagesRead} onClassifyAttachment={classifyAttachment} onRequestDocuments={requestSupplierDocuments} packageId={id} canIssueOrder={canIssueOrders} t={t} />)}{!components.length && <div className="border-y border-gray-200 py-6 text-gray-500">{t("tb.workspace.no_components")}</div>}</div></section>
       <TravelerSection travelers={travelers} setTravelers={setTravelers} capacity={Number(tourPackage.pax_adult || 0) + Number(tourPackage.pax_child || 0)} onSave={saveTravelers} saving={saving} t={t} />
       <section><h2 className="text-xl font-bold">{t("tb.workspace.revisions")}</h2><div className="mt-4 divide-y border-y border-gray-200">{revisions.map((revision) => <div key={revision.version} className="flex items-center justify-between gap-4 py-4"><div className="flex items-center gap-3"><Clock3 size={18} className="text-gray-400" /><div><div className="font-bold">{t("tb.workspace.version", { version: revision.version })}{Number(tourPackage.accepted_revision) === Number(revision.version) ? ` · ${t("tb.workspace.accepted")}` : ""}</div><div className="text-sm text-gray-500">{dateText(revision.created_at)}</div></div></div><div className="font-bold">{money(revision.gross_total, revision.currency || currency)}</div></div>)}{!revisions.length && <div className="py-6 text-gray-500">{t("tb.workspace.no_revisions")}</div>}</div></section>
