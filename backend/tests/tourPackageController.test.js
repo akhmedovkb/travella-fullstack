@@ -186,6 +186,7 @@ test("derives package sourcing status from supplier components", () => {
   assert.equal(derivePackageStatus([{ status: "quoted" }, { status: "pending" }], "request_sent"), "partially_confirmed");
   assert.equal(derivePackageStatus([{ status: "confirmed" }, { status: "paid" }], "request_sent"), "confirmed");
   assert.equal(derivePackageStatus([{ status: "pending" }], "proposed"), "proposed");
+  assert.equal(derivePackageStatus([{ status: "confirmed" }], "accepted"), "accepted");
   assert.equal(derivePackageStatus([{ status: "confirmed" }], "lost"), "lost");
 });
 
