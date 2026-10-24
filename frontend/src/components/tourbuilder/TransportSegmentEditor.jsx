@@ -26,14 +26,14 @@ const copy = {
     departure: "Отправление", arrival: "Прибытие", class: "Класс", search: "Найти рейсы",
     searching: "Ищем", choose: "Выбрать", selected: "Выбрано", noOffers: "Предложений не найдено",
     manualAir: "Выберите подходящий вариант из результатов поиска", iata: "Код IATA", remove: "Удалить сегмент",
-    swap: "Поменять направление", flightDate: "Дата отправления",
+    swap: "Поменять направление", flightDate: "Дата отправления", currency: "Валюта", stops: "пересадок",
   },
   en: {
     car: "Car", train: "Train", air: "Flight", from: "From", to: "To", price: "Price",
     perPax: "per passenger", carrier: "Carrier", number: "Number", departure: "Departure",
     arrival: "Arrival", class: "Class", search: "Search flights", searching: "Searching",
     choose: "Select", selected: "Selected", noOffers: "No offers found", manualAir: "You can enter the flight manually",
-    iata: "IATA code", remove: "Remove segment", swap: "Swap direction", flightDate: "Departure date",
+    iata: "IATA code", remove: "Remove segment", swap: "Swap direction", flightDate: "Departure date", currency: "Currency", stops: "stops",
   },
   uz: {
     car: "Avtomobil", train: "Poyezd", air: "Samolyot", from: "Qayerdan", to: "Qayerga",
@@ -41,7 +41,7 @@ const copy = {
     departure: "Jo'nash", arrival: "Yetib kelish", class: "Klass", search: "Reyslarni topish",
     searching: "Qidirilmoqda", choose: "Tanlash", selected: "Tanlandi", noOffers: "Taklif topilmadi",
     manualAir: "Qidiruv natijalaridan mos variantni tanlang", iata: "IATA kodi", remove: "Segmentni o'chirish",
-    swap: "Yo'nalishni almashtirish", flightDate: "Jo'nash sanasi",
+    swap: "Yo'nalishni almashtirish", flightDate: "Jo'nash sanasi", currency: "Valyuta", stops: "almashish",
   },
 };
 
@@ -240,7 +240,7 @@ export default function TransportSegmentEditor({ value, date, adults, children, 
           {type === "train" ? <Field type="datetime-local" label={text.arrival} value={value.arrival_at || ""} onChange={(arrival_at) => patch({ arrival_at })} /> : null}
           {type === "train" ? <Field label={text.class} value={value.cabin_class} onChange={(cabin_class) => patch({ cabin_class })} /> : null}
           <Field type="number" label={text.price} value={value.price ?? 0} onChange={(price) => patch({ price: Number(price) || 0 })} />
-          <label className="block"><span className="mb-1 block text-xs font-semibold text-slate-600">Currency</span><select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm" value={value.currency || "UZS"} onChange={(event) => patch({ currency: event.target.value })}><option>UZS</option><option>USD</option></select></label>
+          <label className="block"><span className="mb-1 block text-xs font-semibold text-slate-600">{text.currency}</span><select className="h-10 w-full rounded-md border border-slate-200 bg-white px-3 text-sm" value={value.currency || "UZS"} onChange={(event) => patch({ currency: event.target.value })}><option>UZS</option><option>USD</option></select></label>
           <label className="flex items-end pb-2"><span className="inline-flex items-center gap-2 text-sm text-slate-700"><input type="checkbox" checked={Boolean(value.perPax)} onChange={(event) => patch({ perPax: event.target.checked })} />{text.perPax}</span></label>
         </div>
       )}
@@ -272,7 +272,7 @@ export default function TransportSegmentEditor({ value, date, adults, children, 
             const last = offer.segments?.[offer.segments.length - 1] || {};
             const active = selectedId === offer.raw_offer_id;
             return <button key={offer.raw_offer_id} type="button" onClick={() => selectOffer(offer)} className={`flex items-center justify-between gap-3 rounded-md border p-3 text-left ${active ? "border-emerald-400 bg-emerald-50" : "border-slate-200 bg-white hover:border-orange-300"}`}>
-              <span className="min-w-0"><strong className="block truncate text-sm text-slate-900">{first.carrier_name || first.carrier_code} {first.number}</strong><span className="mt-1 block text-xs text-slate-500">{formatDateTime(first.departure_at, locale)} → {formatDateTime(last.arrival_at, locale)} · {offer.segments.length - 1} stops · {offer.baggage || "—"}</span></span>
+              <span className="min-w-0"><strong className="block truncate text-sm text-slate-900">{first.carrier_name || first.carrier_code} {first.number}</strong><span className="mt-1 block text-xs text-slate-500">{formatDateTime(first.departure_at, locale)} → {formatDateTime(last.arrival_at, locale)} · {offer.segments.length - 1} {text.stops} · {offer.baggage || "—"}</span></span>
               <span className="shrink-0 text-right"><strong className="block text-sm">{offer.price.toLocaleString()} {offer.currency}</strong><span className="text-xs text-slate-500">{active ? text.selected : text.choose}</span></span>
             </button>;
           })}</div> : null}
