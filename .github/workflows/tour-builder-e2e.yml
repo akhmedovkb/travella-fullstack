@@ -1,0 +1,30 @@
+name: tour-builder-e2e
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "20 3 * * 1-5"
+
+concurrency:
+  group: tour-builder-staging-e2e
+  cancel-in-progress: false
+
+jobs:
+  staging:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: staging
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Run Tour Builder lifecycle
+        working-directory: backend
+        env:
+          E2E_BASE_URL: https://travella-backend-staging-staging.up.railway.app
+          E2E_DMC_EMAIL: ${{ secrets.STAGING_E2E_DMC_EMAIL }}
+          E2E_DMC_PASSWORD: ${{ secrets.STAGING_E2E_DMC_PASSWORD }}
+          E2E_SUPPLIER_EMAIL: ${{ secrets.STAGING_E2E_SUPPLIER_EMAIL }}
+          E2E_SUPPLIER_PASSWORD: ${{ secrets.STAGING_E2E_SUPPLIER_PASSWORD }}
+        run: npm run test:e2e:tour-builder
