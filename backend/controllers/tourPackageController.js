@@ -458,6 +458,21 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refund_due_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refund_note TEXT`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ`);
+  await pool.query(`
+    DO $$
+    DECLARE status_constraint TEXT;
+    BEGIN
+      SELECT pg_get_constraintdef(oid) INTO status_constraint
+        FROM pg_constraint
+       WHERE conrelid='tour_packages'::regclass AND conname='tour_packages_status_chk';
+      IF status_constraint IS NULL OR status_constraint NOT LIKE '%accepted%' OR status_constraint NOT LIKE '%lost%' THEN
+        ALTER TABLE tour_packages DROP CONSTRAINT IF EXISTS tour_packages_status_chk;
+        ALTER TABLE tour_packages ADD CONSTRAINT tour_packages_status_chk CHECK (status IN (
+          'draft','request_sent','partially_confirmed','confirmed','proposed','accepted','lost','booked','paid','cancelled'
+        ));
+      END IF;
+    END $$
+  `);
   await pool.query(`UPDATE tour_packages SET status='accepted',updated_at=NOW() WHERE status='proposed' AND proposal_response='accepted'`);
   await pool.query(`UPDATE tour_packages SET status='lost',updated_at=NOW() WHERE status='proposed' AND proposal_response='declined'`);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_packages_owner_updated ON tour_packages(owner_provider_id, updated_at DESC)`);

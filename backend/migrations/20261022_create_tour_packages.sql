@@ -39,7 +39,7 @@ CREATE TABLE IF NOT EXISTS tour_packages (
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT tour_packages_status_chk CHECK (status IN (
     'draft', 'request_sent', 'partially_confirmed', 'confirmed',
-    'proposed', 'booked', 'paid', 'cancelled'
+    'proposed', 'accepted', 'lost', 'booked', 'paid', 'cancelled'
   )),
   CONSTRAINT tour_packages_markup_type_chk CHECK (markup_type IN ('percent', 'fixed')),
   CONSTRAINT tour_packages_payment_status_chk CHECK (payment_status IN ('unpaid', 'partial', 'paid')),
