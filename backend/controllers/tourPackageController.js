@@ -1875,6 +1875,11 @@ async function replaceTourPackageTravelers(req, res) {
       );
     }
     await client.query(`UPDATE tour_packages SET updated_at=NOW() WHERE id=$1::uuid`, [req.params.id]);
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "travelers_updated", {
+      traveler_count: rows.length,
+      adult_count: rows.filter((row) => row.travelerType === "adult").length,
+      child_count: rows.filter((row) => row.travelerType === "child").length,
+    });
     await client.query("COMMIT");
     const result = await pool.query(
       `SELECT id,full_name,traveler_type,birth_date,citizenship,passport_number,
@@ -1882,7 +1887,7 @@ async function replaceTourPackageTravelers(req, res) {
          FROM tour_package_travelers WHERE package_id=$1::uuid ORDER BY sort_order,id`,
       [req.params.id]
     );
-    return res.json({ travelers: result.rows });
+    return res.json({ travelers: result.rows, audit_event: audit.rows[0] });
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("replaceTourPackageTravelers error:", error);
@@ -2186,35 +2191,47 @@ async function messageTourPackageServiceOrder(req, res) {
 }
 
 async function createTourPackageTask(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
     const value = normalizeTourTask(req.body);
     if (!value.title) return res.status(400).json({ message: "Task title is required" });
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `INSERT INTO tour_package_tasks(package_id,title,assigned_to,due_at,priority,completed,completed_at)
        SELECT tp.id,$3,$4,$5::date,$6,$7,CASE WHEN $7 THEN NOW() ELSE NULL END
          FROM tour_packages tp WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2
        RETURNING id,title,assigned_to,due_at,priority,completed,completed_at,created_at,updated_at`,
       [req.params.id, ownerId, value.title, value.assignedTo, value.dueAt, value.priority, value.completed]
     );
-    if (!result.rowCount) return res.status(404).json({ message: "Tour package not found" });
-    return res.status(201).json(result.rows[0]);
+    if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Tour package not found" }); }
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "task_created", {
+      task_id: result.rows[0].id, title: result.rows[0].title, assigned_to: result.rows[0].assigned_to,
+      due_at: result.rows[0].due_at, priority: result.rows[0].priority,
+    });
+    await client.query("COMMIT");
+    return res.status(201).json({ ...result.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("createTourPackageTask error:", error);
     return res.status(500).json({ message: "Failed to create task" });
-  }
+  } finally { client?.release(); }
 }
 
 async function updateTourPackageTask(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
     const value = normalizeTourTask(req.body);
     if (!value.title) return res.status(400).json({ message: "Task title is required" });
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_package_tasks task SET
          title=$4,assigned_to=$5,due_at=$6::date,priority=$7,completed=$8,
          completed_at=CASE WHEN $8 AND task.completed=FALSE THEN NOW() WHEN NOT $8 THEN NULL ELSE task.completed_at END,
@@ -2224,34 +2241,49 @@ async function updateTourPackageTask(req, res) {
        RETURNING task.id,task.title,task.assigned_to,task.due_at,task.priority,task.completed,task.completed_at,task.created_at,task.updated_at`,
       [req.params.id, ownerId, req.params.taskId, value.title, value.assignedTo, value.dueAt, value.priority, value.completed]
     );
-    if (!result.rowCount) return res.status(404).json({ message: "Task not found" });
-    return res.json(result.rows[0]);
+    if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Task not found" }); }
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, result.rows[0].completed ? "task_completed" : "task_updated", {
+      task_id: result.rows[0].id, title: result.rows[0].title, assigned_to: result.rows[0].assigned_to,
+      due_at: result.rows[0].due_at, priority: result.rows[0].priority,
+    });
+    await client.query("COMMIT");
+    return res.json({ ...result.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("updateTourPackageTask error:", error);
     return res.status(500).json({ message: "Failed to update task" });
-  }
+  } finally { client?.release(); }
 }
 
 async function deleteTourPackageTask(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `DELETE FROM tour_package_tasks task USING tour_packages tp
        WHERE task.id=$3 AND task.package_id=$1::uuid AND tp.id=task.package_id AND tp.owner_provider_id=$2
-       RETURNING task.id`,
+       RETURNING task.id,task.title`,
       [req.params.id, ownerId, req.params.taskId]
     );
-    if (!result.rowCount) return res.status(404).json({ message: "Task not found" });
-    return res.status(204).end();
+    if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Task not found" }); }
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "task_deleted", {
+      task_id: result.rows[0].id, title: result.rows[0].title,
+    });
+    await client.query("COMMIT");
+    return res.json({ deleted: true, id: result.rows[0].id, audit_event: audit.rows[0] });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("deleteTourPackageTask error:", error);
     return res.status(500).json({ message: "Failed to delete task" });
-  }
+  } finally { client?.release(); }
 }
 
 async function createTourPackageIncident(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
@@ -2260,7 +2292,9 @@ async function createTourPackageIncident(req, res) {
     const severity = ["low", "medium", "high", "critical"].includes(req.body.severity) ? req.body.severity : "medium";
     const bookingId = Number(req.body.booking_id) || null;
     if (!title) return res.status(400).json({ message: "Incident title is required" });
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `INSERT INTO tour_package_incidents(package_id,booking_id,title,description,severity,assigned_to)
        SELECT tp.id,$3,$4,$5,$6,$7 FROM tour_packages tp
        WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2
@@ -2268,15 +2302,22 @@ async function createTourPackageIncident(req, res) {
        RETURNING *`,
       [req.params.id, ownerId, bookingId, title, String(req.body.description || "").trim().slice(0, 2000) || null, severity, String(req.body.assigned_to || "").trim().slice(0, 160) || null]
     );
-    if (!result.rowCount) return res.status(404).json({ message: "Tour package or component not found" });
-    return res.status(201).json(result.rows[0]);
+    if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Tour package or component not found" }); }
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "incident_created", {
+      incident_id: result.rows[0].id, title: result.rows[0].title, severity: result.rows[0].severity,
+      booking_id: result.rows[0].booking_id, assigned_to: result.rows[0].assigned_to,
+    });
+    await client.query("COMMIT");
+    return res.status(201).json({ ...result.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("createTourPackageIncident error:", error);
     return res.status(500).json({ message: "Failed to create incident" });
-  }
+  } finally { client?.release(); }
 }
 
 async function updateTourPackageIncident(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
@@ -2284,7 +2325,9 @@ async function updateTourPackageIncident(req, res) {
     const status = ["open", "monitoring", "resolved"].includes(req.body.status) ? req.body.status : "open";
     const resolution = String(req.body.resolution || "").trim().slice(0, 2000) || null;
     if (status === "resolved" && !resolution) return res.status(400).json({ message: "Resolution is required" });
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_package_incidents incident SET status=$4,resolution=$5,assigned_to=$6,
          resolved_at=CASE WHEN $4='resolved' THEN COALESCE(incident.resolved_at,NOW()) ELSE NULL END,updated_at=NOW()
        FROM tour_packages tp WHERE incident.id=$3 AND incident.package_id=$1::uuid
@@ -2292,12 +2335,18 @@ async function updateTourPackageIncident(req, res) {
        RETURNING incident.*`,
       [req.params.id, ownerId, req.params.incidentId, status, resolution, String(req.body.assigned_to || "").trim().slice(0, 160) || null]
     );
-    if (!result.rowCount) return res.status(404).json({ message: "Incident not found" });
-    return res.json(result.rows[0]);
+    if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Incident not found" }); }
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, status === "resolved" ? "incident_resolved" : "incident_updated", {
+      incident_id: result.rows[0].id, title: result.rows[0].title, severity: result.rows[0].severity,
+      status: result.rows[0].status, assigned_to: result.rows[0].assigned_to,
+    });
+    await client.query("COMMIT");
+    return res.json({ ...result.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("updateTourPackageIncident error:", error);
     return res.status(500).json({ message: "Failed to update incident" });
-  }
+  } finally { client?.release(); }
 }
 
 async function revokeTourPackageShare(req, res) {
