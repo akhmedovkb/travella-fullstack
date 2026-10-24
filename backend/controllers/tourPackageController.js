@@ -831,9 +831,9 @@ async function updateTourPackageSupplierRefund(req, res) {
     const refund = normalizeSupplierRefund(req.body, current.rows[0].supplier_cost);
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE tour_package_component_ops SET supplier_refund_status=$3,supplier_refund_due_amount=$4,
+      `UPDATE tour_package_component_ops SET supplier_refund_status=$3::varchar,supplier_refund_due_amount=$4,
          supplier_refunded_amount=$5,supplier_refund_due_at=$6::date,supplier_refund_note=$7,
-         supplier_refunded_at=CASE WHEN $3='refunded' THEN COALESCE(supplier_refunded_at,NOW()) ELSE NULL END,updated_at=NOW()
+         supplier_refunded_at=CASE WHEN $3::varchar='refunded' THEN COALESCE(supplier_refunded_at,NOW()) ELSE NULL END,updated_at=NOW()
         WHERE package_id=$1::uuid AND booking_id=$2
         RETURNING booking_id,supplier_refund_status,supplier_refund_due_amount,supplier_refunded_amount,
           supplier_refund_due_at,supplier_refund_note,supplier_refunded_at,updated_at`,
@@ -1847,10 +1847,10 @@ async function updateTourPackagePayment(req, res) {
     client = await pool.connect();
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE tour_packages SET payment_status=$3, paid_amount=$4,
+      `UPDATE tour_packages SET payment_status=$3::varchar, paid_amount=$4,
          payment_due_at=$5, payment_note=$6,
-         paid_at=CASE WHEN $3='paid' THEN COALESCE(paid_at,NOW()) ELSE NULL END,
-         status=CASE WHEN $3='paid' THEN 'paid' ELSE 'booked' END,
+         paid_at=CASE WHEN $3::varchar='paid' THEN COALESCE(paid_at,NOW()) ELSE NULL END,
+         status=CASE WHEN $3::varchar='paid' THEN 'paid' ELSE 'booked' END,
          updated_at=NOW()
        WHERE id=$1::uuid AND owner_provider_id=$2 RETURNING *`,
       [req.params.id, ownerId, payment.paymentStatus, payment.paidAmount,
@@ -1982,8 +1982,8 @@ async function updateTourPackageRefund(req, res) {
     client = await pool.connect();
     await client.query("BEGIN");
     const saved = await client.query(
-      `UPDATE tour_packages SET refund_status=$3,refund_due_amount=$4,refunded_amount=$5,
-         refund_due_at=$6,refund_note=$7,refunded_at=CASE WHEN $3='refunded' THEN COALESCE(refunded_at,NOW()) ELSE NULL END,updated_at=NOW()
+      `UPDATE tour_packages SET refund_status=$3::varchar,refund_due_amount=$4,refunded_amount=$5,
+         refund_due_at=$6,refund_note=$7,refunded_at=CASE WHEN $3::varchar='refunded' THEN COALESCE(refunded_at,NOW()) ELSE NULL END,updated_at=NOW()
         WHERE id=$1::uuid AND owner_provider_id=$2
         RETURNING refund_status,refund_due_amount,refunded_amount,refund_due_at,refund_note,refunded_at,updated_at`,
       [req.params.id, ownerId, refund.refundStatus, refund.refundDueAmount, refund.refundedAmount, refund.refundDueAt, refund.refundNote]
@@ -2506,8 +2506,8 @@ async function updateTourPackageIncident(req, res) {
     client = await pool.connect();
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE tour_package_incidents incident SET status=$4,resolution=$5,assigned_to=$6,
-         resolved_at=CASE WHEN $4='resolved' THEN COALESCE(incident.resolved_at,NOW()) ELSE NULL END,updated_at=NOW()
+      `UPDATE tour_package_incidents incident SET status=$4::varchar,resolution=$5,assigned_to=$6,
+         resolved_at=CASE WHEN $4::varchar='resolved' THEN COALESCE(incident.resolved_at,NOW()) ELSE NULL END,updated_at=NOW()
        FROM tour_packages tp WHERE incident.id=$3 AND incident.package_id=$1::uuid
          AND tp.id=incident.package_id AND tp.owner_provider_id=$2
        RETURNING incident.*`,
