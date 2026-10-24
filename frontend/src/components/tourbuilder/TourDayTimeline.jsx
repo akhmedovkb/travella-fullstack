@@ -180,8 +180,8 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
               ? new Intl.DateTimeFormat(i18n.language || "ru", { day: "2-digit", month: "2-digit" }).format(new Date(`${checkoutDate}T12:00:00`))
               : "";
             return (
-              <div key={item.id} className="grid grid-cols-[96px_1fr] gap-3 py-2.5">
-                <div className="pt-2">
+              <div key={item.id} className="grid gap-2 py-2.5 sm:grid-cols-[96px_minmax(0,1fr)] sm:gap-3">
+                <div className="flex items-center justify-between gap-3 px-1 sm:block sm:px-0 sm:pt-2">
                   <div className="text-sm font-bold text-slate-900">
                     {isHotel ? `${item.start_time} → ${checkoutLabel} ${item.end_time}` : `${item.start_time}–${item.end_time}`}
                   </div>
@@ -189,7 +189,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                     {isHotel ? t("tb.timeline.nights", { count: item.end_day_offset || 1 }) : invalid ? t("tb.timeline.check_interval") : durationText(item.start_time, item.end_time, t)}
                   </div>
                 </div>
-                <div className={`rounded-md border px-3 py-2.5 transition ${active ? "border-slate-900 bg-slate-50" : "border-slate-200 bg-white hover:border-slate-400"}`}>
+                <div className={`min-w-0 rounded-md border px-3 py-2.5 transition ${active ? "border-orange-500 bg-orange-50/40 ring-1 ring-orange-200" : "border-slate-200 bg-white hover:border-slate-400"}`}>
                   <div className="flex items-center gap-3">
                   <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { select(item.id); onExpandedChange?.(null); }}>
                     <div className="flex items-center justify-between gap-3">
@@ -210,7 +210,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                           {item.services?.meal?.items?.length > 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{t("tb.meals")}</span>}
                         </div>
                       </div>
-                      {active && <span className="text-xs font-semibold text-slate-600">{t("tb.timeline.selected")}</span>}
+                      {active && <span className="hidden text-xs font-semibold text-orange-700 sm:inline">{t("tb.timeline.selected")}</span>}
                     </div>
                   </button>
                   <button

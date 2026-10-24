@@ -15,7 +15,7 @@ import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
 import TransportSegmentEditor from "../components/tourbuilder/TransportSegmentEditor";
-import { ArrowRight, BedDouble, BusFront, Landmark, MapPin, ReceiptText, Utensils, UserRound } from "lucide-react";
+import { ArrowRight, BedDouble, BusFront, Landmark, MapPin, MoreHorizontal, ReceiptText, Utensils, UserRound } from "lucide-react";
 import {
   GUIDE_CATEGORY_IDS,
   TRANSPORT_CATEGORY_IDS,
@@ -2314,7 +2314,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   return (
     <div className="overflow-x-hidden bg-slate-100 p-3 md:p-5">
       <div className="mx-auto max-w-[1440px] space-y-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:p-6">
-        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-4">
+        <div className="sticky top-16 z-30 -mx-4 flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 bg-white/95 px-4 pb-4 pt-1 shadow-[0_8px_18px_rgba(15,23,42,0.06)] backdrop-blur md:-mx-6 md:px-6">
           <div>
             <h1 className="text-2xl font-bold text-slate-950">{t('tb.title')}</h1>
             <p className="mt-1 text-sm text-slate-500">{t("tb.ui.subtitle")}</p>
@@ -2322,7 +2322,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
           <div className="flex items-center gap-5 text-sm">
             <div><span className="text-slate-500">{t("tb.ui.days")}</span><strong className="ml-2 text-slate-950">{days.length}</strong></div>
             <div><span className="text-slate-500">PAX</span><strong className="ml-2 text-slate-950">{Math.max(0, toNum(adt) + toNum(chd))}</strong></div>
-            <div className="rounded-md bg-slate-950 px-3 py-2 text-white"><span className="text-slate-300">{t("tb.ui.total")}</span><strong className="ml-2">{totals.net.toLocaleString()} UZS</strong></div>
+            <div className="rounded-md bg-slate-950 px-3 py-2 text-white"><span className="text-slate-300">{t("tb.summary.net_cost")}</span><strong className="ml-2">{totals.net.toLocaleString()} UZS</strong></div>
+            <div className="rounded-md bg-orange-600 px-3 py-2 text-white"><span className="text-orange-100">{t("tb.summary.sale_price")}</span><strong className="ml-2">{Math.round(commercialTotals.gross).toLocaleString()} {summaryCurrency}</strong></div>
           </div>
         </div>
         {/* [TPL] панель шаблонов — аккордеон по странам */}
@@ -2649,10 +2650,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 key={k}
                 className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
               >
-                <div className="-mx-3 -mt-3 flex flex-wrap items-center gap-3 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-3">
-                  <div className="grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">D{i + 1}</div>
+                <div className="-mx-3 -mt-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-3 lg:grid-cols-[auto_minmax(220px,1fr)_auto_minmax(130px,auto)_minmax(140px,auto)_auto_auto]">
+                  <div className="col-start-1 row-start-1 grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">D{i + 1}</div>
                   <input
-                    className="h-10 min-w-[220px] flex-1 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100"
+                    className="col-start-2 row-start-1 h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 lg:min-w-[220px]"
                     placeholder={t('tb.city_ph')}
                     value={st.city || ""}
                     onChange={(e) => {
@@ -2670,34 +2671,20 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       // при смене города сбросили поставщиков; автоподбор произойдёт после выбора
                     }}
                   />
-                  <div className="text-sm font-medium text-slate-600">{k}</div>
-                  <div className="min-w-[130px] text-right">
+                  <div className="col-start-1 row-start-2 text-xs font-medium text-slate-500 lg:col-start-auto lg:row-start-auto lg:text-sm">{k}</div>
+                  <div className="col-start-2 row-start-2 min-w-0 text-left lg:col-start-auto lg:row-start-auto lg:min-w-[130px] lg:text-right">
                     <div className="text-xs text-slate-500">{t("tb.ui.completed", { count: completedSections })}</div>
                     <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-200"><div className="h-full rounded-full bg-emerald-500" style={{ width: `${completedSections * 20}%` }} /></div>
                   </div>
-                  <div className="min-w-[140px] text-right"><div className="text-xs text-slate-500">{t("tb.day_total")}</div><strong className="text-sm text-slate-950">{dayTotal.toLocaleString()} UZS</strong></div>
-                  <button
-                    type="button"
-                    className="rounded-md border border-slate-300 bg-white px-2.5 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100"
-                    onClick={() => insertTourDayAfter(k)}
-                  >
-                    {t('tb.insert_day_after', { defaultValue: '+ день после' })}
-                  </button>
-                  <button
-                    type="button"
-                    className="rounded-md border border-rose-200 bg-white px-2.5 py-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                    onClick={() => removeTourDay(k)}
-                  >
-                    {t('tb.delete_day', { defaultValue: 'Удалить день' })}
-                  </button>
-                  <button
-                    type="button"
-                    aria-expanded={!collapsed}
-                    className="rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100"
-                    onClick={() => setCollapsedDays((previous) => ({ ...previous, [k]: !previous[k] }))}
-                  >
-                    {collapsed ? t("tb.ui.expand") : t("tb.ui.collapse")}
-                  </button>
+                  <div className="col-start-3 row-start-1 min-w-0 text-right lg:col-start-auto lg:row-start-auto lg:min-w-[140px]"><div className="text-xs text-slate-500">{t("tb.day_total")}</div><strong className="whitespace-nowrap text-sm text-slate-950">{dayTotal.toLocaleString()} UZS</strong></div>
+                  <details className="relative col-start-3 row-start-2 justify-self-end lg:col-start-auto lg:row-start-auto">
+                    <summary className="grid h-9 w-9 cursor-pointer list-none place-items-center rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-100" title={t("tb.ui.day_actions")}><MoreHorizontal size={18} /></summary>
+                    <div className="absolute right-0 z-20 mt-1 w-48 overflow-hidden rounded-md border border-slate-200 bg-white py-1 shadow-xl">
+                      <button type="button" className="block w-full px-3 py-2 text-left text-sm font-semibold text-slate-700 hover:bg-slate-50" onClick={() => insertTourDayAfter(k)}>{t('tb.insert_day_after')}</button>
+                      <button type="button" className="block w-full px-3 py-2 text-left text-sm font-semibold text-rose-600 hover:bg-rose-50" onClick={() => removeTourDay(k)}>{t('tb.delete_day')}</button>
+                    </div>
+                  </details>
+                  <button type="button" aria-expanded={!collapsed} className="col-span-2 col-start-2 row-start-3 justify-self-start rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100 lg:col-span-1 lg:col-start-auto lg:row-start-auto" onClick={() => setCollapsedDays((previous) => ({ ...previous, [k]: !previous[k] }))}>{collapsed ? t("tb.ui.expand") : t("tb.ui.collapse")}</button>
                 </div>
 
                 {!collapsed && <>
@@ -2724,19 +2711,19 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 />
 
                 {selectedSchedule && expandedComponents[k] === selectedSchedule.id && <>
-                <div className="overflow-hidden rounded-lg border border-slate-900 bg-slate-950 text-white shadow-sm">
-                  <div className="flex flex-wrap items-center gap-3 px-4 py-3">
-                    <div className="grid h-8 w-8 place-items-center rounded-md bg-white/10 text-sm font-bold">{activeEventService === "tour" ? "ST" : activeEventService === "transfer" ? "TR" : "•"}</div>
+                <div className="border-l-4 border-orange-500 bg-orange-50/70 px-4 py-3 text-slate-950">
+                  <div className="flex flex-wrap items-center gap-3">
+                    <div className="grid h-8 w-8 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">{activeEventService === "tour" ? "ST" : activeEventService === "transfer" ? "TR" : "•"}</div>
                     <div className="mr-auto">
                       <strong className="block text-sm">{t(`tb.timeline.components.${activeEventService}`, { defaultValue: t("tb.ui.component_services") })}</strong>
-                      <span className="text-xs text-slate-300">{t("tb.ui.choose_component_services")}</span>
+                      <span className="text-xs text-slate-500">{t("tb.ui.choose_component_services")}</span>
                     </div>
-                    {selectedSchedule && <span className="rounded-md bg-white/10 px-2.5 py-1 text-xs font-semibold text-slate-100">{selectedSchedule.start_time}–{selectedSchedule.end_time}</span>}
+                    {selectedSchedule && <span className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{selectedSchedule.start_time}–{selectedSchedule.end_time}</span>}
                   </div>
                 </div>
 
                 {selectedSchedule ? (<>
-                <div className="grid gap-3 rounded-lg border border-slate-200 bg-slate-100/70 p-3 xl:grid-cols-3">
+                <div className="grid gap-3 border-x border-b border-slate-200 bg-slate-50/70 p-3 xl:grid-cols-3">
                   {/* Guide */}
                   {activeEventService === "tour" && <>
                   {activeEventService === "tour" && <div className="rounded-md border border-slate-200 bg-white p-3 xl:col-span-3">
