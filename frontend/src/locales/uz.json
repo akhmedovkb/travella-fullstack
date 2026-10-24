@@ -1597,6 +1597,7 @@
       "markup": "Agentlik ustamasi"
     },
     "hotel_confirm": { "eyebrow": "Yuborishdan oldin tekshirish", "title": "Yetkazib beruvchilar va narxlarni tasdiqlang", "subtitle": "So‘rovlarga qayd etilgan kotirovka versiyalari kiritiladi. Yetkazib beruvchilarga so‘rovlar: {{count}}.", "night": "Tun", "hotel_number": "Mehmonxona #{{id}}", "legacy_rate": "Eski mehmonxona tarifi", "no_quotes": "Yo‘nalishda hisoblangan mehmonxonalar yo‘q. Boshqa tanlangan xizmatlar yuboriladi.", "extended_title": "Yashash muddati tur sanalaridan tashqariga chiqmoqda", "extended_hint": "{{count}} kecha tur tugash sanasida ({{date}}) yoki undan keyin boshlanadi. Bu uzaytirish ataylab qo‘shilganini tasdiqlang.", "back": "Orqaga", "sending": "Yuborilmoqda…", "confirm": "Tasdiqlash va yuborish" },
+    "onboarding": { "eyebrow": "Tur tayyorligi", "title": "Yuborishdan oldin besh qadamni bajaring", "ready_title": "Tur yuborishga tayyor", "hint": "Yo‘nalishni tartib bilan to‘ldiring — holat avtomatik yangilanadi.", "demo": "Demo turni yuklash", "missing": "Qolgan qadamlar: {{count}}", "complete_first": "Avval majburiy qadamlarni tugating", "steps": { "dates": "Sanalar", "route": "Yo‘nalish", "components": "Dastur", "services": "Xizmatlar", "price": "Narx" } },
     "quote_valid_until": "Taklifning amal qilish muddati",
     "package_status": {
       "draft": "Qoralama",
@@ -1999,6 +2000,7 @@
     "portfolio": {
       "title": "Mening turlarim",
       "subtitle": "Paketlarni hisob-kitobdan to‘lov va safargacha boshqaring.",
+      "empty_title": "Mijoz uchun birinchi turni yarating", "empty_hint": "Yo‘nalish tuzing, yetkazib beruvchilarni tanlang, ustamani hisoblang va tayyor taklifni bitta ish maydonidan yuboring.", "create_first": "Birinchi turni yaratish", "first_tour": "Birinchi tur jarayoni", "first_steps": { "dates": "Sanalar va guruh tarkibini tanlang", "route": "Shaharlar va dasturni qo‘shing", "services": "Yetkazib beruvchilar va tariflarni belgilang", "price": "Tannarx va sotuv narxini tekshiring", "send": "Yetkazib beruvchilarga so‘rov yuboring" },
       "finance_title": "Portfel moliyasi",
       "finance_hint": "Har bir valyutadagi savdolar, tushumlar, majburiyatlar va marja.",
       "finance_period": "Hisobot davri",
