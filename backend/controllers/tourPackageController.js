@@ -682,7 +682,8 @@ function requireProviderOwner(req, res) {
 async function packageBookings(packageId) {
   const result = await pool.query(
     `SELECT b.id, b.status, b.provider_id, b.provider_price, b.currency,
-            b.payment_status, b.date, b.provider_note,
+            NULLIF(to_jsonb(b)->>'payment_status','') AS payment_status,
+            b.date, b.provider_note,
             s.title AS service_title,
             p.name AS provider_name, p.type AS provider_type, p.phone AS provider_phone,
             p.social AS provider_telegram,
