@@ -448,7 +448,6 @@ export default function Header() {
   }, [location]);
 
   const servicesActive = location.pathname.startsWith("/dashboard/services/")
-    || location.pathname === "/dashboard/calendar"
     || location.pathname === "/dashboard/hotels"
     || location.pathname.startsWith("/provider/hotels/");
   const toolsActive = location.pathname.startsWith("/dashboard/passport-parser");
@@ -514,12 +513,20 @@ export default function Header() {
                       />
 
                       {role === "provider" && (
-                        <DropdownItem
-                          to="/tour-builder"
-                          label={t("nav.tour_builder")}
-                          description={t("nav.tour_builder_desc")}
-                          icon={<IconDoc />}
-                        />
+                        <>
+                          <DropdownItem
+                            to="/tour-builder"
+                            label={t("nav.tour_builder")}
+                            description={t("nav.tour_builder_desc")}
+                            icon={<IconDoc />}
+                          />
+                          <DropdownItem
+                            to="/dashboard/tour-packages"
+                            label={t("nav.my_tours")}
+                            description={t("nav.my_tours_desc")}
+                            icon={<IconBookings />}
+                          />
+                        </>
                       )}
 
                       <DropdownItem
@@ -568,12 +575,6 @@ export default function Header() {
                         />
                       )}
                       <DropdownItem
-                        to="/dashboard/services/my"
-                        label={t("nav.my_services")}
-                        description={t("nav.my_services_desc")}
-                        icon={<IconChecklist />}
-                      />
-                      <DropdownItem
                         to="/dashboard/services/marketplace"
                         label={t("nav.services_marketplace")}
                         description={t("nav.services_marketplace_desc")}
@@ -587,17 +588,17 @@ export default function Header() {
                           icon={<IconChecklist />}
                         />
                       )}
-                      {CALENDAR_PROVIDER_TYPES.has(providerType) && (
-                        <DropdownItem
-                          to="/dashboard/calendar"
-                          label={t("nav.provider_calendar", "Календарь")}
-                          description={t("nav.provider_calendar_desc", "Занятость, блокировки и бронирования")}
-                          icon={<IconBookings />}
-                        />
-                      )}
                     </DropdownPanel>
                   )}
                 </div>
+
+                {CALENDAR_PROVIDER_TYPES.has(providerType) && (
+                  <NavItemDark
+                    to="/dashboard/calendar"
+                    label={t("nav.provider_calendar", "Календарь")}
+                    icon={<IconBookings />}
+                  />
+                )}
 
                 <div className="relative" ref={workspaceRef}>
                   <MenuButton
@@ -783,6 +784,7 @@ export default function Header() {
             <RowGroupDark title={t("nav.products")}>
               <NavItemMobileDark to="/" label={t("nav.marketplace")} icon={<IconChecklist />} end />
               {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder")} icon={<IconDoc />} />}
+              {role === "provider" && <NavItemMobileDark to="/dashboard/tour-packages" label={t("nav.my_tours")} icon={<IconBookings />} />}
               <NavItemMobileDark to="/hotels" label={t("nav.hotel_catalog")} icon={<IconHotel />} />
               <NavItemMobileDark to="/community" label={t("nav.community")} icon={<IconUsers />} />
             </RowGroupDark>
@@ -791,17 +793,16 @@ export default function Header() {
               <>
                 <RowGroupDark title={t("nav.dashboard")}>
                   <NavItemMobileDark to="/dashboard/profile" label={t("nav.profile", "Профиль")} icon={<IconProfile />} />
+                  {CALENDAR_PROVIDER_TYPES.has(providerType) && (
+                    <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь занятости")} icon={<IconBookings />} />
+                  )}
                 </RowGroupDark>
 
                 <RowGroupDark title={t("nav.services_tab")}>
                   {providerType === "hotel" && <NavItemMobileDark to="/dashboard/hotels" label={t("nav.my_hotels", "Мои отели")} icon={<IconHotel />} />}
-                  <NavItemMobileDark to="/dashboard/services/my" label={t("nav.my_services")} icon={<IconChecklist />} />
                   <NavItemMobileDark to="/dashboard/services/marketplace" label={t("nav.services_marketplace")} icon={<IconChecklist />} />
                   {TOUR_BUILDER_SERVICE_PROVIDER_TYPES.has(providerType) && (
                     <NavItemMobileDark to="/dashboard/services/tourbuilder" label={t("nav.services_tourbuilder")} icon={<IconChecklist />} />
-                  )}
-                  {CALENDAR_PROVIDER_TYPES.has(providerType) && (
-                    <NavItemMobileDark to="/dashboard/calendar" label={t("nav.provider_calendar", "Календарь занятости")} icon={<IconBookings />} />
                   )}
                 </RowGroupDark>
 

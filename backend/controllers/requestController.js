@@ -320,7 +320,7 @@ exports.createQuickRequest = async (req, res) => {
     // Если пришёл только provider_id — создадим/возьмём плейсхолдер-услугу
     if (!service_id && provider_id) {
       // запрет самозаявки: провайдер не может слать запрос себе
-      if (Number(provider_id) === Number(userId)) {
+      if (String(req.user?.role || "").toLowerCase() === "provider" && Number(provider_id) === Number(userId)) {
         return res.status(400).json({ error: "self_request_forbidden" });
       }
       const kindHint = String(message || "").toLowerCase().includes("transport") ? "transport" : "guide";
@@ -350,7 +350,7 @@ exports.createQuickRequest = async (req, res) => {
     if (!svc) return res.status(404).json({ error: "service_not_available" });
 
     // запрет самозаявки (если зашёл провайдер — на свой же сервис)
-    if (Number(svc.provider_id) === Number(userId)) {
+    if (String(req.user?.role || "").toLowerCase() === "provider" && Number(svc.provider_id) === Number(userId)) {
       return res.status(400).json({ error: "self_request_forbidden" });
     }
 

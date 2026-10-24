@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { apiGet, apiPost } from "../api";
 import QuickRequestModal from "../components/QuickRequestModal";
+import MarketplaceBookingModal from "../components/MarketplaceBookingModal";
 import ServiceCard from "../components/ServiceCard";
 import { apiProviderFavorites, apiToggleProviderFavorite } from "../api/providerFavorites";
 import { tSuccess, tInfo, tError } from "../shared/toast";
@@ -563,12 +564,51 @@ export default function Marketplace() {
   const [qrServiceId, setQrServiceId] = useState(null);
   const [qrProviderId, setQrProviderId] = useState(null);
   const [qrServiceTitle, setQrServiceTitle] = useState("");
+  const [bookingService, setBookingService] = useState(null);
+  const [bookingBusy, setBookingBusy] = useState(false);
 
   const openQuickRequest = (serviceId, providerId, serviceTitle) => {
     setQrServiceId(serviceId);
     setQrProviderId(providerId || null);
     setQrServiceTitle(serviceTitle || "");
     setQrOpen(true);
+  };
+
+  const openBooking = (serviceId, providerId, serviceTitle, meta = {}) => {
+    if (role !== "client" && role !== "provider") {
+      tInfo(t("auth.login_required", { defaultValue: "Войдите, чтобы забронировать услугу" }));
+      return;
+    }
+    setBookingService({ serviceId, providerId, title: serviceTitle, ...meta });
+  };
+
+  const submitBooking = async ({ dates, start, end, adults, children, message, isHotel }) => {
+    if (!bookingService?.serviceId || !bookingService?.providerId) return;
+    setBookingBusy(true);
+    try {
+      await apiPost("/api/bookings", {
+        service_id: Number(bookingService.serviceId),
+        provider_id: Number(bookingService.providerId),
+        dates,
+        currency: "UZS",
+        message: message || undefined,
+        source: "marketplace",
+        type: isHotel ? "hotel" : String(bookingService.providerType || bookingService.category || "service"),
+        details: {
+          fixed_marketplace_rate: true,
+          pax_adult: adults,
+          pax_child: children,
+          check_in: start,
+          check_out: end,
+        },
+      }, role);
+      tSuccess(t("marketplace.booking.created", { defaultValue: "Запрос на бронирование отправлен поставщику" }));
+      setBookingService(null);
+    } catch (error) {
+      tError(error?.response?.data?.message || error?.data?.message || error?.message || t("marketplace.booking.error", { defaultValue: "Не удалось создать бронирование" }));
+    } finally {
+      setBookingBusy(false);
+    }
   };
 
   function getMyProviderId() {
@@ -673,6 +713,9 @@ export default function Marketplace() {
 
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
+  const [guests, setGuests] = useState(1);
     // подсказки поиска
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggest, setShowSuggest] = useState(false);
@@ -691,10 +734,12 @@ export default function Marketplace() {
   const filters = useMemo(
     () => ({
       q: q?.trim() || undefined,
-      //location: q?.trim() || undefined,
       category: category || undefined,
+      start_date: startDate || undefined,
+      end_date: endDate || startDate || undefined,
+      guests: Number(guests) > 0 ? Number(guests) : undefined,
     }),
-    [q, category]
+    [q, category, startDate, endDate, guests]
   );
 
   const openedParams = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -1213,35 +1258,23 @@ const search = async (opts = {}) => {
 };
 
 
-  const categoryOptions = [
-    { value: "", label: t("marketplace.select_category") || "Выберите категорию" },
-    { value: "guide", label: t("marketplace.guide") || "Гид" },
-    { value: "transport", label: t("marketplace.transport") || "Транспорт" },
-    {
-      value: "refused_tour",
-      label: t("marketplace.package") || t("category.refused_tour") || "Отказной тур",
-    },
-    {
-      value: "author_tour",
-      label: t("marketplace.author_tour") || t("category.author_tour") || "Авторский тур",
-    },
-    {
-      value: "refused_hotel",
-      label: t("marketplace.hotel") || t("category.refused_hotel") || "Отказной отель",
-    },
-    {
-      value: "refused_flight",
-      label: t("marketplace.flight") || t("category.refused_flight") || "Отказной авиабилет",
-    },
-    {
-      value: "refused_event_ticket",
-      label:
-        t("marketplace.refused_event") ||
-        t("category.refused_event_ticket") ||
-        "Отказной билет",
-    },
-    { value: "visa_support", label: t("category.visa_support") || "Визовая поддержка" },
+  const quickCategories = [
+    { value: "", label: t("marketplace.category_all", { defaultValue: "Все" }) },
+    { value: "refused_tour", label: t("marketplace.category_tours", { defaultValue: "Отказные туры" }) },
+    { value: "refused_hotel", label: t("marketplace.category_hotels", { defaultValue: "Отказные отели" }) },
+    { value: "refused_flight", label: t("marketplace.category_flights", { defaultValue: "Отказные авиабилеты" }) },
+    { value: "refused_event_ticket", label: t("marketplace.category_events", { defaultValue: "Отказные билеты" }) },
+    { value: "guide", label: t("marketplace.category_guides", { defaultValue: "Гиды" }) },
+    { value: "transport", label: t("marketplace.category_transport", { defaultValue: "Транспорт" }) },
+    { value: "author_tour", label: t("marketplace.category_author_tours", { defaultValue: "Авторские туры" }) },
+    { value: "visa_support", label: t("marketplace.category_visa", { defaultValue: "Визовая поддержка" }) },
   ];
+
+  const runSearch = () => {
+    const wantSearch = Boolean(q.trim() || category || startDate || endDate || Number(guests) > 1);
+    setSearchMode(wantSearch);
+    wantSearch ? search() : ["top", "new", "upcoming"].forEach((key) => loadSection(key, 1));
+  };
 
         // ====== Рендер открытой после оплаты услуги ======
   const renderOpenedServiceBlock = () => {
@@ -1302,6 +1335,7 @@ const search = async (opts = {}) => {
               onQuickRequest={(serviceId, providerId, title) =>
                 openQuickRequest(serviceId ?? sid, providerId, title)
               }
+              onBook={openBooking}
             />
           </div>
         )}
@@ -1371,6 +1405,7 @@ const search = async (opts = {}) => {
                       onQuickRequest={(serviceId, providerId, title) =>
                         openQuickRequest(serviceId ?? sid, providerId, title)
                       }
+                      onBook={openBooking}
                     />
                   );
                 })}
@@ -1383,38 +1418,60 @@ const search = async (opts = {}) => {
   };
  
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6">
-      
-            {/* Top login button for guests */}
-      
+    <div className="mx-auto max-w-7xl px-4 py-5 md:px-6 md:py-8">
       {!isLoggedIn && (
-          <div className="mb-4 flex justify-end gap-2">
+          <div className="mb-5 flex items-center justify-end gap-3">
             <a
               href={`/client/login?redirect=${encodeURIComponent(location.pathname + location.search)}`}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50 text-sm font-medium shadow-sm"
+              className="inline-flex min-h-10 items-center rounded-lg border border-slate-300 bg-white px-4 text-sm font-bold text-slate-800 transition hover:border-slate-400 hover:bg-slate-50"
             >
-              {t("auth.login_client") || "Войти как клиент"}
+              {t("marketplace.sign_in", { defaultValue: "Войти" })}
             </a>
             <a
               href={`/login?redirect=${encodeURIComponent(location.pathname + location.search)}`}
-              className="inline-flex items-center gap-2 px-3 py-1.5 rounded-lg border bg-white hover:bg-gray-50 text-sm font-medium shadow-sm"
+              className="text-sm font-bold text-slate-700 underline decoration-slate-300 underline-offset-4 transition hover:text-orange-600"
             >
-              {t("auth.login_provider") || "Войти как поставщик"}
+              {t("marketplace.become_provider", { defaultValue: "Стать поставщиком" })}
             </a>
           </div>
         )}
 
-      {/* Панель поиска */}
-      <div className="bg-white rounded-xl shadow p-4 border mb-4">
-        <div className="flex flex-col md:flex-row gap-3 items-stretch relative">
+      <section className="mb-5 border-b border-slate-200 pb-5">
+        <p className="mb-2 text-xs font-black uppercase text-orange-600">
+          {t("marketplace.hero_eyebrow", { defaultValue: "Travella Marketplace" })}
+        </p>
+        <h1 className="max-w-4xl text-2xl font-black text-slate-950 md:text-4xl">
+          {t("marketplace.hero_title", { defaultValue: "Найдите и забронируйте туристические услуги" })}
+        </h1>
+        <p className="mt-2 max-w-3xl text-sm font-medium leading-6 text-slate-600 md:text-base">
+          {t("marketplace.hero_subtitle", { defaultValue: "Гиды, транспорт, отели и туры от проверенных поставщиков в одном месте." })}
+        </p>
+
+        <div className="mt-5 flex gap-2 overflow-x-auto pb-1 lg:flex-wrap lg:overflow-visible" role="tablist" aria-label={t("marketplace.categories", { defaultValue: "Категории услуг" })}>
+          {quickCategories.map((option) => (
+            <button
+              key={option.value || "all"}
+              type="button"
+              role="tab"
+              aria-selected={category === option.value}
+              onClick={() => setCategory(option.value)}
+              className={`min-h-10 shrink-0 rounded-lg border px-4 text-sm font-bold transition ${category === option.value ? "border-slate-950 bg-slate-950 text-white" : "border-slate-200 bg-white text-slate-700 hover:border-slate-400"}`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <div className="mb-6 rounded-lg border border-slate-200 bg-white p-3 shadow-sm md:p-4">
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(260px,1fr)_160px_160px_120px_auto]">
+          <div className="relative">
           <input
             ref={inputRef}
             value={q}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
-                const wantSearch = !!(q.trim() || category);
-               setSearchMode(wantSearch);
-                wantSearch ? search() : ["top","new","upcoming"].forEach((k)=>loadSection(k,1));
+                runSearch();
               }
             }}
             onChange={(e) => {
@@ -1467,13 +1524,13 @@ const search = async (opts = {}) => {
               }, 250);
             }}
           placeholder={t("marketplace.search_placeholder") || "Поиск по услугам, странам, городам…"}
-          className="flex-1 border rounded-lg px-3 py-2"
+          className="h-12 w-full rounded-lg border border-slate-300 px-4 text-sm outline-none transition focus:border-orange-500 focus:ring-2 focus:ring-orange-100"
                     onFocus={() => suggestions.length && setShowSuggest(true)}
             onBlur={() => setTimeout(() => setShowSuggest(false), 120)}
           />
           {/* выпадающий список подсказок */}
           {showSuggest && suggestions.length > 0 && (
-            <ul className="absolute z-20 left-0 right-0 top-11 md:top-[42px] bg-white border rounded-lg shadow max-h-72 overflow-auto">
+            <ul className="absolute left-0 right-0 top-[52px] z-20 max-h-72 overflow-auto rounded-lg border bg-white shadow-lg">
               {suggestions.map((sug, i) => (
                 <li
                   key={`${sug}-${i}`}
@@ -1489,35 +1546,36 @@ const search = async (opts = {}) => {
               ))}
             </ul>
           )}
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-          className="w-full md:w-64 border rounded-lg px-3 py-2"
-        >
-          {categoryOptions.map((opt) => (
-            <option key={opt.value || "root"} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
+          </div>
+
+          <label className="relative">
+            <span className="sr-only">{t("marketplace.date_from", { defaultValue: "Дата начала" })}</span>
+            <input type="date" value={startDate} min={new Date().toISOString().slice(0, 10)} onChange={(e) => { setStartDate(e.target.value); if (endDate && e.target.value > endDate) setEndDate(e.target.value); }} className="h-12 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" title={t("marketplace.date_from", { defaultValue: "Дата начала" })} />
+          </label>
+          <label className="relative">
+            <span className="sr-only">{t("marketplace.date_to", { defaultValue: "Дата окончания" })}</span>
+            <input type="date" value={endDate} min={startDate || new Date().toISOString().slice(0, 10)} onChange={(e) => setEndDate(e.target.value)} className="h-12 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" title={t("marketplace.date_to", { defaultValue: "Дата окончания" })} />
+          </label>
+          <label className="relative">
+            <span className="sr-only">{t("marketplace.guests", { defaultValue: "Гости" })}</span>
+            <select value={guests} onChange={(e) => setGuests(Number(e.target.value))} className="h-12 w-full rounded-lg border border-slate-300 px-3 text-sm font-semibold text-slate-700 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" title={t("marketplace.guests", { defaultValue: "Гости" })}>
+              {[1, 2, 3, 4, 5, 6, 7, 8].map((count) => <option key={count} value={count}>{t("marketplace.guests_count", { count, defaultValue: `${count} гостей` })}</option>)}
+            </select>
+          </label>
 
         <button
-          onClick={() => {
-            const wantSearch = !!(q.trim() || category);
-            setSearchMode(wantSearch);
-            if (wantSearch) {
-              search();
-            } else {
-              ["top","new","upcoming"].forEach((k) => loadSection(k, 1));
-            }
-          }}
-          className="px-5 py-2 rounded-lg bg-gray-900 text-white"
+          onClick={runSearch}
+          className="h-12 rounded-lg bg-slate-950 px-6 text-sm font-black text-white transition hover:bg-orange-600 disabled:opacity-60"
           disabled={loading}
         >
           {t("common.find") || "Найти"}
         </button>
+        </div>
+        <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
+          <p className="text-xs font-medium text-slate-500">{t("marketplace.search_hint", { defaultValue: "Укажите направление или выберите категорию — подходящие варианты появятся ниже." })}</p>
+          {(startDate || endDate || Number(guests) > 1) && <button type="button" onClick={() => { setStartDate(""); setEndDate(""); setGuests(1); }} className="shrink-0 text-xs font-bold text-slate-600 underline underline-offset-4 hover:text-orange-600">{t("marketplace.clear_dates", { defaultValue: "Сбросить даты" })}</button>}
+        </div>
       </div>
-    </div>
 
       {renderOpenedServiceBlock()}
 
@@ -1545,6 +1603,7 @@ const search = async (opts = {}) => {
                     onQuickRequest={(serviceId, providerId, title) =>
                       openQuickRequest(serviceId ?? sid, providerId, title)
                     }
+                    onBook={openBooking}
                   />
                 );
               })}
@@ -1560,6 +1619,13 @@ const search = async (opts = {}) => {
       )}
      {/* Модалка быстрого запроса */}
       <QuickRequestModal open={qrOpen} onClose={() => setQrOpen(false)} onSubmit={submitQuickRequest} />
+      <MarketplaceBookingModal
+        open={Boolean(bookingService)}
+        service={bookingService}
+        busy={bookingBusy}
+        onClose={() => !bookingBusy && setBookingService(null)}
+        onSubmit={submitBooking}
+      />
     </div>
   );
 }

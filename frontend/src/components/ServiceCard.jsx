@@ -312,12 +312,12 @@ const collectImages = (...vals) => {
   return out;
 };
 
-/* Тип провайдера/категории: гид/транспорт? */
+/* Тип провайдера/категории: услуга с потоком бронирования. */
 const isGuideOrTransport = (raw) => {
   if (raw == null) return false;
   const s = String(raw).trim().toLowerCase();
-  if (s === "guide" || s === "transport") return true;
-  return /(гид|экскур|трансфер|transport|driver|taxi|car|bus|авто|транспорт)/i.test(s);
+  if (s === "guide" || s === "transport" || s === "hotel") return true;
+  return /(гид|экскур|трансфер|transport|driver|taxi|car|bus|авто|транспорт|hotel|отел|гостиниц)/i.test(s);
 };
 
 /* стикер на карточку - "отказной" */
@@ -793,6 +793,16 @@ const dates =
     item.destination
   );
   const direction = dirFrom && dirTo ? `${dirFrom} → ${dirTo}` : null;
+  const serviceLocation = firstNonEmpty(
+    details?.location,
+    details?.city,
+    details?.city_slug,
+    svc.location,
+    svc.city,
+    item.location,
+    item.city
+  );
+  const placeText = direction || serviceLocation;
 
   const inlineProvider =
     firstNonEmpty(
@@ -872,6 +882,8 @@ const dates =
         details?.flight_info,
         Array.isArray(details?.flights) ? details.flights.join("\n") : null
       );
+  const currency = firstNonEmpty(details?.currency, svc.currency, item.currency, "UZS");
+  const maxGuests = toPositiveInt(firstNonEmpty(details?.maxGuests, details?.max_guests, details?.pax, svc.max_guests));
 
   return {
     svc,
@@ -882,8 +894,12 @@ const dates =
     transfer,
     dates,
     direction,
+    placeText,
     prettyPrice,
+    rawPrice,
     priceDisplay,
+    currency,
+    maxGuests,
     inlineProvider,
     providerId,
     flatName,
@@ -919,6 +935,7 @@ export default function ServiceCard({
   favActive,
   onToggleFavorite,
   onQuickRequest,
+  onBook,
   now = Date.now(),
   className = "",
 }) {
@@ -933,8 +950,12 @@ export default function ServiceCard({
     transfer,
     dates,
     direction,
+    placeText,
     prettyPrice,
+    rawPrice,
     priceDisplay,
+    currency,
+    maxGuests,
     inlineProvider,
     providerId,
     flatName,
@@ -1935,12 +1956,12 @@ return (
                   {title}
                 </div>
 
-                {(direction || dates) && (
+                {(placeText || dates) && (
                   <div className="mt-2.5 space-y-1.5">
-                    {direction && (
+                    {placeText && (
                       <div className="flex items-center gap-1.5 text-[12px] font-bold leading-4 text-gray-700 line-clamp-1">
-                        <span className="text-gray-400">✈️</span>
-                        <span className="truncate">{direction}</span>
+                        <span className="text-gray-400">{direction ? "✈️" : "📍"}</span>
+                        <span className="truncate">{placeText}</span>
                       </div>
                     )}
                     {dates && (
@@ -2333,13 +2354,22 @@ return (
               )}
 
               {showBookButton ? (
-                <a
-                  href={`/profile/provider/${providerId}?service=${id}#book`}
+                <button
+                  type="button"
                   className="w-full inline-flex items-center justify-center rounded-xl border border-orange-100 bg-white/80 px-2.5 py-1.5 text-[12px] font-bold text-orange-700 transition hover:bg-orange-50 hover:border-orange-200 hover:shadow-sm"
-                  onClick={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onBook?.(id, providerId, title, {
+                      providerType: prov?.type || prov?.provider_type || prov?.category,
+                      category: svc.category || details?.category || item?.category,
+                      price: rawPrice,
+                      currency,
+                      maxGuests,
+                    });
+                  }}
                 >
                   {t("actions.book", { defaultValue: "Бронировать" })}
-                </a>
+                </button>
               ) : (
                 <button
                   type="button"
@@ -2491,7 +2521,7 @@ return (
               )}
             </div>
 
-            {((!isRefusedHotel && direction) || accommodation || transfer || authorFormat || authorDuration || authorPax || authorGuideLang || authorMeetingPoint || details.insuranceIncluded || details.earlyCheckIn || (!isRefusedHotel && details.arrivalFastTrack)) && (
+            {((!isRefusedHotel && placeText) || accommodation || transfer || authorFormat || authorDuration || authorPax || authorGuideLang || authorMeetingPoint || details.insuranceIncluded || details.earlyCheckIn || (!isRefusedHotel && details.arrivalFastTrack)) && (
               <div className="rounded-3xl border border-slate-200/80 bg-white p-4 shadow-[0_16px_40px_rgba(15,23,42,0.06)]">
                 <div className="mb-3 flex items-center justify-between gap-3">
                   <div>
@@ -2505,12 +2535,12 @@ return (
                 </div>
 
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-                  {!isRefusedHotel && direction && (
+                  {!isRefusedHotel && placeText && (
                     <div className="rounded-2xl bg-slate-50 px-3 py-2.5 ring-1 ring-slate-100">
                       <div className="text-[10px] font-black uppercase tracking-wide text-slate-400">
-                        {t("marketplace.route", { defaultValue: "Маршрут" })}
+                        {direction ? t("marketplace.route", { defaultValue: "Маршрут" }) : t("marketplace.location", { defaultValue: "Локация" })}
                       </div>
-                      <div className="mt-1 text-sm font-black text-slate-900">✈️ {direction}</div>
+                      <div className="mt-1 text-sm font-black text-slate-900">{direction ? "✈️" : "📍"} {placeText}</div>
                     </div>
                   )}
                   {isAuthorTour && authorFormat && (
@@ -2794,10 +2824,10 @@ return (
                     </div>
                   )}
 
-                  {direction && (
+                  {placeText && (
                     <div className="mt-1.5 flex items-center gap-1.5 text-sm font-semibold text-gray-600">
-                      <span>✈️</span>
-                      <span className="truncate">{direction}</span>
+                      <span>{direction ? "✈️" : "📍"}</span>
+                      <span className="truncate">{placeText}</span>
                     </div>
                   )}
 

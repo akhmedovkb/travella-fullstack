@@ -213,6 +213,9 @@ app.use("/api/requests", requestRouter);
 const bookingRoutes = require("./routes/bookingRoutes");
 app.use("/api/bookings", bookingRoutes);
 
+const tourPackageRoutes = require("./routes/tourPackageRoutes");
+app.use("/api/tour-packages", tourPackageRoutes);
+
 const notificationsRoutes = require("./routes/notificationsRoutes");
 app.use("/api/notifications", notificationsRoutes);
 
@@ -955,10 +958,6 @@ app.use("/api/entry-fees", entryFeesRoutes);
 // админ-CRUD
 const entryFeesAdminRoutes = require("./routes/entryFeesAdminRoutes");
 app.use("/api/admin/entry-fees", entryFeesAdminRoutes);
-
-/** ===================== Provider Services ===================== */
-const providerServices = require("./routes/providerServices");
-app.use(providerServices);
 
 // ✅ Массовая рассылка (админ) через Bot Otkaznyx Turov
 const adminBroadcastRoutes = require("./routes/adminBroadcastRoutes");

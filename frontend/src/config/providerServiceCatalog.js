@@ -86,16 +86,28 @@ export const TRANSPORT_SERVICE_GROUPS = [
   },
 ];
 
+export const HOTEL_SERVICE_GROUPS = [
+  {
+    id: "hotel_products",
+    label: "Услуги отеля",
+    services: [
+      { id: "hotel_room", label: "Номер в отеле" },
+      { id: "hotel_transfer", label: "Трансфер от/до отеля" },
+      { id: "hall_rent", label: "Аренда зала" },
+    ],
+  },
+];
+
 export const GUIDE_CATEGORY_IDS = GUIDE_SERVICE_GROUPS.flatMap((group) => group.services.map((service) => service.id));
 export const TRANSPORT_CATEGORY_IDS = TRANSPORT_SERVICE_GROUPS.flatMap((group) => group.services.map((service) => service.id));
 export const PROVIDER_SERVICE_LABELS = Object.fromEntries(
-  [...GUIDE_SERVICE_GROUPS, ...TRANSPORT_SERVICE_GROUPS]
+  [...GUIDE_SERVICE_GROUPS, ...TRANSPORT_SERVICE_GROUPS, ...HOTEL_SERVICE_GROUPS]
     .flatMap((group) => group.services)
     .map((service) => [service.id, service.label])
 );
 
 export const TOUR_BUILDER_TYPES = [
-  { id: "city", family: "excursion", label: "Обзорная", guideCategories: ["city_tour_guide"], transportCategories: ["city_tour_transport"] },
+  { id: "city", family: "excursion", label: "Обзорная", guideCategories: ["city_tour_guide", "city_tour_guide_with_transport"], transportCategories: ["city_tour_transport"] },
   { id: "thematic", family: "excursion", label: "Тематическая", guideCategories: ["thematic_tour_guide"], transportCategories: ["city_tour_transport"] },
   { id: "attraction", family: "excursion", label: "По объекту", guideCategories: ["attraction_tour_guide"], transportCategories: ["city_tour_transport"] },
   { id: "countryside", family: "excursion", label: "Загородная", guideCategories: ["countryside_tour_guide"], transportCategories: ["countryside_tour_transport"] },

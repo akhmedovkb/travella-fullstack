@@ -7,6 +7,11 @@ const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
 const { HotelInventoryError, quotedHotelPrice, reserveHotelInventory } = require("../utils/hotelInventory");
 const { ensureHotelOfferTables } = require("../utils/hotelOffersSchema");
+const {
+  GUIDE_SERVICE_CATEGORY_SET,
+  TRANSPORT_SERVICE_CATEGORY_SET,
+  PROVIDER_SERVICE_CATEGORY_SET,
+} = require("../utils/providerServiceCatalog");
 
 function buildPaymeCheckoutUrl({ orderId, amountTiyin, redirectUrl }) {
   const merchantId = process.env.PAYME_MERCHANT_ID || process.env.PAYME_CHECKOUT_ID || "";
@@ -277,11 +282,11 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null, propose
   if (!slots.length) {
     let sql =
       `SELECT 1
-         FROM booking_dates bd
-         JOIN bookings b ON b.id = bd.booking_id
+         FROM bookings b
+         LEFT JOIN booking_dates bd ON bd.booking_id = b.id
         WHERE b.provider_id=$1
-          AND b.status IN ('confirmed','active','accepted')
-          AND bd.date = ANY($2::date[])`;
+          AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+          AND COALESCE(bd.date, b.date) = ANY($2::date[])`;
     const params = [providerId, list];
     if (excludeBookingId) {
       sql += ` AND b.id <> $3`;
@@ -296,10 +301,11 @@ async function isDatesFree(providerId, ymdList, excludeBookingId = null, propose
     const conflict = await pool.query(
       `SELECT 1
          FROM bookings b
-         JOIN booking_dates bd ON bd.booking_id=b.id AND bd.date=$2::date
+         LEFT JOIN booking_dates bd ON bd.booking_id=b.id
          LEFT JOIN booking_time_slots existing ON existing.booking_id=b.id AND existing.slot_date=$2::date
         WHERE b.provider_id=$1
-          AND b.status IN ('confirmed','active','accepted')
+          AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+          AND COALESCE(bd.date, b.date)=$2::date
           AND ($5::bigint IS NULL OR b.id <> $5::bigint)
           AND (
             existing.id IS NULL
@@ -429,6 +435,87 @@ const createBooking = async (req, res) => {
     const managedHotelPrice = isTourBuilder && tourBuilderKind === "hotel"
       ? quotedHotelPrice(bag, providerId)
       : null;
+    const isMarketplace = req.body?.source === "marketplace";
+    let publishedMarketplaceRate = null;
+    if (isMarketplace) {
+      const marketplaceServiceId = Number(service_id || 0);
+      if (!Number.isInteger(marketplaceServiceId) || marketplaceServiceId <= 0) {
+        return res.status(400).json({ message: "Не указана услуга Marketplace", error: "marketplace_service_required" });
+      }
+      const serviceResult = await pool.query(
+        `SELECT s.id, s.provider_id, s.title, s.category, s.price,
+                COALESCE(NULLIF(to_jsonb(s)->>'currency', ''), 'UZS') AS currency,
+                s.details
+           FROM services s
+          WHERE s.id=$1 AND s.provider_id=$2
+            AND deleted_at IS NULL
+            AND status IN ('published','approved','active')
+            AND COALESCE(LOWER(moderation_status), 'approved') IN ('approved','published','active')
+            AND (expiration_at IS NULL OR expiration_at > NOW())
+          LIMIT 1`,
+        [marketplaceServiceId, providerId]
+      );
+      const service = serviceResult.rows[0];
+      if (!service) {
+        return res.status(409).json({ message: "Услуга больше недоступна для бронирования.", error: "marketplace_service_unavailable" });
+      }
+      const detailPrice = Number(service.details?.netPrice ?? service.details?.price ?? 0);
+      const amount = Number(service.price) > 0 ? Number(service.price) : detailPrice;
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return res.status(409).json({ message: "У поставщика не указана актуальная цена услуги.", error: "marketplace_service_price_missing" });
+      }
+      publishedMarketplaceRate = {
+        amount: PROVIDER_SERVICE_CATEGORY_SET.has(String(service.category || ""))
+          ? amount * new Set(days).size
+          : amount,
+        unitAmount: amount,
+        units: new Set(days).size,
+        currency: String(service.currency || "UZS").toUpperCase(),
+        title: service.title || null,
+      };
+      bag.fixed_marketplace_rate = true;
+      bag.marketplace_service_id = marketplaceServiceId;
+      bag.published_price = publishedMarketplaceRate.amount;
+      bag.published_unit_price = amount;
+      bag.published_units = publishedMarketplaceRate.units;
+      bag.published_currency = publishedMarketplaceRate.currency;
+    }
+    const providerServiceId = Number(bag.provider_service_id || req.body?.provider_service_id || 0);
+    let publishedTourBuilderRate = null;
+    if (isTourBuilder && tourBuilderKind !== "hotel" && Number.isInteger(providerServiceId) && providerServiceId > 0) {
+      const rateResult = await pool.query(
+        `SELECT id, title, price, currency, category
+           FROM provider_services
+          WHERE id=$1 AND provider_id=$2 AND is_active=TRUE AND price > 0
+          LIMIT 1`,
+        [providerServiceId, providerId]
+      );
+      const rate = rateResult.rows[0];
+      if (!rate) {
+        return res.status(409).json({
+          message: "Выбранный тариф больше недоступен. Обновите список услуг поставщика.",
+          error: "provider_service_unavailable",
+        });
+      }
+      const categorySet = tourBuilderKind === "transport"
+        ? TRANSPORT_SERVICE_CATEGORY_SET
+        : GUIDE_SERVICE_CATEGORY_SET;
+      if (!categorySet.has(String(rate.category || ""))) {
+        return res.status(409).json({
+          message: "Выбранный тариф не соответствует типу компонента Tour Builder.",
+          error: "provider_service_type_mismatch",
+        });
+      }
+      publishedTourBuilderRate = {
+        amount: Number(rate.price) * new Set(days).size,
+        unitAmount: Number(rate.price),
+        units: new Set(days).size,
+        currency: rate.currency || "UZS",
+        title: rate.title || null,
+      };
+      bag.provider_service_id = Number(rate.id);
+      bag.fixed_catalog_rate = true;
+    }
     const initialStatus = managedHotelPrice ? "awaiting_payment" : "pending";
 
     const insertCols = ["service_id", "provider_id", "client_id", "date", "status", "client_message", "attachments"];
@@ -446,12 +533,19 @@ const createBooking = async (req, res) => {
     // опциональная валюта
     if (cols.currency) {
       insertCols.push("currency");
-      values.push(managedHotelPrice?.currency || currency || null);
+      values.push(managedHotelPrice?.currency || publishedTourBuilderRate?.currency || publishedMarketplaceRate?.currency || currency || null);
     }
-    if (managedHotelPrice) {
+    if (managedHotelPrice || publishedTourBuilderRate || publishedMarketplaceRate) {
       insertCols.push("provider_price", "provider_note");
-      values.push(managedHotelPrice.amount, "Цена зафиксирована по опубликованному тарифу Tour Builder");
-      if (cols.hold_until) {
+      values.push(
+        managedHotelPrice?.amount || publishedTourBuilderRate?.amount || publishedMarketplaceRate.amount,
+        publishedMarketplaceRate?.title
+          ? `Опубликованная цена Marketplace: ${publishedMarketplaceRate.title} (${publishedMarketplaceRate.unitAmount} × ${publishedMarketplaceRate.units} дн.)`
+          : publishedTourBuilderRate?.title
+          ? `Опубликованный тариф Tour Builder: ${publishedTourBuilderRate.title} (${publishedTourBuilderRate.unitAmount} × ${publishedTourBuilderRate.units} дн.)`
+          : "Цена зафиксирована по опубликованному тарифу Tour Builder"
+      );
+      if (managedHotelPrice && cols.hold_until) {
         insertCols.push("hold_until");
         values.push(new Date(Date.now() + 30 * 60 * 1000));
       }
@@ -538,7 +632,10 @@ const createBooking = async (req, res) => {
       dates: days,
       time_slots: timeSlots,
       inventory: inventoryReservation,
-      ...(managedHotelPrice ? { price: managedHotelPrice.amount, currency: managedHotelPrice.currency } : {}),
+      ...((managedHotelPrice || publishedTourBuilderRate || publishedMarketplaceRate) ? {
+        price: managedHotelPrice?.amount || publishedTourBuilderRate?.amount || publishedMarketplaceRate.amount,
+        currency: managedHotelPrice?.currency || publishedTourBuilderRate?.currency || publishedMarketplaceRate.currency,
+      } : {}),
     });
 
     const bkg = {
@@ -1272,7 +1369,7 @@ const confirmBooking = async (req, res) => {
 
     // проверим владение и текущий статус
     const bQ = await pool.query(
-      `SELECT id, provider_id, client_id, status
+      `SELECT id, provider_id, client_id, status, provider_price, currency
          FROM bookings WHERE id=$1`,
       [id]
     );
@@ -1283,6 +1380,9 @@ const confirmBooking = async (req, res) => {
     // подтверждать можно из состояний "quoted" (и на всякий случай "pending")
     if (!canConfirmBookingStatus(b.status)) {
       return res.status(409).json({ message: "Подтверждение недоступно для текущего статуса" });
+    }
+    if (!Number.isFinite(Number(b.provider_price)) || Number(b.provider_price) <= 0) {
+      return res.status(409).json({ message: "Поставщик ещё не указал цену" });
     }
 
     // собрать даты
@@ -1304,13 +1404,13 @@ const confirmBooking = async (req, res) => {
       if (!free) return res.status(409).json({ message: "Даты уже заняты" });
     }
 
-    // подтверждаем
+    // Клиент согласовал цену: удерживаем дату и ждём оплату.
     const cols = await getExistingColumns("bookings", ["hold_until"]);
-    const clearHold = cols.hold_until ? `, hold_until = NULL` : ``;
+    const paymentHold = cols.hold_until ? `, hold_until = NOW() + INTERVAL '30 minutes'` : ``;
     const up = await pool.query(
       `UPDATE bookings
-          SET status='confirmed',
-              updated_at = NOW()${clearHold}
+          SET status='awaiting_payment',
+              updated_at = NOW()${paymentHold}
         WHERE id=$1 AND client_id=$2 AND status IN ('pending','quoted')
       RETURNING *`,
       [id, clientId]
@@ -1322,7 +1422,7 @@ const confirmBooking = async (req, res) => {
 
     // TG
     try {
-      (tg.notifyConfirmed || tg.notifyBookingPaidConfirmed)?.({ booking, by: "client" });
+      tg.notifyBookingAcceptedAwaitingPayment?.({ booking });
     } catch {}
 
     return res.json(booking);
@@ -1351,7 +1451,7 @@ const confirmBookingByRequester = async (req, res) => {
     }
 
     const bQ = await pool.query(
-      `SELECT id, provider_id, requester_provider_id, status
+      `SELECT id, provider_id, requester_provider_id, status, provider_price, currency
          FROM bookings WHERE id=$1`,
       [id]
     );
@@ -1362,6 +1462,9 @@ const confirmBookingByRequester = async (req, res) => {
     }
     if (!canConfirmBookingStatus(b.status)) {
       return res.status(409).json({ message: "Подтверждение недоступно для текущего статуса" });
+    }
+    if (!Number.isFinite(Number(b.provider_price)) || Number(b.provider_price) <= 0) {
+      return res.status(409).json({ message: "Поставщик ещё не указал цену" });
     }
 
     // даты
@@ -1376,10 +1479,10 @@ const confirmBookingByRequester = async (req, res) => {
       if (!free) return res.status(409).json({ message: "Даты уже заняты" });
     }
 
-    const clearHold = support.hold_until ? `, hold_until = NULL` : ``;
+    const paymentHold = support.hold_until ? `, hold_until = NOW() + INTERVAL '30 minutes'` : ``;
     const up = await pool.query(
       `UPDATE bookings
-          SET status='confirmed', updated_at=NOW()${clearHold}
+          SET status='awaiting_payment', updated_at=NOW()${paymentHold}
         WHERE id=$1 AND requester_provider_id=$2 AND status IN ('pending','quoted')
       RETURNING *`,
       [id, requesterId]
@@ -1388,7 +1491,7 @@ const confirmBookingByRequester = async (req, res) => {
       return res.status(409).json({ message: "Статус брони изменился. Обновите список и повторите действие." });
     }
     const booking = up.rows[0];
-    try { (tg.notifyConfirmed || tg.notifyBookingPaidConfirmed)?.({ booking, by: "requester" }); } catch {}
+    try { tg.notifyBookingAcceptedAwaitingPayment?.({ booking }); } catch {}
     return res.json(booking);
   } catch (err) {
     console.error("confirmBookingByRequester error:", err);
@@ -1955,7 +2058,7 @@ const markPaid = async (req, res) => {
   }
 };
 
-/** POST /api/bookings/:id/payment-order — создаёт оплату Payme для действующего hotel hold. */
+/** POST /api/bookings/:id/payment-order — создаёт оплату Payme для действующей брони. */
 const createPaymentOrder = async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id)) return res.status(400).json({ message: "Invalid booking id" });
@@ -1967,7 +2070,7 @@ const createPaymentOrder = async (req, res) => {
       return res.status(403).json({ message: "Оплатить бронь может только её заявитель" });
     }
     await db.query("BEGIN");
-    await db.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`hotel-payment:${id}`]);
+    await db.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`booking-payment:${id}`]);
     const bookingResult = await db.query(
       `SELECT id,status,provider_price,currency,hold_until,client_id,
               NULLIF(to_jsonb(bookings)->>'requester_provider_id','')::bigint AS requester_provider_id
@@ -1987,7 +2090,7 @@ const createPaymentOrder = async (req, res) => {
     const currency = String(booking.currency || "UZS").toUpperCase();
     if (currency !== "UZS") {
       await db.query("ROLLBACK");
-      return res.status(409).json({ message: "Онлайн-оплата гостиничной брони доступна только в UZS" });
+      return res.status(409).json({ message: "Онлайн-оплата брони доступна только в UZS" });
     }
     const amountTiyin = Math.round(Number(booking.provider_price || 0) * 100);
     if (!Number.isSafeInteger(amountTiyin) || amountTiyin <= 0) {
@@ -2007,7 +2110,7 @@ const createPaymentOrder = async (req, res) => {
     `);
     const existing = await db.query(
       `SELECT * FROM topup_orders
-        WHERE booking_id=$1 AND order_type='hotel_booking'
+        WHERE booking_id=$1 AND order_type IN ('booking','hotel_booking')
           AND status IN ('created','pending') AND expires_at > NOW()
         ORDER BY id DESC LIMIT 1`,
       [id]
@@ -2025,7 +2128,7 @@ const createPaymentOrder = async (req, res) => {
     const inserted = await db.query(
       `INSERT INTO topup_orders
         (client_id,amount,amount_tiyin,provider,status,purpose,order_type,booking_id,actor_role,actor_id,redirect_url,expires_at,meta)
-       VALUES ($1,$2,$2,'payme','created','hotel_booking','hotel_booking',$3,$4,$5,$6,$7,$8)
+       VALUES ($1,$2,$2,'payme','created','booking','booking',$3,$4,$5,$6,$7,$8)
        RETURNING *`,
       [booking.client_id || null, amountTiyin, id, role, actorId, redirectUrl, booking.hold_until, { booking_id: id }]
     );

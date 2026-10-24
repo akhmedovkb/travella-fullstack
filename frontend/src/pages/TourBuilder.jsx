@@ -15,7 +15,7 @@ import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
 import TransportSegmentEditor from "../components/tourbuilder/TransportSegmentEditor";
-import { BusFront, Landmark, MapPin, UserRound } from "lucide-react";
+import { ArrowRight, BedDouble, BusFront, Landmark, MapPin, ReceiptText, Utensils, UserRound } from "lucide-react";
 import {
   GUIDE_CATEGORY_IDS,
   TRANSPORT_CATEGORY_IDS,
@@ -611,11 +611,34 @@ const postJSON = async (path, body) => {
   return await r.json().catch(() => ({}));
 }
 
+const patchJSON = async (path, body) => {
+  const base = API_BASE || (typeof window !== "undefined" ? window.frontend?.API_BASE : "") || "";
+  const response = await fetch(new URL(path, base).toString(), {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json", Accept: "application/json", ...authHeaders() },
+    credentials: "include",
+    body: JSON.stringify(body || {}),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => ({}));
+    throw new Error(data?.message || data?.error || `HTTP ${response.status}`);
+  }
+  return response.json().catch(() => ({}));
+};
+
 // ------ Bookings API ------
 // POST /api/bookings
 // body: { provider_id, service_id?, dates:[YYYY-MM-DD], message?, attachments?, currency?, source?, group_id? }
 async function createBooking(payload) {
   return await postJSON("/api/bookings", payload);
+}
+
+async function createTourPackage(payload) {
+  return postJSON("/api/tour-packages", payload);
+}
+
+async function updateTourPackage(id, payload) {
+  return patchJSON(`/api/tour-packages/${id}`, payload);
 }
 
 // ------ Совместимость: бронирования с фоллбеком на /api/requests ------
@@ -727,6 +750,27 @@ const normalizeProvider = (row, kind) => ({
   currency: row.currency || "UZS",
   languages: row.languages || [],
   telegram: row.telegram || row.social || row.telegram_handle || "",
+  quality_rating: Number(row.quality_rating || 0),
+  reliability_rating: Number(row.reliability_rating || 0),
+  performance_review_count: Number(row.performance_review_count || 0),
+});
+
+let supplierPerformanceCache = null;
+let supplierPerformanceRequest = null;
+async function loadSupplierPerformance() {
+  if (supplierPerformanceCache) return supplierPerformanceCache;
+  if (!supplierPerformanceRequest) supplierPerformanceRequest = fetchJSON("/api/tour-packages/supplier-performance")
+    .then((data) => new Map((data?.items || []).map((item) => [String(item.provider_id), item])))
+    .catch(() => new Map())
+    .then((value) => { supplierPerformanceCache = value; return value; });
+  return supplierPerformanceRequest;
+}
+
+const withSupplierPerformance = (row, performance) => ({
+  ...row,
+  quality_rating: performance?.quality_rating,
+  reliability_rating: performance?.reliability_rating,
+  performance_review_count: performance?.review_count,
 });
 
 const normalizeService = (row) => {
@@ -754,8 +798,22 @@ const vehicleModel =
   };
 };
 
+const serviceListSignature = (services = []) =>
+  services
+    .map((service) => [
+      service.id,
+      service.price,
+      service.currency,
+      service.title,
+      service.category,
+      service.vehicle_model,
+    ].join(":"))
+    .sort()
+    .join("|");
+
 
 async function fetchProvidersSmart({ kind, city, date, startTime = "", endTime = "", language, q = "", limit = 30 }) {
+  const performance = await loadSupplierPerformance();
   // Пробуем строго /available
   try {
     const j = await fetchJSON("/api/providers/available", {
@@ -763,7 +821,7 @@ async function fetchProvidersSmart({ kind, city, date, startTime = "", endTime =
     });
     const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
     // Возвращаем как есть (даже если пусто) — это и есть «нет свободных»
-    return arr.map((x) => normalizeProvider(x, kind));
+    return arr.map((x) => normalizeProvider(withSupplierPerformance(x, performance.get(String(x.id))), kind));
   } catch (_) {
     // Фоллбек только при сетевой/HTTP ошибке
     try {
@@ -771,7 +829,7 @@ async function fetchProvidersSmart({ kind, city, date, startTime = "", endTime =
         type: kind, location: city, language, q, limit,
       });
       const arr = Array.isArray(j?.items) ? j.items : Array.isArray(j) ? j : [];
-      return arr.map((x) => normalizeProvider(x, kind));
+      return arr.map((x) => normalizeProvider(withSupplierPerformance(x, performance.get(String(x.id))), kind));
     } catch {
       return [];
     }
@@ -962,6 +1020,7 @@ const ProviderOption = (props) => {
       {Number(p.price_per_day) > 0 && (
         <div className="mt-1"><b>{t("tb.profile.price_per_day")}:</b> {p.price_per_day} {p.currency || "UZS"}</div>
       )}
+      {p.performance_review_count > 0 && <div className="mt-1"><b>{t("tb.performance.history_score")}:</b> {((p.quality_rating + p.reliability_rating) / 2).toFixed(1)}/5 · {t("tb.performance.review_count", { count: p.performance_review_count })}</div>}
       {url && (
         <div className="mt-2">
           <a
@@ -1162,6 +1221,9 @@ export default function TourBuilder() {
    // курс USD (UZS за 1 USD), для конвертации итогов вниз страницы
  const [usdRate, setUsdRate] = useState(Number(import.meta.env.VITE_USD_RATE || 0) || 0);
  const toUSD = (vUZS) => (Number(usdRate) > 0 ? Number(vUZS) / Number(usdRate) : 0);
+ const [summaryCurrency, setSummaryCurrency] = useState("UZS");
+  const [markupType, setMarkupType] = useState("percent");
+  const [markupValue, setMarkupValue] = useState(10);
 
   const [byDay, setByDay] = useState({});
   useEffect(() => {
@@ -1219,6 +1281,94 @@ export default function TourBuilder() {
     /* ----- cache услуг провайдеров, чтобы не бить API каждый раз ----- */
   const [servicesCache, setServicesCache] = useState({});     // {providerId: Service[]}
   const [servicesLoading, setServicesLoading] = useState({}); // {providerId: bool}
+  const serviceRefreshInFlight = useRef(false);
+
+  const selectedServiceProviderKey = useMemo(() => {
+    const ids = new Set();
+    Object.values(byDay).forEach((state) => {
+      if (state?.guide?.id) ids.add(String(state.guide.id));
+      if (state?.transport?.id) ids.add(String(state.transport.id));
+    });
+    return [...ids].sort().join("|");
+  }, [byDay]);
+
+  useEffect(() => {
+    if (!selectedServiceProviderKey) return undefined;
+
+    let cancelled = false;
+    const refreshSelectedServicePrices = async () => {
+      if (serviceRefreshInFlight.current) return;
+      serviceRefreshInFlight.current = true;
+      try {
+        const providerIds = selectedServiceProviderKey.split("|").filter(Boolean);
+        const refreshedEntries = await Promise.all(
+          providerIds.map(async (providerId) => [providerId, await fetchProviderServices(providerId)])
+        );
+        if (cancelled) return;
+
+        const refreshedByProvider = Object.fromEntries(refreshedEntries);
+        setServicesCache((previous) => {
+          let changed = false;
+          const next = { ...previous };
+          refreshedEntries.forEach(([providerId, services]) => {
+            if (serviceListSignature(previous[providerId]) !== serviceListSignature(services)) {
+              next[providerId] = services;
+              changed = true;
+            }
+          });
+          return changed ? next : previous;
+        });
+
+        setByDay((previous) => {
+          let changed = false;
+          const next = { ...previous };
+          Object.entries(previous).forEach(([dateKey, state]) => {
+            let updatedState = state;
+            const selections = [
+              ["guide", "guideService"],
+              ["transport", "transportService"],
+            ];
+
+            selections.forEach(([providerKey, serviceKey]) => {
+              const providerId = state?.[providerKey]?.id;
+              const selectedService = state?.[serviceKey];
+              if (!providerId || !selectedService?.id) return;
+              const refreshedService = refreshedByProvider[String(providerId)]?.find(
+                (service) => String(service.id) === String(selectedService.id)
+              );
+              if (!refreshedService) return;
+              if (serviceListSignature([selectedService]) === serviceListSignature([refreshedService])) return;
+              updatedState = { ...updatedState, [serviceKey]: refreshedService };
+              changed = true;
+            });
+
+            if (updatedState !== state) next[dateKey] = updatedState;
+          });
+          return changed ? next : previous;
+        });
+      } catch (error) {
+        console.warn("TourBuilder: failed to refresh provider service prices", error);
+      } finally {
+        serviceRefreshInFlight.current = false;
+      }
+    };
+
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") refreshSelectedServicePrices();
+    };
+    refreshSelectedServicePrices();
+    const intervalId = window.setInterval(refreshSelectedServicePrices, 30_000);
+    window.addEventListener("focus", refreshSelectedServicePrices);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener("focus", refreshSelectedServicePrices);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [selectedServiceProviderKey]);
+
   const ensureServicesLoaded = async (provider) => {
     const pid = provider?.id;
         if (!pid) return [];
@@ -1488,11 +1638,28 @@ export default function TourBuilder() {
       setHotelOptionsMap((m) => ({ ...m, [dateKey]: [] }));
       return;
     }
-    // пробуем серверный фильтр, плюс страхуемся клиентским
-    const items = await fetchHotelsByCity(cityNorm, hotelStars); // → [{value,label,raw}]
-    const filtered = items.filter(o => matchStars(o?.raw?.stars, hotelStars));
-    setHotelOptionsMap((m) => ({ ...m, [dateKey]: filtered }));
+    try {
+      // Пробуем серверный фильтр, плюс страхуемся клиентским.
+      const items = await fetchHotelsByCity(cityNorm, hotelStars);
+      const filtered = items.filter(o => matchStars(o?.raw?.stars, hotelStars));
+      setHotelOptionsMap((m) => ({ ...m, [dateKey]: filtered }));
+    } catch {
+      setHotelOptionsMap((m) => ({ ...m, [dateKey]: [] }));
+    }
   };
+
+  const hotelCitySignature = Object.entries(byDay)
+    .map(([dateKey, day]) => `${dateKey}:${String(day?.city || "").trim().toLowerCase()}`)
+    .sort()
+    .join("|");
+
+  // Загружаем отели и при восстановлении сохранённого тура, когда город уже заполнен.
+  useEffect(() => {
+    Object.entries(byDay).forEach(([dateKey, day]) => {
+      if (String(day?.city || "").trim()) loadHotelOptionsForDay(dateKey, day.city);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hotelCitySignature, hotelStars]);
 
     // при смене фильтра звёзд — обновляем списки по всем дням и сбрасываем неподходящие выборы
   useEffect(() => {
@@ -1558,7 +1725,7 @@ export default function TourBuilder() {
     )
   );
   const filtered = rows.filter((_, i) => okMask[i]);
-  return filtered.map((p) => ({ value: p.id, label: p.name, raw: p }));
+  return filtered.map((p) => ({ value: p.id, label: p.performance_review_count ? `${p.name} · ${((p.quality_rating + p.reliability_rating) / 2).toFixed(1)}/5` : p.name, raw: p }));
 };
  
 
@@ -1598,7 +1765,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     )
   );
   const filtered = rows.filter((_, i) => okMask[i]);
-  return filtered.map((p) => ({ value: p.id, label: p.name, raw: p }));
+  return filtered.map((p) => ({ value: p.id, label: p.performance_review_count ? `${p.name} · ${((p.quality_rating + p.reliability_rating) / 2).toFixed(1)}/5` : p.name, raw: p }));
 };
 
   /* ----- totals (entry fees по видам дня) ----- */
@@ -1679,6 +1846,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   };
   const calcTransportForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
+    if (st?.guideService?.category === "city_tour_guide_with_transport" || st?.guideService?.raw?.details?.transport_included) return 0;
     const hours = durationHoursForProvider(st, "transport", st?.transport?.id);
     return priceForDuration(st?.transportService, hours, st?.transport?.price_per_day);
   };
@@ -1736,6 +1904,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
     return { guide, transport, hotel, entries, transfers, meals, net, perPax: net / pax };
   }, [byDay, adt, chd, residentType, usdRate]);
+  const commercialTotals = useMemo(() => {
+    const net = summaryCurrency === "USD" ? toUSD(totals.net) : totals.net;
+    const markup = markupType === "fixed"
+      ? Math.max(0, Number(markupValue) || 0)
+      : net * Math.max(0, Number(markupValue) || 0) / 100;
+    const gross = net + markup;
+    const pax = Math.max(1, toNum(adt, 0) + toNum(chd, 0));
+    return { net, markup, gross, perPax: gross / pax };
+  }, [totals.net, summaryCurrency, usdRate, markupType, markupValue, adt, chd]);
   const buildTourProgram = () =>
     Object.entries(byDay)
       .sort(([a], [b]) => String(a).localeCompare(String(b)))
@@ -1779,7 +1956,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     const kindForGuide =
       svc && TRANSPORT_ALLOWED.has(svc.category) ? "transport" : "guide";
 
-    const key = `${kindForGuide}:${pid}`;
+    const key = `${kindForGuide}:${pid}:${svcId || "quote"}`;
     if (!buckets.has(key)) {
       buckets.set(key, { kind: kindForGuide, provider_id: pid, service_id: null, dates: [], time_slots: [] });
     }
@@ -1793,8 +1970,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
       // транспорт
       if (st?.transport?.id) {
         const pid = String(st.transport.id);
-        const key = `transport:${pid}`;
         const svcId = (st?.transportService?.raw?.id ?? st?.transportService?.id) || null; // ← real
+        const key = `transport:${pid}:${svcId || "quote"}`;
         if (!buckets.has(key)) buckets.set(key, { kind: "transport", provider_id: pid, service_id: null, dates: [], time_slots: [] });
         const b = buckets.get(key);
         if (svcId && !b.service_id) b.service_id = String(svcId);
@@ -1849,7 +2026,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   
   const handleSendRequests = async () => {
   if (!range?.from || !range?.to)
-    return alert("Выберите даты маршрута."); // можно потом тоже перевести/заменить
+    return alert(t("tb.select_route_dates"));
 
   const hotelDays = Object.entries(byDay).filter(([, state]) => state?.hotel?.id);
   const invalidHotelDay = hotelDays.find(([, state]) => state?.hotelBreakdown?.quoteValid !== true);
@@ -1883,9 +2060,38 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   try {
     let ok = 0,
       fail = 0;
-    const groupId =
+    let groupId =
       crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
     const errs = [];
+
+    const itinerary = buildTourProgram();
+    const routeLabel = [routeCities.from, routeCities.to].filter(Boolean).join(" — ");
+    const packageTitle = routeLabel || `${t("tb.title")} ${ymd(range.from)} — ${ymd(range.to)}`;
+    const validUntil = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    try {
+      const tourPackage = await createTourPackage({
+        id: groupId,
+        title: packageTitle,
+        status: "draft",
+        currency: summaryCurrency,
+        net_total: commercialTotals.net,
+        markup_type: markupType,
+        markup_value: Number(markupValue) || 0,
+        pax_adult: Number(adt) || 0,
+        pax_child: Number(chd) || 0,
+        start_date: ymd(range.from),
+        end_date: ymd(range.to),
+        quote_valid_until: validUntil,
+        route: routeCities,
+        itinerary,
+        meta: { resident_type: residentType, language: lang, transport_segments: transportSegments },
+      });
+      groupId = tourPackage.id || groupId;
+    } catch (error) {
+      setBookingResult({ status: "error", created: 0, ok: 0, fail: payloads.length, groupId: null, errs: [String(error?.message || error)] });
+      return;
+    }
 
     for (const p of payloads) {
       try {
@@ -1913,6 +2119,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             pax_adult: Number(p.pax_adult) || 0,
             pax_child: Number(p.pax_child) || 0,
             resident_type: residentType,
+            provider_service_id: p.service_id ? Number(p.service_id) : null,
             tour_program: Array.isArray(p.tour_program) ? p.tour_program : [],
             tour_program_text: p.tour_program_text || "",
             time_slots: Array.isArray(p.time_slots) ? p.time_slots : [],
@@ -1936,24 +2143,29 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
     // вместо alert — открываем красивое модальное окно
     if (ok && !fail) {
+      await updateTourPackage(groupId, { status: "request_sent" }).catch(() => {});
       setBookingResult({
         status: "success",
         created: ok,
         ok,
         fail,
         groupId,
+        url: `/dashboard/bookings?tab=outgoing&package=${groupId}`,
         errs,
       });
     } else if (ok && fail) {
+      await updateTourPackage(groupId, { status: "request_sent", meta: { partial_creation: true } }).catch(() => {});
       setBookingResult({
         status: "partial",
         created: ok,
         ok,
         fail,
         groupId,
+        url: `/dashboard/bookings?tab=outgoing&package=${groupId}`,
         errs,
       });
     } else {
+      await updateTourPackage(groupId, { status: "draft", meta: { creation_failed: true } }).catch(() => {});
       setBookingResult({
         status: "error",
         created: ok,
@@ -2263,8 +2475,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/50 px-3 py-2">
             <div className="text-sm text-gray-700">
               {days.length
-                ? t('tb.days_count_hint', { count: days.length, defaultValue: `Дней в программе: ${days.length}` })
-                : t('tb.no_days_hint', { defaultValue: 'Выберите даты или добавьте первый день программы.' })}
+                ? t('tb.days_count_hint', { count: days.length })
+                : t('tb.no_days_hint')}
             </div>
             <div className="flex flex-wrap gap-2">
               <button
@@ -2272,7 +2484,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 className="px-3 py-1.5 text-sm border rounded bg-white hover:bg-orange-50"
                 onClick={addTourDayAtEnd}
               >
-                {t('tb.add_day', { defaultValue: '+ Добавить день' })}
+                {t('tb.add_day')}
               </button>
               {!!days.length && (
                 <button
@@ -2280,7 +2492,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   className="px-3 py-1.5 text-sm border rounded bg-white hover:bg-orange-50"
                   onClick={() => generateProgramForAllDays({ overwrite: true })}
                 >
-                  {t('tb.generate_all_program', { defaultValue: 'Сгенерировать все' })}
+                  {t('tb.generate_all_program')}
                 </button>
               )}
             </div>
@@ -2324,6 +2536,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             const guideComponentCategories = activeTourType.guideCategories;
             const providerTransportCategories = activeEventService === "tour" ? activeTourType.transportCategories : activeTransportCategories;
             const activeGuideService = guideComponentCategories.includes(st.guideService?.category) ? st.guideService : null;
+            const activeGuideIncludesTransport = Boolean(activeGuideService && (activeGuideService.category === "city_tour_guide_with_transport" || activeGuideService.raw?.details?.transport_included));
             const activeTransportService = providerTransportCategories.includes(st.transportService?.category)
               && (activeTransportSubtype !== "intercity" || fitsRoute(st.transportService, activeIntercityRoute?.from, activeIntercityRoute?.to))
               ? st.transportService
@@ -2360,6 +2573,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     subtype: "intercity",
                     intercity_mode: mode,
                     ...(mode === "rail" && previousTransport.rail ? { rail: previousTransport.rail } : {}),
+                    ...(mode === "air" && previousTransport.flight ? { flight: previousTransport.flight } : {}),
                   };
                   return { ...item, services: { ...item.services, transport } };
                 });
@@ -2591,14 +2805,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           const citySlug = (byDay[k]?.city || "").trim();
                           const picked = pickFromCache(guide.id, guideComponentCategories, citySlug, pax);
                           if (picked) {
+                            const includesTransport = picked.category === "city_tour_guide_with_transport" || picked.raw?.details?.transport_included;
                             setByDay((p) => {
                               const current = p[k] || {};
                               const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                                 item.id === current.selectedScheduleId
-                                  ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: guide.id, provider_name: guide.name || "", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Услуга гида" } } }
+                                  ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: guide.id, provider_name: guide.name || "", service_id: picked.id, service_title: picked.title || CATEGORY_LABELS[picked.category] || "Услуга гида", transport_included: Boolean(includesTransport) }, ...(includesTransport ? { transport: {} } : {}) } }
                                   : item
                               );
-                              return { ...p, [k]: { ...current, guideService: picked, schedule } };
+                              return { ...p, [k]: { ...current, guideService: picked, ...(includesTransport ? { transport: null, transportService: null } : {}), schedule } };
                             });
                           }
                         }}
@@ -2624,14 +2839,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           fitsCity(s, citySlug)
                         );
                         const chosen = allowed.find(s => String(s.id) === selId) || null;
+                        const includesTransport = chosen?.category === "city_tour_guide_with_transport" || chosen?.raw?.details?.transport_included;
                         setByDay((p) => {
                           const current = p[k] || {};
                           const schedule = normalizeScheduleItems(current.schedule).map((item) =>
                             item.id === current.selectedScheduleId
-                              ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: current.guide?.id || null, provider_name: current.guide?.name || "", service_id: chosen?.id || null, service_title: chosen?.title || "" } } }
+                              ? { ...item, services: { ...item.services, guide: { ...(item.services?.guide || {}), provider_id: current.guide?.id || null, provider_name: current.guide?.name || "", service_id: chosen?.id || null, service_title: chosen?.title || "", transport_included: Boolean(includesTransport) }, ...(includesTransport ? { transport: {} } : {}) } }
                               : item
                           );
-                          return { ...p, [k]: { ...current, guideService: chosen, schedule } };
+                          return { ...p, [k]: { ...current, guideService: chosen, ...(includesTransport ? { transport: null, transportService: null } : {}), schedule } };
                         });
                       }}
                     >
@@ -2646,8 +2862,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         .map(s => {
                           const seats = svcSeats(s); // берёт из s.raw.details.seats
                           const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
+                          const transportIncluded = s.category === "city_tour_guide_with_transport" || s?.raw?.details?.transport_included;
                            const base = t(`provider_services.items.${s.category}`, { defaultValue: s.title || CATEGORY_LABELS[s.category] || "Service" });
-                          const parts = [base, seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
+                          const parts = [base, transportIncluded ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only"), seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
                             .filter(Boolean)
                             .join(" — ");
                           return (
@@ -2656,7 +2873,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         })}
                     </select>
                     <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
-                      <span>{activeGuideService ? t(`provider_services.items.${activeGuideService.category}`, { defaultValue: t("tb.ui.selected_service") }) : t("tb.ui.service_not_selected")}</span>
+                      <span>{activeGuideService ? `${t(`provider_services.items.${activeGuideService.category}`, { defaultValue: t("tb.ui.selected_service") })} · ${(activeGuideService.category === "city_tour_guide_with_transport" || activeGuideService.raw?.details?.transport_included) ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only")}` : t("tb.ui.service_not_selected")}</span>
                       <strong className="text-sm text-slate-950">{activeGuideService ? calcGuideForDay(k).toFixed(2) : "0.00"} {activeGuideService?.currency || st.guide?.currency || "UZS"}</strong>
                     </div>
                     </div>
@@ -2671,7 +2888,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   </>}
 
                   {/* Transport */}
-                  {(activeEventService === "transfer" || (activeEventService === "tour" && !activeTourType.guideOnly)) && <>
+                   {(activeEventService === "transfer" || (activeEventService === "tour" && !activeTourType.guideOnly && !activeGuideIncludesTransport)) && <>
                   <div className={`overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm ${activeEventService === "transfer" ? "xl:col-span-3" : ""}`}>
                     <div className="flex items-center gap-3 border-b border-slate-200 px-4 py-3">
                       <div className="grid h-8 w-8 place-items-center rounded-md bg-blue-100 text-blue-700"><BusFront size={17} /></div>
@@ -2698,10 +2915,11 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     {activeEventService === "transfer" && activeTransportSubtype === "intercity" && (
                       <div className="mb-4 rounded-md border border-slate-200 bg-slate-50 p-3">
                         <div className="mb-2 text-xs font-bold uppercase text-slate-500">{t("tb.ui.intercity_method")}</div>
-                        <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="grid gap-2 sm:grid-cols-3">
                           {[
                             { id: "provider", label: t("tb.ui.transport_supplier"), hint: t("tb.ui.transport_supplier_hint") },
                             { id: "rail", label: t("tb.ui.rail_transport"), hint: t("tb.ui.rail_hint") },
+                            { id: "air", label: t("tb.ui.air_transport"), hint: t("tb.ui.air_hint") },
                           ].map((mode) => (
                             <button
                               key={mode.id}
@@ -2752,6 +2970,62 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                                       },
                                     },
                                   };
+                            });
+                            return { ...previous, [k]: { ...current, transport: null, transportService: null, schedule } };
+                          });
+                        }}
+                        onRemove={() => {
+                          const scheduleId = selectedSchedule.id;
+                          setByDay((previous) => {
+                            const current = previous[k] || {};
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                              if (item.id !== scheduleId) return item;
+                              const transport = { ...(item.services?.transport || {}) };
+                              delete transport.flight;
+                              return { ...item, services: { ...item.services, transport } };
+                            });
+                            return { ...previous, [k]: { ...current, schedule } };
+                          });
+                        }}
+                      />
+                    )}
+                    {activeEventService === "transfer" && activeTransportSubtype === "intercity" && activeIntercityMode === "air" && (
+                      <TransportSegmentEditor
+                        value={{
+                          type: "air",
+                          ...(selectedSchedule?.services?.transport?.flight || {}),
+                        }}
+                        date={k}
+                        adults={Math.max(1, toNum(adt, 1))}
+                        children={Math.max(0, toNum(chd, 0))}
+                        lang={lang}
+                        lockType="air"
+                        onChange={(flight) => {
+                          const scheduleId = selectedSchedule.id;
+                          setByDay((previous) => {
+                            const current = previous[k] || {};
+                            const departureTime = timeFromFlightDateTime(flight.departure_at);
+                            const arrivalTime = timeFromFlightDateTime(flight.arrival_at);
+                            const schedule = normalizeScheduleItems(current.schedule).map((item) => {
+                              if (item.id !== scheduleId) return item;
+                              return {
+                                ...item,
+                                ...(departureTime ? { start_time: departureTime } : {}),
+                                ...(arrivalTime ? { end_time: arrivalTime } : {}),
+                                services: {
+                                  ...item.services,
+                                  transport: {
+                                    ...(item.services?.transport || {}),
+                                    subtype: "intercity",
+                                    intercity_mode: "air",
+                                    provider_id: null,
+                                    provider_name: "",
+                                    service_id: null,
+                                    service_title: flight.raw_offer_id ? t("tb.ui.air_transport") : "",
+                                    flight: { ...flight, type: "air" },
+                                  },
+                                },
+                              };
                             });
                             return { ...previous, [k]: { ...current, transport: null, transportService: null, schedule } };
                           });
@@ -2840,7 +3114,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                         </div>
                       </div>
                     )}
-                    {(activeEventService === "tour" || (activeTransportSubtype && activeTransportSubtype !== "international" && !(activeTransportSubtype === "intercity" && activeIntercityMode === "rail"))) && <>
+                    {(activeEventService === "tour" || (activeTransportSubtype && activeTransportSubtype !== "international" && !(activeTransportSubtype === "intercity" && ["rail", "air"].includes(activeIntercityMode)))) && <>
                     {activeTransportSubtype === "intercity" && (
                       <div className={`mb-3 rounded-md border px-3 py-2 text-sm ${activeIntercityRoute?.from && activeIntercityRoute?.to ? "border-sky-200 bg-sky-50 text-sky-900" : "border-amber-200 bg-amber-50 text-amber-800"}`}>
                         {activeIntercityRoute?.from && activeIntercityRoute?.to
@@ -3428,101 +3702,96 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         servicesCache={servicesCache}
         onRecalc={autoPickForDay}
       />
-        <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')}</div><div>{totals.guide.toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')}</div><div>{(totals.transport + totals.transfers).toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')}</div><div>{totals.hotel.toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.meals')}</div>
-            <div>{totals.meals.toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')}</div><div>{totals.entries.toFixed(2)} UZS</div>
-          </div>
-          <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-            <div className="font-semibold" style={{ color: BRAND.primary }}>{t('tb.totals.total')}</div>
-            <div className="flex justify-between"><span>NET</span><span style={{ color: BRAND.primary, fontWeight: 700 }}>{totals.net.toFixed(2)} UZS</span></div>
-            <div className="flex justify-between mt-1"><span>/ pax</span><span>{totals.perPax.toFixed(2)} UZS</span></div>
-          </div>
-        </div>
-              {/* ===== Курс и итоги в USD ===== */}
-      <div className="mt-3 p-3 border rounded-lg bg-white">
-        <div className="flex items-center gap-3">
-          <label className="text-sm font-medium">
-            USD rate (UZS for 1 USD)
-          </label>
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            className="h-9 w-52 border rounded px-2 text-sm"
-            placeholder="например, 12600"
-            value={usdRate}
-            onChange={(e) => setUsdRate(Number(e.target.value) || 0)}
-          />
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.guide')} (USD)</div>
-          <div>{toUSD(totals.guide).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.transport')} (USD)</div>
-          <div>{toUSD(totals.transport + totals.transfers).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.hotels')} (USD)</div>
-          <div>{toUSD(totals.hotel).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.meals')} (USD)</div>
-          <div>{toUSD(totals.meals).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-medium mb-1" style={{ color: BRAND.primary }}>{t('tb.totals.entry')} (USD)</div>
-          <div>{toUSD(totals.entries).toFixed(2)} USD</div>
-        </div>
-        <div className="rounded p-3 border" style={{ background: BRAND.gray, borderColor: `${BRAND.accent}55` }}>
-          <div className="font-semibold" style={{ color: BRAND.primary }}>Total (USD)</div>
-          <div className="flex justify-between">
-            <span>NET</span>
-            <span style={{ color: BRAND.primary, fontWeight: 700 }}>{toUSD(totals.net).toFixed(2)} USD</span>
-          </div>
-          <div className="flex justify-between mt-1">
-            <span>/ pax</span>
-            <span>{toUSD(totals.perPax).toFixed(2)} USD</span>
-          </div>
-          {Number(usdRate) <= 0 && (
-            <div className="text-xs text-amber-600 mt-2">
-              {t('tb.usd_enter_valid_rate')}
+      <section className="mb-8 mt-4 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <div className="grid xl:grid-cols-[minmax(0,1fr)_360px]">
+          <div className="p-5 sm:p-6">
+            <div className="flex flex-col gap-4 border-b border-slate-200 pb-5 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-950">{t("tb.summary.title")}</h2>
+                <p className="mt-1 text-sm text-slate-500">{t("tb.summary.subtitle")}</p>
+              </div>
+              <div className="flex rounded-md bg-slate-100 p-1" aria-label={t("tb.summary.currency")}>
+                {["UZS", "USD"].map((currency) => (
+                  <button
+                    key={currency}
+                    type="button"
+                    onClick={() => setSummaryCurrency(currency)}
+                    className={`h-8 min-w-14 rounded px-3 text-xs font-bold transition ${summaryCurrency === currency ? "bg-white text-slate-950 shadow-sm" : "text-slate-500 hover:text-slate-800"}`}
+                  >
+                    {currency}
+                  </button>
+                ))}
+              </div>
             </div>
-          )}
+
+            {summaryCurrency === "USD" && (
+              <div className="mt-5 flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50 p-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <div className="text-sm font-semibold text-slate-900">{t("tb.summary.exchange_rate")}</div>
+                  <div className="text-xs text-slate-500">{t("tb.summary.exchange_rate_hint")}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="number" min="0" step="0.01" className="h-9 w-36 rounded border border-slate-300 bg-white px-3 text-right text-sm font-semibold" placeholder="12600" value={usdRate} onChange={(e) => setUsdRate(Number(e.target.value) || 0)} />
+                  <span className="text-xs font-bold text-slate-500">UZS</span>
+                </div>
+              </div>
+            )}
+
+            <div className="mt-5 grid gap-x-8 sm:grid-cols-2">
+              {[
+                { label: t("tb.totals.guide"), value: totals.guide, Icon: UserRound },
+                { label: t("tb.totals.transport"), value: totals.transport + totals.transfers, Icon: BusFront },
+                { label: t("tb.totals.hotels"), value: totals.hotel, Icon: BedDouble },
+                { label: t("tb.meals"), value: totals.meals, Icon: Utensils },
+                { label: t("tb.totals.entry"), value: totals.entries, Icon: Landmark },
+              ].map(({ label, value, Icon }) => {
+                const amount = summaryCurrency === "USD" ? toUSD(value) : value;
+                return (
+                  <div key={label} className="flex min-h-14 items-center justify-between gap-3 border-b border-slate-100 py-3">
+                    <div className="flex min-w-0 items-center gap-3">
+                      <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded bg-orange-50 text-orange-600"><Icon size={16} /></span>
+                      <span className="truncate text-sm font-medium text-slate-600">{label}</span>
+                    </div>
+                    <span className="whitespace-nowrap text-sm font-bold text-slate-950">{summaryCurrency === "USD" ? amount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(amount).toLocaleString("ru-RU")} {summaryCurrency}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {summaryCurrency === "USD" && Number(usdRate) <= 0 && <p className="mt-3 text-xs font-medium text-amber-700">{t("tb.usd_enter_valid_rate")}</p>}
+          </div>
+
+          <aside className="flex flex-col justify-between bg-slate-950 p-5 text-white sm:p-6">
+            <div>
+              <div className="flex items-center gap-2 text-xs font-bold uppercase text-orange-400"><ReceiptText size={16} />{t("tb.summary.sale_price")}</div>
+              <div className="mt-3 text-3xl font-bold">
+                {summaryCurrency === "USD" ? commercialTotals.gross.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(commercialTotals.gross).toLocaleString("ru-RU")} <span className="text-base text-slate-400">{summaryCurrency}</span>
+              </div>
+              <div className="mt-5 space-y-3 border-t border-slate-800 pt-4 text-sm">
+                <div className="flex items-center justify-between"><span className="text-slate-400">{t("tb.summary.net_cost")}</span><strong>{commercialTotals.net.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+                <div className="flex items-center justify-between"><span className="text-slate-400">{t("tb.summary.markup")}</span><strong>{commercialTotals.markup.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+              </div>
+              <div className="mt-4 grid grid-cols-[110px_1fr] gap-2">
+                <select value={markupType} onChange={(event) => setMarkupType(event.target.value)} className="h-10 rounded border border-slate-700 bg-slate-900 px-2 text-sm text-white">
+                  <option value="percent">%</option>
+                  <option value="fixed">{summaryCurrency}</option>
+                </select>
+                <input type="number" min="0" step={markupType === "percent" ? "0.1" : "1"} value={markupValue} onChange={(event) => setMarkupValue(Math.max(0, Number(event.target.value) || 0))} aria-label={t("tb.summary.markup")} className="h-10 min-w-0 rounded border border-slate-700 bg-slate-900 px-3 text-right text-sm font-bold text-white" />
+              </div>
+              <div className="mt-5 flex items-center justify-between border-t border-slate-800 pt-4 text-sm">
+                <span className="text-slate-400">{t("tb.summary.per_person")}</span>
+                <strong>{summaryCurrency === "USD" ? commercialTotals.perPax.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(commercialTotals.perPax).toLocaleString("ru-RU")} {summaryCurrency}</strong>
+              </div>
+            </div>
+            <div className="mt-8">
+              <button type="button" onClick={handleSendRequests} disabled={sending || (summaryCurrency === "USD" && Number(usdRate) <= 0)} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-4 font-bold text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" title={t("tourBuilder.book")}>
+                {sending ? t("tourBuilder.booking_in_progress") : t("tourBuilder.book")}
+                {!sending && <ArrowRight size={18} />}
+              </button>
+              <p className="mt-3 text-xs leading-5 text-slate-400">{t("tb.summary.booking_hint")}</p>
+            </div>
+          </aside>
         </div>
-      </div>
-      {/* ===== Кнопка «Бронировать» → создаём ЗАПРОСЫ поставщикам ===== */}
-      <div className="max-w-6xl mx-auto mt-4 mb-8">
-      <button
-        type="button"
-        onClick={handleSendRequests}
-        disabled={sending}
-        className="px-4 py-2 rounded-lg text-white"
-        style={{ background: sending ? '#D1D5DB' : BRAND.primary }}
-        title={t("tourBuilder.book")}
-      >
-        {sending ? t("tourBuilder.booking_in_progress") : t("tourBuilder.book")}
-      </button>
-        <div className="text-xs text-gray-500 mt-1">
-          {t("tourBuilder.booking_note")}
-        </div>
-      </div>
+      </section>
       </div>
             {/* [TPL] Модал применения шаблона */}
       {applyOpen && (

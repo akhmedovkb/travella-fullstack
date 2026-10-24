@@ -45,6 +45,9 @@ const {
   resolveProviderByTelegramActorId,
   ProviderTelegramResolutionError,
 } = require("../utils/providerTelegramResolver");
+const { verifyProviderTelegramLinkPayload } = require("../utils/providerTelegramLink");
+const { isRegistrationCallbackData } = require("../utils/telegramRegistration");
+const { respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply, consumeSupplierServiceOrderAttachment } = require("../utils/tourServiceOrderResponse");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -1639,7 +1642,7 @@ function isHardBlocked(userId) {
 }
 // ===================== AUTH REHYDRATE (FIX PENDING STUCK) =====================
 // Если админ одобрил лид через сайт, Telegraf-сессия про это не знает.
-// Поэтому при pending/!linked мы раз в несколько секунд перепроверяем БД через API
+// Поэтому при pending/!linked мы раз в несколько секунд перепроверяем БД
 // и обновляем ctx.session (pending=false, linked=true, role=...).
 const AUTH_RECHECK_TTL_MS = 6000;
 
@@ -1657,18 +1660,21 @@ async function rehydrateAuthSessionIfNeeded(ctx) {
     if (Date.now() - last < AUTH_RECHECK_TTL_MS) return false;
     ctx.session._authRecheckTs = Date.now();
 
-    // 1) provider?
+    // 1) provider? Use the canonical resolver shared with provider service routes.
     try {
-      const r = await axios.get(`/api/telegram/profile/provider/${actorId}`);
-      if (r?.data?.success && r?.data?.user?.id) {
+      const providerId = await resolveProviderIdByTelegramChatId(actorId, {
+        action: "rehydrate_auth_session",
+      });
+      if (providerId) {
         ctx.session.pending = false;
         ctx.session.linked = true;
         ctx.session.role = "provider";
         ctx.session.requestedRole = null;
+        ctx.session.__providerFunnelProviderId = providerId;
         return true;
       }
     } catch (e) {
-      // 404 ok -> try client
+      console.log("[tg-bot] provider auth rehydrate error:", e?.message || e);
     }
 
     // 2) client?
@@ -1834,10 +1840,10 @@ bot.use(async (ctx, next) => {
       typeof ctx.message?.text === "string" &&
       isMainMenuText(ctx.message.text);
 
-    const isRolePick =
+    const isRegistrationPick =
       ctx.updateType === "callback_query" &&
       typeof ctx.callbackQuery?.data === "string" &&
-      /^role:(client|provider)$/.test(ctx.callbackQuery.data);
+      isRegistrationCallbackData(ctx.callbackQuery.data);
 
     const isContact =
       ctx.updateType === "message" && !!ctx.message?.contact?.phone_number;
@@ -1853,7 +1859,7 @@ bot.use(async (ctx, next) => {
 
     // ✅ Если pending — режем всё, кроме /start / выбора роли / отправки телефона
     if (ctx.session?.pending) {
-      if (isStartCmd || isMenuCmd || isRolePick || isContact || isPhoneText) {
+      if (isStartCmd || isMenuCmd || isRegistrationPick || isContact || isPhoneText) {
         return next();
       }
 
@@ -1890,7 +1896,7 @@ bot.use(async (ctx, next) => {
 
     if (!isLinked) {
       // разрешаем базовые шаги привязки
-      if (isStartCmd || isMenuCmd || isRolePick || isContact || isPhoneText) {
+      if (isStartCmd || isMenuCmd || isRegistrationPick || isContact || isPhoneText) {
         return next();
       }
 
@@ -3917,6 +3923,70 @@ bot.use(async (ctx, next) => {
 });
 
 // ===================== ACTUAL REMINDER CALLBACK (svc_actual:...) =====================
+bot.action(/^tour_order:(\d+):(accepted|declined)$/, async (ctx) => {
+  try {
+    const match = String(ctx.callbackQuery?.data || "").match(/^tour_order:(\d+):(accepted|declined)$/);
+    const result = await respondToSupplierServiceOrder({
+      actorTelegramId: ctx.from?.id,
+      bookingId: Number(match?.[1]),
+      decision: match?.[2],
+    });
+    if (!result.ok) {
+      const message = result.code === "forbidden" ? "Этот заказ назначен другому поставщику" : "Заказ не найден или уже недоступен";
+      await ctx.answerCbQuery(message, { show_alert: true });
+      return;
+    }
+    await ctx.answerCbQuery(result.service_order_status === "accepted" ? "Заказ принят" : "Заказ отклонён");
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+    await safeReply(ctx, result.service_order_status === "accepted" ? "✅ Вы приняли заказ. DMC получил уведомление." : "❌ Вы отклонили заказ. DMC получил уведомление.", {
+      reply_markup: { inline_keyboard: [[{ text: "💬 Ответить DMC", callback_data: `tour_order_reply:${match?.[1]}` }]] },
+    });
+  } catch (error) {
+    console.error("[tg-bot] tour order response error:", error?.message || error);
+    try { await ctx.answerCbQuery("Не удалось сохранить ответ", { show_alert: true }); } catch {}
+  }
+});
+
+bot.action(/^tour_order_reply:(\d+)$/, async (ctx) => {
+  try {
+    const match = String(ctx.callbackQuery?.data || "").match(/^tour_order_reply:(\d+)$/);
+    const result = await beginSupplierServiceOrderReply({ actorTelegramId: ctx.from?.id, bookingId: Number(match?.[1]) });
+    if (!result.ok) {
+      await ctx.answerCbQuery("Этот заказ недоступен", { show_alert: true });
+      return;
+    }
+    await ctx.answerCbQuery("Отправьте сообщение или файл");
+    await safeReply(ctx, `💬 Напишите ответ или приложите документ/фото для DMC по услуге «${result.service_title || `#${result.booking_id}`}». Ответ нужно отправить в течение 30 минут.`);
+  } catch (error) {
+    console.error("[tg-bot] begin tour order reply error:", error?.message || error);
+    try { await ctx.answerCbQuery("Не удалось начать ответ", { show_alert: true }); } catch {}
+  }
+});
+
+bot.on(["document", "photo"], async (ctx, next) => {
+  try {
+    const bestPhoto = Array.isArray(ctx.message?.photo) && ctx.message.photo.length ? ctx.message.photo[ctx.message.photo.length - 1] : null;
+    const attachment = ctx.message?.document ? {
+      kind: "document", ...ctx.message.document, caption: ctx.message.caption,
+    } : bestPhoto ? {
+      kind: "photo", ...bestPhoto, file_name: `photo-${ctx.message?.message_id || Date.now()}.jpg`, mime_type: "image/jpeg", caption: ctx.message.caption,
+    } : null;
+    const result = await consumeSupplierServiceOrderAttachment({ actorTelegramId: ctx.from?.id, attachment });
+    if (result.ok) {
+      await safeReply(ctx, "✅ Файл отправлен DMC и сохранён в истории заказа.");
+      return;
+    }
+    if (result.code === "invalid_attachment") {
+      await safeReply(ctx, "⚠️ Не удалось принять файл. Максимальный размер — 20 МБ.");
+      return;
+    }
+  } catch (error) {
+    console.error("[tg-bot] supplier attachment error:", error?.message || error);
+  }
+  return next();
+});
+
+// ===================== ACTUAL REMINDER CALLBACK (svc_actual:...) =====================
 // Эти кнопки приходят из напоминаний об актуальности. Обрабатывать должен тот же бот, который отправил кнопки.
 bot.action(/^svc_actual:(\d+):(yes|no|extend7|ping)(?::.*)?$/, async (ctx) => {
   try {
@@ -5377,11 +5447,28 @@ function buildInlineDescription(svc, category, roleForInline) {
 /* ===================== ROLE RESOLUTION ===================== */
 
 async function ensureProviderRole(ctx) {
-  if (ctx.session?.role === "provider") return "provider";
+  if (ctx.session?.role === "provider" && ctx.session?.linked) return "provider";
 
   const actorId = getActorId(ctx);
   if (!actorId) return ctx.session?.role || null;
 
+  try {
+    const providerId = await resolveProviderIdByTelegramChatId(actorId, {
+      action: "restore_provider_session",
+    });
+    if (providerId) {
+      if (!ctx.session) ctx.session = {};
+      ctx.session.role = "provider";
+      ctx.session.linked = true;
+      ctx.session.pending = false;
+      ctx.session.__providerFunnelProviderId = providerId;
+      return "provider";
+    }
+  } catch (e) {
+    console.log("[tg-bot] provider resolver error:", e?.message || e);
+  }
+
+  // Keep the legacy endpoint as a fallback while older installations migrate.
   try {
     const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
     if (resProv.data && resProv.data.success) {
@@ -8380,6 +8467,14 @@ async function finishCreateServiceFromWizard(ctx) {
       return;
     }
 
+    if (apiError === "PROVIDER_TELEGRAM_ID_AMBIGUOUS") {
+      await ctx.reply(
+        "⚠️ Этот Telegram привязан к двум профилям поставщика. Черновик сохранён в боте. " +
+          "Обратитесь в поддержку, чтобы оставить одну привязку, затем повторите сохранение."
+      );
+      return;
+    }
+
     await ctx.reply("⚠️ Ошибка при сохранении услуги. Попробуйте позже.");
     resetServiceWizard(ctx);
   }
@@ -8431,7 +8526,7 @@ async function handlePhoneRegistration(ctx, requestedRole, phone) {
       ctx.session.pendingRole = finalRole;
 
       await ctx.reply(
-        "🕒 Заявка принята и отправлена на модерацию.\n\n" +
+        (data.updated ? "🕒 Заявка обновлена и ожидает модерации.\n\n" : "🕒 Заявка принята и отправлена на модерацию.\n\n") +
           "⏳ Пожалуйста, дождитесь одобрения администратора.\n" +
           "После одобрения меню станет доступно.\n\n" +
           `🌐 Сайт: ${SITE_URL}`,
@@ -8514,7 +8609,13 @@ bot.hears(/^\/testpay(?:@\w+)?$/i, async (ctx) => {
 bot.command("menu", async (ctx) => {
   logUpdate(ctx, "/menu");
 
-  if (!ctx.session?.linked) {
+  const role =
+    (await ensureProviderRole(ctx)) ||
+    (await ensureClientRole(ctx)) ||
+    ctx.session?.role ||
+    null;
+
+  if (!role || !ctx.session?.linked) {
     await ctx.reply(
       "🔐 Сначала привяжите аккаунт по номеру телефона. После этого кнопки меню будут закреплены снизу."
     );
@@ -8522,14 +8623,19 @@ bot.command("menu", async (ctx) => {
     return;
   }
 
-  const role = ctx.session?.role || (await ensureProviderRole(ctx)) || (await ensureClientRole(ctx)) || "client";
   await showMainMenu(ctx, role);
 });
 
 bot.hears(MAIN_MENU_TEXT_RE, async (ctx) => {
   logUpdate(ctx, "hears main menu");
 
-  if (!ctx.session?.linked) {
+  const role =
+    (await ensureProviderRole(ctx)) ||
+    (await ensureClientRole(ctx)) ||
+    ctx.session?.role ||
+    null;
+
+  if (!role || !ctx.session?.linked) {
     await ctx.reply(
       "🔐 Сначала привяжите аккаунт по номеру телефона. После этого меню будет доступно без /start."
     );
@@ -8540,7 +8646,6 @@ bot.hears(MAIN_MENU_TEXT_RE, async (ctx) => {
   forceCloseEditWizard(ctx);
   resetServiceWizard(ctx);
 
-  const role = ctx.session?.role || (await ensureProviderRole(ctx)) || (await ensureClientRole(ctx)) || "client";
   await showMainMenu(ctx, role);
 });
 
@@ -8560,6 +8665,67 @@ bot.start(async (ctx) => {
   try {
     let role = null;
 
+    if (startPayloadRaw.startsWith("pl_")) {
+      const link = verifyProviderTelegramLinkPayload(startPayloadRaw);
+      if (!link) {
+        await ctx.reply("⚠️ Ссылка привязки устарела или недействительна. Вернитесь в кабинет и нажмите «Подключить Telegram» ещё раз.");
+        return;
+      }
+
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const providerResult = await client.query(
+          "SELECT id, name FROM providers WHERE id = $1 FOR UPDATE",
+          [link.providerId]
+        );
+        if (!providerResult.rowCount) {
+          await client.query("ROLLBACK");
+          await ctx.reply("⚠️ Профиль поставщика не найден.");
+          return;
+        }
+
+        const conflict = await client.query(
+          `SELECT id FROM providers
+            WHERE id <> $2
+              AND $1 = ANY(ARRAY[
+                telegram_refused_chat_id::text,
+                telegram_chat_id::text,
+                tg_chat_id::text,
+                telegram_web_chat_id::text
+              ])
+            LIMIT 1`,
+          [String(actorId), link.providerId]
+        );
+        if (conflict.rowCount) {
+          await client.query("ROLLBACK");
+          await ctx.reply("⚠️ Этот Telegram уже привязан к другому профилю поставщика. Обратитесь в поддержку.");
+          return;
+        }
+
+        await client.query(
+          "UPDATE providers SET telegram_chat_id = $1, social = COALESCE($2, social) WHERE id = $3",
+          [String(actorId), ctx.from?.username ? `@${ctx.from.username}` : null, link.providerId]
+        );
+        await client.query("COMMIT");
+
+        if (!ctx.session) ctx.session = {};
+        ctx.session.role = "provider";
+        ctx.session.linked = true;
+        ctx.session.pending = false;
+        await ctx.reply(
+          `✅ Telegram привязан к профилю поставщика «${providerResult.rows[0].name || "Travella"}».`,
+          getMainMenuKeyboard("provider")
+        );
+        return;
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => {});
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+
     // Public channel deep-link: operator_<serviceId> opens a lightweight contact flow
     // before account binding, so new clients can ask an operator without friction.
     const mOperator = startPayloadRaw.match(/^operator_(\d+)$/i);
@@ -8568,15 +8734,8 @@ bot.start(async (ctx) => {
       return;
     }
 
-    // ✅ ПРИОРИТЕТ: СНАЧАЛА provider, ПОТОМ client
-    try {
-      const resProv = await axios.get(`/api/telegram/profile/provider/${actorId}`);
-      if (resProv.data && resProv.data.success) role = "provider";
-    } catch (e) {
-      if (e?.response?.status !== 404) {
-        console.log("[tg-bot] profile provider error:", e?.response?.data || e.message || e);
-      }
-    }
+    // Provider identity is resolved from the same canonical fields as service actions.
+    role = await ensureProviderRole(ctx);
 
     // client проверяем ТОЛЬКО если провайдера нет
     if (!role) {
@@ -8806,9 +8965,6 @@ bot.start(async (ctx) => {
       return;
     }
 
-    await ctx.reply(
-      "👋 Добро пожаловать в Travella!\n\nЧтобы показать ваши бронирования/заявки — привяжем аккаунт по номеру телефона."
-    );
     await askRole(ctx);
   } catch (e) {
     console.error("[tg-bot] /start error:", e?.response?.data || e);
@@ -8825,6 +8981,17 @@ bot.action(/^role:(client|provider)$/, async (ctx) => {
     await ctx.answerCbQuery();
 
     if (role === "provider") {
+      const existingProviderRole = await ensureProviderRole(ctx);
+      if (existingProviderRole === "provider") {
+        ctx.session.requestedRole = null;
+        ctx.session.state = null;
+        await ctx.reply(
+          "✅ Аккаунт поставщика найден. Выберите раздел в меню ниже 👇",
+          getMainMenuKeyboard("provider")
+        );
+        return;
+      }
+
       ctx.session.requestedRole = null;
       ctx.session.state = "choosing_provider_type";
       await askProviderType(ctx);
@@ -16035,6 +16202,12 @@ bot.on("text", async (ctx, next) => {
     // Важно: bot.on("text") стоит раньше bot.hears(/готово/), поэтому
     // сообщение «ГОТОВО» нужно обработать здесь, иначе оно уходит в wizard.
     const rawText = String(ctx.message?.text || "").trim();
+
+    const supplierReply = await consumeSupplierServiceOrderReply({ actorTelegramId: ctx.from?.id, text: rawText });
+    if (supplierReply.ok) {
+      await safeReply(ctx, "✅ Ответ отправлен DMC и сохранён в истории заказа.");
+      return;
+    }
 
     if (ctx.session?.state === "awaiting_provider_support_click_phone" || ctx.session?.pendingProviderSupportClick) {
       await handleProviderSupportClickPhoneInput(ctx, rawText);

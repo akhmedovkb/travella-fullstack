@@ -6,18 +6,19 @@ on:
 
 jobs:
   audit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     strategy:
+      fail-fast: false
       matrix:
         dir: [ "frontend", "backend" ]
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       
       - name: Setup Node (with cache)
         if: hashFiles(format('{0}/package-lock.json', matrix.dir)) != ''
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
           cache: npm
@@ -26,7 +27,7 @@ jobs:
       
       - name: Setup Node (no cache)
         if: hashFiles(format('{0}/package-lock.json', matrix.dir)) == ''
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: 22
 
@@ -40,3 +41,13 @@ jobs:
           fi
           npm ci --no-audit
           npm audit --omit=dev --audit-level=critical
+
+      - name: Build frontend
+        if: matrix.dir == 'frontend'
+        working-directory: frontend
+        run: npm run build
+
+      - name: Test backend
+        if: matrix.dir == 'backend'
+        working-directory: backend
+        run: npm run test:unit

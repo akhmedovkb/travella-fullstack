@@ -1,11 +1,12 @@
 // frontend/src/pages/Register.jsx
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import axios from "axios";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
 import { toast } from "../ui/toast";
+import { Eye, EyeOff } from "lucide-react";
 
 // --- утилиты ---------------------------------------------------------
 const normalizePhone = (raw = "") =>
@@ -19,6 +20,13 @@ const parseErrorMessage = (err, t) => {
     err?.response?.data?.message ??
     err?.message ??
     "";
+
+  if (err?.response?.data?.code === "PROVIDER_ACCOUNT_EXISTS") {
+    const method = err?.response?.data?.login_method;
+    return t(method === "telegram"
+      ? "register.errors.provider_exists_telegram"
+      : "register.errors.provider_exists");
+  }
 
   if (typeof raw === "string" && raw.startsWith("register.")) {
     return t(raw);
@@ -67,6 +75,7 @@ const Register = () => {
   const [locationSuggestions, setLocationSuggestions] = useState([]);
   const [submitting, setSubmitting] = useState(false);
   const [telegramError, setTelegramError] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
     window.onTelegramProviderRegister = async (user) => {
@@ -203,6 +212,10 @@ const Register = () => {
       toast.error(t("register.errors.phone_invalid"));
       return;
     }
+    if (formData.password.length < 8) {
+      toast.error(t("register.errors.password_length"));
+      return;
+    }
 
     const payload = {
       ...formData,
@@ -233,170 +246,71 @@ const Register = () => {
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-gray-100 p-6">
-      <form
-        onSubmit={handleSubmit}
-        className="bg-white p-10 rounded-lg shadow-lg w-full max-w-4xl"
-      >
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-orange-600">
-            {t("register.title")}
-          </h2>
+    <div className="mx-auto w-full max-w-6xl px-4 py-8 md:px-6 md:py-12">
+      <div className="grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[0.72fr_1.28fr]">
+        <aside className="order-2 bg-slate-950 p-7 text-white md:p-10 lg:order-1">
+          <Link to="/" className="text-sm font-bold text-orange-400 hover:text-orange-300">{t("provider_auth.back_marketplace")}</Link>
+          <h2 className="mt-8 text-2xl font-black leading-tight md:text-3xl">{t("provider_auth.title")}</h2>
+          <p className="mt-3 text-sm leading-6 text-slate-300">{t("provider_auth.subtitle")}</p>
+          <ul className="mt-8 space-y-5">
+            {["sales", "calendar", "tools"].map((benefit) => (
+              <li key={benefit} className="flex gap-3">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-black" aria-hidden="true">✓</span>
+                <div><div className="text-sm font-bold">{t(`provider_auth.benefit_${benefit}`)}</div><div className="mt-1 text-xs leading-5 text-slate-400">{t(`provider_auth.benefit_${benefit}_hint`)}</div></div>
+              </li>
+            ))}
+          </ul>
+        </aside>
 
-          <div className="mt-4 rounded-2xl border border-gray-200 bg-gray-50 p-4">
-            <div className="text-sm font-semibold text-gray-600 mb-3">
-              {t("telegram_provider_auth.register", {
-                defaultValue: "Register / login via Telegram",
-              })}
-            </div>
+        <section className="order-1 p-6 md:p-10 lg:order-2">
+          <div className="border-b border-slate-200 pb-6">
+            <p className="text-xs font-black uppercase text-orange-600">{t("provider_auth.eyebrow")}</p>
+            <h1 className="mt-2 text-3xl font-black text-slate-950">{t("register.title")}</h1>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">{t("provider_auth.register_subtitle")}</p>
+          </div>
 
-            <div id="telegram-register-container" />
+          <div className="mt-6 rounded-lg border border-sky-200 bg-sky-50 p-4">
+            <div className="text-sm font-bold text-slate-800">{t("telegram_provider_auth.register", { defaultValue: "Register / login via Telegram" })}</div>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{t("telegram_provider_auth.register_hint")}</p>
+            <div id="telegram-register-container" className="mt-3" />
+            {telegramError && <div className="mt-2 text-sm font-semibold text-red-600">{telegramError}</div>}
+          </div>
 
-            {telegramError && (
-              <div className="mt-2 text-sm text-red-600">
-                {telegramError}
+          <form onSubmit={handleSubmit} className="mt-6">
+            <div className="grid gap-x-5 gap-y-5 md:grid-cols-2">
+              <Field label={t("register.name")}><input name="name" required title={requiredTitle} lang={i18n.language} onChange={handleChange} placeholder={t("provider_auth.name_placeholder")} className="h-12 w-full rounded-lg border border-slate-300 px-4 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" /></Field>
+              <Field label={t("register.type")}><select name="type" value={formData.type} onChange={handleChange} className="h-12 w-full rounded-lg border border-slate-300 px-4 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100"><option value="guide">{t("guide")}</option><option value="transport">{t("transport")}</option><option value="agent">{t("agent")}</option><option value="hotel">{t("hotel")}</option></select></Field>
+
+              <div className="relative">
+                <Field label={t("location")} hint={t("provider_auth.location_hint")}><input name="location" value={formData.location} required title={requiredTitle} lang={i18n.language} onChange={handleChange} placeholder={t("register.location_placeholder")} className="h-12 w-full rounded-lg border border-slate-300 px-4 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" /></Field>
+                {locationSuggestions.length > 0 && <ul className="absolute left-0 right-0 top-[78px] z-20 max-h-40 overflow-y-auto rounded-lg border bg-white shadow-lg">{locationSuggestions.map((city, i) => <li key={`${city}-${i}`} onClick={() => handleLocationSelect(city)} className="cursor-pointer border-b px-3 py-2 text-sm hover:bg-slate-50">{city}</li>)}</ul>}
               </div>
-            )}
+              <Field label={t("register.phone")} hint={t("register.phone_hint")}><input name="phone" type="tel" required title={t("register.phone_hint")} lang={i18n.language} onChange={handleChange} placeholder="+998 90 123 45 67" autoComplete="tel" className="h-12 w-full rounded-lg border border-slate-300 px-4 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" /></Field>
 
-            <div className="mt-2 text-xs text-gray-500">
-              {t("telegram_provider_auth.register_hint", {
-                defaultValue:
-                  "If you are already approved as a provider in the bot, Telegram login will open the same dashboard.",
-              })}
+              <Field label={t("register.email")}><input name="email" type="email" required title={requiredTitle} lang={i18n.language} onChange={handleChange} placeholder="name@example.com" autoComplete="email" className="h-12 w-full rounded-lg border border-slate-300 px-4 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" /></Field>
+              <Field label={t("register.social")} hint={t("provider_auth.telegram_username_hint")}><input name="social" required title={requiredTitle} onChange={handleChange} placeholder="@username" className="h-12 w-full rounded-lg border border-slate-300 px-4 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" /></Field>
+
+              <Field label={t("register.password")} hint={t("provider_auth.password_hint")}>
+                <div className="relative"><input name="password" type={showPassword ? "text" : "password"} minLength={8} required title={requiredTitle} lang={i18n.language} onChange={handleChange} autoComplete="new-password" className="h-12 w-full rounded-lg border border-slate-300 px-4 pr-14 outline-none focus:border-orange-500 focus:ring-2 focus:ring-orange-100" /><button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute inset-y-0 right-0 inline-flex w-12 items-center justify-center text-slate-500 hover:text-slate-950" aria-label={t(showPassword ? "login.hide_password" : "login.show_password")}>{showPassword ? <EyeOff className="h-5 w-5" aria-hidden="true" /> : <Eye className="h-5 w-5" aria-hidden="true" />}</button></div>
+              </Field>
+              <Field label={t("register.photo")} hint={t("provider_auth.photo_hint")}>
+                <label className="flex h-12 cursor-pointer items-center justify-between rounded-lg border border-dashed border-slate-300 px-4 text-sm transition hover:border-orange-400 hover:bg-orange-50"><span className="font-bold text-slate-700">{t("register.select_file")}</span><span className="truncate pl-3 text-xs text-slate-500">{formData.photo ? t("register.file_chosen") : t("register.no_file")}</span><input type="file" name="photo" accept="image/*" onChange={handleChange} className="hidden" /></label>
+              </Field>
             </div>
-          </div>
-        </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {/* Левая колонка */}
-          <div>
-            <label className="block mb-1">{t("register.name")}</label>
-            <input
-              name="name"
-              required
-              title={requiredTitle}
-              lang={i18n.language}
-              onChange={handleChange}
-              className="w-full border p-2 mb-4"
-            />
+            <button type="submit" disabled={submitting} className={`mt-6 h-12 w-full rounded-lg text-sm font-black text-white transition ${submitting ? "cursor-not-allowed bg-orange-300" : "bg-orange-600 hover:bg-orange-700"}`}>{submitting ? t("register.loading") : t("register.button")}</button>
+            <p className="mt-3 text-xs leading-5 text-slate-500">{t("provider_auth.terms")}</p>
+          </form>
 
-            <label className="block mb-1">{t("register.type")}</label>
-            <select
-              name="type"
-              value={formData.type}
-              onChange={handleChange}
-              className="w-full border p-2 mb-4"
-            >
-              <option value="guide">{t("guide")}</option>
-              <option value="transport">{t("transport")}</option>
-              <option value="agent">{t("agent")}</option>
-              <option value="hotel">{t("hotel")}</option>
-            </select>
-
-            <label className="block mb-1">{t("location")}</label>
-            <input
-              name="location"
-              value={formData.location}
-              required
-              title={requiredTitle}
-              lang={i18n.language}
-              onChange={handleChange}
-              placeholder={t("register.location_placeholder")}
-              className="w-full border p-2 mb-1"
-            />
-
-            {locationSuggestions.length > 0 && (
-              <ul className="bg-white border -mt-0.5 max-h-40 overflow-y-auto z-10 relative">
-                {locationSuggestions.map((city, i) => (
-                  <li
-                    key={`${city}-${i}`}
-                    onClick={() => handleLocationSelect(city)}
-                    className="p-2 border-b cursor-pointer hover:bg-gray-100"
-                  >
-                    {city}
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            <div className="mt-4">
-              <label className="block font-medium mb-1">{t("register.photo")}</label>
-              <div className="flex items-center gap-4">
-                <label className="bg-orange-500 text-white py-2 px-4 rounded cursor-pointer hover:bg-orange-600">
-                  {t("register.select_file")}
-                  <input
-                    type="file"
-                    name="photo"
-                    accept="image/*"
-                    onChange={handleChange}
-                    className="hidden"
-                  />
-                </label>
-                <span className="text-sm text-gray-600">
-                  {formData.photo ? t("register.file_chosen") : t("register.no_file")}
-                </span>
-              </div>
-            </div>
-          </div>
-
-          {/* Правая колонка */}
-          <div>
-            <label className="block mb-1">{t("register.phone")}</label>
-            <input
-              name="phone"
-              required
-              title={t("register.phone_hint")}
-              lang={i18n.language}
-              onChange={handleChange}
-              placeholder="+998 90 123 45 67"
-              className="w-full border p-2 mb-1"
-            />
-
-            <label className="block mb-1">{t("register.email")}</label>
-            <input
-              name="email"
-              type="email"
-              required
-              title={requiredTitle}
-              lang={i18n.language}
-              onChange={handleChange}
-              className="w-full border p-2 mb-4"
-            />
-
-            <label className="block mb-1">{t("register.social")}</label>
-            <input
-              name="social"
-              required
-              title={requiredTitle}
-              onChange={handleChange}
-              className="w-full border p-2 mb-4"
-            />
-
-            <label className="block mb-1">{t("register.password")}</label>
-            <input
-              name="password"
-              type="password"
-              required
-              title={requiredTitle}
-              lang={i18n.language}
-              onChange={handleChange}
-              className="w-full border p-2 font-bold border-2 border-orange-500"
-            />
-          </div>
-        </div>
-
-        <button
-          type="submit"
-          disabled={submitting}
-          className={`mt-6 w-full text-white py-3 rounded font-bold transition ${
-            submitting ? "bg-orange-400 cursor-not-allowed" : "bg-orange-600 hover:bg-orange-700"
-          }`}
-        >
-          {submitting ? t("register.loading") : t("register.button")}
-        </button>
-      </form>
+          <p className="mt-6 border-t border-slate-200 pt-5 text-center text-sm text-slate-600">{t("provider_auth.have_account")}{" "}<Link to="/login" className="font-bold text-orange-600 hover:underline">{t("login.button")}</Link></p>
+        </section>
+      </div>
     </div>
   );
 };
+
+function Field({ label, hint, children }) {
+  return <label className="block"><span className="mb-2 block text-sm font-bold text-slate-800">{label}</span>{children}{hint ? <span className="mt-1.5 block text-xs text-slate-500">{hint}</span> : null}</label>;
+}
 
 export default Register;

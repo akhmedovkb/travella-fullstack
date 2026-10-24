@@ -3,6 +3,11 @@ const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
 const pool = require("../db");
 const { resolveProviderByTelegramActorId } = require("../utils/providerTelegramResolver");
+const {
+  findProviderIdentityMatches,
+  lockProviderIdentity,
+  requireVerifiedProviderLink,
+} = require("../utils/providerIdentity");
 
 const JWT_SECRET = process.env.JWT_SECRET || "changeme_in_env";
 const LOGIN_MAX_AGE_SEC = Number(process.env.TELEGRAM_LOGIN_MAX_AGE_SEC || 86400);
@@ -415,16 +420,15 @@ async function upsertApprovedLeadAccount(db, lead, tgUser) {
   }
 
   if (status === "approved_provider") {
-    if (lead.phone) {
-      const byPhone = await db.query(
-        `SELECT * FROM providers WHERE phone = $1 ORDER BY id DESC LIMIT 1`,
-        [lead.phone]
-      );
-      if (byPhone.rowCount) {
-        await touchProviderTelegram(db, byPhone.rows[0].id, tgUser);
-        const refetch = await findProviderByTelegram(db, String(tgUser.id));
-        return { role: "provider", row: refetch.rows[0] || byPhone.rows[0] };
-      }
+    const identity = { email: lead.email, phone: lead.phone, telegramId: tgUser.id };
+    await lockProviderIdentity(db, identity);
+    const existing = requireVerifiedProviderLink(
+      await findProviderIdentityMatches(db, identity)
+    );
+    if (existing) {
+      await touchProviderTelegram(db, existing.id, tgUser);
+      const refetch = await findProviderByTelegram(db, String(tgUser.id));
+      return { role: "provider", row: refetch.rows[0] || existing };
     }
 
     const created = await createProviderFromLead(db, lead, tgUser);
@@ -552,7 +556,14 @@ async function loginWithTelegram(req, res) {
       await db.query("ROLLBACK");
     } catch {}
     console.error("loginWithTelegram error:", e);
-    return res.status(500).json({ ok: false, error: "server_error" });
+    const status = Number(e?.status) || 500;
+    return res.status(status).json({
+      ok: false,
+      error: e?.code || "server_error",
+      message: status === 409
+        ? "Найдены разные профили с совпадающими контактами. Обратитесь в поддержку для объединения."
+        : undefined,
+    });
   } finally {
     db.release();
   }

@@ -1,0 +1,79 @@
+const express = require("express");
+const authenticateToken = require("../middleware/authenticateToken");
+const {
+  createTourPackage,
+  listTourPackages,
+  listSupplierPerformance,
+  getTourPackage,
+  getTourPackageAudit,
+  exportTourPackageAudit,
+  updateTourPackage,
+  updateTourPackageManager,
+  recordTourPackageClientFollowup,
+  shareTourPackage,
+  revokeTourPackageShare,
+  getPublicTourProposal,
+  respondToTourProposal,
+  confirmTourPackageSale,
+  updateTourPackagePayment,
+  cancelTourPackage,
+  updateTourPackageRefund,
+  replaceTourPackageTravelers,
+  updateTourPackageComponentOperations,
+  updateTourPackageSupplierRefund,
+  markTourPackageComponentMessagesRead,
+  downloadTourPackageComponentAttachment,
+  updateTourPackageComponentAttachment,
+  reviewTourPackageComponentAttachment,
+  sendTourPackageServiceOrder,
+  remindTourPackageServiceOrder,
+  requestTourPackageSupplierDocuments,
+  cancelTourPackageServiceOrder,
+  messageTourPackageServiceOrder,
+  createTourPackageTask,
+  updateTourPackageTask,
+  deleteTourPackageTask,
+  createTourPackageIncident,
+  updateTourPackageIncident,
+} = require("../controllers/tourPackageController");
+
+const router = express.Router();
+
+router.get("/public/:token", getPublicTourProposal);
+router.post("/public/:token/respond", respondToTourProposal);
+router.use(authenticateToken);
+router.get("/", listTourPackages);
+router.get("/supplier-performance", listSupplierPerformance);
+router.post("/", createTourPackage);
+router.post("/:id/share", shareTourPackage);
+router.delete("/:id/share", revokeTourPackageShare);
+router.post("/:id/confirm-sale", confirmTourPackageSale);
+router.patch("/:id/payment", updateTourPackagePayment);
+router.post("/:id/cancel", cancelTourPackage);
+router.patch("/:id/refund", updateTourPackageRefund);
+router.patch("/:id/manager", updateTourPackageManager);
+router.post("/:id/client-followup", recordTourPackageClientFollowup);
+router.put("/:id/travelers", replaceTourPackageTravelers);
+router.patch("/:id/components/:bookingId", updateTourPackageComponentOperations);
+router.patch("/:id/components/:bookingId/refund", updateTourPackageSupplierRefund);
+router.post("/:id/components/:bookingId/read-messages", markTourPackageComponentMessagesRead);
+router.get("/:id/components/:bookingId/events/:eventId/attachment", downloadTourPackageComponentAttachment);
+router.patch("/:id/components/:bookingId/events/:eventId/attachment", updateTourPackageComponentAttachment);
+router.post("/:id/components/:bookingId/events/:eventId/review", reviewTourPackageComponentAttachment);
+router.post("/:id/components/:bookingId/send-service-order", sendTourPackageServiceOrder);
+router.post("/:id/components/:bookingId/remind-service-order", remindTourPackageServiceOrder);
+router.post("/:id/components/:bookingId/request-documents", requestTourPackageSupplierDocuments);
+router.post("/:id/components/:bookingId/cancel-service-order", cancelTourPackageServiceOrder);
+router.post("/:id/components/:bookingId/message-service-order", messageTourPackageServiceOrder);
+router.post("/:id/tasks", createTourPackageTask);
+router.patch("/:id/tasks/:taskId", updateTourPackageTask);
+router.delete("/:id/tasks/:taskId", deleteTourPackageTask);
+router.post("/:id/incidents", createTourPackageIncident);
+router.patch("/:id/incidents/:incidentId", updateTourPackageIncident);
+router.get("/:id/audit", getTourPackageAudit);
+router.get("/:id/audit.csv", exportTourPackageAudit);
+router.get("/:id", getTourPackage);
+router.patch("/:id", updateTourPackage);
+
+module.exports = router;
+

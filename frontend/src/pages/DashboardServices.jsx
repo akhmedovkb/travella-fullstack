@@ -1,14 +1,24 @@
 // frontend/src/pages/DashboardServices.jsx
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import axios from "axios";
+import ISO6391 from "iso-639-1";
+import Select from "react-select";
+import AsyncCreatableSelect from "react-select/async-creatable";
 import { useTranslation } from "react-i18next";
 import ConfirmModal from "../components/ConfirmModal";
 import { tSuccess, tError, tWarn } from "../shared/toast";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
 import { SERVICE_FIELD_OPTIONS } from "../constants/serviceFieldOptions";
 import { getServiceUrgency } from "../utils/serviceUrgency";
-import { GUIDE_CATEGORY_IDS, TRANSPORT_CATEGORY_IDS, PROVIDER_SERVICE_LABELS } from "../config/providerServiceCatalog";
+import {
+  GUIDE_CATEGORY_IDS,
+  GUIDE_SERVICE_GROUPS,
+  HOTEL_SERVICE_GROUPS,
+  TRANSPORT_CATEGORY_IDS,
+  TRANSPORT_SERVICE_GROUPS,
+  PROVIDER_SERVICE_LABELS,
+} from "../config/providerServiceCatalog";
 import {
   BadgeDollarSign,
   CalendarDays,
@@ -73,6 +83,7 @@ const DEFAULT_DETAILS = {
   notIncludedText: "",
   minPax: "",
   maxPax: "",
+  guideLanguages: [],
   guideLanguage: "",
   meetingPoint: "",
   cancellationPolicy: "",
@@ -198,8 +209,58 @@ function compactDeep(value) {
   return value;
 }
 
+function buildServiceSavePayload({ category, title, description, price, images, details, isExtended }) {
+  const net = parseMoney(details.netPrice);
+  const gross = parseMoney(details.grossPrice);
+  const simplePrice = parseMoney(price);
+  const expirationDate = details.expiration ? new Date(details.expiration) : null;
+
+  return compactDeep({
+    title: String(title || "").trim(),
+    category,
+    images,
+    price: isExtended ? undefined : simplePrice,
+    description: isExtended ? undefined : description,
+    details: isExtended
+      ? {
+          ...(category === "author_tour" ? normalizeAuthorTourDetailsForSave(details) : details),
+          flightDetails: normalizeFlightDetails(details.flightDetails),
+          netPrice: net,
+          grossPrice: gross,
+          proofImages: details.proofImages || [],
+          ...(expirationDate && Number.isFinite(expirationDate.getTime())
+            ? { expiration_ts: Math.floor(expirationDate.getTime() / 1000) }
+            : {}),
+        }
+      : {
+          ...details,
+          proofImages: details.proofImages || [],
+        },
+  });
+}
+
+function stableFingerprint(value) {
+  if (Array.isArray(value)) return `[${value.map(stableFingerprint).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.keys(value)
+      .sort()
+      .map((key) => `${JSON.stringify(key)}:${stableFingerprint(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
 function asDetails(service) {
-  return service?.details && typeof service.details === "object" ? service.details : {};
+  if (service?.details && typeof service.details === "object") return service.details;
+  if (typeof service?.details === "string") {
+    try {
+      const parsed = JSON.parse(service.details);
+      return parsed && typeof parsed === "object" ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
 }
 
 function firstText(...values) {
@@ -267,9 +328,10 @@ function getServiceRouteText(service, fallback = "—") {
     return firstText(d.visaCountry, d.directionCountry, d.description, fallback);
   }
 
-  return [firstText(d.directionFrom, d.fromCity), firstText(d.directionTo, d.toCity), firstText(d.hotel)]
+  const route = [firstText(d.directionFrom, d.fromCity), firstText(d.directionTo, d.toCity), firstText(d.hotel)]
     .filter(Boolean)
-    .join(" → ") || firstText(d.directionCountry, fallback);
+    .join(" → ");
+  return route || firstText(d.location, d.city, d.city_slug, d.directionCountry, fallback);
 }
 
 function getServicePriceText(service, fallback = "—") {
@@ -1181,6 +1243,111 @@ function OptionTextInput({ value, onChange, options = [], placeholder, listId, c
   );
 }
 
+function useDebouncedLoader(asyncFn, delay = 350) {
+  const timerRef = useRef(null);
+  const controllerRef = useRef(null);
+  const resolveRef = useRef(null);
+
+  useEffect(() => () => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    controllerRef.current?.abort?.();
+    resolveRef.current?.([]);
+  }, []);
+
+  return useCallback((inputValue) => new Promise((resolve) => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    controllerRef.current?.abort?.();
+    resolveRef.current?.([]);
+    resolveRef.current = resolve;
+    const query = String(inputValue || "").trim();
+    if (query.length < 2) {
+      resolveRef.current = null;
+      resolve([]);
+      return;
+    }
+    const controller = new AbortController();
+    controllerRef.current = controller;
+    timerRef.current = setTimeout(async () => {
+      try {
+        resolve(await asyncFn(query, controller.signal));
+      } catch (error) {
+        if (error?.code !== "ERR_CANCELED") console.warn("City autocomplete failed", error);
+        resolve([]);
+      } finally {
+        if (resolveRef.current === resolve) resolveRef.current = null;
+      }
+    }, delay);
+  }), [asyncFn, delay]);
+}
+
+const POPULAR_CITY_OPTIONS = [
+  "Tashkent", "Samarkand", "Bukhara", "Khiva", "Shahrisabz", "Nukus",
+  "Fergana", "Andijan", "Namangan", "Termez",
+].map((name) => ({ value: name, label: name }));
+
+const selectStyles = {
+  control: (base, state) => ({
+    ...base,
+    minHeight: 44,
+    borderRadius: 8,
+    borderColor: state.isFocused ? "#fb923c" : "#e2e8f0",
+    boxShadow: state.isFocused ? "0 0 0 4px #ffedd5" : "none",
+    fontSize: 14,
+    fontWeight: 600,
+    ":hover": { borderColor: state.isFocused ? "#fb923c" : "#cbd5e1" },
+  }),
+  valueContainer: (base) => ({ ...base, padding: "5px 12px" }),
+  menu: (base) => ({ ...base, zIndex: 30, borderRadius: 8, overflow: "hidden" }),
+  option: (base, state) => ({
+    ...base,
+    fontSize: 14,
+    fontWeight: 600,
+    backgroundColor: state.isSelected ? "#0f172a" : state.isFocused ? "#fff7ed" : "#fff",
+    color: state.isSelected ? "#fff" : "#334155",
+  }),
+  multiValue: (base) => ({ ...base, borderRadius: 999, backgroundColor: "#0f172a" }),
+  multiValueLabel: (base) => ({ ...base, color: "#fff", fontWeight: 700, paddingLeft: 9 }),
+  multiValueRemove: (base) => ({ ...base, color: "#fff", borderRadius: 999, ":hover": { backgroundColor: "#334155", color: "#fff" } }),
+};
+
+const LANGUAGE_ALIASES = {
+  russian: "ru", "русский": "ru", ru: "ru",
+  english: "en", "английский": "en", en: "en",
+  uzbek: "uz", "узбекский": "uz", "o‘zbek": "uz", "o'zbek": "uz", uz: "uz",
+  german: "de", "немецкий": "de", de: "de",
+  french: "fr", "французский": "fr", fr: "fr",
+  spanish: "es", "испанский": "es", es: "es",
+  turkish: "tr", "турецкий": "tr", tr: "tr",
+  arabic: "ar", "арабский": "ar", ar: "ar",
+  chinese: "zh", "китайский": "zh", zh: "zh",
+};
+
+function normalizeLanguageCodes(details) {
+  if (Array.isArray(details?.guideLanguages) && details.guideLanguages.length) {
+    return [...new Set(details.guideLanguages.map((code) => String(code || "").trim().toLowerCase()).filter(Boolean))];
+  }
+  return [...new Set(
+    String(details?.guideLanguage || "")
+      .split(/[,;/]+/)
+      .map((value) => LANGUAGE_ALIASES[value.trim().toLowerCase()] || "")
+      .filter(Boolean)
+  )];
+}
+
+function languageLabel(code, uiLanguage) {
+  const normalized = String(code || "").toLowerCase();
+  try {
+    const locale = String(uiLanguage || "en").slice(0, 2);
+    const localized = new Intl.DisplayNames([locale], { type: "language" }).of(normalized);
+    if (localized && localized.toLowerCase() !== normalized) {
+      return localized.charAt(0).toUpperCase() + localized.slice(1);
+    }
+  } catch {
+    // Older browsers fall back to the ISO catalog below.
+  }
+  return ISO6391.getName(normalized) || ISO6391.getNativeName(normalized) || normalized.toUpperCase();
+}
+
 function TextArea(props) {
   return (
     <textarea
@@ -1217,6 +1384,7 @@ function Toggle({ checked, onChange, label, hint }) {
 }
 
 function ImageUploader({ title, hint, images, onChange, max = 10 }) {
+  const { t } = useTranslation();
   const handleFiles = async (event) => {
     const files = Array.from(event.target.files || []).slice(0, Math.max(0, max - images.length));
     if (!files.length) return;
@@ -1238,7 +1406,7 @@ function ImageUploader({ title, hint, images, onChange, max = 10 }) {
         </div>
         {!!images.length && (
           <button type="button" onClick={() => onChange([])} className="text-xs font-black text-rose-600 hover:underline">
-            Очистить
+            {t("marketplace_form.photos_clear", { defaultValue: "Очистить" })}
           </button>
         )}
       </div>
@@ -1260,13 +1428,13 @@ function ImageUploader({ title, hint, images, onChange, max = 10 }) {
         </div>
       ) : (
         <div className="mt-3 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-center text-sm font-semibold text-slate-400">
-          Изображений пока нет
+          {t("marketplace_form.photos_empty", { defaultValue: "Изображений пока нет" })}
         </div>
       )}
 
       <label className="mt-3 inline-flex cursor-pointer rounded-2xl bg-orange-500 px-4 py-2.5 text-sm font-black text-white shadow-sm transition hover:bg-orange-600">
         <input type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
-        Выбрать файлы
+        {t("marketplace_form.photos_choose", { defaultValue: "Выбрать файлы" })}
       </label>
     </div>
   );
@@ -1594,8 +1762,9 @@ function AuthorProgramDaysEditor({ value, activeIndex, setActiveIndex, onChange,
 }
 
 export default function DashboardServices({ viewMode = "create" }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const location = useLocation();
   const API_BASE = import.meta.env.VITE_API_BASE_URL;
   const api = useMemo(() => {
     const instance = axios.create({ baseURL: API_BASE });
@@ -1621,6 +1790,7 @@ export default function DashboardServices({ viewMode = "create" }) {
   const [supportPromptService, setSupportPromptService] = useState(null);
   const [supportPayBusy, setSupportPayBusy] = useState(false);
   const [supportPayError, setSupportPayError] = useState("");
+  const editBaselineRef = useRef(null);
 
   const [category, setCategory] = useState("");
   const [title, setTitle] = useState("");
@@ -1634,7 +1804,81 @@ export default function DashboardServices({ viewMode = "create" }) {
   const isAgent = profile?.type === "agent";
   const isGuide = profile?.type === "guide";
   const isTransport = profile?.type === "transport";
+  const isHotel = profile?.type === "hotel";
   const isExtended = isAgent && EXTENDED_AGENT_CATEGORIES.includes(category);
+
+  const availableGuideLanguages = useMemo(() => {
+    const profileCodes = Array.isArray(profile?.languages) ? profile.languages : [];
+    const selectedCodes = normalizeLanguageCodes(details);
+    return [...new Set([...profileCodes, ...selectedCodes, ...(profileCodes.length ? [] : ["ru", "uz", "en"])])]
+      .map((code) => String(code || "").trim().toLowerCase())
+      .filter(Boolean);
+  }, [profile?.languages, details.guideLanguages, details.guideLanguage]);
+
+  const languageOptions = useMemo(() => {
+    const preferred = new Set(availableGuideLanguages);
+    return ISO6391.getAllCodes()
+      .map((code) => ({ value: code, label: languageLabel(code, i18n.language) }))
+      .sort((a, b) => {
+        const preferredDifference = Number(preferred.has(b.value)) - Number(preferred.has(a.value));
+        return preferredDifference || a.label.localeCompare(b.label, i18n.language);
+      });
+  }, [availableGuideLanguages, i18n.language]);
+
+  const loadCityOptionsRaw = useCallback(async (query, signal) => {
+    const username = import.meta.env.VITE_GEONAMES_USERNAME;
+    if (!username) {
+      return POPULAR_CITY_OPTIONS.filter((option) => option.label.toLowerCase().includes(query.toLowerCase()));
+    }
+    const { data } = await axios.get("https://secure.geonames.org/searchJSON", {
+      params: {
+        q: query,
+        name_startsWith: query,
+        featureClass: "P",
+        maxRows: 15,
+        orderby: "population",
+        style: "FULL",
+        lang: String(i18n.language || "en").slice(0, 2),
+        username,
+      },
+      signal,
+    });
+    const seen = new Set();
+    return (data?.geonames || []).flatMap((city) => {
+      const name = String(city?.name || "").trim();
+      if (!name) return [];
+      const region = String(city?.adminName1 || "").trim();
+      const country = String(city?.countryName || "").trim();
+      const label = [name, region, country].filter(Boolean).join(", ");
+      const key = `${name}|${city?.countryCode || ""}`.toLowerCase();
+      if (seen.has(key)) return [];
+      seen.add(key);
+      return [{
+        value: name,
+        label,
+        city: name,
+        geonameId: city?.geonameId || null,
+        countryCode: city?.countryCode || "",
+        latitude: city?.lat || null,
+        longitude: city?.lng || null,
+      }];
+    });
+  }, [i18n.language]);
+
+  const loadCityOptions = useDebouncedLoader(loadCityOptionsRaw);
+
+  const meetingPointOptions = useMemo(() => {
+    const standard = [
+      t("marketplace_form.meeting_hotel", { defaultValue: "Отель клиента" }),
+      t("marketplace_form.meeting_airport", { defaultValue: "Аэропорт" }),
+      t("marketplace_form.meeting_city_center", { defaultValue: "Центр города" }),
+    ];
+    const saved = services
+      .map((service) => service?.details?.meetingPoint || service?.details?.meeting_point || "")
+      .filter(Boolean);
+    const profileAddress = String(profile?.address || "").trim();
+    return [...new Set([...standard, ...(profileAddress ? [profileAddress] : []), ...saved])];
+  }, [services, profile?.address, t]);
 
   const steps = useMemo(
     () => [
@@ -1660,11 +1904,20 @@ export default function DashboardServices({ viewMode = "create" }) {
         "author_tour",
       ];
     }
-    if (type === "guide") return [...GUIDE_CATEGORY_IDS, ...TRANSPORT_CATEGORY_IDS];
+    if (type === "guide") return GUIDE_CATEGORY_IDS;
     if (type === "transport") return TRANSPORT_CATEGORY_IDS;
     if (type === "hotel") return ["hotel_room", "hotel_transfer", "hall_rent"];
     return [];
   }, [profile?.type]);
+
+  const categoryGroups = useMemo(() => {
+    if (isGuide) return GUIDE_SERVICE_GROUPS;
+    if (isTransport) return TRANSPORT_SERVICE_GROUPS;
+    if (isHotel) return HOTEL_SERVICE_GROUPS;
+    return categoryOptions.length
+      ? [{ id: "agent_products", label: "Marketplace", services: categoryOptions.map((id) => ({ id })) }]
+      : [];
+  }, [categoryOptions, isGuide, isHotel, isTransport]);
 
   const loadAll = async () => {
     try {
@@ -1676,9 +1929,6 @@ export default function DashboardServices({ viewMode = "create" }) {
       setProfile(profileRes.data || {});
       const loadedServices = Array.isArray(servicesRes.data) ? servicesRes.data : [];
       setServices(loadedServices);
-      const requestedServiceId = new URLSearchParams(window.location.search).get("service");
-      const requestedService = loadedServices.find((service) => String(service.id) === String(requestedServiceId));
-      if (requestedService) loadServiceToEdit(requestedService, { stayOnPage: true });
     } catch (err) {
       console.error(err);
       tError(t("services_load_error", { defaultValue: "Не удалось загрузить услуги" }));
@@ -1693,6 +1943,7 @@ export default function DashboardServices({ viewMode = "create" }) {
   }, []);
 
   const resetForm = () => {
+    editBaselineRef.current = null;
     setSelectedService(null);
     setCategory("");
     setTitle("");
@@ -1706,7 +1957,30 @@ export default function DashboardServices({ viewMode = "create" }) {
     setTab("create");
   };
 
+  const startNewService = () => {
+    resetForm();
+    navigate("/dashboard/services/marketplace");
+  };
+
   const patchDetails = (patch) => setDetails((prev) => ({ ...prev, ...patch }));
+
+  const selectGuideLanguages = (options) => {
+    const next = (options || []).map((option) => option.value);
+    patchDetails({
+      guideLanguages: next,
+      guideLanguage: next.map((code) => languageLabel(code, i18n.language)).join(", "),
+    });
+  };
+
+  const selectCity = (option) => {
+    patchDetails({
+      location: option?.city || option?.value || "",
+      locationGeonameId: option?.geonameId || null,
+      locationCountryCode: option?.countryCode || "",
+      locationLatitude: option?.latitude || null,
+      locationLongitude: option?.longitude || null,
+    });
+  };
 
   const patchAuthorProgramDays = (nextDays) => {
     const draftDays = normalizeAuthorProgramDaysDraft(nextDays);
@@ -1759,18 +2033,52 @@ export default function DashboardServices({ viewMode = "create" }) {
       navigate(`/dashboard/services/marketplace?service=${service.id}`);
       return;
     }
-    const d = service?.details && typeof service.details === "object" ? service.details : {};
+    const d = asDetails(service);
+    const hydratedDetails = {
+      ...DEFAULT_DETAILS,
+      ...d,
+      proofImages: Array.isArray(d.proofImages || d.proof_images) ? (d.proofImages || d.proof_images) : [],
+    };
+    const serviceIsExtended = profile?.type === "agent" && EXTENDED_AGENT_CATEGORIES.includes(service.category);
+    editBaselineRef.current = stableFingerprint(buildServiceSavePayload({
+      category: service.category || "",
+      title: service.title || "",
+      description: service.description || d.description || "",
+      price: service.price ?? "",
+      images: Array.isArray(service.images) ? service.images : [],
+      details: hydratedDetails,
+      isExtended: serviceIsExtended,
+    }));
     setSelectedService(service);
     setCategory(service.category || "");
     setTitle(service.title || "");
     setDescription(service.description || d.description || "");
     setPrice(service.price ?? "");
     setImages(Array.isArray(service.images) ? service.images : []);
-    setDetails({ ...DEFAULT_DETAILS, ...d, proofImages: Array.isArray(d.proofImages || d.proof_images) ? (d.proofImages || d.proof_images) : [] });
+    setDetails(hydratedDetails);
     setAuthorProgramDayIndex(0);
     setStep(1);
     setTab("create");
   };
+
+  useEffect(() => {
+    if (loading || viewMode === "manage") return;
+
+    const requestedServiceId = new URLSearchParams(location.search).get("service");
+    if (!requestedServiceId) {
+      if (selectedService) resetForm();
+      return;
+    }
+
+    const requestedService = services.find(
+      (service) => String(service.id) === String(requestedServiceId)
+    );
+    if (!requestedService || String(selectedService?.id) === String(requestedService.id)) return;
+
+    loadServiceToEdit(requestedService, { stayOnPage: true });
+    // loadServiceToEdit only copies the selected service into form state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, location.search, services, selectedService?.id, viewMode]);
 
   const currentValidationIssues = useMemo(
     () => buildValidationIssues({ category, title, description, price, images, details, isExtended, t, requireProof: false }),
@@ -1807,37 +2115,18 @@ export default function DashboardServices({ viewMode = "create" }) {
   };
 
   const saveService = async () => {
-    if (!validate()) return;
     const wasEditing = !!selectedService?.id;
     const createdCategory = category;
+    const payload = buildServiceSavePayload({ category, title, description, price, images, details, isExtended });
+
+    if (wasEditing && editBaselineRef.current === stableFingerprint(payload)) {
+      tWarn(t("service_no_changes", { defaultValue: "Изменений нет. Сохранение не требуется." }));
+      return;
+    }
+
+    if (!validate()) return;
     try {
       setSaving(true);
-      const net = parseMoney(details.netPrice);
-      const gross = parseMoney(details.grossPrice);
-      const simplePrice = parseMoney(price);
-      const expirationDate = details.expiration ? new Date(details.expiration) : null;
-      const payload = compactDeep({
-        title: title.trim(),
-        category,
-        images,
-        price: isExtended ? undefined : simplePrice,
-        description: isExtended ? undefined : description,
-        details: isExtended
-          ? {
-              ...(category === "author_tour" ? normalizeAuthorTourDetailsForSave(details) : details),
-              flightDetails: normalizeFlightDetails(details.flightDetails),
-              netPrice: net,
-              grossPrice: gross,
-              proofImages: details.proofImages || [],
-              ...(expirationDate && Number.isFinite(expirationDate.getTime())
-                ? { expiration_ts: Math.floor(expirationDate.getTime() / 1000) }
-                : {}),
-            }
-          : {
-              ...details,
-              proofImages: details.proofImages || [],
-            },
-      });
       const res = selectedService?.id
         ? await api.put(`/api/providers/services/${selectedService.id}`, payload)
         : await api.post("/api/providers/services", payload);
@@ -1847,12 +2136,12 @@ export default function DashboardServices({ viewMode = "create" }) {
         return [...prev, saved];
       });
       tSuccess(wasEditing ? t("service_updated", { defaultValue: "Услуга обновлена" }) : t("service_added", { defaultValue: "Услуга добавлена" }));
-      if (!wasEditing && saved?.id && HISTORICAL_REFUSED_CATEGORIES.includes(createdCategory)) {
+      const shouldOfferSupport = !wasEditing && saved?.id && HISTORICAL_REFUSED_CATEGORIES.includes(createdCategory);
+      if (shouldOfferSupport) {
         setSupportPayError("");
         setSupportPromptService(saved);
-      }
-      if (saved?.id) {
-        loadServiceToEdit(saved);
+      } else if (saved?.id) {
+        navigate("/dashboard/services/my");
       }
     } catch (err) {
       console.error(err);
@@ -2053,7 +2342,47 @@ export default function DashboardServices({ viewMode = "create" }) {
       tSuccess(t("moderation.submitted_toast", { defaultValue: "Отправлено на модерацию" }));
     } catch (err) {
       console.error(err);
-      tError(err?.response?.data?.message || t("submit_error", { defaultValue: "Не удалось отправить на модерацию" }));
+      const response = err?.response?.data;
+      const blockerKeys = {
+        TITLE_REQUIRED: "validation.title_required",
+        DESCRIPTION_REQUIRED: "validation.description_required",
+        PRICE_REQUIRED: "validation.price_positive",
+        NET_PRICE_REQUIRED: "validation.net_positive",
+        GROSS_PRICE_REQUIRED: "validation.gross_positive",
+        GROSS_PRICE_TOO_LOW: "validation.gross_ge_net",
+        PHOTO_REQUIRED: "validation.photo_required",
+        PROOF_IMAGES_REQUIRED: "validation.proof_required",
+        COUNTRY_REQUIRED: "validation.country_required",
+        FROM_REQUIRED: "validation.from_required",
+        TO_REQUIRED: "validation.to_required",
+        CITY_REQUIRED: "validation.city_required",
+        START_DATE_REQUIRED: "validation.start_date_required",
+        END_DATE_REQUIRED: "validation.end_date_required",
+        DEPARTURE_DATE_REQUIRED: "validation.departure_date_required",
+        HOTEL_REQUIRED: "validation.hotel_required",
+        ACCOMMODATION_REQUIRED: "validation.room_required",
+        CHECKIN_REQUIRED: "validation.checkin_required",
+        CHECKOUT_REQUIRED: "validation.checkout_required",
+        EVENT_NAME_REQUIRED: "validation.event_name_required",
+        EVENT_CITY_REQUIRED: "validation.location_required",
+        EVENT_DATE_REQUIRED: "validation.event_date_required",
+        FLIGHT_DETAILS_REQUIRED: "validation.flight_details_required",
+        PROGRAM_REQUIRED: "validation.program_required",
+        INCLUDED_REQUIRED: "validation.included_required",
+      };
+      const details = Array.isArray(response?.blockerDetails) ? response.blockerDetails : [];
+      if (details.length > 0) {
+        const fields = details.map((blocker) => {
+          const key = blockerKeys[blocker?.code];
+          return key ? t(key) : blocker?.label;
+        }).filter(Boolean);
+        tError(t("moderation.submit_blocked", {
+          fields: fields.join("; "),
+          defaultValue: `Before submitting for moderation, fix: ${fields.join("; ")}`,
+        }));
+      } else {
+        tError(t("submit_error", { defaultValue: "Failed to submit for moderation" }));
+      }
     }
   };
 
@@ -2161,32 +2490,32 @@ export default function DashboardServices({ viewMode = "create" }) {
               <h2 className="text-xl font-black text-slate-950 sm:text-2xl">
                 {viewMode === "manage"
                   ? t("provider_services_tab_created", { defaultValue: "Мои услуги" })
-                  : "Создать услугу для Marketplace"}
+                  : t("marketplace_create.title", { defaultValue: "Создать услугу для Marketplace" })}
               </h2>
               <p className="mt-1 max-w-2xl text-sm font-medium leading-5 text-slate-500">
                 {viewMode === "manage"
                   ? t("service_form.manage_hint", { defaultValue: "Управляйте статусами, актуальностью и публикацией созданных услуг." })
-                  : "Выберите тип услуги и последовательно заполните карточку для клиента."}
+                  : t("marketplace_create.subtitle", { defaultValue: "Выберите тип услуги и последовательно заполните карточку для клиента." })}
               </p>
             </div>
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
               {viewMode === "manage" && <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="min-w-[88px] rounded-lg bg-slate-50 px-3 py-2 ring-1 ring-slate-200">
-                  <div className="text-lg font-black text-slate-950">{serviceListStats.active}</div>
-                  <div className="text-[10px] font-bold text-slate-500">Активные</div>
-                </div>
-                <div className="min-w-[88px] rounded-lg bg-amber-50 px-3 py-2 ring-1 ring-amber-100">
-                  <div className="text-lg font-black text-amber-700">{serviceListStats.pending}</div>
-                  <div className="text-[10px] font-bold text-amber-700">На проверке</div>
-                </div>
-                <div className="min-w-[88px] rounded-lg bg-emerald-50 px-3 py-2 ring-1 ring-emerald-100">
-                  <div className="text-lg font-black text-emerald-700">{serviceListStats.published}</div>
-                  <div className="text-[10px] font-bold text-emerald-700">Опубликовано</div>
-                </div>
+                <button type="button" onClick={() => setServiceListFilter("active")} className={cx("min-w-[88px] rounded-lg px-3 py-2 ring-1 transition", serviceListFilter === "active" ? "bg-slate-900 text-white ring-slate-900" : "bg-slate-50 text-slate-950 ring-slate-200 hover:bg-slate-100")}>
+                  <div className={cx("text-lg font-black", serviceListFilter === "active" ? "text-white" : "text-slate-950")}>{serviceListStats.active}</div>
+                  <div className={cx("text-[10px] font-bold", serviceListFilter === "active" ? "text-white/70" : "text-slate-500")}>{t("service_list_filter.active", { defaultValue: "Активные" })}</div>
+                </button>
+                <button type="button" onClick={() => setServiceListFilter("pending")} className={cx("min-w-[88px] rounded-lg px-3 py-2 ring-1 transition", serviceListFilter === "pending" ? "bg-amber-500 text-white ring-amber-500" : "bg-amber-50 text-amber-700 ring-amber-100 hover:bg-amber-100")}>
+                  <div className={cx("text-lg font-black", serviceListFilter === "pending" ? "text-white" : "text-amber-700")}>{serviceListStats.pending}</div>
+                  <div className={cx("text-[10px] font-bold", serviceListFilter === "pending" ? "text-white/80" : "text-amber-700")}>{t("service_list_filter.pending", { defaultValue: "На проверке" })}</div>
+                </button>
+                <button type="button" onClick={() => setServiceListFilter("published")} className={cx("min-w-[88px] rounded-lg px-3 py-2 ring-1 transition", serviceListFilter === "published" ? "bg-emerald-600 text-white ring-emerald-600" : "bg-emerald-50 text-emerald-700 ring-emerald-100 hover:bg-emerald-100")}>
+                  <div className={cx("text-lg font-black", serviceListFilter === "published" ? "text-white" : "text-emerald-700")}>{serviceListStats.published}</div>
+                  <div className={cx("text-[10px] font-bold", serviceListFilter === "published" ? "text-white/80" : "text-emerald-700")}>{t("service_list_filter.published", { defaultValue: "Опубликовано" })}</div>
+                </button>
               </div>}
               <button
                 type="button"
-                onClick={() => viewMode === "manage" ? navigate("/dashboard/services/marketplace") : navigate("/dashboard/services/my")}
+                onClick={() => viewMode === "manage" ? startNewService() : navigate("/dashboard/services/my")}
                 className="inline-flex h-11 items-center justify-center gap-2 rounded-lg bg-orange-500 px-5 text-sm font-black text-white shadow-sm transition hover:bg-orange-600"
               >
                 {viewMode === "manage" ? <Plus aria-hidden="true" className="h-4 w-4" /> : <Layers3 aria-hidden="true" className="h-4 w-4" />}
@@ -2202,38 +2531,38 @@ export default function DashboardServices({ viewMode = "create" }) {
           {viewMode === "manage" && (
           <aside className="border-b border-slate-200 bg-white lg:border-b-0 lg:border-r">
             <div className="border-b border-slate-100 bg-white p-4">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <div className="text-lg font-black tracking-[-0.02em] text-slate-950">
-                    {t("provider_services_tab_created", { defaultValue: "Мои услуги" })}
-                  </div>
-                  <div className="mt-0.5 text-xs font-semibold text-slate-500">
-                    {services.length} {t("service_form.services_count", { defaultValue: "всего" })}
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2 border-b border-slate-100 bg-white p-3">
-              <label className="relative block">
+              <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+              <label className="relative block min-w-0 flex-1">
                 <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                 <input
                   type="search"
                   value={serviceSearch}
                   onChange={(event) => setServiceSearch(event.target.value)}
-                  placeholder="Поиск по услугам"
-                  className="h-10 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-semibold outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                  placeholder={t("service_form.search_services", { defaultValue: "Поиск по услугам" })}
+                  className="h-11 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm font-semibold outline-none transition focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
                 />
               </label>
-              <select
-                value={serviceListFilter}
-                onChange={(event) => setServiceListFilter(event.target.value)}
-                className="h-10 w-full rounded-lg border border-slate-200 bg-white px-3 text-sm font-bold text-slate-700 outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100"
-              >
+              <div className="flex max-w-full gap-1 overflow-x-auto rounded-lg bg-slate-100 p-1" role="tablist" aria-label={t("service_filters", { defaultValue: "Фильтры услуг" })}>
                 {serviceListTabs.map((item) => (
-                  <option key={item.id} value={item.id}>{item.label} · {item.count}</option>
+                  <button
+                    key={item.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={serviceListFilter === item.id}
+                    onClick={() => setServiceListFilter(item.id)}
+                    className={cx(
+                      "inline-flex h-9 shrink-0 items-center gap-2 rounded-md px-3 text-xs font-black transition",
+                      serviceListFilter === item.id
+                        ? "bg-white text-slate-950 shadow-sm ring-1 ring-slate-200"
+                        : "text-slate-500 hover:bg-white/60 hover:text-slate-800"
+                    )}
+                  >
+                    <span>{item.label}</span>
+                    <span className={cx("rounded-full px-1.5 py-0.5 text-[10px]", serviceListFilter === item.id ? "bg-slate-900 text-white" : "bg-slate-200 text-slate-600")}>{item.count}</span>
+                  </button>
                 ))}
-              </select>
+              </div>
+              </div>
             </div>
 
             <div className="space-y-4 p-3">
@@ -2257,7 +2586,7 @@ export default function DashboardServices({ viewMode = "create" }) {
               ) : (
                 filteredServiceSections.map((section) => (
                     <div key={section.id} className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                      <div className="sticky top-0 z-[1] -mx-1 flex items-center justify-between rounded-2xl bg-white/95 px-3 py-2 text-xs font-black uppercase tracking-wide text-slate-500 shadow-sm ring-1 ring-slate-100 backdrop-blur md:col-span-2 xl:col-span-3">
+                      <div className="flex items-center justify-between border-b border-slate-200 px-1 pb-2 text-xs font-black uppercase tracking-wide text-slate-500 md:col-span-2 xl:col-span-3">
                       <span>{section.label}</span>
                       <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-600">{section.items.length}</span>
                     </div>
@@ -2293,7 +2622,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                         <article
                           key={service.id}
                           className={cx(
-                            "group overflow-hidden rounded-[1.5rem] border bg-white shadow-sm transition",
+                            "group overflow-hidden rounded-lg border bg-white shadow-sm transition",
                             isSelected
                               ? "border-orange-300 ring-4 ring-orange-100"
                               : "border-slate-200 hover:border-orange-200 hover:shadow-md",
@@ -2526,7 +2855,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                       <span className="inline-flex items-center gap-1"><MapPin aria-hidden="true" className="h-3.5 w-3.5" />{routeText}</span>
                       <span className="inline-flex items-center gap-1"><CalendarDays aria-hidden="true" className="h-3.5 w-3.5" />{dateRangeText || "—"}</span>
                       <span className="inline-flex items-center gap-1"><BadgeDollarSign aria-hidden="true" className="h-3.5 w-3.5" />{priceText || "—"}</span>
-                      <span className="inline-flex items-center gap-1">{serviceHasProof({ details }) ? <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-emerald-600" /> : <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5 text-amber-600" />}Подтверждение</span>
+                      <span className="inline-flex items-center gap-1">{serviceHasProof({ details }) ? <CheckCircle2 aria-hidden="true" className="h-3.5 w-3.5 text-emerald-600" /> : <ShieldCheck aria-hidden="true" className="h-3.5 w-3.5 text-amber-600" />}{t("service_form.proof_label", { defaultValue: "Подтверждение" })}</span>
                     </div>
                   </div>
                 </div>
@@ -2536,29 +2865,57 @@ export default function DashboardServices({ viewMode = "create" }) {
             {!category && (
               <div className="mx-auto max-w-5xl">
                 <div className="mb-4">
-                  <div className="text-lg font-black text-slate-950">Что вы хотите предложить?</div>
-                  <div className="mt-1 text-sm font-medium text-slate-500">Выберите один тип. Набор полей настроится автоматически.</div>
+                  <div className="text-lg font-black text-slate-950">
+                    {t("marketplace_create.choose_title", { defaultValue: "Что вы хотите предложить?" })}
+                  </div>
+                  <div className="mt-1 text-sm font-medium text-slate-500">
+                    {t(`marketplace_create.role_hint.${profile?.type}`, {
+                      defaultValue: t("marketplace_create.choose_hint", { defaultValue: "Выберите один тип. Набор полей настроится автоматически." }),
+                    })}
+                  </div>
                 </div>
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {categoryOptions.map((cat) => {
-                    const meta = getCategoryMeta(cat, t);
-                    return (
-                      <button
-                        key={cat}
-                        type="button"
-                        onClick={() => { setCategory(cat); setStep(1); setDetails({ ...DEFAULT_DETAILS }); }}
-                        className="group flex min-h-28 items-start gap-3 rounded-lg border border-slate-200 bg-white p-4 text-left transition hover:border-orange-300 hover:bg-orange-50/40 hover:shadow-sm"
-                      >
-                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition group-hover:bg-orange-100 group-hover:text-orange-600">
-                          <Layers3 aria-hidden="true" className="h-5 w-5" />
-                        </span>
-                        <span>
-                          <span className="block text-sm font-black text-slate-950">{meta.label}</span>
-                          <span className="mt-1 block text-xs font-medium leading-5 text-slate-500">{meta.hint}</span>
-                        </span>
-                      </button>
-                    );
-                  })}
+                <div className="space-y-5">
+                  {categoryGroups.map((group) => (
+                    <section key={group.id} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                      <div className="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-4 py-3">
+                        <h3 className="text-sm font-black text-slate-900">
+                          {t(`provider_services.groups.${group.id}`, { defaultValue: group.label })}
+                        </h3>
+                        <span className="text-xs font-bold text-slate-400">{group.services.length}</span>
+                      </div>
+                      <div className="grid sm:grid-cols-2 lg:grid-cols-3">
+                        {group.services.map((service, index) => {
+                          const cat = service.id;
+                          const meta = getCategoryMeta(cat, t);
+                          return (
+                            <button
+                              key={cat}
+                              type="button"
+                              onClick={() => { setCategory(cat); setStep(1); setDetails({ ...DEFAULT_DETAILS }); }}
+                              className={cx(
+                                "group flex min-h-24 items-start gap-3 p-4 text-left transition hover:bg-orange-50/60",
+                                index > 0 && "border-t border-slate-100",
+                                "sm:[&:nth-child(2)]:border-t-0 sm:[&:nth-child(even)]:border-l",
+                                "lg:[&:nth-child(3)]:border-t-0 lg:[&:nth-child(3n+1)]:border-l-0 lg:[&:nth-child(n+4)]:border-t lg:[&:not(:nth-child(3n+1))]:border-l"
+                              )}
+                            >
+                              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-slate-600 transition group-hover:bg-orange-100 group-hover:text-orange-600">
+                                <Layers3 aria-hidden="true" className="h-5 w-5" />
+                              </span>
+                              <span className="min-w-0">
+                                <span className="block text-sm font-black leading-5 text-slate-950">
+                                  {t(`provider_services.items.${cat}`, { defaultValue: meta.label })}
+                                </span>
+                                <span className="mt-1 block text-xs font-medium leading-4 text-slate-500">
+                                  {t("marketplace_create.card_hint", { defaultValue: "Открыть форму и назначить цену" })}
+                                </span>
+                              </span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </section>
+                  ))}
                 </div>
               </div>
             )}
@@ -2567,13 +2924,13 @@ export default function DashboardServices({ viewMode = "create" }) {
               <div className="mx-auto mt-2 grid max-w-5xl gap-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
                 <aside className="space-y-3 lg:sticky lg:top-5">
                   <div className="rounded-lg border border-slate-200 bg-white p-4">
-                    <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">Тип услуги</div>
+                    <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">{t("marketplace_form.service_type", { defaultValue: "Тип услуги" })}</div>
                     <div className="mt-2 text-sm font-black text-slate-950">{getCategoryMeta(category, t).label}</div>
-                    <button type="button" onClick={() => { setCategory(""); setStep(1); }} className="mt-3 text-xs font-black text-orange-600 hover:text-orange-700">Изменить тип</button>
+                    <button type="button" onClick={() => { setCategory(""); setStep(1); }} className="mt-3 text-xs font-black text-orange-600 hover:text-orange-700">{t("marketplace_form.change_type", { defaultValue: "Изменить тип" })}</button>
                   </div>
 
                   {isExtended && (
-                    <nav className="rounded-lg border border-slate-200 bg-white p-2" aria-label="Шаги создания услуги">
+                    <nav className="rounded-lg border border-slate-200 bg-white p-2" aria-label={t("marketplace_form.creation_steps", { defaultValue: "Шаги создания услуги" })}>
                       {steps.map((item) => (
                         <button
                           key={item.id}
@@ -2590,7 +2947,7 @@ export default function DashboardServices({ viewMode = "create" }) {
 
                   {!isExtended && (
                     <div className="rounded-lg border border-slate-200 bg-white p-4 text-xs font-medium leading-5 text-slate-500">
-                      Заполните данные, добавьте фотографии и сохраните услугу как черновик.
+                      {t("marketplace_form.sidebar_hint", { defaultValue: "Заполните данные, добавьте фотографии и сохраните услугу как черновик." })}
                     </div>
                   )}
                 </aside>
@@ -2604,55 +2961,90 @@ export default function DashboardServices({ viewMode = "create" }) {
                           <Layers3 aria-hidden="true" className="h-5 w-5" />
                         </div>
                         <div>
-                          <div className="text-base font-black text-slate-950">Основная информация</div>
-                          <div className="text-xs font-medium text-slate-500">То, что клиент увидит в карточке услуги</div>
+                          <div className="text-base font-black text-slate-950">{t("marketplace_form.main_info", { defaultValue: "Основная информация" })}</div>
+                          <div className="text-xs font-medium text-slate-500">{t("marketplace_form.main_info_hint", { defaultValue: "То, что клиент увидит в карточке услуги" })}</div>
                         </div>
                       </div>
 
                       <div className="grid gap-5 p-5 sm:grid-cols-2">
                         <div className="sm:col-span-2">
-                          <Field label={t("title", { defaultValue: "Название услуги" })} hint="Короткое и конкретное: например, «Обзорная экскурсия по Самарканду»">
-                            <TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Введите название" />
+                          <Field label={t("title", { defaultValue: "Название услуги" })} hint={t("marketplace_form.title_hint", { defaultValue: "Короткое и конкретное: например, «Обзорная экскурсия по Самарканду»" })}>
+                            <TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("marketplace_form.title_placeholder", { defaultValue: "Введите название" })} />
                           </Field>
                         </div>
 
-                        <Field label="Город или регион">
-                          <div className="relative">
-                            <MapPin aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <TextInput className="pl-9" value={details.location} onChange={(e) => patchDetails({ location: e.target.value })} placeholder="Например, Samarkand" />
-                          </div>
+                        <Field
+                          label={t("marketplace_form.city", { defaultValue: "Город или регион" })}
+                          hint={t("marketplace_form.city_hint", { defaultValue: "Выберите город из GeoNames или введите свой вариант" })}
+                        >
+                          <AsyncCreatableSelect
+                            cacheOptions
+                            defaultOptions={POPULAR_CITY_OPTIONS}
+                            loadOptions={loadCityOptions}
+                            value={details.location ? { value: details.location, label: details.location } : null}
+                            onChange={selectCity}
+                            onCreateOption={(value) => selectCity({ value, city: value })}
+                            isClearable
+                            formatCreateLabel={(value) => t("marketplace_form.use_city", { defaultValue: "Использовать «{{value}}»", value })}
+                            noOptionsMessage={({ inputValue }) => inputValue.trim().length < 2
+                              ? t("marketplace_form.city_type_more", { defaultValue: "Введите минимум 2 символа" })
+                              : t("marketplace_form.city_not_found", { defaultValue: "Город не найден. Можно сохранить введённое название" })}
+                            loadingMessage={() => t("marketplace_form.city_loading", { defaultValue: "Ищем города…" })}
+                            placeholder={t("marketplace_form.city_placeholder", { defaultValue: "Выберите или начните вводить город" })}
+                            styles={selectStyles}
+                            components={{ DropdownIndicator: () => <MapPin aria-hidden="true" className="mr-3 h-4 w-4 text-slate-400" /> }}
+                          />
                         </Field>
 
-                        <Field label="Продолжительность">
+                        <Field label={t("marketplace_form.duration", { defaultValue: "Продолжительность" })}>
                           <div className="relative">
                             <Clock3 aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <TextInput className="pl-9" value={details.duration} onChange={(e) => patchDetails({ duration: e.target.value })} placeholder="Например, 4 часа" />
+                            <TextInput className="pl-9" value={details.duration} onChange={(e) => patchDetails({ duration: e.target.value })} placeholder={t("marketplace_form.duration_placeholder", { defaultValue: "Например, 4 часа" })} />
                           </div>
                         </Field>
 
                         {(isGuide || isTransport) && (
-                          <Field label={isTransport ? "Место подачи" : "Место встречи"}>
-                            <TextInput value={details.meetingPoint} onChange={(e) => patchDetails({ meetingPoint: e.target.value })} placeholder="Адрес или ориентир" />
+                          <Field
+                            label={isTransport ? t("marketplace_form.pickup_point", { defaultValue: "Место подачи" }) : t("marketplace_form.meeting_point", { defaultValue: "Место встречи" })}
+                            hint={t("marketplace_form.meeting_point_hint", { defaultValue: "Выберите вариант из списка или укажите точный адрес" })}
+                          >
+                            <OptionTextInput
+                              listId="marketplace-meeting-point-options"
+                              options={meetingPointOptions}
+                              value={details.meetingPoint}
+                              onChange={(e) => patchDetails({ meetingPoint: e.target.value })}
+                              placeholder={t("marketplace_form.meeting_point_placeholder", { defaultValue: "Выберите место или начните вводить адрес" })}
+                            />
                           </Field>
                         )}
 
                         {isGuide && (
-                          <Field label="Язык проведения">
-                            <div className="relative">
-                              <Languages aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                              <TextInput className="pl-9" value={details.guideLanguage} onChange={(e) => patchDetails({ guideLanguage: e.target.value })} placeholder="Русский, English" />
-                            </div>
+                          <Field
+                            label={t("marketplace_form.languages", { defaultValue: "Языки проведения" })}
+                            hint={t("marketplace_form.languages_hint", { defaultValue: "Выберите один или несколько языков. Языки профиля показаны первыми" })}
+                          >
+                            <Select
+                              isMulti
+                              closeMenuOnSelect={false}
+                              options={languageOptions}
+                              value={languageOptions.filter((option) => normalizeLanguageCodes(details).includes(option.value))}
+                              onChange={selectGuideLanguages}
+                              placeholder={t("marketplace_form.languages_placeholder", { defaultValue: "Выберите или найдите язык" })}
+                              noOptionsMessage={() => t("marketplace_form.languages_not_found", { defaultValue: "Язык не найден" })}
+                              styles={selectStyles}
+                              components={{ DropdownIndicator: () => <Languages aria-hidden="true" className="mr-3 h-4 w-4 text-slate-400" /> }}
+                            />
                           </Field>
                         )}
 
-                        <Field label={isTransport ? "Количество мест" : "Максимум гостей"}>
+                        <Field label={isTransport ? t("marketplace_form.seats", { defaultValue: "Количество мест" }) : t("marketplace_form.max_guests", { defaultValue: "Максимум гостей" })}>
                           <div className="relative">
                             <Users aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                            <TextInput className="pl-9" type="number" min="1" value={details.maxPax} onChange={(e) => patchDetails({ maxPax: e.target.value })} placeholder="Например, 8" />
+                            <TextInput className="pl-9" type="number" min="1" value={details.maxPax} onChange={(e) => patchDetails({ maxPax: e.target.value })} placeholder={t("marketplace_form.guests_placeholder", { defaultValue: "Например, 8" })} />
                           </div>
                         </Field>
 
-                        <Field label={`Цена за услугу${profile?.currency ? `, ${profile.currency}` : ""}`} hint="Итоговая стоимость, которую увидит клиент">
+                        <Field label={`${t("marketplace_form.price", { defaultValue: "Цена за услугу" })}${profile?.currency ? `, ${profile.currency}` : ""}`} hint={t("marketplace_form.price_hint", { defaultValue: "Итоговая стоимость, которую увидит клиент" })}>
                           <div className="relative">
                             <BadgeDollarSign aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <TextInput className="pl-9" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" />
@@ -2660,8 +3052,8 @@ export default function DashboardServices({ viewMode = "create" }) {
                         </Field>
 
                         <div className="sm:col-span-2">
-                          <Field label={t("description", { defaultValue: "Описание" })} hint="Расскажите о маршруте, программе и важных условиях">
-                            <TextArea value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Что входит в услугу и как она проходит" />
+                          <Field label={t("description", { defaultValue: "Описание" })} hint={t("marketplace_form.description_hint", { defaultValue: "Расскажите о маршруте, программе и важных условиях" })}>
+                            <TextArea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("marketplace_form.description_placeholder", { defaultValue: "Что входит в услугу и как она проходит" })} />
                           </Field>
                         </div>
                       </div>
@@ -3214,6 +3606,7 @@ export default function DashboardServices({ viewMode = "create" }) {
           if (!supportPayBusy) {
             setSupportPayError("");
             setSupportPromptService(null);
+            navigate("/dashboard/services/my");
           }
         }}
         onPay={createSupportPaymentAfterService}

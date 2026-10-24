@@ -80,21 +80,27 @@ const resolveFile = (raw) => {
 // СТАТУСЫ "confirmed", "Отклонено: поставщиком услуги", "Отменено: вами"
 const statusKey = (s) => String(s || "").toLowerCase();
 const StatusPill = ({ status, text, className = "" }) => {
+  const normalizedStatus = statusKey(status);
   const map = {
-    pending:   "bg-amber-50  text-amber-700  ring-amber-200",
-    quoted:    "bg-blue-50   text-blue-700   ring-blue-200",
-    awaiting_payment: "bg-violet-50 text-violet-700 ring-violet-200",
-    confirmed: "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    active:    "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    paid:      "bg-emerald-50 text-emerald-700 ring-emerald-200",
-    rejected:  "bg-rose-50   text-rose-700   ring-rose-200",
-    cancelled: "bg-rose-50   text-rose-700   ring-rose-200",
-    cancelled_unpaid: "bg-gray-100 text-gray-700 ring-gray-200",
-    expired:   "bg-gray-100 text-gray-700 ring-gray-200",
+    pending:   ["bg-amber-500", "text-amber-700"],
+    quoted:    ["bg-blue-500", "text-blue-700"],
+    awaiting_payment: ["bg-violet-500", "text-violet-700"],
+    confirmed: ["bg-emerald-500", "text-emerald-700"],
+    active:    ["bg-emerald-500", "text-emerald-700"],
+    paid:      ["bg-emerald-500", "text-emerald-700"],
+    rejected:  ["bg-rose-500", "text-rose-700"],
+    cancelled: ["bg-rose-500", "text-rose-700"],
+    cancelled_unpaid: ["bg-gray-400", "text-gray-600"],
+    expired:   ["bg-gray-400", "text-gray-600"],
   };
-  const cls = map[statusKey(status)] || "bg-gray-100 text-gray-700 ring-gray-200";
+  const [dotClass, textClass] = map[normalizedStatus] || ["bg-gray-400", "text-gray-600"];
+  const needsAttention = ["pending", "quoted", "awaiting_payment"].includes(normalizedStatus);
   return (
-    <span className={`ml-1 inline-flex items-center rounded-full px-2.5 py-0.5 text-xs ring-1 ${cls} ${className}`}>
+    <span className={`inline-flex items-center gap-1.5 text-xs font-medium ${textClass} ${className}`}>
+      <span
+        className={`h-1.5 w-1.5 rounded-full ${dotClass} ${needsAttention ? "motion-safe:animate-pulse" : ""}`}
+        aria-hidden="true"
+      />
       {text ?? status}
     </span>
   );
@@ -136,7 +142,7 @@ const initials = (name) =>
     .map((w) => w[0]?.toUpperCase())
     .join("");
 
-const tourBuilderDetails = (booking) => {
+const tourBuilderDetails = (booking, t) => {
   const details = booking?.details && typeof booking.details === "object"
     ? booking.details
     : booking?.attachments && typeof booking.attachments === "object"
@@ -152,11 +158,19 @@ const tourBuilderDetails = (booking) => {
     : null;
   const guests = structuredGuests ?? (legacy?.[2] ? Number(legacy[2]) : null);
   const residency = String(details.resident_type || legacy?.[3] || "").trim().toLowerCase();
-  const kindLabel = kind === "hotel" ? "Гостиница" : kind === "guide" ? "Гид" : kind === "transport" ? "Транспорт" : kind === "entry" ? "Входные билеты" : "";
+  const kindLabel = kind === "hotel"
+    ? t("bookings.types.hotel", { defaultValue: "Гостиница" })
+    : kind === "guide"
+      ? t("bookings.types.guide", { defaultValue: "Гид" })
+      : kind === "transport"
+        ? t("bookings.types.transport", { defaultValue: "Транспорт" })
+        : kind === "entry"
+          ? t("bookings.types.entry", { defaultValue: "Входные билеты" })
+          : "";
   const parts = [kindLabel];
-  if (Number.isFinite(guests)) parts.push(`Гостей: ${guests}`);
-  if (residency === "nrs") parts.push("Тариф: для нерезидентов");
-  if (residency === "res") parts.push("Тариф: для резидентов");
+  if (Number.isFinite(guests)) parts.push(t("bookings.guests_count", { count: guests, defaultValue: `Гостей: ${guests}` }));
+  if (residency === "nrs") parts.push(t("bookings.tariff_non_residents", { defaultValue: "Тариф: для нерезидентов" }));
+  if (residency === "res") parts.push(t("bookings.tariff_residents", { defaultValue: "Тариф: для резидентов" }));
   return { kind, text: parts.filter(Boolean).join(" · ") || message || "—" };
 };
 
@@ -188,6 +202,7 @@ export default function BookingRow({
   booking,
   viewerRole,            // 'provider' (входящие) | 'client' (исходящие у провайдера и кабинет клиента)
   needPriceForAccept,    // показать «Подтвердить» только при наличии provider_price
+  allowProviderAccept = false,
   hideAcceptIfQuoted = false, // скрыть «Подтвердить», если цена уже отправлена (ожидаем подтверждение заявителя)
   hideClientCancel,      // спрятать кнопку «Отмена» (когда надо)
   onAccept,
@@ -302,9 +317,20 @@ const profileHref = useMemo(() => {
     ? createdAt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
     : null;
   const alreadyQuoted = Number(booking?.provider_price) > 0;
-  // Поставщик больше НЕ подтверждает входящие: блокируем всегда
+  const providerNote = useMemo(() => {
+    const note = String(booking?.provider_note || "").trim();
+    if (!note) return "";
+    const fixedRateTitle = note.replace(/^Опубликованный тариф Tour Builder:\s*/i, "");
+    if (fixedRateTitle !== note) {
+      return t("bookings.published_tour_builder_rate", {
+        title: fixedRateTitle,
+        defaultValue: `Опубликованный тариф Tour Builder: ${fixedRateTitle}`,
+      });
+    }
+    return note;
+  }, [booking?.provider_note, t]);
   const canAccept =
-    viewerRole !== "provider" &&
+    (viewerRole !== "provider" || allowProviderAccept) &&
     String(booking?.status) === "pending" &&
     (!needPriceForAccept || alreadyQuoted) &&
     !hideAcceptIfQuoted;
@@ -327,7 +353,7 @@ const profileHref = useMemo(() => {
   };
 
   const dates = Array.isArray(booking?.dates) ? booking.dates : [];
-  const tbDetails = useMemo(() => tourBuilderDetails(booking), [booking]);
+  const tbDetails = useMemo(() => tourBuilderDetails(booking, t), [booking, t]);
   const isIncoming = viewerRole === "provider";
   const isHotelBooking = tbDetails.kind === "hotel";
   const attachments = useMemo(
@@ -336,12 +362,12 @@ const profileHref = useMemo(() => {
   );
 
   return (
-    <div className={embedded ? "bg-transparent" : "rounded-lg border border-gray-200 bg-white p-4"}>
+    <div className={embedded ? "bg-transparent" : "rounded-lg border border-gray-200 bg-white p-5"}>
       {/* Верхняя строка: #id · услуга · статус · дата создания */}
-      <div className="mb-2 flex flex-wrap items-center gap-2 text-sm text-gray-700">
-        <span className="text-gray-500">#{booking.id}</span>
+      <div className="mb-3 flex flex-wrap items-center gap-2 text-sm text-gray-700">
+        <span className="font-mono text-xs text-gray-400">#{booking.id}</span>
         {booking.service_title ? <span className="text-gray-700">· {booking.service_title}</span> : null}
-        {booking.status && booking.source !== "tour_builder" ? (
+        {booking.status ? (
           <StatusPill
             status={booking.status}
             text={statusText ?? t(`status.${booking.status}`, { defaultValue: booking.status })}
@@ -351,36 +377,36 @@ const profileHref = useMemo(() => {
           <BookingHoldCountdown holdUntil={booking.hold_until} onExpired={onHoldExpired} />
         ) : null}
         {String(booking.payment_status || "").toLowerCase() === "paid" ? (
-          <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700 ring-1 ring-emerald-200">
+          <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
             {t("bookings.paid_via_payme", { defaultValue: "Оплачено через Payme" })}
           </span>
         ) : null}
 
         {/* добавлено: дата создания */}
         {createdAtLabel ? (
-          <span className="inline-flex items-center rounded-full bg-gray-50 px-2.5 py-0.5 text-xs text-gray-500">
+          <span className="text-xs text-gray-400">
             {createdAtLabel}
           </span>
         ) : null}
 
         {/* цена/комментарий поставщика — бейдж справа, если есть */}
         {Number(booking?.provider_price) > 0 ? (
-          <span className="ml-auto inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs text-emerald-700 ring-1 ring-emerald-200">
-            <b>{fmtPrice(booking.provider_price)} {booking.currency || "USD"}</b>
-            {booking.provider_note ? <span className="opacity-70">· {booking.provider_note}</span> : null}
-          </span>
+          <div className="ml-auto min-w-0 text-right">
+            <div className="font-semibold text-gray-950">{fmtPrice(booking.provider_price)} {booking.currency || "USD"}</div>
+            {providerNote ? <div className="max-w-[440px] truncate text-xs text-gray-400" title={providerNote}>{providerNote}</div> : null}
+          </div>
         ) : null}
       </div>
 
-      <div className="grid gap-x-6 gap-y-4 border-t border-gray-100 pt-3 sm:grid-cols-2 xl:grid-cols-[1.35fr,1fr,0.8fr,1.5fr]">
+      <div className="grid gap-x-8 gap-y-4 border-t border-gray-100 pt-4 sm:grid-cols-2 xl:grid-cols-[1.2fr,1fr,0.8fr,1.35fr]">
         <div className="min-w-0">
-          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+          <div className="mb-1.5 text-xs font-medium text-gray-400">
             {isIncoming
               ? t("bookings.customer", { defaultValue: "Заказчик" })
               : t("bookings.provider", { defaultValue: "Поставщик" })}
           </div>
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 shrink-0 overflow-hidden rounded-full bg-indigo-100 text-indigo-700 ring-1 ring-indigo-200">
+            <div className="h-9 w-9 shrink-0 overflow-hidden rounded-full bg-gray-100 text-gray-700">
               {avatarUrl ? (
                 <img src={avatarUrl} alt="" className="h-full w-full object-cover" />
               ) : (
@@ -395,10 +421,10 @@ const profileHref = useMemo(() => {
                   {counterpart.title}
                 </Link>
               ) : (
-                <div className="truncate font-semibold">{counterpart.title}</div>
+                <div className="truncate font-semibold text-gray-950">{counterpart.title}</div>
               )}
               {counterpart.extra ? (
-                <span className="mt-1 inline-flex rounded-full bg-indigo-50 px-2 py-0.5 text-xs text-indigo-700 ring-1 ring-indigo-200">
+                <span className="mt-0.5 inline-flex text-xs text-gray-500">
                   {counterpart.extra}
                 </span>
               ) : null}
@@ -407,7 +433,7 @@ const profileHref = useMemo(() => {
         </div>
 
         <div className="min-w-0">
-          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+          <div className="mb-1.5 text-xs font-medium text-gray-400">
             {isIncoming
               ? t("bookings.customer_contacts", { defaultValue: "Контакты заказчика" })
               : t("bookings.provider_contacts", { defaultValue: "Контакты поставщика" })}
@@ -430,7 +456,7 @@ const profileHref = useMemo(() => {
         </div>
 
         <div className="min-w-0">
-          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+          <div className="mb-1.5 text-xs font-medium text-gray-400">
             {isHotelBooking
               ? t("bookings.stay_date", { defaultValue: "Дата проживания" })
               : t("bookings.service_date", { defaultValue: "Дата услуги" })}
@@ -447,7 +473,7 @@ const profileHref = useMemo(() => {
         </div>
 
         <div className="min-w-0">
-          <div className="mb-2 text-xs font-semibold uppercase text-gray-400">
+          <div className="mb-1.5 text-xs font-medium text-gray-400">
             {isHotelBooking
               ? t("bookings.accommodation", { defaultValue: "Размещение" })
               : t("bookings.request_details", { defaultValue: "Детали заявки" })}

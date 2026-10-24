@@ -6,6 +6,8 @@ import BookingRow from "../components/BookingRow";
 import { tSuccess, tError, tInfo } from "../shared/toast";
 import ConfirmModal from "../components/ConfirmModal";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
+import { Copy, ExternalLink, Link2, X } from "lucide-react";
+import { Link } from "react-router-dom";
 
 /* ================= helpers ================= */
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -24,6 +26,22 @@ const fmt = (n) => (isFiniteNum(n) ? n.toLocaleString(undefined, { maximumFracti
 const isTourBuilderHotel = (booking) =>
   String(booking?.source || "").toLowerCase() === "tour_builder"
   && String(booking?.details?.tb_kind || booking?.attachments?.tb_kind || "").toLowerCase() === "hotel";
+const isFixedTourBuilderRate = (booking) =>
+  String(booking?.source || "").toLowerCase() === "tour_builder"
+  && Boolean(
+    booking?.details?.fixed_catalog_rate
+    || booking?.attachments?.fixed_catalog_rate
+    || /^Опубликованный тариф Tour Builder:/i.test(String(booking?.provider_note || "").trim())
+  )
+  && Number(booking?.provider_price) > 0;
+const isFixedMarketplaceRate = (booking) =>
+  String(booking?.source || "").toLowerCase() === "marketplace"
+  && Boolean(
+    booking?.details?.fixed_marketplace_rate
+    || booking?.attachments?.fixed_marketplace_rate
+    || /^Опубликованная цена Marketplace:/i.test(String(booking?.provider_note || "").trim())
+  )
+  && Number(booking?.provider_price) > 0;
 const bookingTimeSlots = (booking) => {
   const raw = booking?.details?.time_slots || booking?.attachments?.time_slots || booking?.time_slots;
   if (!Array.isArray(raw)) return [];
@@ -199,7 +217,13 @@ export default function ProviderBookings() {
   const [filter, setFilter] = useState("all"); // all | pending | quoted | payment | confirmed | rejected
   const [incoming, setIncoming] = useState([]);
   const [outgoing, setOutgoing] = useState([]);
+  const [tourPackages, setTourPackages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [proposalTarget, setProposalTarget] = useState(null);
+  const [proposalForm, setProposalForm] = useState({ client_name: "", client_phone: "", client_email: "", client_company: "", quote_valid_until: "" });
+  const [proposalUrl, setProposalUrl] = useState("");
+  const [proposalBusy, setProposalBusy] = useState(false);
+  const [packageActionBusy, setPackageActionBusy] = useState(null);
     // --- Модалка отмены поставщиком ---
   const [showCancelModal, setShowCancelModal] = useState(false);
   const [cancelTarget, setCancelTarget] = useState(null);
@@ -223,18 +247,94 @@ export default function ProviderBookings() {
     if (!getToken()) return;
     setLoading(true);
     try {
-      const [incRes, outRes] = await Promise.all([
+      const [incRes, outRes, packagesRes] = await Promise.all([
         axios.get(`${API_BASE}/api/bookings/provider`, cfg()),
         axios.get(`${API_BASE}/api/bookings/provider/outgoing`, cfg()),
+        axios.get(`${API_BASE}/api/tour-packages`, cfg()).catch(() => ({ data: [] })),
       ]);
       setIncoming(Array.isArray(incRes.data) ? incRes.data : []);
       setOutgoing(Array.isArray(outRes.data) ? outRes.data : []);
+      setTourPackages(Array.isArray(packagesRes.data) ? packagesRes.data : []);
     } catch (e) {
       console.error("load provider bookings failed", e);
       setIncoming([]);
       setOutgoing([]);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const openProposal = (tourPackage) => {
+    const fallback = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+    setProposalTarget(tourPackage);
+    setProposalUrl("");
+    setProposalForm({
+      client_name: tourPackage?.client_name || "",
+      client_phone: tourPackage?.client_phone || "",
+      client_email: tourPackage?.client_email || "",
+      client_company: tourPackage?.client_company || "",
+      quote_valid_until: String(tourPackage?.quote_valid_until || fallback).slice(0, 10),
+    });
+  };
+
+  const generateProposalLink = async () => {
+    if (!proposalTarget?.id || proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      const expires = proposalForm.quote_valid_until
+        ? new Date(`${proposalForm.quote_valid_until}T23:59:59`).toISOString()
+        : null;
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${proposalTarget.id}/share`, {
+        ...proposalForm,
+        quote_valid_until: expires,
+      }, cfg());
+      const url = `${window.location.origin}/tour-proposal/${data.token}`;
+      setProposalUrl(url);
+      setTourPackages((items) => items.map((item) => item.id === proposalTarget.id
+        ? { ...item, ...proposalForm, quote_valid_until: expires, status: "proposed", is_shared: true, share_expires_at: data.share_expires_at }
+        : item));
+      try { await navigator.clipboard.writeText(url); } catch {}
+      tSuccess(t("tb.proposal.link_created"));
+    } catch (error) {
+      tError(error?.response?.data?.message || t("tb.proposal.link_error"));
+    } finally {
+      setProposalBusy(false);
+    }
+  };
+
+  const revokeProposalLink = async () => {
+    if (!proposalTarget?.id || proposalBusy) return;
+    setProposalBusy(true);
+    try {
+      await axios.delete(`${API_BASE}/api/tour-packages/${proposalTarget.id}/share`, cfg());
+      setProposalUrl("");
+      setTourPackages((items) => items.map((item) => item.id === proposalTarget.id ? { ...item, is_shared: false } : item));
+      setProposalTarget((item) => ({ ...item, is_shared: false }));
+      tSuccess(t("tb.proposal.link_revoked"));
+    } catch (error) {
+      tError(error?.response?.data?.message || t("tb.proposal.revoke_error"));
+    } finally {
+      setProposalBusy(false);
+    }
+  };
+
+  const confirmPackageSale = async (tourPackage) => {
+    if (!tourPackage?.id || packageActionBusy) return;
+    setPackageActionBusy(tourPackage.id);
+    try {
+      const { data } = await axios.post(`${API_BASE}/api/tour-packages/${tourPackage.id}/confirm-sale`, {}, cfg());
+      setTourPackages((items) => items.map((item) => item.id === tourPackage.id ? { ...item, ...data } : item));
+      tSuccess(t("tb.proposal.sale_confirmed"));
+    } catch (error) {
+      const readiness = error?.response?.data?.readiness;
+      const message = !readiness?.client_accepted
+        ? t("tb.proposal.acceptance_required")
+        : readiness?.component_count === 0
+        ? t("tb.proposal.components_required")
+        : t("tb.proposal.components_pending", { confirmed: readiness?.confirmed_count || 0, total: readiness?.component_count || 0 });
+      tError(message);
+    } finally {
+      setPackageActionBusy(null);
     }
   };
 
@@ -300,7 +400,9 @@ export default function ProviderBookings() {
     }
     try {
       await axios.post(`${API_BASE}/api/bookings/${b.id}/accept`, {}, cfg());
-      tSuccess(t("bookings.accepted", { defaultValue: "Бронь подтверждена" }));
+      tSuccess(t("bookings.accepted_awaiting_payment", {
+        defaultValue: "Заявка принята. Ожидаем оплату от заказчика.",
+      }));
     } catch (e) {
       tError(e?.response?.data?.message || t("bookings.accept_error", { defaultValue: "Ошибка подтверждения" }));
     } finally {
@@ -592,36 +694,80 @@ export default function ProviderBookings() {
   const renderPackageOverview = (group) => {
     const rows = buildDailyMatrix(group.items);
     const reference = String(group.group_id || "").split("-")[0].toUpperCase();
+    const tourPackage = group.package;
+    const currency = tourPackage?.currency || "UZS";
+    const status = String(tourPackage?.status || "request_sent");
+    const validUntil = tourPackage?.quote_valid_until ? new Date(tourPackage.quote_valid_until) : null;
+    const componentCount = Number(tourPackage?.component_count || group.items.length || 0);
+    const confirmedCount = Number(tourPackage?.confirmed_count || 0);
+    const componentsReady = componentCount > 0 && confirmedCount === componentCount;
+    const formatMoney = (value) => Number(value || 0).toLocaleString(currency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 });
     return (
-      <div className="border-b border-gray-200 bg-gray-50/70 p-4 md:p-5">
+      <div className="border-b border-gray-200 bg-white px-5 py-4">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <div className="text-xs font-semibold uppercase text-orange-600">Tour Builder</div>
+            <div className="text-xs font-semibold text-orange-600">Tour Builder</div>
             <div className="mt-1 flex flex-wrap items-center gap-2">
-              <h2 className="text-lg font-bold text-gray-950">
-                {t("bookings.request", { defaultValue: "Заявка" })} {reference ? `№ ${reference}` : ""}
-              </h2>
-              <span className="rounded-md bg-white px-2 py-1 text-xs font-medium text-gray-600 ring-1 ring-gray-200">
+              {tourPackage ? <Link to={`/dashboard/tour-packages/${tourPackage.id}`} className="text-lg font-bold text-gray-950 hover:text-orange-700 hover:underline">{tourPackage.title}</Link> : <h2 className="text-lg font-bold text-gray-950">{`${t("bookings.request", { defaultValue: "Заявка" })} ${reference ? `№ ${reference}` : ""}`}</h2>}
+              <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-200">
+                {t(`tb.package_status.${status}`, { defaultValue: status })}
+              </span>
+              <span className="text-xs text-gray-500">
                 {group.items.length} {t("bookings.services_count", { defaultValue: "услуг" })}
               </span>
+              {tourPackage?.booking_reference ? <span className="font-mono text-xs font-semibold text-gray-600">{tourPackage.booking_reference}</span> : null}
+              {tourPackage?.proposal_response ? (
+                <span className={`rounded-full px-2 py-1 text-xs font-semibold ring-1 ${tourPackage.proposal_response === "accepted" ? "bg-emerald-50 text-emerald-700 ring-emerald-200" : "bg-amber-50 text-amber-800 ring-amber-200"}`}>
+                  {t(`tb.proposal.response_${tourPackage.proposal_response}`)}
+                </span>
+              ) : null}
             </div>
           </div>
-          <div className="text-right text-xs text-gray-500">
-            <div>{t("bookings.full_reference", { defaultValue: "Номер пакета" })}</div>
-            <div className="mt-0.5 font-mono">{group.group_id}</div>
-          </div>
+          {tourPackage ? (
+            <div className="grid min-w-[280px] grid-cols-3 gap-4 text-right">
+              <div><div className="text-[11px] font-semibold uppercase text-gray-400">NET</div><div className="font-bold text-gray-950">{formatMoney(tourPackage.net_total)} {currency}</div></div>
+              <div><div className="text-[11px] font-semibold uppercase text-gray-400">{t("tb.summary.markup")}</div><div className="font-bold text-orange-600">{tourPackage.markup_type === "percent" ? `${formatMoney(tourPackage.markup_value)}%` : `${formatMoney(tourPackage.markup_value)} ${currency}`}</div></div>
+              <div><div className="text-[11px] font-semibold uppercase text-gray-400">GROSS</div><div className="font-bold text-emerald-700">{formatMoney(tourPackage.gross_total)} {currency}</div></div>
+              {validUntil && Number.isFinite(validUntil.getTime()) ? <div className="col-span-3 text-xs text-gray-500">{t("tb.quote_valid_until")}: {validUntil.toLocaleDateString()}</div> : null}
+              <div className="col-span-3">
+                <div className="mb-1 flex items-center justify-between text-xs text-gray-500"><span>{t("tb.proposal.supplier_readiness")}</span><span>{confirmedCount}/{componentCount}</span></div>
+                <div className="h-1.5 overflow-hidden rounded-full bg-gray-200"><div className={`h-full ${componentsReady ? "bg-emerald-500" : "bg-orange-500"}`} style={{ width: `${componentCount ? Math.round((confirmedCount / componentCount) * 100) : 0}%` }} /></div>
+              </div>
+              {tab === "outgoing" ? (
+                <div className="col-span-3 flex flex-wrap justify-end gap-2">
+                  <button type="button" onClick={() => openProposal(tourPackage)} className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-300 px-3 text-sm font-semibold text-gray-800 hover:border-orange-400 hover:text-orange-700">
+                    <Link2 size={16} /> {tourPackage.is_shared ? t("tb.proposal.manage_link") : t("tb.proposal.create_link")}
+                  </button>
+                  {tourPackage.proposal_response === "accepted" && status !== "booked" ? (
+                    <button type="button" onClick={() => confirmPackageSale(tourPackage)} disabled={!componentsReady || packageActionBusy === tourPackage.id} title={!componentsReady ? t("tb.proposal.confirm_suppliers_first") : ""} className="h-9 rounded-md bg-emerald-600 px-3 text-sm font-semibold text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:bg-gray-300">
+                      {packageActionBusy === tourPackage.id ? t("common.loading") : t("tb.proposal.confirm_sale")}
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <div className="max-w-[280px] truncate font-mono text-right text-xs text-gray-400" title={group.group_id}>{group.group_id}</div>
+          )}
         </div>
 
+        {tourPackage?.proposal_response_message ? (
+          <div className="mt-3 border-l-2 border-orange-400 bg-orange-50 px-3 py-2 text-sm text-gray-700">
+            <span className="font-semibold">{t("tb.proposal.client_comment")}:</span> {tourPackage.proposal_response_message}
+          </div>
+        ) : null}
+
         {rows.length ? (
-          <div className="mt-4 grid gap-2 md:grid-cols-2">
+          <div className="mt-4 grid gap-x-6 gap-y-2 border-t border-gray-100 pt-3 md:grid-cols-2">
             {rows.map((row) => (
-              <div key={row.date} className="rounded-lg border border-gray-200 bg-white p-3">
-                <div className="flex items-start gap-3">
-                  <span className="rounded-md bg-gray-950 px-2 py-1 text-xs font-bold text-white">{row.label}</span>
+              <div key={row.date} className="flex min-w-0 items-start gap-3 py-1.5">
+                  <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-gray-950 text-xs font-bold text-white">{row.label}</span>
                   <div className="min-w-0">
-                    <div className="font-semibold text-gray-950">{row.city || t("bookings.city_unknown", { defaultValue: "Город не указан" })}</div>
-                    <div className="text-sm text-gray-500">{row.dateLabel || fmtShort(row.date)}</div>
-                    <div className="mt-2 space-y-1 text-sm text-gray-700">
+                    <div className="flex flex-wrap items-baseline gap-x-2">
+                      <span className="font-semibold text-gray-950">{row.city || t("bookings.city_unknown", { defaultValue: "Город не указан" })}</span>
+                      <span className="text-sm text-gray-500">{row.dateLabel || fmtShort(row.date)}</span>
+                    </div>
+                    <div className="mt-1 space-y-0.5 text-sm text-gray-600">
                       {row.sections.map(([klass, names]) =>
                         names.length ? (
                           <div key={klass}>
@@ -631,7 +777,6 @@ export default function ProviderBookings() {
                       )}
                     </div>
                   </div>
-                </div>
               </div>
             ))}
           </div>
@@ -745,17 +890,18 @@ export default function ProviderBookings() {
         singles.push(b);
       }
     }
+    const packagesById = new Map(tourPackages.map((item) => [String(item.id), item]));
     const groups = [...map.entries()].map(([group_id, items]) => {
       const firstTs = Math.min(
         ...items
           .map((x) => new Date(x?.created_at || x?.updated_at || 0).getTime())
           .filter(Number.isFinite)
       );
-      return { group_id, items, firstTs: Number.isFinite(firstTs) ? firstTs : 0 };
+      return { group_id, items, package: packagesById.get(String(group_id)) || null, firstTs: Number.isFinite(firstTs) ? firstTs : 0 };
     });
     groups.sort((a, b) => b.firstTs - a.firstTs); // новые сверху
     return { groups, singles };
-  }, [filtered, tab]);
+  }, [filtered, tab, tourPackages]);
 
   const groupedIncoming = useMemo(() => {
     if (tab !== "incoming") return [];
@@ -781,6 +927,9 @@ export default function ProviderBookings() {
           const alreadyQuoted = Number(b?.provider_price) > 0;
           const awaitingRequester = isIncoming && String(b?.status) === "quoted";
           const fixedHotelBooking = isTourBuilderHotel(b);
+          const fixedCatalogBooking = isFixedTourBuilderRate(b);
+          const fixedMarketplaceBooking = isFixedMarketplaceRate(b);
+          const fixedPriceBooking = fixedHotelBooking || fixedCatalogBooking || fixedMarketplaceBooking;
 
           // подписи «кем отклонено/кем отменено»
           let rejectedByLabel = null;
@@ -800,13 +949,14 @@ export default function ProviderBookings() {
               <BookingRow
                 booking={b}
                 viewerRole={isIncoming ? "provider" : "client"}
+                allowProviderAccept={isIncoming && fixedPriceBooking}
                 needPriceForAccept={!isIncoming} // у заявителя скрыть «Подтвердить» до предложения цены
                 hideAcceptIfQuoted={awaitingRequester}
                 hideClientCancel={!isIncoming}
                 rejectedByLabel={rejectedByLabel}
                 cancelledByLabel={cancelledByLabel}
                 onAccept={accept}
-                onReject={isIncoming && String(b.status) === "pending" && !fixedHotelBooking ? undefined : reject}
+                onReject={isIncoming && String(b.status) === "pending" && !fixedPriceBooking ? undefined : reject}
                 onCancel={cancelOutgoing}
                 onCancelByProvider={openCancelIncoming}
                 onHoldExpired={load}
@@ -816,7 +966,7 @@ export default function ProviderBookings() {
               <BookingTimeSlots booking={b} />
 
               {/* Входящие: форма согласования цены (прячем после отправки предложения) */}
-              {isIncoming && String(b.status) === "pending" && !awaitingRequester && !fixedHotelBooking && (
+              {isIncoming && String(b.status) === "pending" && !awaitingRequester && (!fixedPriceBooking || fixedMarketplaceBooking) && (
                 <PriceAgreementCard booking={b} onSent={load} onReject={reject} />
               )}
 
@@ -946,7 +1096,7 @@ export default function ProviderBookings() {
     return (
       <div className="space-y-6">
         {groupedOutgoing.groups.map((g) => (
-          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
             {renderPackageOverview(g)}
             <div className="divide-y">
               {g.items.map((b) => (
@@ -995,30 +1145,34 @@ export default function ProviderBookings() {
     if (!groupedIncoming.length)
       return <div className="text-gray-500">{t("bookings.tb_empty", { defaultValue: "Пакетов TourBuilder пока нет." })}</div>;
     // используем тот же renderRow (он реагирует на tab === "incoming")
-    const renderRow = (b) => (
+    const renderRow = (b) => {
+      const fixedPriceBooking = isTourBuilderHotel(b) || isFixedTourBuilderRate(b) || isFixedMarketplaceRate(b);
+      return (
       <div key={b.id} className="p-4">
         <BookingRow
           booking={b}
           embedded
           viewerRole="provider"
+          allowProviderAccept={fixedPriceBooking}
           needPriceForAccept
           hideClientCancel
           onAccept={accept}
           onHoldExpired={load}
           onPay={payBooking}
-          onReject={String(b.status) === "pending" && !isTourBuilderHotel(b) ? undefined : reject}
+          onReject={String(b.status) === "pending" && !fixedPriceBooking ? undefined : reject}
           onCancelByProvider={openCancelIncoming}
         />
         <BookingTimeSlots booking={b} />
-        {String(b.status) === "pending" && !isTourBuilderHotel(b) && (
+        {String(b.status) === "pending" && !fixedPriceBooking && (
           <PriceAgreementCard booking={b} onSent={load} onReject={reject} />
         )}
       </div>
-    );
+      );
+    };
     return (
       <div className="space-y-6">
         {groupedIncoming.map((g) => (
-          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div key={g.group_id} className="overflow-hidden rounded-lg border border-gray-200 bg-white">
             {renderPackageOverview(g)}
             <div className="divide-y">{g.items.map(renderRow)}</div>
           </div>
@@ -1042,13 +1196,13 @@ export default function ProviderBookings() {
 
   return (
     <div className="mx-auto max-w-7xl p-4 md:p-6">
-      <header className="mb-5 border-b border-gray-200 pb-5">
+      <header className="mb-4 pb-2">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <div className="mb-1 text-xs font-semibold uppercase text-orange-600">
+            <div className="mb-1 text-xs font-semibold text-orange-600">
               {t("bookings.workspace", { defaultValue: "Управление заявками" })}
             </div>
-            <h1 className="text-2xl font-bold text-gray-950 md:text-3xl">
+            <h1 className="text-2xl font-bold text-gray-950">
               {t("bookings.title", { defaultValue: "Бронирования" })}
             </h1>
             <p className="mt-1 max-w-2xl text-sm text-gray-600">
@@ -1069,7 +1223,7 @@ export default function ProviderBookings() {
         </div>
       </header>
 
-      <div className="mb-5 grid gap-3 md:grid-cols-2" role="tablist" aria-label={t("bookings.direction", { defaultValue: "Направление бронирований" })}>
+      <div className="mb-4 grid border-b border-gray-200 bg-white md:grid-cols-2" role="tablist" aria-label={t("bookings.direction", { defaultValue: "Направление бронирований" })}>
         {[
           {
             key: "incoming",
@@ -1094,22 +1248,22 @@ export default function ProviderBookings() {
               role="tab"
               aria-selected={active}
               onClick={() => { setTab(item.key); setFilter("all"); }}
-              className={`min-h-[92px] rounded-lg border px-4 py-3 text-left transition ${
+              className={`min-h-[72px] border-b-2 px-4 py-3 text-left transition ${
                 active
-                  ? "border-gray-950 bg-gray-950 text-white shadow-sm"
-                  : "border-gray-200 bg-white text-gray-950 hover:border-gray-400"
+                  ? "border-b-orange-500 bg-orange-50/40 text-gray-950"
+                  : "border-b-transparent bg-white text-gray-600 hover:bg-gray-50"
               }`}
             >
               <span className="flex items-start justify-between gap-4">
                 <span>
-                  <span className="block text-lg font-bold">{item.title}</span>
-                  <span className={`mt-1 block text-sm ${active ? "text-white/70" : "text-gray-500"}`}>{item.description}</span>
+                  <span className="block font-bold">{item.title}</span>
+                  <span className="mt-0.5 block text-sm text-gray-500">{item.description}</span>
                 </span>
-                <span className={`min-w-10 rounded-md px-2.5 py-1 text-center text-lg font-bold ${active ? "bg-white/10" : "bg-gray-100"}`}>
+                <span className="min-w-8 text-center text-sm font-bold text-gray-500">
                   {item.total}
                 </span>
               </span>
-              <span className={`mt-2 block text-xs font-medium ${active ? "text-orange-300" : "text-orange-700"}`}>
+              <span className={`mt-1.5 block text-xs font-medium ${item.attention > 0 ? "text-orange-700" : "text-gray-400"}`}>
                 {item.attention > 0
                   ? t("bookings.need_action", { count: item.attention, defaultValue: `Требуют действия: ${item.attention}` })
                   : t("bookings.no_action", { defaultValue: "Нет заявок, требующих действия" })}
@@ -1119,27 +1273,27 @@ export default function ProviderBookings() {
         })}
       </div>
 
-      <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-gray-200 pb-3">
-        <span className="mr-2 text-xs font-semibold uppercase text-gray-500">
+      <div className="mb-0 flex flex-wrap items-center gap-5 border-b border-gray-200 bg-white px-1">
+        <span className="py-3 text-xs font-semibold text-gray-400">
           {t("bookings.source", { defaultValue: "Источник" })}
         </span>
         <button
           type="button"
           onClick={() => { setActiveSubTab("tb"); setFilter("all"); }}
-          className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSubTab === "tb" ? "bg-orange-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
+          className={`border-b-2 px-1 py-3 text-sm font-semibold ${activeSubTab === "tb" ? "border-orange-500 text-gray-950" : "border-transparent text-gray-500 hover:text-gray-800"}`}
         >
           Tour Builder <span className="ml-1 opacity-75">{tourBuilderCount}</span>
         </button>
         <button
           type="button"
           onClick={() => { setActiveSubTab("rest"); setFilter("all"); }}
-          className={`rounded-lg px-3 py-2 text-sm font-semibold ${activeSubTab === "rest" ? "bg-orange-600 text-white" : "text-gray-700 hover:bg-gray-100"}`}
+          className={`border-b-2 px-1 py-3 text-sm font-semibold ${activeSubTab === "rest" ? "border-orange-500 text-gray-950" : "border-transparent text-gray-500 hover:text-gray-800"}`}
         >
           {t("bookings.other", { defaultValue: "Другие бронирования" })} <span className="ml-1 opacity-75">{otherCount}</span>
         </button>
       </div>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
+      <div className="mb-5 flex flex-wrap items-center gap-5 border-b border-gray-200 bg-white px-1">
         {[
           { key: "all", label: t("filter.all", { defaultValue: "Все" }), count: counts.all },
           { key: "pending", label: t("filter.pending", { defaultValue: "Ожидает" }), count: counts.pending },
@@ -1151,10 +1305,10 @@ export default function ProviderBookings() {
           <button
             key={key}
             onClick={() => setFilter(key)}
-            className={"rounded-full px-3 py-1.5 text-sm ring-1 " + (filter === key ? "bg-indigo-600 text-white ring-indigo-600" : "bg-white text-gray-800 ring-gray-200 hover:bg-gray-50")}
+            className={"border-b-2 px-1 py-3 text-sm " + (filter === key ? "border-orange-500 font-semibold text-gray-950" : "border-transparent text-gray-500 hover:text-gray-800")}
           >
             {label}
-            <span className={"ml-2 inline-flex items-center rounded-full px-1 text-xs " + (filter === key ? "bg-white/20" : "bg-gray-100")}>
+            <span className="ml-1.5 text-xs tabular-nums text-gray-400">
               {count}
             </span>
           </button>
@@ -1166,6 +1320,47 @@ export default function ProviderBookings() {
         : tab === "incoming" && inSubTab === "tb"
         ? tbIncomingContent
         : flatListContent}
+      {proposalTarget ? (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-gray-950/60 p-4" role="dialog" aria-modal="true" aria-labelledby="proposal-dialog-title">
+          <div className="max-h-[92vh] w-full max-w-xl overflow-y-auto rounded-lg bg-white shadow-xl">
+            <div className="flex items-start justify-between border-b border-gray-200 px-6 py-5">
+              <div>
+                <div className="text-xs font-semibold uppercase text-orange-600">Tour Builder</div>
+                <h2 id="proposal-dialog-title" className="mt-1 text-xl font-bold text-gray-950">{t("tb.proposal.dialog_title")}</h2>
+                <p className="mt-1 text-sm text-gray-600">{proposalTarget.title}</p>
+              </div>
+              <button type="button" onClick={() => setProposalTarget(null)} className="flex h-9 w-9 items-center justify-center rounded-md border border-gray-200 text-gray-500 hover:bg-gray-50" aria-label={t("actions.close", { defaultValue: "Закрыть" })}><X size={18} /></button>
+            </div>
+            <div className="space-y-5 px-6 py-5">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <label className="block text-sm font-semibold text-gray-800">{t("tb.proposal.client_name")}<input value={proposalForm.client_name} onChange={(e) => setProposalForm((v) => ({ ...v, client_name: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+                <label className="block text-sm font-semibold text-gray-800">{t("tb.proposal.client_company")}<input value={proposalForm.client_company} onChange={(e) => setProposalForm((v) => ({ ...v, client_company: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+                <label className="block text-sm font-semibold text-gray-800">{t("tb.proposal.client_phone")}<input value={proposalForm.client_phone} onChange={(e) => setProposalForm((v) => ({ ...v, client_phone: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+                <label className="block text-sm font-semibold text-gray-800">Email<input type="email" value={proposalForm.client_email} onChange={(e) => setProposalForm((v) => ({ ...v, client_email: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+                <label className="block text-sm font-semibold text-gray-800 sm:col-span-2">{t("tb.quote_valid_until")}<input type="date" value={proposalForm.quote_valid_until} min={new Date().toISOString().slice(0, 10)} onChange={(e) => setProposalForm((v) => ({ ...v, quote_valid_until: e.target.value }))} className="mt-1.5 h-11 w-full rounded-md border border-gray-300 px-3 font-normal outline-none focus:border-orange-500" /></label>
+              </div>
+              <div className="rounded-md border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">{t("tb.proposal.privacy_note")}</div>
+              {proposalTarget.is_shared && !proposalUrl ? <div className="rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">{t("tb.proposal.rotate_note")}</div> : null}
+              {proposalUrl ? (
+                <div className="border border-gray-200 bg-gray-50 p-3">
+                  <div className="break-all text-sm text-gray-700">{proposalUrl}</div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <button type="button" onClick={() => { navigator.clipboard.writeText(proposalUrl); tSuccess(t("tb.proposal.copied")); }} className="inline-flex h-9 items-center gap-2 rounded-md bg-gray-950 px-3 text-sm font-semibold text-white"><Copy size={16} />{t("tb.proposal.copy")}</button>
+                    <a href={proposalUrl} target="_blank" rel="noreferrer" className="inline-flex h-9 items-center gap-2 rounded-md border border-gray-300 px-3 text-sm font-semibold text-gray-800"><ExternalLink size={16} />{t("tb.proposal.open")}</a>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-gray-200 px-6 py-4">
+              <div>{proposalTarget.is_shared ? <button type="button" onClick={revokeProposalLink} disabled={proposalBusy} className="text-sm font-semibold text-red-600 hover:text-red-700 disabled:opacity-50">{t("tb.proposal.revoke")}</button> : null}</div>
+              <div className="flex gap-2">
+                <button type="button" onClick={() => setProposalTarget(null)} className="h-10 rounded-md border border-gray-300 px-4 font-semibold text-gray-700">{t("actions.cancel", { defaultValue: "Отмена" })}</button>
+                <button type="button" onClick={generateProposalLink} disabled={proposalBusy || !proposalForm.quote_valid_until} className="h-10 rounded-md bg-orange-600 px-4 font-semibold text-white hover:bg-orange-700 disabled:opacity-50">{proposalBusy ? t("common.loading") : proposalTarget.is_shared ? t("tb.proposal.rotate") : t("tb.proposal.create")}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
             {/* Модалка отмены поставщиком — через общий ConfirmModal */}
       <ConfirmModal
         open={showCancelModal}

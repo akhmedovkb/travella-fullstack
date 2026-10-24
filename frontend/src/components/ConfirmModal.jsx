@@ -15,6 +15,7 @@ export default function ConfirmModal({
   cancelLabel,
   danger = false,
   busy = false,
+  busyLabel,
   onConfirm,
   onClose,
   hideCancel = false,
@@ -89,7 +90,7 @@ export default function ConfirmModal({
             onClick={onConfirm ?? onClose}
             className={`flex-1 rounded-2xl px-4 py-3 text-sm font-black text-white transition focus:outline-none focus:ring-4 disabled:cursor-not-allowed disabled:opacity-60 ${confirmClass}`}
           >
-            {busy ? tt("common.sending", "Отправка…") : (confirmLabel ?? tt("actions.ok", "ОК"))}
+            {busy ? (busyLabel ?? tt("common.sending", "Отправка…")) : (confirmLabel ?? tt("actions.ok", "ОК"))}
           </button>
         </div>
       </div>

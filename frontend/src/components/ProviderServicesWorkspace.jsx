@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { CheckCircle2, Layers3, MapPin, Plus, RefreshCw, WalletCards } from "lucide-react";
+import { CarFront, CheckCircle2, Layers3, MapPin, Plus, RefreshCw, Search, Trash2, UserRound, WalletCards, X } from "lucide-react";
 import { tError, tSuccess } from "../shared/toast";
+import ConfirmModal from "./ConfirmModal";
 import {
   GUIDE_SERVICE_GROUPS,
   TRANSPORT_SERVICE_GROUPS,
@@ -12,6 +13,11 @@ import {
 
 const transportCategory = (value) => TRANSPORT_CATEGORY_IDS.includes(value);
 const INTERCITY_CATEGORIES = new Set(["intercity_transfer", "border_transfer", "one_way_transfer"]);
+const LEGACY_GUIDE_WITH_TRANSPORT = "city_tour_guide_with_transport";
+const guideCategory = (value) => GUIDE_SERVICE_GROUPS.some((group) => group.services.some((service) => service.id === value))
+  || value === LEGACY_GUIDE_WITH_TRANSPORT;
+const catalogCategory = (value) => value === LEGACY_GUIDE_WITH_TRANSPORT ? "city_tour_guide" : value;
+const catalogGroup = (value, groups) => findServiceGroup(catalogCategory(value), groups);
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number(value));
 const cityLabel = (value) => String(value || "").trim().replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toUpperCase());
@@ -40,6 +46,7 @@ const blankForm = () => ({
   destinationCity: "",
   seats: "",
   vehicleModel: "",
+  transportIncluded: false,
   pricingMode: "fixed",
   price: "",
   minimumHours: "2",
@@ -78,6 +85,7 @@ function calculatedPreview(form, w) {
 export default function ProviderServicesWorkspace({ providerId, providerType }) {
   const { t } = useTranslation();
   const w = (key, options = {}) => t(`provider_services.workspace.${key}`, options);
+  const f = (key, options = {}) => t(`provider_services_filters.${key}`, options);
   const pid = Number(providerId);
   const [rows, setRows] = useState([]);
   const [profile, setProfile] = useState({});
@@ -85,13 +93,19 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(blankForm);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [cityFilter, setCityFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
+  const [deletingId, setDeletingId] = useState(null);
+  const [pendingDelete, setPendingDelete] = useState(null);
   const [draft, setDraft] = useState(null);
 
   const fleet = useMemo(() => (Array.isArray(profile?.car_fleet) ? profile.car_fleet.filter((car) => car && car.is_active !== false) : []), [profile]);
   const cities = useMemo(() => (Array.isArray(profile?.city_slugs) ? profile.city_slugs : []), [profile]);
   const isTransport = transportCategory(form.category);
+  const isGuideService = guideCategory(form.category);
+  const usesVehicle = isTransport || (isGuideService && form.transportIncluded);
   const isIntercity = INTERCITY_CATEGORIES.has(form.category);
   const preview = calculatedPreview(form, w);
   const serviceLabel = (category) => t(`provider_services.items.${category}`, { defaultValue: LABELS[category] || category || "Услуга" });
@@ -99,9 +113,27 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const serviceTitle = (current) => INTERCITY_CATEGORIES.has(current.category)
     ? `${serviceLabel(current.category)} · ${cityLabel(current.originCity) || t("provider_services.from", "Откуда")} → ${cityLabel(current.destinationCity) || t("provider_services.to", "Куда")}`
     : `${serviceLabel(current.category)}${current.citySlug ? ` · ${cityLabel(current.citySlug)}` : ""}`;
+  const includesTransport = (service) => service?.category === LEGACY_GUIDE_WITH_TRANSPORT || service?.details?.transport_included === true;
   const storedServiceTitle = (row) => row.details?.destination_city
     ? `${serviceLabel(row.category)} · ${cityLabel(row.details.origin_city || row.details.city_slug)} → ${cityLabel(row.details.destination_city)}`
     : `${serviceLabel(row.category)}${row.details?.city_slug ? ` · ${cityLabel(row.details.city_slug)}` : ""}`;
+  const duplicateKey = (service) => {
+    const details = service.details || {};
+    const normalize = (value) => String(value || "").trim().toLowerCase();
+    return [
+      normalize(service.category),
+      normalize(details.city_slug),
+      normalize(details.origin_city),
+      normalize(details.destination_city),
+      String(includesTransport(service)),
+      normalize(details.vehicle_model || service.vehicle_model),
+    ].join("\u001f");
+  };
+  const formDuplicateKey = (current) => duplicateKey({
+    category: current.category,
+    details: detailsFrom(current),
+    vehicle_model: current.vehicleModel,
+  });
 
   const categoryGroups = useMemo(() => {
     if (providerType === "transport") return TRANSPORT_SERVICE_GROUPS;
@@ -109,7 +141,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     return [...GUIDE_SERVICE_GROUPS, ...TRANSPORT_SERVICE_GROUPS];
   }, [providerType]);
   const activeCategoryGroup = categoryGroups.find((group) => group.id === form.catalogGroup)
-    || findServiceGroup(form.category, categoryGroups);
+    || catalogGroup(form.category, categoryGroups);
 
   async function load() {
     if (!pid) return;
@@ -144,7 +176,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       if (!current.originCity || !current.destinationCity) return w("validation_route");
       if (current.originCity === current.destinationCity) return w("validation_different_cities");
     } else if (!current.citySlug) return w("validation_city");
-    if (transportCategory(current.category) && !String(current.vehicleModel || "").trim()) return w("validation_vehicle");
+    if ((transportCategory(current.category) || (guideCategory(current.category) && current.transportIncluded)) && !String(current.vehicleModel || "").trim()) return w("validation_vehicle");
     if (current.pricingMode === "packages" && (number(current.halfDayPrice) <= 0 || number(current.fullDayPrice) <= 0)) return w("validation_package_prices");
     if (current.pricingMode !== "packages" && number(current.price) <= 0) return current.pricingMode === "hourly" ? w("validation_hourly_price") : w("validation_price");
     return "";
@@ -157,9 +189,9 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       : String(current.citySlug || "").trim() || null,
     origin_city: INTERCITY_CATEGORIES.has(current.category) ? String(current.originCity || "").trim() || null : null,
     destination_city: INTERCITY_CATEGORIES.has(current.category) ? String(current.destinationCity || "").trim() || null : null,
-    ...(transportCategory(current.category)
-      ? { seats: Math.max(1, number(current.seats) || 1), vehicle_model: String(current.vehicleModel || "" ).trim(), max_guests: null }
-      : { seats: null, vehicle_model: null, max_guests: number(current.seats) > 0 ? number(current.seats) : null }),
+    ...(transportCategory(current.category) || (guideCategory(current.category) && current.transportIncluded)
+      ? { seats: Math.max(1, number(current.seats) || 1), vehicle_model: String(current.vehicleModel || "" ).trim(), max_guests: null, transport_included: Boolean(guideCategory(current.category) && current.transportIncluded) }
+      : { seats: null, vehicle_model: null, max_guests: number(current.seats) > 0 ? number(current.seats) : null, transport_included: false }),
     pricing_mode: current.pricingMode,
     minimum_hours: Math.max(1, number(current.minimumHours) || 1),
     ...(current.pricingMode === "packages" ? {
@@ -174,20 +206,14 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   async function addService() {
     const error = validate(form);
     if (error) return tError(error);
-    const duplicate = rows.some((row) => {
-      const details = row.details || {};
-      return row.category === form.category
-        && String(details.city_slug || "") === String(isIntercity ? form.originCity : form.citySlug)
-        && String(details.destination_city || "") === String(isIntercity ? form.destinationCity : "")
-        && String(details.vehicle_model || row.vehicle_model || "") === String(form.vehicleModel || "");
-    });
+    const duplicate = rows.some((row) => duplicateKey(row) === formDuplicateKey(form));
     if (duplicate) return tError(w("duplicate"));
     setSaving(true);
     try {
       const created = await fetchJSON(`/api/providers/${pid}/services`, {
         method: "POST",
         body: JSON.stringify({
-          category: form.category,
+          category: form.category === LEGACY_GUIDE_WITH_TRANSPORT ? "city_tour_guide" : form.category,
           title: serviceTitle(form),
           price: form.pricingMode === "packages" ? number(form.halfDayPrice) : number(form.price),
           currency: "UZS",
@@ -217,17 +243,18 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
   function beginEdit(row) {
     const details = row.details || {};
-    const group = findServiceGroup(row.category, categoryGroups);
+    const group = catalogGroup(row.category, categoryGroups);
     setEditingId(row.id);
     setDraft({
       catalogGroup: group?.id || "",
-      category: row.category,
+      category: catalogCategory(row.category),
       title: row.title || "",
       citySlug: details.city_slug || "",
       originCity: details.origin_city || details.city_slug || "",
       destinationCity: details.destination_city || "",
       seats: details.seats || "",
       vehicleModel: details.vehicle_model || "",
+      transportIncluded: includesTransport(row),
       pricingMode: details.pricing_mode || "fixed",
       price: row.price || "",
       minimumHours: details.minimum_hours || "2",
@@ -242,16 +269,20 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   async function saveEdit(row) {
     const error = validate(draft);
     if (error) return tError(error);
+    const duplicate = rows.some(
+      (item) => item.id !== row.id && duplicateKey(item) === formDuplicateKey(draft)
+    );
+    if (duplicate) return tError(w("duplicate"));
     setSaving(true);
     try {
       await patchService(row.id, {
-        category: draft.category,
+        category: draft.category === LEGACY_GUIDE_WITH_TRANSPORT ? "city_tour_guide" : draft.category,
         title: INTERCITY_CATEGORIES.has(draft.category)
           ? `${serviceLabel(draft.category)} · ${draft.originCity} → ${draft.destinationCity}`
           : `${serviceLabel(draft.category)} · ${draft.citySlug}`,
         price: draft.pricingMode === "packages" ? number(draft.halfDayPrice) : number(draft.price),
         details: detailsFrom(draft, row.details || {}),
-        vehicle_model: transportCategory(draft.category) ? String(draft.vehicleModel || "").trim() : null,
+        vehicle_model: (transportCategory(draft.category) || (guideCategory(draft.category) && draft.transportIncluded)) ? String(draft.vehicleModel || "").trim() : null,
       });
       setEditingId(null);
       setDraft(null);
@@ -262,25 +293,55 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   }
 
   async function removeService(row) {
-    if (!confirm(w("delete_confirm", { service: storedServiceTitle(row) }))) return;
+    setDeletingId(row.id);
     try {
       await fetchJSON(`/api/providers/${pid}/services/${row.id}`, { method: "DELETE" });
       setRows((current) => current.filter((item) => item.id !== row.id));
+      if (editingId === row.id) {
+        setEditingId(null);
+        setDraft(null);
+      }
+      setPendingDelete(null);
       tSuccess(w("deleted"));
     } catch (error) {
       tError(w("delete_error", { error: error.message }));
+    } finally {
+      setDeletingId(null);
     }
   }
 
+  const availableCategoryGroups = useMemo(() => categoryGroups
+    .map((group) => ({
+      ...group,
+      count: rows.filter((row) => group.services.some((service) => service.id === catalogCategory(row.category))).length,
+    }))
+    .filter((group) => group.count > 0), [categoryGroups, rows]);
+  const availableCities = useMemo(() => Array.from(new Set(rows.flatMap((row) => [
+    row.details?.city_slug,
+    row.details?.origin_city,
+    row.details?.destination_city,
+  ]).filter(Boolean))).sort((a, b) => cityLabel(a).localeCompare(cityLabel(b))), [rows]);
+  const hasFilters = Boolean(query.trim()) || categoryFilter !== "all" || cityFilter !== "all" || statusFilter !== "all";
+  const clearFilters = () => {
+    setQuery("");
+    setCategoryFilter("all");
+    setCityFilter("all");
+    setStatusFilter("all");
+  };
+
   const filtered = useMemo(() => rows.filter((row) => {
-    const text = `${row.title || ""} ${serviceLabel(row.category)}`.toLowerCase();
-    const matchesText = text.includes(query.toLowerCase());
+    const rowCities = [row.details?.city_slug, row.details?.origin_city, row.details?.destination_city].filter(Boolean);
+    const text = `${row.title || ""} ${serviceLabel(row.category)} ${rowCities.map(cityLabel).join(" ")} ${row.details?.vehicle_model || ""}`.toLowerCase();
+    const matchesText = text.includes(query.trim().toLowerCase());
+    const matchesCategory = categoryFilter === "all"
+      || catalogGroup(row.category, categoryGroups)?.id === categoryFilter;
+    const matchesCity = cityFilter === "all" || rowCities.includes(cityFilter);
     const matchesStatus = statusFilter === "all" || (statusFilter === "active" ? row.is_active : !row.is_active);
-    return matchesText && matchesStatus;
-  }), [rows, query, statusFilter]);
+    return matchesText && matchesCategory && matchesCity && matchesStatus;
+  }), [rows, query, categoryFilter, cityFilter, statusFilter, categoryGroups]);
 
   return (
-    <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
+    <div className="rounded-lg border border-slate-200 bg-white">
       <header className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 px-5 py-4">
         <div>
           <h2 className="text-lg font-bold text-slate-950">{w("catalog_title")}</h2>
@@ -316,7 +377,16 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                   <CitySelect label={w("to")} value={form.destinationCity} cities={cities.filter((city) => city !== form.originCity)} onChange={(value) => setField("destinationCity", value)} placeholder={w("choose_city")} />
                 </> : <CitySelect label={w("service_city")} value={form.citySlug} cities={cities} onChange={(value) => setField("citySlug", value)} placeholder={w("choose_city")} />}
               </div>
-              {isTransport && <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-3">
+              {isGuideService && <TransportMode
+                value={form.transportIncluded}
+                labels={{ title: f("service_format"), guide: f("guide_only"), guideHint: f("guide_only_hint"), transport: f("guide_with_transport"), transportHint: f("guide_with_transport_hint") }}
+                onChange={(transportIncluded) => setForm((current) => ({
+                  ...current,
+                  transportIncluded,
+                  ...(!transportIncluded ? { vehicleModel: "", seats: "" } : {}),
+                }))}
+              />}
+              {usesVehicle && <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-3">
                 {fleet.length > 0 ? <SelectField label={w("profile_vehicle")} value="" onChange={applyVehicle} options={fleet.map((car, index) => ({ value: String(car.id ?? index), label: `${car.model || w("vehicle")} · ${w("seats_count", { count: car.seats || "?" })}` }))} placeholder={w("choose_vehicle")} /> : <div className="md:col-span-3 text-sm text-amber-700">{w("add_vehicle")}</div>}
                 <ReadOnlyValue label={w("model")} value={form.vehicleModel || w("not_selected")} />
                 <ReadOnlyValue label={w("capacity")} value={form.seats ? w("seats_count", { count: form.seats }) : "—"} />
@@ -333,7 +403,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
             </FormStep>
           </div>
 
-          <aside className="overflow-hidden rounded-lg bg-slate-950 text-white xl:sticky xl:top-4">
+          <aside className="overflow-hidden rounded-lg bg-slate-950 text-white xl:sticky xl:top-20 xl:z-10 xl:self-start">
             <div className="border-b border-white/10 px-5 py-4"><div className="text-xs font-bold uppercase text-orange-400">{w("preview")}</div><div className="mt-1 text-xs text-slate-400">{w("preview_hint")}</div></div>
             <div className="px-5 py-5"><div className="text-lg font-bold leading-snug">{serviceTitle(form)}</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-300"><MapPin size={16} />{isIntercity ? `${cityLabel(form.originCity) || w("from")} → ${cityLabel(form.destinationCity) || w("to")}` : cityLabel(form.citySlug) || w("location_not_selected")}</div><div className="mt-6 border-t border-white/10 pt-4"><div className="text-xs uppercase text-slate-400">{w("example_calculation")}</div><div className="mt-1 text-sm text-slate-300">{preview.duration} · {preview.rule}</div><div className="mt-2 text-2xl font-bold">{money(preview.total)} <span className="text-base font-semibold text-slate-300">UZS</span></div></div></div>
             <div className="px-5 pb-5"><button type="button" onClick={addService} disabled={saving || !cities.length} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-5 font-bold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={19} />{saving ? w("saving") : w("add_rate")}</button></div>
@@ -342,25 +412,54 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       </section>
 
       <section className="px-5 py-5">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div><h3 className="font-bold text-slate-950">{w("my_services")}</h3><p className="text-sm text-slate-500">{w("services_enabled", { total: rows.length, active: rows.filter((row) => row.is_active).length })}</p></div>
-          <div className="flex flex-wrap gap-2"><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={w("search_service")} className="h-10 min-w-56 rounded-md border border-slate-300 px-3 text-sm" /><select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)} className="h-10 rounded-md border border-slate-300 bg-white px-3 text-sm"><option value="all">{w("all")}</option><option value="active">{w("enabled_plural")}</option><option value="inactive">{w("disabled_plural")}</option></select></div>
+        <div>
+          <h3 className="font-bold text-slate-950">{w("my_services")}</h3>
+          <p className="text-sm text-slate-500">{w("services_enabled", { total: rows.length, active: rows.filter((row) => row.is_active).length })}</p>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-[minmax(240px,1fr)_minmax(180px,0.7fr)_minmax(160px,0.55fr)_minmax(150px,0.5fr)_auto]">
+            <label className="relative block">
+              <span className="sr-only">{w("search_service")}</span>
+              <Search size={17} aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+              <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={w("search_service")} className="h-11 w-full rounded-md border border-slate-300 bg-white pl-10 pr-3 text-sm outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200" />
+            </label>
+            <FilterSelect label={f("filter_category")} value={categoryFilter} onChange={setCategoryFilter}>
+              <option value="all">{f("all_categories")}</option>
+              {availableCategoryGroups.map((group) => <option key={group.id} value={group.id}>{groupLabel(group)} ({group.count})</option>)}
+            </FilterSelect>
+            <FilterSelect label={f("filter_city")} value={cityFilter} onChange={setCityFilter}>
+              <option value="all">{f("all_cities")}</option>
+              {availableCities.map((city) => <option key={city} value={city}>{cityLabel(city)}</option>)}
+            </FilterSelect>
+            <FilterSelect label={f("filter_status")} value={statusFilter} onChange={setStatusFilter}>
+              <option value="all">{f("all_statuses")}</option>
+              <option value="active">{w("enabled_plural")}</option>
+              <option value="inactive">{w("disabled_plural")}</option>
+            </FilterSelect>
+            <button type="button" onClick={clearFilters} disabled={!hasFilters} className="flex h-11 items-center justify-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-600 hover:bg-slate-100 disabled:cursor-default disabled:opacity-40" title={f("reset_filters")}><X size={17} aria-hidden="true" />{f("reset")}</button>
+          </div>
+          <div className="mt-2 flex min-h-5 items-center justify-between gap-3 text-xs text-slate-500">
+            <span>{f("results_count", { count: filtered.length })}</span>
+            {hasFilters && filtered.length !== rows.length && <span>{f("filtered_from", { total: rows.length })}</span>}
+          </div>
         </div>
 
         <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
-          {loading ? <div className="py-8 text-center text-slate-500">{w("loading")}</div> : filtered.length === 0 ? <div className="py-8 text-center text-slate-500">{w("services_not_found")}</div> : filtered.map((row) => {
+          {loading ? <div className="py-8 text-center text-slate-500">{w("loading")}</div> : filtered.length === 0 ? <div className="flex flex-col items-center py-10 text-center"><Search size={24} className="mb-2 text-slate-300" aria-hidden="true" /><div className="font-semibold text-slate-700">{w("services_not_found")}</div><div className="mt-1 text-sm text-slate-500">{f("try_other_filters")}</div>{hasFilters && <button type="button" onClick={clearFilters} className="mt-3 text-sm font-semibold text-orange-600 hover:text-orange-700">{f("reset_filters")}</button>}</div> : filtered.map((row) => {
             const expanded = editingId === row.id;
             const draftCategoryGroup = expanded && draft
-              ? categoryGroups.find((group) => group.id === draft.catalogGroup) || findServiceGroup(draft.category, categoryGroups)
+              ? categoryGroups.find((group) => group.id === draft.catalogGroup) || catalogGroup(draft.category, categoryGroups)
               : null;
-            const draftIsTransport = Boolean(expanded && draft && transportCategory(draft.category));
+            const draftIsGuide = Boolean(expanded && draft && guideCategory(draft.category));
+            const draftUsesVehicle = Boolean(expanded && draft && (transportCategory(draft.category) || (draftIsGuide && draft.transportIncluded)));
             const draftIsIntercity = Boolean(expanded && draft && INTERCITY_CATEGORIES.has(draft.category));
             return <div key={row.id} className="py-4">
               <div className="grid items-center gap-4 md:grid-cols-[minmax(240px,1.5fr)_minmax(220px,1fr)_120px_auto]">
-                <div><div className="font-semibold text-slate-950">{storedServiceTitle(row)}</div><div className="mt-1 text-sm text-slate-500">{serviceLabel(row.category)}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${w("seats_count", { count: row.details.seats })}` : ""}</div></div>
+                <div><div className="font-semibold text-slate-950">{storedServiceTitle(row)}</div><div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-slate-500"><span>{serviceLabel(row.category)}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${w("seats_count", { count: row.details.seats })}` : ""}</span>{guideCategory(row.category) && <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${includesTransport(row) ? "bg-blue-50 text-blue-700" : "bg-violet-50 text-violet-700"}`}>{includesTransport(row) ? f("transport_included") : f("guide_only")}</span>}</div></div>
                 <div><div className="font-semibold text-slate-900">{pricingLabel(row, w)}</div><div className="text-xs text-slate-500">{w("tour_builder_rate")}</div></div>
                 <div className={`text-sm font-semibold ${row.is_active ? 'text-emerald-700' : 'text-slate-400'}`}>{row.is_active ? w("enabled") : w("disabled")}</div>
-                <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? w("close") : w("edit")}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? w("disable") : w("enable")}</button></div>
+                <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? w("close") : w("edit")}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? w("disable") : w("enable")}</button><button type="button" onClick={() => setPendingDelete(row)} disabled={deletingId === row.id} title={w("delete")} aria-label={w("delete")} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"><Trash2 size={16} aria-hidden="true" /></button></div>
               </div>
               {expanded && draft && (
                 <div className="mt-4 border-l-4 border-slate-400 bg-slate-50 p-4">
@@ -396,7 +495,14 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                     </> : <CitySelect compact label={w("service_city")} value={draft.citySlug} cities={cities} onChange={(value) => setDraft({ ...draft, citySlug: value })} placeholder={w("choose_city")} />}
                   </div>
 
-                  {draftIsTransport && (
+                  {draftIsGuide && <TransportMode
+                    compact
+                    value={draft.transportIncluded}
+                    labels={{ title: f("service_format"), guide: f("guide_only"), guideHint: f("guide_only_hint"), transport: f("guide_with_transport"), transportHint: f("guide_with_transport_hint") }}
+                    onChange={(transportIncluded) => setDraft({ ...draft, transportIncluded, ...(!transportIncluded ? { vehicleModel: "", seats: "" } : {}) })}
+                  />}
+
+                  {draftUsesVehicle && (
                     <div className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 md:grid-cols-3">
                       {fleet.length > 0 && <label className="text-xs font-semibold text-slate-600">{w("profile_vehicle")}
                         <select defaultValue="" onChange={(event) => {
@@ -428,7 +534,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                     {draft.pricingMode === "packages" && <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={draft.halfDayHours} onChange={(value) => setDraft({ ...draft, halfDayHours: value })} /><MoneyField label={w("half_day_price")} value={draft.halfDayPrice} onChange={(value) => setDraft({ ...draft, halfDayPrice: value })} /><NumberField label={w("full_day_hours")} value={draft.fullDayHours} onChange={(value) => setDraft({ ...draft, fullDayHours: value })} /><MoneyField label={w("full_day_price")} value={draft.fullDayPrice} onChange={(value) => setDraft({ ...draft, fullDayPrice: value })} /><MoneyField label={w("extra_hour")} value={draft.extraHourPrice} onChange={(value) => setDraft({ ...draft, extraHourPrice: value })} /></div>}
                   </div>
                   <div className="mt-5 flex justify-between gap-3 border-t border-slate-200 pt-4">
-                    <button type="button" onClick={() => removeService(row)} className="h-10 rounded-md border border-rose-200 px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50">{w("delete")}</button>
+                    <button type="button" onClick={() => setPendingDelete(row)} className="h-10 rounded-md border border-rose-200 px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50">{w("delete")}</button>
                     <button type="button" onClick={() => saveEdit(row)} disabled={saving} className="h-10 rounded-md bg-slate-950 px-5 text-sm font-semibold text-white disabled:opacity-50">{w("save_changes")}</button>
                   </div>
                 </div>
@@ -437,6 +543,21 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
           })}
         </div>
       </section>
+
+      <ConfirmModal
+        open={Boolean(pendingDelete)}
+        title={w("delete")}
+        message={pendingDelete ? w("delete_confirm", { service: storedServiceTitle(pendingDelete) }) : ""}
+        confirmLabel={w("delete")}
+        cancelLabel={t("actions.cancel", { defaultValue: "Отмена" })}
+        busyLabel={`${w("delete")}...`}
+        danger
+        busy={Boolean(pendingDelete && deletingId === pendingDelete.id)}
+        onConfirm={() => pendingDelete && removeService(pendingDelete)}
+        onClose={() => {
+          if (!deletingId) setPendingDelete(null);
+        }}
+      />
 
     </div>
   );
@@ -456,6 +577,28 @@ function FormStep({ icon: Icon, number, title, description, stepLabel, children 
 }
 function SelectField({ label, value, onChange, options, placeholder, disabled = false }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-100 disabled:text-slate-400"><option value="">{placeholder}</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;
+}
+function FilterSelect({ label, value, onChange, children }) {
+  return <label className="relative block"><span className="sr-only">{label}</span><select aria-label={label} value={value} onChange={(event) => onChange(event.target.value)} className="h-11 w-full rounded-md border border-slate-300 bg-white px-3 text-sm text-slate-800 outline-none focus:border-slate-500 focus:ring-2 focus:ring-slate-200">{children}</select></label>;
+}
+function TransportMode({ value, onChange, labels, compact = false }) {
+  const options = [
+    { value: false, icon: UserRound, title: labels.guide, hint: labels.guideHint },
+    { value: true, icon: CarFront, title: labels.transport, hint: labels.transportHint },
+  ];
+  return <fieldset className={`${compact ? "mt-4" : "mt-5 border-t border-slate-100 pt-4"}`}>
+    <legend className="mb-2 text-xs font-bold uppercase text-slate-500">{labels.title}</legend>
+    <div className="grid gap-2 sm:grid-cols-2">
+      {options.map((option) => {
+        const selected = value === option.value;
+        const Icon = option.icon;
+        return <button key={String(option.value)} type="button" aria-pressed={selected} onClick={() => onChange(option.value)} className={`flex min-h-16 items-center gap-3 rounded-md border px-3 py-2 text-left transition-colors ${selected ? "border-slate-950 bg-slate-950 text-white" : "border-slate-300 bg-white text-slate-800 hover:border-slate-500"}`}>
+          <span className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${selected ? "bg-white/10" : "bg-slate-100 text-slate-700"}`}><Icon size={18} aria-hidden="true" /></span>
+          <span className="min-w-0"><span className="block text-sm font-bold">{option.title}</span><span className={`mt-0.5 block text-xs ${selected ? "text-slate-300" : "text-slate-500"}`}>{option.hint}</span></span>
+        </button>;
+      })}
+    </div>
+  </fieldset>;
 }
 function CitySelect({ label, value, cities, onChange, placeholder, compact = false }) {
   return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={!cities.length} className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-50`}><option value="">{placeholder}</option>{cities.map((city) => <option key={city} value={city}>{cityLabel(city)}</option>)}</select></label>;

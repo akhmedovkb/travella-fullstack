@@ -1,11 +1,10 @@
 // frontend/src/components/ProviderCalendar.jsx
-import React, { useEffect, useMemo, useState } from "react";
-import { DayPicker } from "react-day-picker";
-import "react-day-picker/dist/style.css";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import axios from "axios";
 import { toast } from "react-toastify";
 import { useTranslation } from "react-i18next";
-import { enUS, ru, uz } from "date-fns/locale";
+import { CalendarDays, Check, ChevronLeft, ChevronRight, CircleAlert, LockKeyhole, MessageCircle, Save, UserRound } from "lucide-react";
 
 const CALENDAR_PROVIDER_TYPES = new Set(["guide", "transport"]);
 
@@ -49,6 +48,7 @@ const ProviderCalendar = ({ token }) => {
 
   // подробности по бронированиям: { [ymd]: [{ name, phone, telegram, profileId, profileUrl }] }
   const [bookedDetails, setBookedDetails] = useState({});
+  const [calendarBookings, setCalendarBookings] = useState([]);
 
   // тип провайдера: guide / transport / ...
   const [providerType, setProviderType] = useState("");
@@ -56,8 +56,16 @@ const ProviderCalendar = ({ token }) => {
   const [calendarLoading, setCalendarLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
-  // для tooltip
-  const [hoveredYmd, setHoveredYmd] = useState(null);
+  const [activeYmd, setActiveYmd] = useState("");
+  const [visibleMonth, setVisibleMonth] = useState(() => {
+    const today = new Date();
+    return new Date(today.getFullYear(), today.getMonth(), 1);
+  });
+  const [timelineMonth, setTimelineMonth] = useState(visibleMonth);
+  const [bookingPreview, setBookingPreview] = useState(null);
+  const timelineRef = useRef(null);
+  const previewCloseTimerRef = useRef(null);
+  const dragSelectionRef = useRef({ active: false, mode: "add", touched: new Set() });
 
   const cfg = useMemo(() => {
     const stored =
@@ -147,6 +155,7 @@ const ProviderCalendar = ({ token }) => {
         setManualInitial(blockedArr);
         setBooked(bookedArr);
         setBookedDetails(detailsMap);
+        setCalendarBookings(Array.isArray(data?.bookings) ? data.bookings : []);
 
         if (!Object.keys(detailsMap).length) {
           try {
@@ -198,51 +207,12 @@ const ProviderCalendar = ({ token }) => {
     return () => { cancelled = true; };
   }, [calendarEnabled, cfg, profileResolved, t]);
 
-  // преобразования дат
-  const manualAsDates = useMemo(() => manual.map(ymdToLocalDate).filter(Boolean), [manual]);
-  const bookedAsDates = useMemo(() => booked.map(ymdToLocalDate).filter(Boolean), [booked]);
-
-  // разрез: сохранённые вручную / новые несохранённые
   const manualSavedYmd = useMemo(
     () => manual.filter((d) => manualInitial.includes(d)),
     [manual, manualInitial]
   );
-  const manualNewYmd = useMemo(
-    () => manual.filter((d) => !manualInitial.includes(d)),
-    [manual, manualInitial]
-  );
-  const manualSavedAsDates = useMemo(
-    () => manualSavedYmd.map(ymdToLocalDate).filter(Boolean),
-    [manualSavedYmd]
-  );
-  const manualNewAsDates = useMemo(
-    () => manualNewYmd.map(ymdToLocalDate).filter(Boolean),
-    [manualNewYmd]
-  );
-
-  // локаль и первый день недели
-  const dpLocale = useMemo(() => {
-    const lang = (i18n.language || "en").split("-")[0];
-    if (lang === "ru") return ru;
-    if (lang === "uz") return uz;
-    return enUS;
-  }, [i18n.language]);
-
-  const weekStartsOn = useMemo(() => {
-    const lang = (i18n.language || "en").split("-")[0];
-    return lang === "ru" || lang === "uz" ? 1 : 0;
-  }, [i18n.language]);
 
   const startOfToday = useMemo(() => getStartOfToday(), []);
-  const pastMatcher = useMemo(() => ({ before: startOfToday }), [startOfToday]);
-
-  // контролируемый выбор
-  const handleSelect = (dates) => {
-    const arr = Array.isArray(dates) ? dates : dates ? [dates] : [];
-    const ymds = arr.map(toYMD).filter(Boolean);
-    const filtered = ymds.filter((d) => !booked.includes(d)); // нельзя выбирать системно занятые
-    setManual(filtered);
-  };
 
   const handleSave = async () => {
     const final = Array.from(new Set(manual)).sort();
@@ -263,220 +233,398 @@ const ProviderCalendar = ({ token }) => {
     }
   };
 
-  // только прошлые запрещаем (booked НЕ дизейблим, чтобы работал hover)
-  const disabledMatchers = useMemo(() => [pastMatcher], [pastMatcher]);
-
-  // показывать подсказку только гиду/транспортнику
-  const isGuideOrTransport = useMemo(() => {
-    const tp = (providerType || "").toLowerCase();
-    return tp === "guide" || tp === "transport";
-  }, [providerType]);
-
   const hasChanges = useMemo(() => {
     const current = [...new Set(manual)].sort().join(",");
     const saved = [...new Set(manualInitial)].sort().join(",");
     return current !== saved;
   }, [manual, manualInitial]);
 
-  const typeLabel = String(providerType || "").toLowerCase() === "guide" ? "Гид" : "Транспорт";
+  const changedDatesCount = useMemo(() => {
+    const allDates = new Set([...manual, ...manualInitial]);
+    return [...allDates].filter((date) => manual.includes(date) !== manualInitial.includes(date)).length;
+  }, [manual, manualInitial]);
+  const datesToCloseCount = useMemo(
+    () => manual.filter((date) => !manualInitial.includes(date)).length,
+    [manual, manualInitial]
+  );
+  const datesToOpenCount = useMemo(
+    () => manualInitial.filter((date) => !manual.includes(date)).length,
+    [manual, manualInitial]
+  );
+  const saveActionKey = datesToOpenCount && !datesToCloseCount
+    ? "calendar.save_open_dates"
+    : datesToCloseCount && !datesToOpenCount
+      ? "calendar.save_blocked_dates"
+      : "calendar.save_changes";
+  const pendingChangesKey = datesToOpenCount && !datesToCloseCount
+    ? "calendar.unsaved_open_changes"
+    : datesToCloseCount && !datesToOpenCount
+      ? "calendar.unsaved_close_changes"
+      : "calendar.unsaved_mixed_changes";
 
-  // Кастомный контент ячейки дня с tooltip
-    const DayCell = (dayProps) => {
-    const dateYmd = toYMD(dayProps.date);
-    const infoList = bookedDetails[dateYmd] || [];
-    const isBookedDay = booked.includes(dateYmd);
-    const showTooltip = isGuideOrTransport && isBookedDay && hoveredYmd === dateYmd;
+  const activeDate = activeYmd ? ymdToLocalDate(activeYmd) : null;
+  const activeBookedDetails = activeYmd ? bookedDetails[activeYmd] || [] : [];
+  const normalizedBookings = useMemo(() => calendarBookings.map((booking) => ({
+    ...booking,
+    dates: (Array.isArray(booking?.dates) ? booking.dates : []).map(toYMD).filter(Boolean),
+  })), [calendarBookings]);
+  const bookingByDate = useMemo(() => {
+    const map = {};
+    normalizedBookings.forEach((booking) => booking.dates.forEach((date) => { if (!map[date]) map[date] = booking; }));
+    return map;
+  }, [normalizedBookings]);
+  const activeBooking = activeYmd ? bookingByDate[activeYmd] || null : null;
+  const activeIsBooked = activeYmd ? booked.includes(activeYmd) : false;
+  const activeIsManual = activeYmd ? manual.includes(activeYmd) : false;
+  const activeIsChanged = activeYmd ? manual.includes(activeYmd) !== manualInitial.includes(activeYmd) : false;
+  const activeIsPast = activeDate ? activeDate < startOfToday : false;
+  const activeDateLabel = activeDate
+    ? new Intl.DateTimeFormat(i18n.language || "en", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(activeDate)
+    : "";
 
-    const dayNum = dayProps.date.getDate();
-
-    return (
-      <div className="relative flex items-center justify-center w-full h-full">
-        <span>{dayNum}</span>
-
-        {showTooltip && (
-          <div
-            role="tooltip"
-            className="absolute z-50 -top-2 left-1/2 -translate-x-1/2 -translate-y-full bg-white border border-gray-200 rounded-lg shadow-xl p-2 w-64 text-xs text-gray-800"
-            onMouseEnter={() => setHoveredYmd(dateYmd)}
-            onMouseLeave={() => setHoveredYmd(null)}
-          >
-            <div className="max-h-48 overflow-auto space-y-2">
-              {infoList.length ? (
-                infoList.map((it, idx) => {
-                  const profileHref =
-                    it?.profileUrl ||
-                    (it?.profileId ? `/profile/${it.profileId}` : null);
-                  const name =
-                    it?.name ||
-                    t("calendar.unknown_name", { defaultValue: "Noma'lum foydalanuvchi" });
-
-                  return (
-                    <div key={idx} className="border-b last:border-b-0 pb-2 last:pb-0">
-                      <div className="font-semibold truncate">
-                        {profileHref ? (
-                          <a href={profileHref} target="_blank" rel="noreferrer" className="text-blue-600 hover:underline">
-                            {name}
-                          </a>
-                        ) : (
-                          <span>{name}</span>
-                        )}
-                      </div>
-
-                      {it?.phone && (
-                        <div className="mt-1">
-                          {t("calendar.phone", { defaultValue: "Telefon" })}:{" "}
-                          <a href={`tel:${it.phone}`} className="text-blue-600 hover:underline">
-                            {it.phone}
-                          </a>
-                        </div>
-                      )}
-
-                      {it?.telegram && (
-                        <div className="mt-1">
-                          Telegram:{" "}
-                          <a
-                            href={`https://t.me/${String(it.telegram).replace(/^@/, "")}`}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="text-blue-600 hover:underline"
-                          >
-                            @{String(it.telegram).replace(/^@/, "")}
-                          </a>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })
-              ) : (
-                <div className="text-gray-600">
-                  {t("calendar.booked", { defaultValue: "Забронировано" })}
-                </div>
-              )}
-            </div>
-            <div className="absolute bottom-[-6px] left-1/2 -translate-x-1/2 w-3 h-3 rotate-45 bg-white border-r border-b border-gray-200" />
-          </div>
-        )}
-      </div>
-    );
+  const toggleActiveDate = () => {
+    if (!activeYmd || activeIsBooked || activeIsPast) return;
+    setManual((current) => current.includes(activeYmd) ? current.filter((date) => date !== activeYmd) : [...current, activeYmd]);
   };
 
+  const typeLabel = String(providerType || "").toLowerCase() === "guide"
+    ? t("calendar.provider_guide")
+    : t("calendar.provider_transport");
+
+  const monthDays = useMemo(() => {
+    const start = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() - 1, 1);
+    const end = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 13, 0);
+    const days = [];
+    for (const day = new Date(start); day <= end; day.setDate(day.getDate() + 1)) days.push(new Date(day));
+    return days;
+  }, [visibleMonth]);
+  const monthInputValue = `${timelineMonth.getFullYear()}-${String(timelineMonth.getMonth() + 1).padStart(2, "0")}`;
+  const monthTitle = new Intl.DateTimeFormat(i18n.language || "en", { month: "long", year: "numeric" }).format(timelineMonth);
+
+  const jumpToMonth = (month) => {
+    const target = new Date(month.getFullYear(), month.getMonth(), 1);
+    setTimelineMonth(target);
+    setVisibleMonth(target);
+  };
+  const moveMonth = (delta) => jumpToMonth(new Date(timelineMonth.getFullYear(), timelineMonth.getMonth() + delta, 1));
+  const goToday = () => {
+    const today = getStartOfToday();
+    jumpToMonth(new Date(today.getFullYear(), today.getMonth(), 1));
+    setActiveYmd(toYMD(today));
+  };
+
+  const openBookingPreview = (event, booking) => {
+    if (previewCloseTimerRef.current) window.clearTimeout(previewCloseTimerRef.current);
+    const rect = event.currentTarget.getBoundingClientRect();
+    setBookingPreview({ booking, left: Math.min(rect.left, window.innerWidth - 300), top: rect.bottom + 8 });
+  };
+  const scheduleBookingPreviewClose = () => {
+    previewCloseTimerRef.current = window.setTimeout(() => setBookingPreview(null), 140);
+  };
+  const keepBookingPreviewOpen = () => {
+    if (previewCloseTimerRef.current) window.clearTimeout(previewCloseTimerRef.current);
+  };
+  const updateTimelineDate = (dateYmd, mode) => {
+    setActiveYmd(dateYmd);
+    const date = ymdToLocalDate(dateYmd);
+    if (!date || date < startOfToday || booked.includes(dateYmd)) return;
+    setManual((current) => {
+      if (mode === "add") return current.includes(dateYmd) ? current : [...current, dateYmd];
+      return current.filter((item) => item !== dateYmd);
+    });
+  };
+
+  const startTimelineDrag = (event, dateYmd) => {
+    if (event.button !== 0) return;
+    const date = ymdToLocalDate(dateYmd);
+    if (!date || date < startOfToday || booked.includes(dateYmd)) {
+      setActiveYmd(dateYmd);
+      return;
+    }
+    event.preventDefault();
+    const mode = manual.includes(dateYmd) ? "remove" : "add";
+    dragSelectionRef.current = { active: true, mode, touched: new Set([dateYmd]) };
+    updateTimelineDate(dateYmd, mode);
+  };
+
+  const continueTimelineDrag = (dateYmd) => {
+    const drag = dragSelectionRef.current;
+    if (!drag.active || drag.touched.has(dateYmd)) return;
+    drag.touched.add(dateYmd);
+    updateTimelineDate(dateYmd, drag.mode);
+  };
+
+  useEffect(() => {
+    const stopDrag = () => { dragSelectionRef.current.active = false; };
+    window.addEventListener("pointerup", stopDrag);
+    window.addEventListener("pointercancel", stopDrag);
+    return () => {
+      window.removeEventListener("pointerup", stopDrag);
+      window.removeEventListener("pointercancel", stopDrag);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (calendarLoading || !timelineRef.current || !monthDays.length) return undefined;
+    const frame = window.requestAnimationFrame(() => {
+      const viewport = timelineRef.current;
+      if (!viewport) return;
+      const dayWidth = 56;
+      const today = getStartOfToday();
+      const targetYmd = visibleMonth.getFullYear() === today.getFullYear() && visibleMonth.getMonth() === today.getMonth()
+        ? toYMD(today)
+        : toYMD(new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1));
+      const targetIndex = Math.max(0, monthDays.findIndex((day) => toYMD(day) === targetYmd));
+      const target = targetIndex * dayWidth;
+      viewport.scrollTo({
+        left: Math.max(0, target - (viewport.clientWidth / 2) + (dayWidth / 2)),
+        behavior: "auto",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [calendarLoading, monthDays, visibleMonth]);
+
   if (!profileResolved) {
-    return <div className="mx-auto mt-6 max-w-6xl px-4 py-16 text-center text-sm font-semibold text-slate-500">Загружаем календарь...</div>;
+    return <div className="mx-auto max-w-7xl px-4 py-16 text-center text-sm font-semibold text-slate-500">{t("calendar.loading")}</div>;
   }
 
   if (!calendarEnabled) {
     return (
       <div className="mx-auto mt-6 max-w-4xl border border-slate-200 bg-white px-6 py-12 text-center shadow-sm">
-        <div className="text-xs font-black uppercase text-orange-600">Календарь занятости</div>
-        <h1 className="mt-3 text-2xl font-black text-slate-950">Этот раздел доступен гидам и транспортникам</h1>
+        <div className="text-xs font-black uppercase text-orange-600">{t("calendar.blocking_title")}</div>
+        <h1 className="mt-3 text-2xl font-black text-slate-950">{t("calendar.unavailable_title")}</h1>
         <p className="mx-auto mt-3 max-w-2xl text-sm leading-6 text-slate-600">
-          Отели управляют остатками и stop-sale внутри «Мои отели», а турагенты работают с созданными бронированиями в разделе «Активность».
+          {t("calendar.unavailable_description")}
         </p>
       </div>
     );
   }
 
   return (
-    <main className="mx-auto mt-6 max-w-6xl px-3 pb-10 sm:px-5">
-      <section className="overflow-visible border border-slate-200 bg-white shadow-sm">
-        <header className="border-b border-slate-200 px-5 py-5 sm:px-7">
-          <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <>
+    <main className="mx-auto max-w-7xl px-3 py-4 sm:px-6 sm:py-6">
+      <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
+        <header className="px-5 py-5 sm:px-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
-              <div className="text-xs font-black uppercase text-orange-600">{typeLabel} · доступность</div>
-              <h1 className="mt-1 text-2xl font-black text-slate-950">Календарь занятости</h1>
-              <p className="mt-1 text-sm text-slate-600">Отметьте дни, когда вы не принимаете новые заказы. Дни с бронями изменять нельзя.</p>
+              <div className="flex items-center gap-2 text-[11px] font-black uppercase text-orange-600"><CalendarDays size={15} />{typeLabel} · {t("calendar.availability")}</div>
+              <h1 className="mt-1.5 text-2xl font-black text-slate-950">{t("calendar.blocking_title")}</h1>
+              <p className="mt-1 max-w-2xl text-sm leading-5 text-slate-500">{t("calendar.workspace_description")}</p>
             </div>
-            <div className="grid grid-cols-3 gap-px overflow-hidden border border-slate-200 bg-slate-200 text-center">
-              <div className="bg-white px-4 py-2"><div className="text-xl font-black text-slate-950">{booked.length}</div><div className="text-xs font-bold text-slate-500">по броням</div></div>
-              <div className="bg-white px-4 py-2"><div className="text-xl font-black text-sky-600">{manualSavedYmd.length}</div><div className="text-xs font-bold text-slate-500">закрыто вами</div></div>
-              <div className="bg-white px-4 py-2"><div className="text-xl font-black text-orange-600">{manualNewYmd.length}</div><div className="text-xs font-bold text-slate-500">новых</div></div>
+            <div className="grid grid-cols-3 gap-1 rounded-lg bg-slate-100 p-1">
+              <div className="min-w-0 rounded-md bg-white px-3 py-2 sm:min-w-28"><div className="text-base font-black text-emerald-700">{booked.length}</div><div className="truncate text-[10px] font-bold uppercase text-slate-400">{t("calendar.by_bookings")}</div></div>
+              <div className="min-w-0 rounded-md bg-white px-3 py-2 sm:min-w-28"><div className="text-base font-black text-slate-700">{manualSavedYmd.length}</div><div className="truncate text-[10px] font-bold uppercase text-slate-400">{t("calendar.closed_by_you")}</div></div>
+              <div className="min-w-0 rounded-md bg-white px-3 py-2 sm:min-w-28"><div className="text-base font-black text-orange-700">{changedDatesCount}</div><div className="truncate text-[10px] font-bold uppercase text-slate-400">{t("calendar.unsaved")}</div></div>
             </div>
           </div>
         </header>
 
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-2 border-b border-slate-200 px-5 py-3 text-xs font-bold text-slate-600 sm:px-7">
-          <span className="flex items-center gap-2"><span className="h-3 w-3 bg-slate-300" /> Бронь</span>
-          <span className="flex items-center gap-2"><span className="h-3 w-3 bg-sky-500" /> Закрыто вами</span>
-          <span className="flex items-center gap-2"><span className="h-3 w-3 bg-orange-500" /> Не сохранено</span>
-          <span className="ml-auto text-slate-400">Нажмите дату, чтобы закрыть или открыть её</span>
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-y border-slate-200 bg-slate-50/70 px-5 py-2.5 text-xs font-bold text-slate-600 sm:px-6">
+          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-emerald-600" />{t("calendar.booked")}</span>
+          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-slate-700" />{t("calendar.closed_by_you")}</span>
+          <span className="flex items-center gap-2"><span className="h-2 w-2 rounded-full bg-orange-600" />{t("calendar.unsaved")}</span>
+          <span className="ml-auto hidden items-center gap-2 text-slate-400 sm:flex"><LockKeyhole size={14} />{t("calendar.click_hint")}</span>
         </div>
 
-      {/* overflow-visible + сброс hover */}
-      <div className="relative overflow-visible px-3 py-5 sm:px-7" onMouseLeave={() => setHoveredYmd(null)}>
-        {calendarLoading ? <div className="py-20 text-center text-sm font-semibold text-slate-500">Загружаем занятость...</div> : (
-        <DayPicker
-            locale={dpLocale}
-            weekStartsOn={weekStartsOn}
-            mode="multiple"
-            selected={manualAsDates}
-            onSelect={handleSelect}
-            disabled={disabledMatchers} // только прошлое запрещаем
-            modifiers={{
-              past: pastMatcher,
-              booked: bookedAsDates,
-              manualSaved: manualSavedAsDates, // сохранённые с бэка
-              manualNew: manualNewAsDates,     // новые, ещё не сохранённые
-            }}
-            /* ВАЖНО: НЕТ stylings для "selected", чтобы не красить всё в оранжевый */
-            modifiersClassNames={{
-              booked: "bg-gray-300 text-white cursor-help",
-              past: "text-gray-400 cursor-not-allowed",
-            }}
-            modifiersStyles={{
-              manualSaved: { backgroundColor: "#0ea5e9", color: "#fff" }, // синие — сохранено
-              manualNew:   { backgroundColor: "#f97316", color: "#fff" }, // оранжевые — черновик
-              booked:      { backgroundColor: "#d1d5db", color: "#fff", opacity: 1 },
-            }}
-            components={{ DayContent: DayCell }}
-            /* Растянуть календарь и зафиксировать сетку таблицы */
-            className="rdp w-full !m-0 text-slate-900"
-            classNames={{
-              months: "w-full",
-              month: "w-full",
-              table: "w-full table-fixed",
-              caption: "relative mb-5 flex h-10 items-center justify-center",
-              caption_label: "text-lg font-black capitalize text-slate-950",
-              nav: "absolute right-0 top-0 flex gap-2",
-              nav_button: "h-9 w-9 border border-slate-200 bg-white text-slate-700 hover:bg-slate-50",
-              head_row: "grid grid-cols-7 border-b border-slate-100",
-              head_cell: "py-3 text-center text-xs font-black uppercase text-slate-400",
-              row: "grid grid-cols-7 border-b border-slate-100 last:border-b-0",
-              cell: "overflow-visible relative h-16 border-r border-slate-100 last:border-r-0 sm:h-20",
-              day: "rdp-day overflow-visible relative h-full w-full flex items-center justify-center text-sm font-bold transition hover:bg-orange-50",
-            }}
-            styles={{
-              months: { width: "100%" },
-              month: { width: "100%" },
-              table: { width: "100%" },
-              cell: { overflow: "visible" },
-              day: { overflow: "visible" },
-            }}
-            onDayMouseEnter={(date) => {
-              const ymd = toYMD(date);
-              if (isGuideOrTransport && (bookedDetails[ymd]?.length || 0) > 0) {
-                setHoveredYmd(ymd);
-              }
-            }}
-          />
-        )}
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_280px]">
+          <div className="relative min-w-0 bg-white">
+            <div className="flex flex-wrap items-center gap-2 border-b border-slate-200 bg-white px-4 py-2.5">
+              <label className="relative flex h-10 min-w-48 cursor-pointer items-center gap-2 rounded-md border border-slate-200 bg-white px-3 text-sm font-black capitalize text-slate-800 transition hover:bg-slate-50 focus-within:border-orange-400">
+                <span className="sr-only">{t("calendar.choose_month")}</span>
+                <CalendarDays size={16} className="text-slate-400" />
+                <span>{monthTitle}</span>
+                <input
+                  type="month"
+                  value={monthInputValue}
+                  onChange={(event) => {
+                    const [year, month] = event.target.value.split("-").map(Number);
+                    if (year && month) jumpToMonth(new Date(year, month - 1, 1));
+                  }}
+                  className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+                />
+              </label>
+              <button type="button" onClick={goToday} className="h-10 rounded-md border border-slate-200 bg-white px-4 text-sm font-black text-slate-700 transition hover:bg-slate-50">{t("calendar.today")}</button>
+              <div className="ml-auto flex items-center gap-1">
+                <button type="button" onClick={() => moveMonth(-1)} aria-label={t("calendar.previous_month")} className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><ChevronLeft size={18} /></button>
+                <button type="button" onClick={() => moveMonth(1)} aria-label={t("calendar.next_month")} className="flex h-10 w-10 items-center justify-center rounded-md border border-slate-200 bg-white text-slate-700 hover:bg-slate-50"><ChevronRight size={18} /></button>
+              </div>
+            </div>
 
-      </div>
+            {calendarLoading ? <div className="bg-white py-24 text-center text-sm font-semibold text-slate-500">{t("calendar.loading_availability")}</div> : (
+              <div className="flex border-b border-slate-200 bg-white">
+                <div className="z-10 w-32 shrink-0 border-r border-slate-200 bg-white sm:w-36">
+                  <div className="flex h-16 items-center border-b border-slate-200 px-3 text-sm font-black capitalize text-slate-900">{monthTitle}</div>
+                  <div className="flex h-24 flex-col justify-center px-3">
+                    <div className="text-sm font-black text-slate-950">{t("calendar.my_availability")}</div>
+                    <div className="mt-1 text-xs leading-4 text-slate-500">{typeLabel}</div>
+                  </div>
+                </div>
 
-        <footer className="flex flex-col gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between sm:px-7">
-          <div className={`text-sm font-bold ${hasChanges ? "text-orange-700" : "text-slate-500"}`}>
-            {hasChanges ? `Есть несохранённые изменения: ${manualNewYmd.length || "изменён список дат"}` : "Все изменения сохранены"}
+                <div
+                  ref={timelineRef}
+                  onScroll={(event) => {
+                    const viewport = event.currentTarget;
+                    const centerIndex = Math.min(monthDays.length - 1, Math.max(0, Math.floor((viewport.scrollLeft + viewport.clientWidth / 2) / 56)));
+                    const centerDate = monthDays[centerIndex];
+                    if (!centerDate) return;
+                    setTimelineMonth((current) => current.getFullYear() === centerDate.getFullYear() && current.getMonth() === centerDate.getMonth()
+                      ? current
+                      : new Date(centerDate.getFullYear(), centerDate.getMonth(), 1));
+                  }}
+                  className="min-w-0 flex-1 overflow-x-auto overscroll-x-contain"
+                  style={{ scrollbarColor: "#cbd5e1 #f8fafc", scrollbarWidth: "thin" }}
+                >
+                  <div className="flex min-w-max">
+                    {monthDays.map((date) => {
+                      const ymd = toYMD(date);
+                      const weekday = new Intl.DateTimeFormat(i18n.language || "en", { weekday: "short" }).format(date);
+                      const weekend = date.getDay() === 0 || date.getDay() === 6;
+                      const isToday = ymd === toYMD(startOfToday);
+                      const isPast = date < startOfToday;
+                      const isManual = manual.includes(ymd);
+                      const isChanged = isManual !== manualInitial.includes(ymd);
+                      const booking = bookingByDate[ymd];
+                      const previous = new Date(date); previous.setDate(date.getDate() - 1);
+                      const next = new Date(date); next.setDate(date.getDate() + 1);
+                      const continuesLeft = booking && bookingByDate[toYMD(previous)]?.id === booking.id;
+                      const continuesRight = booking && bookingByDate[toYMD(next)]?.id === booking.id;
+                      const manualContinuesLeft = isManual && !isChanged && manual.includes(toYMD(previous)) && manualInitial.includes(toYMD(previous));
+                      const manualContinuesRight = isManual && !isChanged && manual.includes(toYMD(next)) && manualInitial.includes(toYMD(next));
+                      const changedContinuesLeft = isManual && isChanged && manual.includes(toYMD(previous)) && !manualInitial.includes(toYMD(previous));
+                      const changedContinuesRight = isManual && isChanged && manual.includes(toYMD(next)) && !manualInitial.includes(toYMD(next));
+                      const selected = activeYmd === ymd;
+                      const startsMonth = date.getDate() === 1;
+                      return (
+                        <div key={ymd} className="w-14 shrink-0 border-r border-slate-200 last:border-r-0">
+                          <button type="button" onClick={() => setActiveYmd(ymd)} className={`flex h-16 w-full flex-col items-center justify-center border-b border-slate-200 transition ${selected ? "bg-orange-50 ring-2 ring-inset ring-orange-500" : weekend ? "bg-slate-50/60 hover:bg-slate-100" : "bg-white hover:bg-slate-50"}`}>
+                            <span className={`max-w-full truncate px-0.5 text-[10px] font-bold uppercase ${startsMonth ? "text-orange-600" : weekend ? "text-rose-500" : "text-slate-400"}`}>{startsMonth ? new Intl.DateTimeFormat(i18n.language || "en", { month: "short" }).format(date) : weekday}</span>
+                            <span className={`mt-1 flex h-8 w-8 items-center justify-center rounded-md text-sm font-black ${isToday ? "bg-slate-950 text-white" : weekend ? "text-rose-600" : "text-slate-900"}`}>{date.getDate()}</span>
+                          </button>
+                          <button
+                            type="button"
+                            onPointerDown={(event) => startTimelineDrag(event, ymd)}
+                            onPointerEnter={() => continueTimelineDrag(ymd)}
+                            disabled={isPast}
+                            className={`relative h-24 w-full touch-none select-none overflow-hidden transition disabled:cursor-not-allowed ${selected ? "ring-2 ring-inset ring-orange-500" : ""} ${isPast ? "bg-slate-50 opacity-45" : isChanged ? "bg-orange-50" : weekend ? "bg-slate-50/60 hover:bg-slate-100" : "bg-white hover:bg-slate-50"}`}
+                          >
+                            {booking ? (
+                              <span
+                                onMouseEnter={(event) => openBookingPreview(event, booking)}
+                                onMouseLeave={scheduleBookingPreviewClose}
+                                onFocus={(event) => openBookingPreview(event, booking)}
+                                onBlur={scheduleBookingPreviewClose}
+                                tabIndex={0}
+                                className={`absolute top-1/2 z-10 flex h-7 -translate-y-1/2 items-center bg-emerald-600 px-2 text-left text-[10px] font-black text-white outline-none hover:bg-emerald-700 focus:ring-2 focus:ring-emerald-300 ${continuesLeft ? "left-0" : "left-1 rounded-l-full"} ${continuesRight ? "right-0" : "right-1 rounded-r-full"}`}
+                              >
+                                {!continuesLeft ? (booking.customer_name || `#${booking.id}`) : ""}
+                              </span>
+                            ) : null}
+                            {isManual && !booking ? (
+                              <span className={`absolute top-1/2 h-7 -translate-y-1/2 ${isChanged ? `bg-orange-600 ${changedContinuesLeft ? "left-0" : "left-1 rounded-l-full"} ${changedContinuesRight ? "right-0" : "right-1 rounded-r-full"}` : `bg-slate-700 ${manualContinuesLeft ? "left-0" : "left-1 rounded-l-full"} ${manualContinuesRight ? "right-0" : "right-1 rounded-r-full"}`}`} />
+                            ) : null}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={!hasChanges || saving}
-            className="h-11 bg-orange-600 px-6 text-sm font-black text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-300"
-          >
-            {saving ? "Сохраняем..." : (t("calendar.save_blocked_dates") || "Сохранить занятые даты")}
+
+          <aside className="border-t border-slate-200 bg-slate-50/70 p-5 lg:border-l lg:border-t-0">
+            {!activeYmd ? (
+              <div className="flex min-h-44 flex-col items-center justify-center text-center lg:min-h-full">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full bg-white text-slate-400 ring-1 ring-slate-200"><CalendarDays size={20} /></div>
+                <div className="mt-3 text-sm font-black text-slate-800">{t("calendar.select_day_title")}</div>
+                <div className="mt-1 max-w-52 text-xs leading-5 text-slate-500">{t("calendar.select_day_hint")}</div>
+              </div>
+            ) : (
+              <div>
+                <div className="text-[11px] font-black uppercase text-slate-400">{t("calendar.selected_day")}</div>
+                <div className="mt-1 text-base font-black capitalize leading-6 text-slate-950">{activeDateLabel}</div>
+                <div className={`mt-3 inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-xs font-black ${activeIsBooked ? "bg-emerald-100 text-emerald-800" : activeIsChanged ? "bg-orange-100 text-orange-800" : activeIsManual ? "bg-slate-200 text-slate-800" : "bg-slate-200 text-slate-800"}`}>
+                  <span className={`h-2 w-2 rounded-full ${activeIsBooked ? "bg-emerald-600" : activeIsChanged ? "bg-orange-600" : activeIsManual ? "bg-slate-700" : "bg-slate-500"}`} />
+                  {activeIsBooked ? t("calendar.booked") : activeIsChanged ? t("calendar.unsaved") : activeIsManual ? t("calendar.closed_by_you") : t("calendar.available")}
+                </div>
+                {activeIsBooked && (
+                  <div className="mt-5 space-y-4">
+                    {activeBooking ? (
+                      <>
+                        <div className="border-b border-slate-200 pb-4">
+                          <div className="text-xs font-bold text-slate-400">{t("calendar.booking_number", { number: activeBooking.id })}</div>
+                          <div className="mt-1 text-sm font-black text-slate-950">{activeBooking.service_title || t("calendar.service_booking")}</div>
+                        </div>
+                        <div>
+                          <div className="text-xs font-black uppercase text-slate-400">{t("calendar.customer")}</div>
+                          <div className="mt-2 flex items-center gap-2 text-sm font-black text-slate-900"><UserRound size={16} className="text-slate-400" />{activeBooking.customer_name || t("calendar.unknown_name")}</div>
+                          {activeBooking.customer_phone ? <a className="mt-2 block text-sm font-bold text-slate-600 hover:text-orange-600" href={`tel:${activeBooking.customer_phone}`}>{activeBooking.customer_phone}</a> : null}
+                          {activeBooking.customer_telegram ? <a className="mt-1 block text-sm font-bold text-slate-600 hover:text-orange-600" href={`https://t.me/${String(activeBooking.customer_telegram).replace(/^@/, "")}`} target="_blank" rel="noreferrer">@{String(activeBooking.customer_telegram).replace(/^@/, "")}</a> : null}
+                        </div>
+                        {activeBooking.provider_price ? (
+                          <div className="border-t border-slate-200 pt-4">
+                            <div className="text-xs font-black uppercase text-slate-400">{t("calendar.booking_price")}</div>
+                            <div className="mt-1 text-lg font-black text-slate-950">{Number(activeBooking.provider_price).toLocaleString(i18n.language || "en")} {activeBooking.currency || "UZS"}</div>
+                          </div>
+                        ) : null}
+                        {activeBooking.client_message ? (
+                          <div className="border-t border-slate-200 pt-4">
+                            <div className="flex items-center gap-2 text-xs font-black uppercase text-slate-400"><MessageCircle size={14} />{t("calendar.customer_comment")}</div>
+                            <div className="mt-2 text-sm leading-5 text-slate-600">{activeBooking.client_message}</div>
+                          </div>
+                        ) : null}
+                        <a href="/dashboard/bookings" className="flex h-10 w-full items-center justify-center rounded-md border border-slate-300 bg-white px-4 text-sm font-black text-slate-800 transition hover:bg-slate-100">{t("calendar.open_booking")}</a>
+                      </>
+                    ) : activeBookedDetails.length ? activeBookedDetails.map((item, index) => (
+                      <div key={index} className="border-t border-slate-200 pt-3 first:border-t-0 first:pt-0">
+                        <div className="flex items-center gap-2 text-sm font-black text-slate-900"><UserRound size={15} className="text-slate-400" />{item.name || t("calendar.unknown_name")}</div>
+                        {item.phone ? <a className="mt-2 block text-sm font-bold text-slate-600 hover:text-orange-600" href={`tel:${item.phone}`}>{item.phone}</a> : null}
+                      </div>
+                    )) : <div className="text-sm text-slate-500">{t("calendar.booking_without_contacts")}</div>}
+                  </div>
+                )}
+                {!activeIsBooked && !activeIsPast && (
+                  <button type="button" onClick={toggleActiveDate} className={`mt-6 flex h-10 w-full items-center justify-center gap-2 rounded-md px-4 text-sm font-black transition ${activeIsManual ? "border border-slate-300 bg-white text-slate-800 hover:bg-slate-100" : "bg-slate-950 text-white hover:bg-slate-800"}`}>
+                    <LockKeyhole size={15} />{activeIsManual ? t("calendar.open_day") : t("calendar.close_day")}
+                  </button>
+                )}
+              </div>
+            )}
+          </aside>
+        </div>
+
+        <footer className="flex flex-col gap-3 border-t border-slate-200 bg-white px-5 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6">
+          <div className={`flex items-center gap-2 text-sm font-bold ${hasChanges ? "text-orange-700" : "text-emerald-700"}`}>
+            {hasChanges ? <CircleAlert size={17} /> : <Check size={17} />}
+            {hasChanges ? t(pendingChangesKey, { count: changedDatesCount }) : t("calendar.all_saved")}
+          </div>
+          <button type="button" onClick={handleSave} disabled={!hasChanges || saving} className="flex h-11 items-center justify-center gap-2 rounded-md bg-orange-600 px-6 text-sm font-black text-white transition hover:bg-orange-700 disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400">
+            <Save size={17} />{saving ? t("calendar.saving") : t(saveActionKey)}
           </button>
         </footer>
       </section>
     </main>
+    {bookingPreview ? createPortal(
+      <div
+        className="fixed z-[5000] w-72 rounded-lg border border-slate-200 bg-white p-4 shadow-2xl"
+        style={{ left: Math.max(12, bookingPreview.left), top: Math.min(bookingPreview.top, window.innerHeight - 230) }}
+        onMouseEnter={keepBookingPreviewOpen}
+        onMouseLeave={scheduleBookingPreviewClose}
+      >
+        <div className="text-[10px] font-black uppercase text-emerald-700">{t("calendar.booking_number", { number: bookingPreview.booking.id })}</div>
+        <div className="mt-1 text-sm font-black text-slate-950">{bookingPreview.booking.service_title || t("calendar.service_booking")}</div>
+        <div className="mt-3 flex items-center gap-2 border-t border-slate-100 pt-3">
+          {bookingPreview.booking.customer_photo ? <img src={bookingPreview.booking.customer_photo} alt="" className="h-9 w-9 rounded-full object-cover" /> : <span className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500"><UserRound size={17} /></span>}
+          <div className="min-w-0">
+            <div className="truncate text-sm font-black text-slate-900">{bookingPreview.booking.customer_name || t("calendar.unknown_name")}</div>
+            <div className="text-xs text-slate-500">{bookingPreview.booking.customer_role === "provider" ? t("calendar.customer_provider", { defaultValue: "Поставщик" }) : t("calendar.customer_client", { defaultValue: "Клиент" })}</div>
+          </div>
+        </div>
+        {bookingPreview.booking.customer_profile_url ? <a href={bookingPreview.booking.customer_profile_url} className="mt-3 flex h-9 w-full items-center justify-center rounded-md bg-slate-950 px-3 text-sm font-black text-white transition hover:bg-slate-800">{t("calendar.open_customer_profile", { defaultValue: "Открыть профиль" })}</a> : null}
+      </div>,
+      document.body
+    ) : null}
+    </>
   );
 };
 

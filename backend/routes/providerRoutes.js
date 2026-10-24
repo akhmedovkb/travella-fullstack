@@ -53,6 +53,7 @@ const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 const { buildRefusedQuality } = require("../utils/refusedQuality");
 const { ensureProviderLeadCrmTable } = require("../utils/providerLeadCrm");
+const { createProviderTelegramLinkPayload } = require("../utils/providerTelegramLink");
 
 function requireProvider(req, res, next) {
   if (!req.user || !req.user.id) {
@@ -78,6 +79,15 @@ router.post("/telegram-login", loginProviderWithTelegram);
 router.get("/profile", authenticateToken, requireProvider, getProviderProfile);
 router.put("/profile", authenticateToken, requireProvider, updateProviderProfile);
 router.put("/password", authenticateToken, requireProvider, changeProviderPassword);
+router.get("/telegram-link", authenticateToken, requireProvider, (req, res) => {
+  try {
+    const payload = createProviderTelegramLinkPayload(req.user.id);
+    return res.json({ success: true, payload, expires_in: 15 * 60 });
+  } catch (error) {
+    console.error("GET /api/providers/telegram-link error:", error);
+    return res.status(500).json({ success: false, message: "Не удалось создать ссылку Telegram" });
+  }
+});
 
 router.get("/stats", authenticateToken, requireProvider, getProviderStats);
 
@@ -603,7 +613,7 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
     const q = await pool.query(
       `
         SELECT
-           bd.date::text AS date,
+           COALESCE(bd.date, b.date)::text AS date,
            COALESCE(rp.name, c.name)   AS name,
            COALESCE(rp.phone, c.phone) AS phone,
            CASE WHEN rp.id IS NOT NULL THEN rp.social ELSE c.telegram END AS telegram,
@@ -613,14 +623,14 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
              WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
              ELSE '/profile/client/'   || c.id
            END AS "profileUrl"
-        FROM booking_dates bd
-        JOIN bookings b   ON b.id = bd.booking_id
+        FROM bookings b
+        LEFT JOIN booking_dates bd ON bd.booking_id = b.id
         LEFT JOIN clients   c  ON c.id = b.client_id
         LEFT JOIN providers rp ON rp.id = b.requester_provider_id
         WHERE b.provider_id = $1
-          AND b.status IN ('confirmed','active')
-          AND bd.date >= CURRENT_DATE
-        ORDER BY bd.date, name
+          AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+          AND COALESCE(bd.date, b.date) IS NOT NULL
+        ORDER BY COALESCE(bd.date, b.date), name
       `,
       [providerId]
     );
@@ -634,15 +644,15 @@ router.get("/booked-details", authenticateToken, requireProvider, async (req, re
 router.get("/calendar", authenticateToken, requireProvider, async (req, res) => {
   try {
     const providerId = req.user.id;
-    const [booked, blocked, details] = await Promise.all([
+    const [booked, blocked, details, calendarBookings] = await Promise.all([
       pool.query(
         `
-          SELECT DISTINCT bd.date::text AS date
-          FROM booking_dates bd
-          JOIN bookings b ON b.id = bd.booking_id
+          SELECT DISTINCT COALESCE(bd.date, b.date)::text AS date
+          FROM bookings b
+          LEFT JOIN booking_dates bd ON bd.booking_id = b.id
           WHERE b.provider_id = $1
-            AND b.status IN ('confirmed','active')
-            AND bd.date >= CURRENT_DATE
+            AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+            AND COALESCE(bd.date, b.date) IS NOT NULL
           ORDER BY 1
         `,
         [providerId]
@@ -659,7 +669,7 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
       pool.query(
         `
           SELECT
-             bd.date::text AS date,
+             COALESCE(bd.date, b.date)::text AS date,
              COALESCE(rp.name, c.name)   AS name,
              COALESCE(rp.phone, c.phone) AS phone,
              CASE WHEN rp.id IS NOT NULL THEN rp.social ELSE c.telegram END AS telegram,
@@ -669,14 +679,54 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
                WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
                ELSE '/profile/client/' || c.id
              END AS "profileUrl"
-          FROM booking_dates bd
-          JOIN bookings b   ON b.id = bd.booking_id
+          FROM bookings b
+          LEFT JOIN booking_dates bd ON bd.booking_id = b.id
           LEFT JOIN clients   c  ON c.id = b.client_id
           LEFT JOIN providers rp ON rp.id = b.requester_provider_id
           WHERE b.provider_id = $1
-            AND b.status IN ('confirmed','active')
-            AND bd.date >= CURRENT_DATE
-          ORDER BY bd.date, name
+            AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+            AND COALESCE(bd.date, b.date) IS NOT NULL
+          ORDER BY COALESCE(bd.date, b.date), name
+        `,
+        [providerId]
+      ),
+      pool.query(
+        `
+          SELECT
+            b.id,
+            b.status,
+            b.source,
+            b.created_at,
+            b.client_message,
+            b.provider_price,
+            COALESCE(b.attachments::jsonb, '{}'::jsonb) AS details,
+            COALESCE(
+              (SELECT array_agg(d.date::date ORDER BY d.date)
+                 FROM booking_dates d
+                WHERE d.booking_id = b.id),
+              CASE WHEN b.date IS NULL THEN ARRAY[]::date[] ELSE ARRAY[b.date::date] END
+            ) AS dates,
+            COALESCE(s.title, (b.attachments::jsonb)->>'rate_title', (b.attachments::jsonb)->>'service_title') AS service_title,
+            COALESCE((b.attachments::jsonb)->>'published_currency', (b.attachments::jsonb)->>'currency', 'UZS') AS currency,
+            COALESCE(rp.name, c.name) AS customer_name,
+            COALESCE(rp.phone, c.phone) AS customer_phone,
+            COALESCE(rp.social, c.telegram) AS customer_telegram,
+            COALESCE(rp.photo, c.avatar_url) AS customer_photo,
+            CASE WHEN rp.id IS NOT NULL THEN 'provider' ELSE 'client' END AS customer_role,
+            COALESCE(rp.id, c.id) AS customer_profile_id,
+            CASE
+              WHEN rp.id IS NOT NULL THEN '/profile/provider/' || rp.id
+              WHEN c.id IS NOT NULL THEN '/profile/client/' || c.id
+              ELSE NULL
+            END AS customer_profile_url
+          FROM bookings b
+          LEFT JOIN clients c ON c.id = b.client_id
+          LEFT JOIN providers rp ON rp.id = b.requester_provider_id
+          LEFT JOIN services s ON s.id = b.service_id
+          WHERE b.provider_id = $1
+            AND b.status IN ('awaiting_payment','confirmed','active','accepted')
+            AND (b.date IS NOT NULL OR EXISTS (SELECT 1 FROM booking_dates d WHERE d.booking_id = b.id))
+          ORDER BY b.created_at DESC
         `,
         [providerId]
       ),
@@ -685,6 +735,7 @@ router.get("/calendar", authenticateToken, requireProvider, async (req, res) => 
       booked: booked.rows,
       blocked: blocked.rows,
       bookedDetails: details.rows,
+      bookings: calendarBookings.rows,
     });
   } catch (e) {
     console.error("providers/calendar error:", e);

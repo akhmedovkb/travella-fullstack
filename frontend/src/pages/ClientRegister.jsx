@@ -1,9 +1,8 @@
 // frontend/src/pages/ClientRegister.jsx
-import React, { useState } from "react";
+import { useState } from "react";
 import { useNavigate, Link, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import i18n from "../i18n";
-import LanguageSelector from "../components/LanguageSelector";
 import { apiPost } from "../api";             // как и было
 import { toast } from "../ui/toast";          // реэкспорт react-hot-toast
 
@@ -57,7 +56,8 @@ export default function ClientRegister() {
 
   const [form, setForm] = useState({ name: "", email: "", phone: "", password: "" });
   const [loading, setLoading] = useState(false);
-  const [err, setErr] = useState(""); // оставил, но тосты уже покрывают ошибки
+  const [err, setErr] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
 
   const requiredTitle = t("register.errors.required");
 
@@ -75,6 +75,10 @@ export default function ClientRegister() {
     const phoneNormalized = normalizePhone(form.phone);
     if (!isValidE164(phoneNormalized)) {
       toast.error(t("register.errors.phone_invalid"));
+      return;
+    }
+    if (form.password.length < 8) {
+      toast.error(t("register.errors.password_length"));
       return;
     }
 
@@ -104,82 +108,86 @@ export default function ClientRegister() {
   }
 
   return (
-    <div className="max-w-md mx-auto bg-white p-6 rounded-xl shadow">
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-bold">{t("client.register.title")}</h1>
-        <LanguageSelector />
-      </div>
+    <div className="mx-auto w-full max-w-5xl px-4 py-8 md:px-6 md:py-12">
+      <div className="grid overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm lg:grid-cols-[0.8fr_1.2fr]">
+        <aside className="order-2 bg-slate-950 p-7 text-white md:p-10 lg:order-1">
+          <Link to="/" className="text-sm font-bold text-orange-400 hover:text-orange-300">
+            {t("client.register.back_marketplace")}
+          </Link>
+          <h2 className="mt-8 text-2xl font-black leading-tight md:text-3xl">
+            {t("client.register.benefits_title")}
+          </h2>
+          <p className="mt-3 text-sm leading-6 text-slate-300">
+            {t("client.register.benefits_subtitle")}
+          </p>
+          <ul className="mt-8 space-y-5">
+            {["booking", "favorites", "history"].map((benefit) => (
+              <li key={benefit} className="flex gap-3">
+                <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-500 text-xs font-black" aria-hidden="true">✓</span>
+                <div>
+                  <div className="text-sm font-bold">{t(`client.register.benefit_${benefit}`)}</div>
+                  <div className="mt-1 text-xs leading-5 text-slate-400">{t(`client.register.benefit_${benefit}_hint`)}</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </aside>
 
-      {err && (
-        <div className="mb-3 bg-orange-500 text-white text-sm px-3 py-2 rounded">
-          {err}
-        </div>
-      )}
+        <section className="order-1 p-6 md:p-10 lg:order-2">
+          <div className="border-b border-slate-200 pb-6">
+            <div>
+              <p className="text-xs font-black uppercase text-orange-600">{t("client.register.eyebrow")}</p>
+              <h1 className="mt-2 text-3xl font-black text-slate-950">{t("client.register.title")}</h1>
+              <p className="mt-2 max-w-md text-sm leading-6 text-slate-500">{t("client.register.subtitle")}</p>
+            </div>
+          </div>
 
-      <form onSubmit={submit} className="space-y-3">
-        <input
-          className="w-full border rounded px-3 py-2"
-          placeholder={t("client.register.name")}
-          value={form.name}
-          onChange={(e) => setForm({ ...form, name: e.target.value })}
-          required
-          title={requiredTitle}
-          lang={i18n.language}
-        />
+          {err && (
+            <div role="alert" className="mt-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">
+              {err}
+            </div>
+          )}
 
-        <input
-          type="email"
-          className="w-full border rounded px-3 py-2"
-          placeholder="email"
-          value={form.email}
-          onChange={(e) => setForm({ ...form, email: e.target.value })}
-          required
-          title={requiredTitle}
-          lang={i18n.language}
-        />
+          <form onSubmit={submit} className="mt-6 space-y-5">
+            <label className="block">
+              <span className="mb-2 block text-sm font-bold text-slate-800">{t("client.register.name_label")}</span>
+              <input className="h-12 w-full rounded-lg border border-slate-300 px-4 outline-none transition placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100" placeholder={t("client.register.name_placeholder")} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoComplete="name" required title={requiredTitle} lang={i18n.language} />
+            </label>
 
-        <input
-          className="w-full border rounded px-3 py-2"
-          placeholder={t("client.register.phone")}
-          value={form.phone}
-          onChange={(e) => setForm({ ...form, phone: e.target.value })}
-          required
-          title={t("register.phone_hint")}
-          lang={i18n.language}
-        />
-        <p className="text-xs text-gray-500 -mt-2">
-          {t("register.phone_hint")}
-        </p>
+            <div className="grid gap-5 sm:grid-cols-2">
+              <label className="block">
+                <span className="mb-2 block text-sm font-bold text-slate-800">{t("client.register.email_label")}</span>
+                <input type="email" className="h-12 w-full rounded-lg border border-slate-300 px-4 outline-none transition placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100" placeholder={t("client.register.email_placeholder")} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} autoComplete="email" required title={requiredTitle} lang={i18n.language} />
+              </label>
+              <label className="block">
+                <span className="mb-2 block text-sm font-bold text-slate-800">{t("client.register.phone_label")}</span>
+                <input type="tel" className="h-12 w-full rounded-lg border border-slate-300 px-4 outline-none transition placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100" placeholder={t("client.register.phone_placeholder")} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} autoComplete="tel" required title={t("register.phone_hint")} lang={i18n.language} />
+                <span className="mt-1.5 block text-xs text-slate-500">{t("register.phone_hint")}</span>
+              </label>
+            </div>
 
-        <input
-          type="password"
-          className="w-full border rounded px-3 py-2"
-          placeholder={t("client.register.password")}
-          value={form.password}
-          onChange={(e) => setForm({ ...form, password: e.target.value })}
-          required
-          title={requiredTitle}
-          lang={i18n.language}
-        />
+            <label className="block">
+              <span className="mb-2 block text-sm font-bold text-slate-800">{t("client.register.password_label")}</span>
+              <div className="relative">
+                <input type={showPassword ? "text" : "password"} minLength={8} className="h-12 w-full rounded-lg border border-slate-300 px-4 pr-28 outline-none transition placeholder:text-slate-400 focus:border-orange-500 focus:ring-2 focus:ring-orange-100" placeholder={t("client.register.password_placeholder")} value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" required title={requiredTitle} lang={i18n.language} />
+                <button type="button" onClick={() => setShowPassword((value) => !value)} className="absolute inset-y-0 right-0 px-4 text-xs font-bold text-slate-600 hover:text-slate-950" aria-label={showPassword ? t("client.register.hide_password") : t("client.register.show_password")}>
+                  {showPassword ? t("client.register.hide") : t("client.register.show")}
+                </button>
+              </div>
+              <span className="mt-1.5 block text-xs text-slate-500">{t("client.register.password_hint")}</span>
+            </label>
 
-        <button
-          type="submit"
-          disabled={loading}
-          className={`w-full text-white font-semibold py-2 rounded transition ${
-            loading ? "bg-orange-400 cursor-not-allowed" : "bg-orange-500 hover:bg-orange-600"
-          }`}
-        >
-          {loading
-            ? t("client.register.loading", { defaultValue: t("common.loading") })
-            : t("client.register.registerBtn")}
-        </button>
-      </form>
+            <button type="submit" disabled={loading} className={`h-12 w-full rounded-lg text-sm font-black text-white transition ${loading ? "cursor-not-allowed bg-orange-300" : "bg-orange-600 hover:bg-orange-700"}`}>
+              {loading ? t("client.register.loading", { defaultValue: t("common.loading") }) : t("client.register.registerBtn")}
+            </button>
+            <p className="text-xs leading-5 text-slate-500">{t("client.register.terms")}</p>
+          </form>
 
-      <div className="mt-3 text-sm text-gray-600">
-        {t("client.register.haveAccount")}{" "}
-        <Link to={`/client/login?redirect=${encodeURIComponent(safeRedirect)}`} className="text-orange-600 font-semibold hover:underline">
-          {t("client.register.loginLink")}
-        </Link>
+          <div className="mt-6 border-t border-slate-200 pt-5 text-center text-sm text-slate-600">
+            {t("client.register.haveAccount")}{" "}
+            <Link to={`/client/login?redirect=${encodeURIComponent(safeRedirect)}`} className="font-bold text-orange-600 hover:underline">{t("client.register.loginLink")}</Link>
+          </div>
+        </section>
       </div>
     </div>
   );
