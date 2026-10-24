@@ -43,8 +43,9 @@ async function upsertProvider({ name, email, password, type, isAdmin, phone, soc
 }
 
 async function main() {
-  if (String(process.env.RAILWAY_ENVIRONMENT_NAME || process.env.NODE_ENV || "").toLowerCase() === "production") {
-    throw new Error("Refusing to seed Tour Builder E2E accounts in production");
+  const railwayEnvironment = String(process.env.RAILWAY_ENVIRONMENT_NAME || "").toLowerCase();
+  if (railwayEnvironment !== "staging") {
+    throw new Error(`Refusing to seed Tour Builder E2E accounts outside Railway staging (received ${railwayEnvironment || "unknown"})`);
   }
   const dmc = await upsertProvider({
     name: "Tour Builder E2E DMC",
