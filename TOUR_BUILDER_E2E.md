@@ -23,7 +23,7 @@ Create a `staging` environment and add these environment secrets:
 - `STAGING_E2E_SUPPLIER_EMAIL`
 - `STAGING_E2E_SUPPLIER_PASSWORD`
 
-The DMC fixture must have `is_admin=true`; the supplier must be a separate guide, transport, hotel, or agent provider. The workflow can be started manually and also runs on weekdays.
+The DMC fixture must have `is_admin=true`; the supplier must be a separate guide, transport, hotel, or agent provider. The workflow runs for same-repository pull requests that change the backend, can be started manually, and also runs on weekdays. Fork pull requests are skipped so staging credentials are never exposed to untrusted code.
 
 The accounts can be created or rotated idempotently inside the Railway staging service with:
 
