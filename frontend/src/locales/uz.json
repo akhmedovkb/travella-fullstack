@@ -1596,7 +1596,7 @@
       "net_cost": "NET tannarx",
       "markup": "Agentlik ustamasi"
     },
-    "hotel_confirm": { "eyebrow": "Yuborishdan oldin tekshirish", "title": "Yetkazib beruvchilar va narxlarni tasdiqlang", "subtitle": "So‘rovlarga qayd etilgan kotirovka versiyalari kiritiladi. Yetkazib beruvchilarga so‘rovlar: {{count}}.", "night": "Tun", "hotel_number": "Mehmonxona #{{id}}", "legacy_rate": "Eski mehmonxona tarifi", "no_quotes": "Yo‘nalishda hisoblangan mehmonxonalar yo‘q. Boshqa tanlangan xizmatlar yuboriladi.", "back": "Orqaga", "sending": "Yuborilmoqda…", "confirm": "Tasdiqlash va yuborish" },
+    "hotel_confirm": { "eyebrow": "Yuborishdan oldin tekshirish", "title": "Yetkazib beruvchilar va narxlarni tasdiqlang", "subtitle": "So‘rovlarga qayd etilgan kotirovka versiyalari kiritiladi. Yetkazib beruvchilarga so‘rovlar: {{count}}.", "night": "Tun", "hotel_number": "Mehmonxona #{{id}}", "legacy_rate": "Eski mehmonxona tarifi", "no_quotes": "Yo‘nalishda hisoblangan mehmonxonalar yo‘q. Boshqa tanlangan xizmatlar yuboriladi.", "extended_title": "Yashash muddati tur sanalaridan tashqariga chiqmoqda", "extended_hint": "{{count}} kecha tur tugash sanasida ({{date}}) yoki undan keyin boshlanadi. Bu uzaytirish ataylab qo‘shilganini tasdiqlang.", "back": "Orqaga", "sending": "Yuborilmoqda…", "confirm": "Tasdiqlash va yuborish" },
     "quote_valid_until": "Taklifning amal qilish muddati",
     "package_status": {
       "draft": "Qoralama",
