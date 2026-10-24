@@ -1944,6 +1944,17 @@
       "client_followup_saved": "Mijoz bilan aloqa qayd etildi. Keyingi bog‘lanish rejalashtirildi.",
       "client_followup_error": "Mijoz bilan aloqani qayd etib bo‘lmadi"
     },
+    "audit": {
+      "title": "Harakatlar jurnali",
+      "hint": "Tur bo‘yicha muhim operatsiyalarning o‘zgarmas tarixi.",
+      "manager_assigned": "Menejer tayinlandi",
+      "client_payment_updated": "Mijoz to‘lovi yangilandi",
+      "tour_cancelled": "Tur bekor qilindi",
+      "client_refund_updated": "Mijozga qaytarish yangilandi",
+      "system": "Tizim",
+      "current_user": "Siz",
+      "unassigned": "Menejer tayinlanmagan"
+    },
     "portfolio": {
       "title": "Mening turlarim",
       "subtitle": "Paketlarni hisob-kitobdan to‘lov va safargacha boshqaring.",

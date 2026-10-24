@@ -14,6 +14,15 @@ function cleanMoney(value) {
   return Number.isFinite(number) && number >= 0 ? Math.round(number * 100) / 100 : 0;
 }
 
+async function recordTourPackageAudit(db, packageId, actorProviderId, action, metadata = {}) {
+  return db.query(
+    `INSERT INTO tour_package_audit_events(package_id,actor_provider_id,action,metadata)
+     VALUES($1::uuid,$2,$3,$4::jsonb)
+     RETURNING id,action,metadata,created_at`,
+    [packageId, actorProviderId, action, JSON.stringify(metadata || {})]
+  );
+}
+
 function calculateGross(netTotal, markupType, markupValue) {
   const net = cleanMoney(netTotal);
   const value = cleanMoney(markupValue);
@@ -476,6 +485,17 @@ async function ensureTourPackagesTable() {
     )
   `);
   await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_refund_events_package ON tour_package_refund_events(package_id, created_at DESC)`);
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS tour_package_audit_events (
+      id BIGSERIAL PRIMARY KEY,
+      package_id UUID NOT NULL REFERENCES tour_packages(id) ON DELETE CASCADE,
+      actor_provider_id INTEGER REFERENCES providers(id) ON DELETE SET NULL,
+      action VARCHAR(48) NOT NULL,
+      metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `);
+  await pool.query(`CREATE INDEX IF NOT EXISTS idx_tour_package_audit_events_package ON tour_package_audit_events(package_id, created_at DESC)`);
   await pool.query(`
     CREATE TABLE IF NOT EXISTS tour_package_client_contacts (
       id BIGSERIAL PRIMARY KEY,
@@ -1241,6 +1261,13 @@ async function getTourPackage(req, res) {
          FROM tour_package_refund_events WHERE package_id=$1::uuid ORDER BY created_at DESC,id DESC`,
       [req.params.id]
     );
+    const auditEvents = await pool.query(
+      `SELECT event.id,event.action,event.metadata,event.created_at,provider.name AS actor_name
+         FROM tour_package_audit_events event
+         LEFT JOIN providers provider ON provider.id=event.actor_provider_id
+        WHERE event.package_id=$1::uuid ORDER BY event.created_at DESC,event.id DESC LIMIT 100`,
+      [req.params.id]
+    );
     const clientContacts = await pool.query(
       `SELECT id,channel,note,contacted_at FROM tour_package_client_contacts
         WHERE package_id=$1::uuid ORDER BY contacted_at DESC,id DESC LIMIT 50`,
@@ -1285,6 +1312,7 @@ async function getTourPackage(req, res) {
       revisions: revisions.rows,
       payment_events: paymentEvents.rows,
       refund_events: refundEvents.rows,
+      audit_events: auditEvents.rows,
       client_contacts: clientContacts.rows,
       travelers: travelers.rows,
       tasks: tasks.rows,
@@ -1357,23 +1385,29 @@ async function updateTourPackage(req, res) {
 }
 
 async function updateTourPackageManager(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
     const managerName = String(req.body?.manager_name || "").trim().slice(0, 120) || null;
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_packages SET manager_name=$3,updated_at=NOW()
         WHERE id=$1::uuid AND owner_provider_id=$2
         RETURNING id,manager_name,updated_at`,
       [req.params.id, ownerId, managerName]
     );
-    if (!result.rowCount) return res.status(404).json({ message: "Tour package not found" });
-    return res.json(result.rows[0]);
+    if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Tour package not found" }); }
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "manager_assigned", { manager_name: managerName });
+    await client.query("COMMIT");
+    return res.json({ ...result.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("updateTourPackageManager error:", error);
     return res.status(500).json({ message: "Failed to assign tour manager" });
-  }
+  } finally { client?.release(); }
 }
 
 async function recordTourPackageClientFollowup(req, res) {
@@ -1619,8 +1653,13 @@ async function updateTourPackagePayment(req, res) {
        VALUES($1::uuid,$2,$3,$4,$5)`,
       [req.params.id, payment.paymentStatus, payment.paidAmount, payment.paymentDueAt, payment.paymentNote]
     );
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "client_payment_updated", {
+      payment_status: payment.paymentStatus,
+      paid_amount: payment.paidAmount,
+      payment_due_at: payment.paymentDueAt,
+    });
     await client.query("COMMIT");
-    return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash) });
+    return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash), audit_event: audit.rows[0] });
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("updateTourPackagePayment error:", error);
@@ -1694,6 +1733,11 @@ async function cancelTourPackage(req, res) {
           refund_due_amount,refunded_amount,refund_due_at,refund_note,refunded_at,updated_at`,
       [req.params.id, ownerId, cancellation.reason, cancellation.reasonCode, cancellation.initiator]
     );
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "tour_cancelled", {
+      reason_code: cancellation.reasonCode,
+      initiator: cancellation.initiator,
+      cancelled_supplier_order_count: activeOrders.rowCount,
+    });
     await client.query("COMMIT");
     const notificationResults = await Promise.all(activeOrders.rows.map(async (item) => {
       const profile = item.supplier_profile || {};
@@ -1703,6 +1747,7 @@ async function cancelTourPackage(req, res) {
     }));
     return res.json({
       ...saved.rows[0],
+      audit_event: audit.rows[0],
       cancelled_supplier_order_count: activeOrders.rowCount,
       supplier_notifications_failed: notificationResults.filter((sent) => !sent).length,
     });
@@ -1741,8 +1786,14 @@ async function updateTourPackageRefund(req, res) {
        RETURNING id,refund_status,refund_due_amount,refunded_amount,refund_due_at,refund_note,created_at`,
       [req.params.id, refund.refundStatus, refund.refundDueAmount, refund.refundedAmount, refund.refundDueAt, refund.refundNote]
     );
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "client_refund_updated", {
+      refund_status: refund.refundStatus,
+      refund_due_amount: refund.refundDueAmount,
+      refunded_amount: refund.refundedAmount,
+      refund_due_at: refund.refundDueAt,
+    });
     await client.query("COMMIT");
-    return res.json({ ...saved.rows[0], refund_event: event.rows[0] });
+    return res.json({ ...saved.rows[0], refund_event: event.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
     if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("updateTourPackageRefund error:", error);

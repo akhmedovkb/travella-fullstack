@@ -1946,6 +1946,17 @@
       "client_followup_saved": "Client contact recorded. The next follow-up is scheduled.",
       "client_followup_error": "Could not record client contact"
     },
+    "audit": {
+      "title": "Activity log",
+      "hint": "An immutable history of sensitive tour operations.",
+      "manager_assigned": "Manager assigned",
+      "client_payment_updated": "Client payment updated",
+      "tour_cancelled": "Tour cancelled",
+      "client_refund_updated": "Client refund updated",
+      "system": "System",
+      "current_user": "You",
+      "unassigned": "Unassigned"
+    },
     "portfolio": {
       "title": "My tours",
       "subtitle": "Manage packages from quote to payment and travel.",
