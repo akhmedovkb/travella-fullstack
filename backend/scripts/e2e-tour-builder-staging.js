@@ -187,8 +187,9 @@ async function main() {
     logStep("published client proposal", `revision ${shared.current_revision}`);
 
     const publicProposal = await request(`/api/tour-packages/public/${encodeURIComponent(shared.token)}`);
-    assert.equal(publicProposal.id, packageId);
     assert.equal(publicProposal.title, title);
+    assert.equal(publicProposal.revision, Number(shared.current_revision));
+    assert.equal(publicProposal.proposal_response, null);
     await request(`/api/tour-packages/public/${encodeURIComponent(shared.token)}/respond`, {
       method: "POST",
       body: { response: "accepted", message: "Accepted by automated E2E" },
