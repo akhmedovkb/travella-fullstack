@@ -1884,6 +1884,7 @@
       "loaded_count": "Загружено {{loaded}} из {{total}}",
       "load_older": "Загрузить предыдущие",
       "loading_older": "Загрузка…",
+      "searching": "Поиск по всей истории…",
       "load_error": "Не удалось загрузить предыдущие события",
       "manager_assigned": "Назначен менеджер",
       "client_payment_updated": "Обновлена оплата клиента",

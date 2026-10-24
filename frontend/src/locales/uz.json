@@ -1960,6 +1960,7 @@
       "loaded_count": "{{total}} tadan {{loaded}} tasi yuklandi",
       "load_older": "Oldingi hodisalarni yuklash",
       "loading_older": "Yuklanmoqda…",
+      "searching": "Butun tarix bo‘yicha qidirilmoqda…",
       "load_error": "Oldingi hodisalarni yuklab bo‘lmadi",
       "manager_assigned": "Menejer tayinlandi",
       "client_payment_updated": "Mijoz to‘lovi yangilandi",

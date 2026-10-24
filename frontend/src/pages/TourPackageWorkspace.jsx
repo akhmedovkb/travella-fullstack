@@ -376,17 +376,49 @@ const auditGroups = {
   finance: new Set(["client_payment_updated", "client_refund_updated", "supplier_refund_updated", "tour_cancelled"]),
   team: new Set(["manager_assigned", "task_created", "task_updated", "task_completed", "task_deleted", "incident_created", "incident_updated", "incident_resolved"]),
 };
+const auditActions = [...new Set(Object.values(auditGroups).flatMap((group) => [...group]))];
 
 function TourAuditHistory({ items = [], total = 0, packageId, currency, t }) {
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [exporting, setExporting] = useState(false);
-  const [olderItems, setOlderItems] = useState([]);
+  const [historyItems, setHistoryItems] = useState(items);
+  const [historyTotal, setHistoryTotal] = useState(Number(total || 0));
+  const [filtering, setFiltering] = useState(false);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [loadError, setLoadError] = useState("");
-  useEffect(() => { setOlderItems([]); setLoadError(""); }, [packageId]);
-  const allItems = [...items, ...olderItems].filter((event, index, source) => source.findIndex((candidate) => Number(candidate.id) === Number(event.id)) === index);
-  if (!allItems.length) return null;
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const matchingActions = normalizedQuery ? auditActions.filter((action) => t(`tb.audit.${action}`).toLocaleLowerCase().includes(normalizedQuery)) : [];
+  const actionsParam = matchingActions.join(",");
+  const requestParams = (offset = 0) => ({
+    offset,
+    limit: 100,
+    ...(filter !== "all" ? { category: filter } : {}),
+    ...(query.trim() ? { q: query.trim() } : {}),
+    ...(actionsParam ? { actions: actionsParam } : {}),
+  });
+  useEffect(() => {
+    setLoadError("");
+    if (filter === "all" && !normalizedQuery) {
+      setHistoryItems(items);
+      setHistoryTotal(Math.max(Number(total || 0), items.length));
+      setFiltering(false);
+      return undefined;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(async () => {
+      setFiltering(true);
+      try {
+        const { data } = await axios.get(`${API_BASE}/api/tour-packages/${packageId}/audit`, { ...cfg(), params: requestParams(0), signal: controller.signal });
+        setHistoryItems(data.items || []);
+        setHistoryTotal(Number(data.total || 0));
+      } catch (error) {
+        if (error?.code !== "ERR_CANCELED") setLoadError(error?.response?.data?.message || t("tb.audit.load_error"));
+      } finally { if (!controller.signal.aborted) setFiltering(false); }
+    }, 300);
+    return () => { window.clearTimeout(timer); controller.abort(); };
+  }, [actionsParam, filter, normalizedQuery, packageId, items, total]);
+  if (!historyItems.length && filter === "all" && !normalizedQuery && !filtering) return null;
   const detail = (event) => {
     const metadata = event.metadata || {};
     if (event.action === "manager_assigned") return metadata.manager_name || t("tb.audit.unassigned");
@@ -408,19 +440,14 @@ function TourAuditHistory({ items = [], total = 0, packageId, currency, t }) {
     if (["supplier_order_sent", "supplier_order_reminded", "supplier_documents_requested", "supplier_order_cancelled", "supplier_message_sent"].includes(event.action)) return metadata.service_title || `#${metadata.booking_id}`;
     return "";
   };
-  const normalizedQuery = query.trim().toLocaleLowerCase();
-  const visible = allItems.filter((event) => {
-    if (filter !== "all" && !auditGroups[filter]?.has(event.action)) return false;
-    if (!normalizedQuery) return true;
-    return [t(`tb.audit.${event.action}`), event.actor_name, detail(event), JSON.stringify(event.metadata || {})]
-      .filter(Boolean).join(" ").toLocaleLowerCase().includes(normalizedQuery);
-  });
+  const visible = historyItems;
   const exportCsv = async () => {
     setExporting(true);
     try {
       const params = new URLSearchParams();
       if (filter !== "all") params.set("category", filter);
       if (query.trim()) params.set("q", query.trim());
+      if (actionsParam) params.set("actions", actionsParam);
       const response = await axios.get(`${API_BASE}/api/tour-packages/${packageId}/audit.csv?${params}`, { ...cfg(), responseType: "blob" });
       const url = URL.createObjectURL(response.data);
       const link = document.createElement("a");
@@ -435,14 +462,15 @@ function TourAuditHistory({ items = [], total = 0, packageId, currency, t }) {
   const loadOlder = async () => {
     setLoadingOlder(true); setLoadError("");
     try {
-      const { data } = await axios.get(`${API_BASE}/api/tour-packages/${packageId}/audit`, { ...cfg(), params: { offset: allItems.length, limit: 100 } });
-      setOlderItems((current) => [...current, ...(data.items || [])]);
+      const { data } = await axios.get(`${API_BASE}/api/tour-packages/${packageId}/audit`, { ...cfg(), params: requestParams(historyItems.length) });
+      setHistoryItems((current) => [...current, ...(data.items || [])].filter((event, index, source) => source.findIndex((candidate) => Number(candidate.id) === Number(event.id)) === index));
+      setHistoryTotal(Number(data.total || historyTotal));
     } catch (error) { setLoadError(error?.response?.data?.message || t("tb.audit.load_error")); }
     finally { setLoadingOlder(false); }
   };
-  const effectiveTotal = Math.max(Number(total || 0), allItems.length);
-  const hasMore = allItems.length < effectiveTotal;
-  return <section><div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">{t("tb.audit.title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.audit.hint")}</p></div><button type="button" onClick={exportCsv} disabled={exporting} className="inline-flex h-10 items-center gap-2 border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:border-gray-500 disabled:opacity-50"><Download size={16} />{exporting ? t("tb.audit.exporting") : t("tb.audit.export")}</button></div><div className="mt-4 grid gap-3 lg:grid-cols-[minmax(240px,1fr)_auto]"><label className="relative block"><Search size={16} className="pointer-events-none absolute left-3 top-3 text-gray-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("tb.audit.search_placeholder")} className="h-10 w-full border border-gray-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-orange-500" /></label><div className="flex max-w-full gap-1 overflow-x-auto border border-gray-200 bg-gray-50 p-1">{["all", "commercial", "operations", "finance", "team"].map((value) => <button key={value} type="button" onClick={() => setFilter(value)} className={`h-8 whitespace-nowrap px-3 text-xs font-semibold ${filter === value ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-white"}`}>{t(`tb.audit.filter_${value}`)}</button>)}</div></div><div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-gray-500"><span>{t("tb.audit.result_count", { count: visible.length })}</span><span>{t("tb.audit.loaded_count", { loaded: allItems.length, total: effectiveTotal })}</span></div><div className="mt-2 divide-y border-y border-gray-200">{visible.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="font-semibold">{t(`tb.audit.${event.action}`)}</div><div className="mt-1 text-xs text-gray-500">{event.actor_name || t(event.action === "proposal_response_received" ? "tb.audit.client" : "tb.audit.system")} · {dateTimeText(event.created_at)}</div></div>{detail(event) && <div className="text-sm font-bold text-gray-700">{detail(event)}</div>}</div>)}{!visible.length && <div className="py-8 text-center text-sm text-gray-500">{t("tb.audit.empty_filter")}</div>}</div>{loadError && <div className="mt-3 text-sm font-semibold text-red-600">{loadError}</div>}{hasMore && <div className="mt-4 flex justify-center"><button type="button" onClick={loadOlder} disabled={loadingOlder} className="h-10 border border-gray-300 bg-white px-5 text-sm font-semibold text-gray-800 hover:border-gray-500 disabled:opacity-50">{loadingOlder ? t("tb.audit.loading_older") : t("tb.audit.load_older")}</button></div>}</section>;
+  const effectiveTotal = Math.max(historyTotal, historyItems.length);
+  const hasMore = historyItems.length < effectiveTotal;
+  return <section><div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">{t("tb.audit.title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.audit.hint")}</p></div><button type="button" onClick={exportCsv} disabled={exporting} className="inline-flex h-10 items-center gap-2 border border-gray-300 bg-white px-4 text-sm font-semibold text-gray-800 hover:border-gray-500 disabled:opacity-50"><Download size={16} />{exporting ? t("tb.audit.exporting") : t("tb.audit.export")}</button></div><div className="mt-4 grid gap-3 lg:grid-cols-[minmax(240px,1fr)_auto]"><label className="relative block"><Search size={16} className="pointer-events-none absolute left-3 top-3 text-gray-400" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t("tb.audit.search_placeholder")} className="h-10 w-full border border-gray-300 bg-white pl-9 pr-3 text-sm outline-none focus:border-orange-500" /></label><div className="flex max-w-full gap-1 overflow-x-auto border border-gray-200 bg-gray-50 p-1">{["all", "commercial", "operations", "finance", "team"].map((value) => <button key={value} type="button" onClick={() => setFilter(value)} className={`h-8 whitespace-nowrap px-3 text-xs font-semibold ${filter === value ? "bg-gray-950 text-white" : "text-gray-600 hover:bg-white"}`}>{t(`tb.audit.filter_${value}`)}</button>)}</div></div><div className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs font-semibold text-gray-500"><span>{filtering ? t("tb.audit.searching") : t("tb.audit.result_count", { count: visible.length })}</span><span>{t("tb.audit.loaded_count", { loaded: historyItems.length, total: effectiveTotal })}</span></div><div className={`mt-2 divide-y border-y border-gray-200 ${filtering ? "opacity-50" : ""}`}>{visible.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="font-semibold">{t(`tb.audit.${event.action}`)}</div><div className="mt-1 text-xs text-gray-500">{event.actor_name || t(event.action === "proposal_response_received" ? "tb.audit.client" : "tb.audit.system")} · {dateTimeText(event.created_at)}</div></div>{detail(event) && <div className="text-sm font-bold text-gray-700">{detail(event)}</div>}</div>)}{!visible.length && !filtering && <div className="py-8 text-center text-sm text-gray-500">{t("tb.audit.empty_filter")}</div>}</div>{loadError && <div className="mt-3 text-sm font-semibold text-red-600">{loadError}</div>}{hasMore && <div className="mt-4 flex justify-center"><button type="button" onClick={loadOlder} disabled={loadingOlder || filtering} className="h-10 border border-gray-300 bg-white px-5 text-sm font-semibold text-gray-800 hover:border-gray-500 disabled:opacity-50">{loadingOlder ? t("tb.audit.loading_older") : t("tb.audit.load_older")}</button></div>}</section>;
 }
 
 export default function TourPackageWorkspace() {

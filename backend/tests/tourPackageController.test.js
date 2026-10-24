@@ -1,11 +1,23 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizePackageRefund, normalizeProposalResponseReason, normalizeSupplierRefund, normalizeTourCancellationDetails, normalizeTourCancellationReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { appendAuditFilters, buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizePackageRefund, normalizeProposalResponseReason, normalizeSupplierRefund, normalizeTourCancellationDetails, normalizeTourCancellationReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
   assert.equal(calculateGross(1000, "fixed", 250), 1250);
   assert.equal(calculateGross(-10, "percent", 15), 0);
+});
+
+test("builds safe full-history audit filters", () => {
+  const params = ["package-id"];
+  const conditions = ["event.package_id=$1::uuid"];
+  appendAuditFilters({ category: "finance", q: "payment", actions: "client_payment_updated,not_allowed" }, params, conditions);
+  assert.deepEqual(params[1], ["client_payment_updated", "client_refund_updated", "supplier_refund_updated", "tour_cancelled"]);
+  assert.equal(params[2], "%payment%");
+  assert.deepEqual(params[3], ["client_payment_updated"]);
+  assert.match(conditions.join(" "), /event\.action = ANY\(\$2::text\[\]\)/);
+  assert.match(conditions.join(" "), /event\.metadata::text ILIKE \$3/);
+  assert.match(conditions.join(" "), /event\.action = ANY\(\$4::text\[\]\)/);
 });
 
 test("only editable tour package states can be revised", () => {

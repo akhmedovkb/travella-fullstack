@@ -1962,6 +1962,7 @@
       "loaded_count": "Loaded {{loaded}} of {{total}}",
       "load_older": "Load earlier events",
       "loading_older": "Loading…",
+      "searching": "Searching the full history…",
       "load_error": "Could not load earlier events",
       "manager_assigned": "Manager assigned",
       "client_payment_updated": "Client payment updated",

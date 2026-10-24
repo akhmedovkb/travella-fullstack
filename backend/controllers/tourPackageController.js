@@ -14,6 +14,7 @@ const AUDIT_ACTION_GROUPS = {
   finance: ["client_payment_updated", "client_refund_updated", "supplier_refund_updated", "tour_cancelled"],
   team: ["manager_assigned", "task_created", "task_updated", "task_completed", "task_deleted", "incident_created", "incident_updated", "incident_resolved"],
 };
+const AUDIT_ACTIONS = new Set(Object.values(AUDIT_ACTION_GROUPS).flat());
 
 function cleanMoney(value) {
   const number = Number(value);
@@ -33,6 +34,28 @@ function csvCell(value) {
   const raw = typeof value === "string" ? value : JSON.stringify(value ?? "");
   const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
   return `"${safe.replace(/"/g, '""')}"`;
+}
+
+function appendAuditFilters(query, params, conditions) {
+  const category = String(query.category || "all").toLowerCase();
+  const search = String(query.q || "").trim().slice(0, 200);
+  const actions = String(query.actions || "").split(",").map((value) => value.trim()).filter((value) => AUDIT_ACTIONS.has(value));
+  if (AUDIT_ACTION_GROUPS[category]) {
+    params.push(AUDIT_ACTION_GROUPS[category]);
+    conditions.push(`event.action = ANY($${params.length}::text[])`);
+  }
+  if (search || actions.length) {
+    const alternatives = [];
+    if (search) {
+      params.push(`%${search}%`);
+      alternatives.push(`event.action ILIKE $${params.length}`, `COALESCE(provider.name,'') ILIKE $${params.length}`, `event.metadata::text ILIKE $${params.length}`);
+    }
+    if (actions.length) {
+      params.push(actions);
+      alternatives.push(`event.action = ANY($${params.length}::text[])`);
+    }
+    conditions.push(`(${alternatives.join(" OR ")})`);
+  }
 }
 
 function calculateGross(netTotal, markupType, markupValue) {
@@ -1419,14 +1442,18 @@ async function getTourPackageAudit(req, res) {
     if (!tour.rowCount) return res.status(404).json({ message: "Tour package not found" });
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 100));
     const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
+    const params = [req.params.id];
+    const conditions = ["event.package_id=$1::uuid"];
+    appendAuditFilters(req.query, params, conditions);
+    params.push(limit, offset);
     const result = await pool.query(
       `SELECT event.id,event.action,event.metadata,event.created_at,provider.name AS actor_name,
               COUNT(*) OVER()::int AS total_count
          FROM tour_package_audit_events event
          LEFT JOIN providers provider ON provider.id=event.actor_provider_id
-        WHERE event.package_id=$1::uuid
-        ORDER BY event.created_at DESC,event.id DESC LIMIT $2 OFFSET $3`,
-      [req.params.id, limit, offset]
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY event.created_at DESC,event.id DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
     );
     const total = Number(result.rows[0]?.total_count || 0);
     return res.json({
@@ -1452,18 +1479,9 @@ async function exportTourPackageAudit(req, res) {
     );
     if (!tour.rowCount) return res.status(404).json({ message: "Tour package not found" });
 
-    const category = String(req.query.category || "all").toLowerCase();
-    const search = String(req.query.q || "").trim().slice(0, 200);
     const params = [req.params.id];
     const conditions = ["event.package_id=$1::uuid"];
-    if (AUDIT_ACTION_GROUPS[category]) {
-      params.push(AUDIT_ACTION_GROUPS[category]);
-      conditions.push(`event.action = ANY($${params.length}::text[])`);
-    }
-    if (search) {
-      params.push(`%${search}%`);
-      conditions.push(`(event.action ILIKE $${params.length} OR COALESCE(provider.name,'') ILIKE $${params.length} OR event.metadata::text ILIKE $${params.length})`);
-    }
+    appendAuditFilters(req.query, params, conditions);
     const result = await pool.query(
       `SELECT event.created_at,event.action,provider.name AS actor_name,event.metadata
          FROM tour_package_audit_events event
@@ -2565,6 +2583,7 @@ async function getPublicTourProposal(req, res) {
 
 module.exports = {
   calculateGross,
+  appendAuditFilters,
   canEditTourPackage,
   normalizePackagePayment,
   normalizePackageRefund,
