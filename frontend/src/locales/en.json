@@ -1598,7 +1598,7 @@
       "net_cost": "NET cost",
       "markup": "Agency markup"
     },
-    "hotel_confirm": { "eyebrow": "Review before sending", "title": "Confirm suppliers and prices", "subtitle": "Locked quote versions will be included in the requests. Supplier requests: {{count}}.", "night": "Night", "hotel_number": "Hotel #{{id}}", "legacy_rate": "Legacy hotel rate", "no_quotes": "No calculated hotels are included in the itinerary. The other selected services will still be sent.", "back": "Go back", "sending": "Sending…", "confirm": "Confirm and send" },
+    "hotel_confirm": { "eyebrow": "Review before sending", "title": "Confirm suppliers and prices", "subtitle": "Locked quote versions will be included in the requests. Supplier requests: {{count}}.", "night": "Night", "hotel_number": "Hotel #{{id}}", "legacy_rate": "Legacy hotel rate", "no_quotes": "No calculated hotels are included in the itinerary. The other selected services will still be sent.", "extended_title": "The stay extends beyond the tour dates", "extended_hint": "{{count}} night(s) start on or after the tour end date ({{date}}). Confirm that this extension was added intentionally.", "back": "Go back", "sending": "Sending…", "confirm": "Confirm and send" },
     "quote_valid_until": "Proposal valid until",
     "package_status": {
       "draft": "Draft",

@@ -1,8 +1,18 @@
-import React from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-export default function HotelQuoteConfirmModal({ open, quotes = [], requestCount = 0, sending = false, onClose, onConfirm }) {
+export default function HotelQuoteConfirmModal({ open, quotes = [], requestCount = 0, tourEndDate = "", sending = false, onClose, onConfirm }) {
   const { t, i18n } = useTranslation();
+  const [extendedStayConfirmed, setExtendedStayConfirmed] = useState(false);
+  const extendedQuotes = useMemo(
+    () => quotes.filter((quote) => tourEndDate && String(quote.date || "") >= String(tourEndDate)),
+    [quotes, tourEndDate]
+  );
+
+  useEffect(() => {
+    if (open) setExtendedStayConfirmed(false);
+  }, [open]);
+
   if (!open) return null;
 
   const locale = i18n.language === "uz" ? "uz-UZ" : i18n.language === "en" ? "en-GB" : "ru-RU";
@@ -33,9 +43,16 @@ export default function HotelQuoteConfirmModal({ open, quotes = [], requestCount
           )) : <div className="px-5 py-6 text-sm font-semibold text-slate-500">{t("tb.hotel_confirm.no_quotes")}</div>}
         </div>
 
+        {extendedQuotes.length > 0 ? (
+          <label className="mx-5 mb-4 flex cursor-pointer gap-3 rounded-md border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950">
+            <input type="checkbox" checked={extendedStayConfirmed} onChange={(event) => setExtendedStayConfirmed(event.target.checked)} className="mt-0.5 h-4 w-4 shrink-0 accent-orange-600" />
+            <span><strong className="block">{t("tb.hotel_confirm.extended_title")}</strong><span className="mt-1 block text-amber-800">{t("tb.hotel_confirm.extended_hint", { count: extendedQuotes.length, date: tourEndDate })}</span></span>
+          </label>
+        ) : null}
+
         <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
           <button type="button" disabled={sending} onClick={onClose} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{t("tb.hotel_confirm.back")}</button>
-          <button type="button" disabled={sending} onClick={onConfirm} className="rounded-md bg-orange-600 px-5 py-2 text-sm font-bold text-white hover:bg-orange-500 disabled:opacity-50">{sending ? t("tb.hotel_confirm.sending") : t("tb.hotel_confirm.confirm")}</button>
+          <button type="button" disabled={sending || (extendedQuotes.length > 0 && !extendedStayConfirmed)} onClick={onConfirm} className="rounded-md bg-orange-600 px-5 py-2 text-sm font-bold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">{sending ? t("tb.hotel_confirm.sending") : t("tb.hotel_confirm.confirm")}</button>
         </div>
       </div>
     </div>
