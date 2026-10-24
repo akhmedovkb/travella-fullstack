@@ -8,6 +8,12 @@ const PACKAGE_STATUSES = new Set([
   "proposed", "accepted", "lost", "booked", "paid", "cancelled",
 ]);
 const PACKAGE_PAYMENT_STATUSES = new Set(["unpaid", "partial", "paid"]);
+const AUDIT_ACTION_GROUPS = {
+  commercial: ["package_updated", "proposal_published", "proposal_response_received", "proposal_link_revoked", "sale_confirmed", "client_followup_recorded"],
+  operations: ["component_operations_updated", "supplier_document_classified", "supplier_document_reviewed", "supplier_order_sent", "supplier_order_reminded", "supplier_documents_requested", "supplier_order_cancelled", "supplier_message_sent", "travelers_updated"],
+  finance: ["client_payment_updated", "client_refund_updated", "supplier_refund_updated", "tour_cancelled"],
+  team: ["manager_assigned", "task_created", "task_updated", "task_completed", "task_deleted", "incident_created", "incident_updated", "incident_resolved"],
+};
 
 function cleanMoney(value) {
   const number = Number(value);
@@ -21,6 +27,12 @@ async function recordTourPackageAudit(db, packageId, actorProviderId, action, me
      RETURNING id,action,metadata,created_at`,
     [packageId, actorProviderId, action, JSON.stringify(metadata || {})]
   );
+}
+
+function csvCell(value) {
+  const raw = typeof value === "string" ? value : JSON.stringify(value ?? "");
+  const safe = /^[=+\-@]/.test(raw) ? `'${raw}` : raw;
+  return `"${safe.replace(/"/g, '""')}"`;
 }
 
 function calculateGross(netTotal, markupType, markupValue) {
@@ -1393,6 +1405,51 @@ async function getTourPackage(req, res) {
   }
 }
 
+async function exportTourPackageAudit(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const tour = await pool.query(
+      `SELECT id,title,booking_reference FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2`,
+      [req.params.id, ownerId]
+    );
+    if (!tour.rowCount) return res.status(404).json({ message: "Tour package not found" });
+
+    const category = String(req.query.category || "all").toLowerCase();
+    const search = String(req.query.q || "").trim().slice(0, 200);
+    const params = [req.params.id];
+    const conditions = ["event.package_id=$1::uuid"];
+    if (AUDIT_ACTION_GROUPS[category]) {
+      params.push(AUDIT_ACTION_GROUPS[category]);
+      conditions.push(`event.action = ANY($${params.length}::text[])`);
+    }
+    if (search) {
+      params.push(`%${search}%`);
+      conditions.push(`(event.action ILIKE $${params.length} OR COALESCE(provider.name,'') ILIKE $${params.length} OR event.metadata::text ILIKE $${params.length})`);
+    }
+    const result = await pool.query(
+      `SELECT event.created_at,event.action,provider.name AS actor_name,event.metadata
+         FROM tour_package_audit_events event
+         LEFT JOIN providers provider ON provider.id=event.actor_provider_id
+        WHERE ${conditions.join(" AND ")}
+        ORDER BY event.created_at DESC,event.id DESC LIMIT 5000`,
+      params
+    );
+    const rows = [
+      ["timestamp", "action", "actor", "details"],
+      ...result.rows.map((event) => [event.created_at?.toISOString?.() || event.created_at, event.action, event.actor_name || "system", event.metadata || {}]),
+    ];
+    const reference = String(tour.rows[0].booking_reference || tour.rows[0].title || "tour").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "tour";
+    res.set("Content-Type", "text/csv; charset=utf-8");
+    res.set("Content-Disposition", `attachment; filename="${reference}-audit.csv"`);
+    return res.send(`\uFEFF${rows.map((row) => row.map(csvCell).join(",")).join("\r\n")}`);
+  } catch (error) {
+    console.error("exportTourPackageAudit error:", error);
+    return res.status(500).json({ message: "Failed to export tour audit" });
+  }
+}
+
 async function updateTourPackage(req, res) {
   let client;
   try {
@@ -2502,6 +2559,7 @@ module.exports = {
   listTourPackages,
   listSupplierPerformance,
   getTourPackage,
+  exportTourPackageAudit,
   updateTourPackage,
   updateTourPackageManager,
   recordTourPackageClientFollowup,

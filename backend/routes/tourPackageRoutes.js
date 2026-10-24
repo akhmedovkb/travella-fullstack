@@ -5,6 +5,7 @@ const {
   listTourPackages,
   listSupplierPerformance,
   getTourPackage,
+  exportTourPackageAudit,
   updateTourPackage,
   updateTourPackageManager,
   recordTourPackageClientFollowup,
@@ -68,6 +69,7 @@ router.patch("/:id/tasks/:taskId", updateTourPackageTask);
 router.delete("/:id/tasks/:taskId", deleteTourPackageTask);
 router.post("/:id/incidents", createTourPackageIncident);
 router.patch("/:id/incidents/:incidentId", updateTourPackageIncident);
+router.get("/:id/audit.csv", exportTourPackageAudit);
 router.get("/:id", getTourPackage);
 router.patch("/:id", updateTourPackage);
 
