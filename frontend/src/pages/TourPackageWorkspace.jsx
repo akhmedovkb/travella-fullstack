@@ -378,6 +378,10 @@ function TourAuditHistory({ items = [], currency, t }) {
     if (event.action === "client_payment_updated") return money(metadata.paid_amount, currency);
     if (event.action === "client_refund_updated") return `${money(metadata.refunded_amount, currency)} / ${money(metadata.refund_due_amount, currency)}`;
     if (event.action === "tour_cancelled") return t(`tb.workspace.cancellation_reason_${metadata.reason_code || "other"}`);
+    if (event.action === "component_operations_updated") return [metadata.service_title || metadata.provider_name || `#${metadata.booking_id}`, metadata.confirmation_reference].filter(Boolean).join(" · ");
+    if (event.action === "supplier_refund_updated") return `${metadata.service_title || metadata.provider_name || `#${metadata.booking_id}`} · ${money(metadata.received_amount, currency)} / ${money(metadata.due_amount, currency)}`;
+    if (event.action === "supplier_document_classified") return t(`tb.documents.attachment_${metadata.document_type || "other"}`);
+    if (event.action === "supplier_document_reviewed") return `${metadata.service_title || `#${metadata.booking_id}`} · ${t(`tb.documents.attachment_${metadata.review_status || "pending"}`)}`;
     return "";
   };
   return <section><h2 className="text-xl font-bold">{t("tb.audit.title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.audit.hint")}</p><div className="mt-4 divide-y border-y border-gray-200">{items.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="font-semibold">{t(`tb.audit.${event.action}`)}</div><div className="mt-1 text-xs text-gray-500">{event.actor_name || t("tb.audit.system")} · {dateTimeText(event.created_at)}</div></div>{detail(event) && <div className="text-sm font-bold text-gray-700">{detail(event)}</div>}</div>)}</div></section>;
@@ -573,7 +577,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.patch(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}`, values, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
       setNotice(t("tb.workspace.component_saved"));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.workspace.component_save_error"));
@@ -584,7 +588,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError(""); setNotice("");
     try {
       const { data } = await axios.patch(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/refund`, values, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
       setNotice(t("tb.workspace.supplier_refund_saved"));
     } catch (requestError) { setError(requestError?.response?.data?.message || t("tb.workspace.supplier_refund_error")); }
     finally { setSaving(false); }
@@ -702,7 +706,7 @@ export default function TourPackageWorkspace() {
     setError("");
     try {
       const { data } = await axios.patch(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/events/${eventId}/attachment`, { document_type: documentType }, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: (item.service_order_events || []).map((event) => Number(event.id) === Number(eventId) ? { ...event, metadata: data.metadata } : event) } : item) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: (item.service_order_events || []).map((event) => Number(event.id) === Number(eventId) ? { ...event, metadata: data.metadata } : event) } : item), audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.documents.attachment_update_error"));
     }

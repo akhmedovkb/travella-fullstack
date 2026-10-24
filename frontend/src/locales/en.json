@@ -1953,6 +1953,10 @@
       "client_payment_updated": "Client payment updated",
       "tour_cancelled": "Tour cancelled",
       "client_refund_updated": "Client refund updated",
+        "component_operations_updated": "Component operations updated",
+        "supplier_refund_updated": "Supplier refund updated",
+        "supplier_document_classified": "Supplier document classified",
+        "supplier_document_reviewed": "Supplier document reviewed",
       "system": "System",
       "current_user": "You",
       "unassigned": "Unassigned"

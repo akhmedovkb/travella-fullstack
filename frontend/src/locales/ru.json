@@ -1875,6 +1875,10 @@
       "client_payment_updated": "Обновлена оплата клиента",
       "tour_cancelled": "Тур отменён",
       "client_refund_updated": "Обновлён возврат клиенту",
+        "component_operations_updated": "Обновлены данные компонента",
+        "supplier_refund_updated": "Обновлён возврат поставщика",
+        "supplier_document_classified": "Указан тип документа поставщика",
+        "supplier_document_reviewed": "Проверен документ поставщика",
       "system": "Система",
       "current_user": "Вы",
       "unassigned": "Без менеджера"

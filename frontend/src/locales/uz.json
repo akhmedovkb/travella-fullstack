@@ -1951,6 +1951,10 @@
       "client_payment_updated": "Mijoz to‘lovi yangilandi",
       "tour_cancelled": "Tur bekor qilindi",
       "client_refund_updated": "Mijozga qaytarish yangilandi",
+        "component_operations_updated": "Komponent amallari yangilandi",
+        "supplier_refund_updated": "Yetkazib beruvchi qaytarimi yangilandi",
+        "supplier_document_classified": "Yetkazib beruvchi hujjati turi belgilandi",
+        "supplier_document_reviewed": "Yetkazib beruvchi hujjati tekshirildi",
       "system": "Tizim",
       "current_user": "Siz",
       "unassigned": "Menejer tayinlanmagan"

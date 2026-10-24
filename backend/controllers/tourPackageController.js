@@ -694,6 +694,7 @@ async function syncSupplierOrderFollowUpTasks(ownerId, packageId = null) {
 }
 
 async function updateTourPackageComponentOperations(req, res) {
+  const client = await pool.connect();
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
@@ -701,17 +702,20 @@ async function updateTourPackageComponentOperations(req, res) {
     const packageId = req.params.id;
     const bookingId = Number(req.params.bookingId);
     if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
-    const current = await pool.query(
-      `SELECT tp.status
+    const current = await client.query(
+      `SELECT tp.status,s.title AS service_title,p.name AS provider_name
          FROM tour_packages tp
          JOIN bookings b ON b.group_id=tp.id AND b.id=$3
+         LEFT JOIN services s ON s.id=b.service_id
+         LEFT JOIN providers p ON p.id=b.provider_id
         WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
       [packageId, ownerId, bookingId]
     );
     if (!current.rowCount) return res.status(404).json({ message: "Tour package component not found" });
     if (String(current.rows[0].status) === "cancelled") return res.status(409).json({ message: "Cancelled packages cannot be changed" });
     const value = normalizeComponentOperations(req.body);
-    const result = await pool.query(
+    await client.query("BEGIN");
+    const result = await client.query(
       `INSERT INTO tour_package_component_ops(
          package_id,booking_id,confirmation_reference,supplier_payment_due_at,supplier_paid,operational_note,
          quality_rating,reliability_rating,performance_note,actual_supplier_cost,cost_variance_note
@@ -731,26 +735,42 @@ async function updateTourPackageComponentOperations(req, res) {
                  quality_rating,reliability_rating,performance_note,actual_supplier_cost,cost_variance_note,updated_at`,
       [packageId, bookingId, value.confirmationReference, value.supplierPaymentDueAt, value.supplierPaid, value.operationalNote, value.qualityRating, value.reliabilityRating, value.performanceNote, value.actualSupplierCost, value.costVarianceNote]
     );
-    return res.json(result.rows[0]);
+    const audit = await recordTourPackageAudit(client, packageId, ownerId, "component_operations_updated", {
+      booking_id: bookingId,
+      service_title: current.rows[0].service_title || null,
+      provider_name: current.rows[0].provider_name || null,
+      confirmation_reference: value.confirmationReference,
+      supplier_payment_due_at: value.supplierPaymentDueAt,
+      supplier_paid: value.supplierPaid,
+      actual_supplier_cost: value.actualSupplierCost,
+    });
+    await client.query("COMMIT");
+    return res.json({ ...result.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("updateTourPackageComponentOperations error:", error);
     return res.status(500).json({ message: "Failed to update component operations" });
+  } finally {
+    client.release();
   }
 }
 
 async function updateTourPackageSupplierRefund(req, res) {
+  const client = await pool.connect();
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
     const bookingId = Number(req.params.bookingId);
     if (!Number.isInteger(bookingId) || bookingId <= 0) return res.status(400).json({ message: "Valid booking ID is required" });
-    const current = await pool.query(
+    const current = await client.query(
       `SELECT tp.status,b.provider_price,COALESCE(ops.actual_supplier_cost,b.provider_price,0) AS supplier_cost,
-              COALESCE(ops.supplier_paid,FALSE) AS supplier_paid
+              COALESCE(ops.supplier_paid,FALSE) AS supplier_paid,s.title AS service_title,p.name AS provider_name
          FROM tour_packages tp
          JOIN bookings b ON b.group_id=tp.id AND b.id=$3
          LEFT JOIN tour_package_component_ops ops ON ops.package_id=tp.id AND ops.booking_id=b.id
+         LEFT JOIN services s ON s.id=b.service_id
+         LEFT JOIN providers p ON p.id=b.provider_id
         WHERE tp.id=$1::uuid AND tp.owner_provider_id=$2`,
       [req.params.id, ownerId, bookingId]
     );
@@ -758,7 +778,8 @@ async function updateTourPackageSupplierRefund(req, res) {
     if (String(current.rows[0].status) !== "cancelled") return res.status(409).json({ message: "Supplier refunds can only be recorded for cancelled tours" });
     if (!current.rows[0].supplier_paid) return res.status(409).json({ message: "Supplier payment must be recorded before a refund" });
     const refund = normalizeSupplierRefund(req.body, current.rows[0].supplier_cost);
-    const result = await pool.query(
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_package_component_ops SET supplier_refund_status=$3,supplier_refund_due_amount=$4,
          supplier_refunded_amount=$5,supplier_refund_due_at=$6::date,supplier_refund_note=$7,
          supplier_refunded_at=CASE WHEN $3='refunded' THEN COALESCE(supplier_refunded_at,NOW()) ELSE NULL END,updated_at=NOW()
@@ -767,17 +788,30 @@ async function updateTourPackageSupplierRefund(req, res) {
           supplier_refund_due_at,supplier_refund_note,supplier_refunded_at,updated_at`,
       [req.params.id, bookingId, refund.status, refund.dueAmount, refund.receivedAmount, refund.dueAt, refund.note]
     );
-    const event = await pool.query(
+    const event = await client.query(
       `INSERT INTO tour_package_component_events(package_id,booking_id,event_type,actor_type,metadata)
        VALUES($1::uuid,$2,'supplier_refund_updated','dmc',jsonb_build_object(
          'status',$3::text,'due_amount',$4::numeric,'received_amount',$5::numeric,'due_at',$6::text,'note',$7::text))
        RETURNING id,event_type,actor_type,created_at,metadata`,
       [req.params.id, bookingId, refund.status, refund.dueAmount, refund.receivedAmount, refund.dueAt, refund.note]
     );
-    return res.json({ ...result.rows[0], service_order_event: event.rows[0] });
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "supplier_refund_updated", {
+      booking_id: bookingId,
+      service_title: current.rows[0].service_title || null,
+      provider_name: current.rows[0].provider_name || null,
+      status: refund.status,
+      due_amount: refund.dueAmount,
+      received_amount: refund.receivedAmount,
+      due_at: refund.dueAt,
+    });
+    await client.query("COMMIT");
+    return res.json({ ...result.rows[0], service_order_event: event.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
+    await client.query("ROLLBACK");
     console.error("updateTourPackageSupplierRefund error:", error);
     return res.status(500).json({ message: "Failed to update supplier refund" });
+  } finally {
+    client.release();
   }
 }
 
@@ -876,7 +910,12 @@ async function updateTourPackageComponentAttachment(req, res) {
       [documentType, eventId, req.params.id, bookingId, ownerId]
     );
     if (!result.rowCount) return res.status(404).json({ message: "Attachment not found" });
-    return res.json(result.rows[0]);
+    const audit = await recordTourPackageAudit(pool, req.params.id, ownerId, "supplier_document_classified", {
+      booking_id: bookingId,
+      attachment_event_id: eventId,
+      document_type: documentType,
+    });
+    return res.json({ ...result.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
     console.error("updateTourPackageComponentAttachment error:", error);
     return res.status(500).json({ message: "Failed to update attachment" });
@@ -930,7 +969,13 @@ async function reviewTourPackageComponentAttachment(req, res) {
        RETURNING id,event_type,actor_type,created_at,metadata`,
       [item.package_id, bookingId, reviewStatus === "approved" ? "attachment_approved" : "attachment_rejected", eventId]
     );
-    return res.json({ ...updated.rows[0], review_event: audit.rows[0] });
+    const packageAudit = await recordTourPackageAudit(pool, item.package_id, ownerId, "supplier_document_reviewed", {
+      booking_id: bookingId,
+      attachment_event_id: eventId,
+      service_title: item.service_title || null,
+      review_status: reviewStatus,
+    });
+    return res.json({ ...updated.rows[0], review_event: audit.rows[0], audit_event: packageAudit.rows[0] });
   } catch (error) {
     console.error("reviewTourPackageComponentAttachment error:", error);
     return res.status(500).json({ message: "Failed to review attachment" });
