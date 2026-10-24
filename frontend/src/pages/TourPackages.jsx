@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
-import { AlertTriangle, CalendarDays, ChevronRight, CircleDollarSign, Clock3, Download, MessageCircle, Plus, Search, Users } from "lucide-react";
+import { AlertTriangle, ArrowRight, CalendarDays, Check, ChevronRight, CircleDollarSign, Clock3, Download, MessageCircle, Plus, Search, Sparkles, Users } from "lucide-react";
 import { Link } from "react-router-dom";
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || "";
@@ -323,6 +323,13 @@ export default function TourPackages() {
   }), [filtered, sortBy]);
 
   if (loading) return <main className="mx-auto max-w-7xl p-6 text-gray-500">{t("common.loading")}</main>;
+  if (!items.length && !error) return <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
+    <header className="border-b border-gray-200 pb-6"><div className="text-xs font-bold uppercase text-orange-600">Tour Builder</div><h1 className="mt-1 text-3xl font-bold">{t("tb.portfolio.title")}</h1><p className="mt-2 text-gray-600">{t("tb.portfolio.subtitle")}</p></header>
+    <section className="grid min-h-[430px] items-center gap-8 border-b border-gray-200 py-10 lg:grid-cols-[minmax(0,1fr)_420px]">
+      <div className="max-w-2xl"><div className="inline-flex h-11 w-11 items-center justify-center rounded-md bg-orange-50 text-orange-600"><Sparkles size={22} /></div><h2 className="mt-5 text-2xl font-bold text-gray-950">{t("tb.portfolio.empty_title")}</h2><p className="mt-3 max-w-xl text-base leading-7 text-gray-600">{t("tb.portfolio.empty_hint")}</p><Link to="/tour-builder" className="mt-6 inline-flex h-12 items-center gap-2 bg-orange-600 px-5 font-bold text-white hover:bg-orange-700"><Plus size={18} />{t("tb.portfolio.create_first")}<ArrowRight size={18} /></Link></div>
+      <div className="border border-gray-200 bg-gray-50 p-5"><div className="text-xs font-bold uppercase text-gray-400">{t("tb.portfolio.first_tour")}</div><div className="mt-4 space-y-1">{["dates", "route", "services", "price", "send"].map((key, index) => <div key={key} className="flex items-center gap-3 border-b border-gray-200 bg-white px-3 py-3 last:border-b-0"><span className="grid h-7 w-7 place-items-center rounded-full bg-gray-950 text-xs font-bold text-white">{index + 1}</span><span className="text-sm font-semibold text-gray-700">{t(`tb.portfolio.first_steps.${key}`)}</span>{index === 0 && <Check size={16} className="ml-auto text-emerald-600" />}</div>)}</div></div>
+    </section>
+  </main>;
   return <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
     <header className="flex flex-wrap items-end justify-between gap-5 border-b border-gray-200 pb-6"><div><div className="text-xs font-bold uppercase text-orange-600">Tour Builder</div><h1 className="mt-1 text-3xl font-bold">{t("tb.portfolio.title")}</h1><p className="mt-2 text-gray-600">{t("tb.portfolio.subtitle")}</p></div><Link to="/tour-builder" className="inline-flex h-11 items-center gap-2 bg-orange-600 px-5 font-bold text-white hover:bg-orange-700"><Plus size={18} />{t("tb.portfolio.create")}</Link></header>
     {cancellationReasons.length > 0 && <section className="mt-5 flex flex-wrap items-center gap-2 border-b border-gray-200 pb-4"><span className="mr-1 text-xs font-semibold uppercase text-gray-400">{t("tb.portfolio.cancellation_reasons")}</span>{cancellationReasons.map(([reason, count]) => <span key={reason} className="border border-gray-200 bg-white px-2.5 py-1.5 text-sm text-gray-700">{t(`tb.workspace.cancellation_reason_${reason}`)} · <strong>{count}</strong></span>)}</section>}
