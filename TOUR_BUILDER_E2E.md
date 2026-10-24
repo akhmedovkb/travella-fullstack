@@ -31,6 +31,8 @@ The accounts can be created or rotated idempotently inside the Railway staging s
 npm run seed:e2e:tour-builder
 ```
 
+Railway staging may set `SEED_TOUR_BUILDER_E2E=true` for one deployment. The `prestart` hook then seeds through Railway's private database network. Production skips the hook unless that explicit flag is present.
+
 ## Local run
 
 ```powershell

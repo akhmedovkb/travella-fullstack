@@ -1,6 +1,11 @@
 const bcrypt = require("bcryptjs");
 const pool = require("../db");
 
+if (process.argv.includes("--if-enabled") && process.env.SEED_TOUR_BUILDER_E2E !== "true") {
+  console.log("Tour Builder E2E fixture seed is disabled");
+  process.exit(0);
+}
+
 function required(name) {
   const value = String(process.env[name] || "").trim();
   if (!value) throw new Error(`${name} is required`);
