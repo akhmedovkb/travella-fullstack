@@ -1394,6 +1394,7 @@ async function getTourPackage(req, res) {
 }
 
 async function updateTourPackage(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
@@ -1408,7 +1409,9 @@ async function updateTourPackage(req, res) {
       ...req.body,
       meta: { ...(current.rows[0].meta || {}), ...(req.body?.meta || {}) },
     });
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_packages SET title=$3,status=$4,currency=$5,net_total=$6,
          markup_type=$7,markup_value=$8,gross_total=$9,quote_valid_until=$10,
          meta=$11::jsonb, client_name=$12, client_phone=$13, client_email=$14,
@@ -1422,11 +1425,17 @@ async function updateTourPackage(req, res) {
         value.clientCompany, JSON.stringify(value.route), JSON.stringify(value.itinerary),
         value.paxAdult, value.paxChild, value.startDate, value.endDate]
     );
-    return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash) });
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "package_updated", {
+      title: value.title, start_date: value.startDate, end_date: value.endDate,
+      pax_adult: value.paxAdult, pax_child: value.paxChild, gross_total: value.grossTotal,
+    });
+    await client.query("COMMIT");
+    return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash), audit_event: audit.rows[0] });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("updateTourPackage error:", error);
     return res.status(500).json({ message: "Failed to update tour package" });
-  }
+  } finally { client?.release(); }
 }
 
 async function updateTourPackageManager(req, res) {
@@ -1478,8 +1487,11 @@ async function recordTourPackageClientFollowup(req, res) {
        VALUES($1::uuid,$2,$3,$4) RETURNING id,channel,note,contacted_at`,
       [req.params.id, followup.channel, followup.note, result.rows[0].last_client_followup_at]
     );
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "client_followup_recorded", {
+      channel: followup.channel,
+    });
     await client.query("COMMIT");
-    return res.json({ ...result.rows[0], contact: contact.rows[0] });
+    return res.json({ ...result.rows[0], contact: contact.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
     await client.query("ROLLBACK");
     console.error("recordTourPackageClientFollowup error:", error);
@@ -1488,6 +1500,7 @@ async function recordTourPackageClientFollowup(req, res) {
 }
 
 async function shareTourPackage(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
@@ -1507,7 +1520,9 @@ async function shareTourPackage(req, res) {
       : fallbackExpiry;
     const isFinal = ["booked", "paid"].includes(String(current.rows[0].status));
     const nextRevision = isFinal ? Number(current.rows[0].current_revision || 0) : Number(current.rows[0].current_revision || 0) + 1;
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_packages SET title=$3, client_name=$4, client_phone=$5,
          client_email=$6, client_company=$7, quote_valid_until=$8,
          share_token_hash=$9, shared_at=NOW(),
@@ -1527,13 +1542,18 @@ async function shareTourPackage(req, res) {
         value.clientEmail, value.clientCompany, expiresAt.toISOString(), hashShareToken(token), nextRevision]
     );
     if (!isFinal) {
-      await pool.query(
+      await client.query(
         `INSERT INTO tour_package_revisions(package_id,version,snapshot)
          VALUES($1::uuid,$2,$3::jsonb)
          ON CONFLICT(package_id,version) DO UPDATE SET snapshot=EXCLUDED.snapshot,created_at=NOW()`,
         [req.params.id, nextRevision, JSON.stringify(packageSnapshot(result.rows[0]))]
       );
     }
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "proposal_published", {
+      revision: nextRevision,
+      expires_at: result.rows[0].share_expires_at,
+    });
+    await client.query("COMMIT");
     return res.json({
       id: result.rows[0].id,
       status: result.rows[0].status,
@@ -1541,11 +1561,13 @@ async function shareTourPackage(req, res) {
       share_expires_at: result.rows[0].share_expires_at,
       current_revision: result.rows[0].current_revision,
       token,
+      audit_event: audit.rows[0],
     });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("shareTourPackage error:", error);
     return res.status(500).json({ message: "Failed to create proposal link" });
-  }
+  } finally { client?.release(); }
 }
 
 async function respondToTourProposal(req, res) {
@@ -1586,6 +1608,11 @@ async function respondToTourProposal(req, res) {
       [result.rows[0].id, result.rows[0].current_revision, result.rows[0].proposal_response,
         result.rows[0].proposal_response_reason, result.rows[0].proposal_response_message, result.rows[0].proposal_responded_at]
     );
+    await recordTourPackageAudit(client, result.rows[0].id, null, "proposal_response_received", {
+      response: result.rows[0].proposal_response,
+      reason: result.rows[0].proposal_response_reason,
+      revision: result.rows[0].current_revision,
+    });
     await client.query("COMMIT");
     setImmediate(() => { notifyAgencyProposalResponse(result.rows[0]); });
     res.set("Cache-Control", "no-store");
@@ -1626,6 +1653,7 @@ function normalizeTourCancellationDetails(body = {}) {
 }
 
 async function confirmTourPackageSale(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
@@ -1647,7 +1675,9 @@ async function confirmTourPackageSale(req, res) {
       return res.status(409).json({ message: "All supplier components must be confirmed", readiness });
     }
     const bookingReference = current.rows[0].booking_reference || createBookingReference();
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_packages SET status='booked', booking_reference=COALESCE(booking_reference,$3),
          booked_at=COALESCE(booked_at,NOW()),
          share_expires_at=GREATEST(
@@ -1659,11 +1689,17 @@ async function confirmTourPackageSale(req, res) {
        RETURNING *`,
       [req.params.id, ownerId, bookingReference]
     );
-    return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash), readiness });
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "sale_confirmed", {
+      booking_reference: result.rows[0].booking_reference,
+      gross_total: result.rows[0].gross_total,
+    });
+    await client.query("COMMIT");
+    return res.json({ ...result.rows[0], share_token_hash: undefined, is_shared: Boolean(result.rows[0].share_token_hash), readiness, audit_event: audit.rows[0] });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("confirmTourPackageSale error:", error);
     return res.status(500).json({ message: "Failed to confirm package sale" });
-  }
+  } finally { client?.release(); }
 }
 
 async function updateTourPackagePayment(req, res) {
@@ -2350,22 +2386,28 @@ async function updateTourPackageIncident(req, res) {
 }
 
 async function revokeTourPackageShare(req, res) {
+  let client;
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
     await ensureTourPackagesTable();
-    const result = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE tour_packages SET share_token_hash=NULL, shared_at=NULL,
          share_expires_at=NULL, updated_at=NOW()
        WHERE id=$1::uuid AND owner_provider_id=$2 RETURNING id`,
       [req.params.id, ownerId]
     );
-    if (!result.rowCount) return res.status(404).json({ message: "Tour package not found" });
-    return res.status(204).send();
+    if (!result.rowCount) { await client.query("ROLLBACK"); return res.status(404).json({ message: "Tour package not found" }); }
+    const audit = await recordTourPackageAudit(client, req.params.id, ownerId, "proposal_link_revoked");
+    await client.query("COMMIT");
+    return res.json({ revoked: true, audit_event: audit.rows[0] });
   } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("revokeTourPackageShare error:", error);
     return res.status(500).json({ message: "Failed to revoke proposal link" });
-  }
+  } finally { client?.release(); }
 }
 
 async function getPublicTourProposal(req, res) {

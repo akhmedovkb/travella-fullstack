@@ -385,9 +385,14 @@ function TourAuditHistory({ items = [], currency, t }) {
     if (event.action === "travelers_updated") return t("tb.audit.travelers_count", { count: metadata.traveler_count || 0 });
     if (["task_created", "task_updated", "task_completed", "task_deleted"].includes(event.action)) return metadata.title || `#${metadata.task_id}`;
     if (["incident_created", "incident_updated", "incident_resolved"].includes(event.action)) return metadata.title || `#${metadata.incident_id}`;
+    if (event.action === "package_updated") return metadata.title || "";
+    if (event.action === "proposal_published") return `v${metadata.revision || 0}`;
+    if (event.action === "proposal_response_received") return t(`tb.proposal.response_${metadata.response || "changes_requested"}`);
+    if (event.action === "sale_confirmed") return metadata.booking_reference || "";
+    if (event.action === "client_followup_recorded") return t(`tb.action_timeline.channel_${metadata.channel || "other"}`);
     return "";
   };
-  return <section><h2 className="text-xl font-bold">{t("tb.audit.title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.audit.hint")}</p><div className="mt-4 divide-y border-y border-gray-200">{items.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="font-semibold">{t(`tb.audit.${event.action}`)}</div><div className="mt-1 text-xs text-gray-500">{event.actor_name || t("tb.audit.system")} · {dateTimeText(event.created_at)}</div></div>{detail(event) && <div className="text-sm font-bold text-gray-700">{detail(event)}</div>}</div>)}</div></section>;
+  return <section><h2 className="text-xl font-bold">{t("tb.audit.title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.audit.hint")}</p><div className="mt-4 divide-y border-y border-gray-200">{items.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="font-semibold">{t(`tb.audit.${event.action}`)}</div><div className="mt-1 text-xs text-gray-500">{event.actor_name || t(event.action === "proposal_response_received" ? "tb.audit.client" : "tb.audit.system")} · {dateTimeText(event.created_at)}</div></div>{detail(event) && <div className="text-sm font-bold text-gray-700">{detail(event)}</div>}</div>)}</div></section>;
 }
 
 export default function TourPackageWorkspace() {
@@ -461,7 +466,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.patch(`${API_BASE}/api/tour-packages/${id}`, form, cfg());
-      const merged = { ...tourPackage, ...data };
+      const merged = { ...tourPackage, ...data, audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(tourPackage.audit_events || [])] : tourPackage.audit_events };
       setTourPackage(merged); setForm(createForm(merged)); setDirty(false);
       if (!quiet) setNotice(t("tb.workspace.saved"));
       return true;
@@ -487,7 +492,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError(""); setNotice("");
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/confirm-sale`, {}, cfg());
-      setTourPackage((current) => ({ ...current, ...data }));
+      setTourPackage((current) => ({ ...current, ...data, audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
       setNotice(t("tb.proposal.sale_confirmed", { reference: data.booking_reference }));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.workspace.save_error"));
@@ -556,7 +561,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/client-followup`, values, cfg());
-      setTourPackage((current) => ({ ...current, ...data, client_contacts: [data.contact, ...(current.client_contacts || [])] }));
+      setTourPackage((current) => ({ ...current, ...data, client_contacts: [data.contact, ...(current.client_contacts || [])], audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
       setNotice(t("tb.workspace.client_followup_saved"));
       return true;
     } catch (requestError) {
