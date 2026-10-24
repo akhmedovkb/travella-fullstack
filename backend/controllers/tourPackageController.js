@@ -1018,6 +1018,10 @@ async function listTourPackages(req, res) {
               ),0) AS supplier_refund_outstanding_total,
               COALESCE(SUM(COALESCE(ops.supplier_refunded_amount,0)),0) AS supplier_refunded_total,
               COALESCE(SUM(COALESCE(ops.actual_supplier_cost,b.provider_price,0)) FILTER (
+                WHERE COALESCE(ops.supplier_paid,FALSE)=TRUE
+              ),0) AS supplier_paid_total,
+              COALESCE(SUM(COALESCE(ops.supplier_refund_due_amount,0)),0) AS supplier_refund_due_total,
+              COALESCE(SUM(COALESCE(ops.actual_supplier_cost,b.provider_price,0)) FILTER (
                 WHERE COALESCE(ops.supplier_paid,FALSE)=FALSE
               ),0) AS supplier_payable_total,
               COALESCE(SUM(COALESCE(ops.actual_supplier_cost,b.provider_price,0)) FILTER (

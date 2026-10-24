@@ -103,16 +103,22 @@ export default function TourPackages() {
   }), [items]);
   const cancellationFinances = useMemo(() => {
     const groups = new Map();
-    items.filter(isCancellationSettlementPending).forEach((item) => {
+    items.filter((item) => item.status === "cancelled").forEach((item) => {
       const currency = item.currency || "UZS";
-      const group = groups.get(currency) || { currency, tours: 0, clientDue: 0, supplierDue: 0, overdueRecoveries: 0 };
+      const group = groups.get(currency) || { currency, tours: 0, open: 0, clientDue: 0, supplierDue: 0, clientRetained: 0, supplierLoss: 0, result: 0, overdueRecoveries: 0 };
+      const clientRetained = Math.max(0, Number(item.paid_amount || 0) - Number(item.refund_due_amount || 0));
+      const supplierLoss = Math.max(0, Number(item.supplier_paid_total || 0) - Number(item.supplier_refund_due_total || 0));
       group.tours += 1;
+      group.open += isCancellationSettlementPending(item) ? 1 : 0;
       group.clientDue += Math.max(0, Number(item.refund_due_amount || 0) - Number(item.refunded_amount || 0));
       group.supplierDue += Math.max(0, Number(item.supplier_refund_outstanding_total || 0));
+      group.clientRetained += clientRetained;
+      group.supplierLoss += supplierLoss;
+      group.result += clientRetained - supplierLoss;
       group.overdueRecoveries += Number(item.supplier_refund_overdue_count || 0);
       groups.set(currency, group);
     });
-    return [...groups.values()].filter((group) => group.clientDue > 0 || group.supplierDue > 0);
+    return [...groups.values()];
   }, [items]);
   const proposalResponses = stats.proposalAccepted + stats.proposalChanges + stats.proposalDeclined;
   const respondedTours = items.filter((item) => Number(item.proposal_response_count || 0) > 0);
@@ -311,6 +317,7 @@ export default function TourPackages() {
   if (loading) return <main className="mx-auto max-w-7xl p-6 text-gray-500">{t("common.loading")}</main>;
   return <main className="mx-auto max-w-7xl px-4 py-6 md:px-6">
     <header className="flex flex-wrap items-end justify-between gap-5 border-b border-gray-200 pb-6"><div><div className="text-xs font-bold uppercase text-orange-600">Tour Builder</div><h1 className="mt-1 text-3xl font-bold">{t("tb.portfolio.title")}</h1><p className="mt-2 text-gray-600">{t("tb.portfolio.subtitle")}</p></div><Link to="/tour-builder" className="inline-flex h-11 items-center gap-2 bg-orange-600 px-5 font-bold text-white hover:bg-orange-700"><Plus size={18} />{t("tb.portfolio.create")}</Link></header>
+    {cancellationFinances.length > 0 && <section className="mt-5 border border-gray-200 bg-gray-50 p-4"><div className="text-xs font-semibold uppercase text-gray-400">{t("tb.portfolio.cancellation_result_title")}</div><div className="mt-3 space-y-3">{cancellationFinances.map((group) => <div key={group.currency} className="grid gap-3 sm:grid-cols-3"><div><div className="text-xs text-gray-500">{t("tb.portfolio.client_cancellation_fees")}</div><div className="font-bold">{money(group.clientRetained, group.currency)}</div></div><div><div className="text-xs text-gray-500">{t("tb.portfolio.nonrecoverable_supplier_costs")}</div><div className="font-bold text-red-700">{money(group.supplierLoss, group.currency)}</div></div><div><div className="text-xs text-gray-500">{t("tb.portfolio.cancellation_result")}</div><div className={`font-bold ${group.result < 0 ? "text-red-700" : "text-emerald-700"}`}>{money(group.result, group.currency)}</div></div></div>)}</div></section>}
     {error && <div className="mt-5 border border-red-200 bg-red-50 p-4 text-red-800">{error}</div>}
     {stats.review > 0 && <button type="button" onClick={() => setOperations("document_review")} className="mt-5 inline-flex items-center gap-2 border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-bold text-amber-800"><AlertTriangle size={16} />{t("tb.portfolio.documents_to_review", { count: stats.review })}</button>}
     {stats.missingFinanceDates > 0 && <button type="button" onClick={() => setOperations("finance_dates_missing")} className="mt-5 ml-2 inline-flex items-center gap-2 border border-red-300 bg-red-50 px-4 py-2 text-sm font-bold text-red-800"><CalendarDays size={16} />{t("tb.portfolio.finance_dates_missing_count", { count: stats.missingFinanceDates })}</button>}
