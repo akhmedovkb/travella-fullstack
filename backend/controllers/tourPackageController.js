@@ -405,6 +405,8 @@ async function ensureTourPackagesTable() {
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS current_revision INTEGER NOT NULL DEFAULT 0`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS accepted_revision INTEGER`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS cancellation_reason TEXT`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS cancellation_reason_code VARCHAR(32)`);
+  await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS cancellation_initiator VARCHAR(16)`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS cancelled_at TIMESTAMPTZ`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refund_status VARCHAR(16) NOT NULL DEFAULT 'not_required'`);
   await pool.query(`ALTER TABLE tour_packages ADD COLUMN IF NOT EXISTS refund_due_amount NUMERIC(18,2) NOT NULL DEFAULT 0`);
@@ -1534,6 +1536,16 @@ function normalizeTourCancellationReason(value) {
   return String(value || "").trim().replace(/\s+/g, " ").slice(0, 1000);
 }
 
+function normalizeTourCancellationDetails(body = {}) {
+  const reasonCode = String(body.reason_code || "").trim().toLowerCase();
+  const initiator = String(body.initiator || "").trim().toLowerCase();
+  return {
+    reason: normalizeTourCancellationReason(body.reason),
+    reasonCode: new Set(["client_plans", "price", "visa", "flight", "supplier_failure", "force_majeure", "dmc_error", "other"]).has(reasonCode) ? reasonCode : "other",
+    initiator: new Set(["client", "supplier", "dmc", "external"]).has(initiator) ? initiator : "client",
+  };
+}
+
 async function confirmTourPackageSale(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
@@ -1623,8 +1635,8 @@ async function cancelTourPackage(req, res) {
   try {
     const ownerId = requireProviderOwner(req, res);
     if (!ownerId) return;
-    const reason = normalizeTourCancellationReason(req.body?.reason);
-    if (reason.length < 5) return res.status(400).json({ message: "Cancellation reason is required" });
+    const cancellation = normalizeTourCancellationDetails(req.body);
+    if (cancellation.reason.length < 5) return res.status(400).json({ message: "Cancellation reason is required" });
     await ensureTourPackagesTable();
     client = await pool.connect();
     await client.query("BEGIN");
@@ -1673,14 +1685,14 @@ async function cancelTourPackage(req, res) {
       [req.params.id]
     );
     const saved = await client.query(
-      `UPDATE tour_packages SET status='cancelled',cancellation_reason=$3,cancelled_at=NOW(),
+      `UPDATE tour_packages SET status='cancelled',cancellation_reason=$3,cancellation_reason_code=$4,cancellation_initiator=$5,cancelled_at=NOW(),
          refund_due_amount=paid_amount,refunded_amount=0,
          refund_status=CASE WHEN paid_amount > 0 THEN 'pending' ELSE 'not_required' END,
          refund_due_at=NULL,refund_note=NULL,refunded_at=NULL,updated_at=NOW()
         WHERE id=$1::uuid AND owner_provider_id=$2
-        RETURNING id,status,booking_reference,cancellation_reason,cancelled_at,refund_status,
+        RETURNING id,status,booking_reference,cancellation_reason,cancellation_reason_code,cancellation_initiator,cancelled_at,refund_status,
           refund_due_amount,refunded_amount,refund_due_at,refund_note,refunded_at,updated_at`,
-      [req.params.id, ownerId, reason]
+      [req.params.id, ownerId, cancellation.reason, cancellation.reasonCode, cancellation.initiator]
     );
     await client.query("COMMIT");
     const notificationResults = await Promise.all(activeOrders.rows.map(async (item) => {
@@ -2282,6 +2294,7 @@ module.exports = {
   isValidProposalResponse,
   normalizeProposalResponseReason,
   normalizeTourCancellationReason,
+  normalizeTourCancellationDetails,
   packageSnapshot,
   createTourPackage,
   listTourPackages,

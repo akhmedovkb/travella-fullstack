@@ -1,6 +1,6 @@
 const test = require("node:test");
 const assert = require("node:assert/strict");
-const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizePackageRefund, normalizeProposalResponseReason, normalizeSupplierRefund, normalizeTourCancellationReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
+const { buildSupplierServiceOrderMessage, buildSupplierServiceOrderReminderMessage, buildSupplierServiceOrderCancellationMessage, buildSupplierServiceOrderNoteMessage, buildSupplierDocumentRequestMessage, calculateGross, canEditTourPackage, createBookingReference, derivePackageStatus, escapeTelegramHtml, hashShareToken, isValidProposalResponse, normalizeClientFollowup, normalizeComponentOperations, normalizePackagePayment, normalizePackageRefund, normalizeProposalResponseReason, normalizeSupplierRefund, normalizeTourCancellationDetails, normalizeTourCancellationReason, normalizeTourTask, normalizeTraveler, packageOperationsReadiness, packageOperationsTimeline, packageSaleReadiness, packageSnapshot, publicPackageView } = require("../controllers/tourPackageController");
 
 test("calculates percent and fixed agency markup", () => {
   assert.equal(calculateGross(1000, "percent", 15), 1150);
@@ -39,6 +39,15 @@ test("derives supplier recovery status without exceeding paid cost", () => {
     status: "partial", dueAmount: 700, receivedAmount: 250, dueAt: "2026-11-05", note: "Hotel refund",
   });
   assert.equal(normalizeSupplierRefund({ supplier_refund_due_amount: 900, supplier_refunded_amount: 900 }, 800).receivedAmount, 800);
+});
+
+test("normalizes structured tour cancellation details", () => {
+  assert.deepEqual(normalizeTourCancellationDetails({ reason: "  Client changed dates  ", reason_code: "client_plans", initiator: "client" }), {
+    reason: "Client changed dates", reasonCode: "client_plans", initiator: "client",
+  });
+  assert.deepEqual(normalizeTourCancellationDetails({ reason: "Details", reason_code: "unknown", initiator: "unknown" }), {
+    reason: "Details", reasonCode: "other", initiator: "client",
+  });
 });
 
 test("normalizes private traveler details", () => {
