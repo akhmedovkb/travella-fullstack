@@ -390,6 +390,7 @@ function TourAuditHistory({ items = [], currency, t }) {
     if (event.action === "proposal_response_received") return t(`tb.proposal.response_${metadata.response || "changes_requested"}`);
     if (event.action === "sale_confirmed") return metadata.booking_reference || "";
     if (event.action === "client_followup_recorded") return t(`tb.action_timeline.channel_${metadata.channel || "other"}`);
+    if (["supplier_order_sent", "supplier_order_reminded", "supplier_documents_requested", "supplier_order_cancelled", "supplier_message_sent"].includes(event.action)) return metadata.service_title || `#${metadata.booking_id}`;
     return "";
   };
   return <section><h2 className="text-xl font-bold">{t("tb.audit.title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.audit.hint")}</p><div className="mt-4 divide-y border-y border-gray-200">{items.map((event) => <div key={event.id} className="grid gap-2 py-3 sm:grid-cols-[1fr_auto] sm:items-center"><div><div className="font-semibold">{t(`tb.audit.${event.action}`)}</div><div className="mt-1 text-xs text-gray-500">{event.actor_name || t(event.action === "proposal_response_received" ? "tb.audit.client" : "tb.audit.system")} · {dateTimeText(event.created_at)}</div></div>{detail(event) && <div className="text-sm font-bold text-gray-700">{detail(event)}</div>}</div>)}</div></section>;
@@ -607,7 +608,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/send-service-order`, {}, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), tasks: (current.tasks || []).map((task) => (data.closed_task_ids || []).includes(task.id) ? { ...task, completed: true, completed_at: new Date().toISOString() } : task) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), tasks: (current.tasks || []).map((task) => (data.closed_task_ids || []).includes(task.id) ? { ...task, completed: true, completed_at: new Date().toISOString() } : task), audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
       setNotice(t("tb.documents.service_order_sent_notice"));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.documents.service_order_send_error"));
@@ -633,6 +634,7 @@ export default function TourPackageWorkspace() {
           return data ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item;
         }),
         tasks: (current.tasks || []).map((task) => closedTaskIds.has(task.id) ? { ...task, completed: true, completed_at: new Date().toISOString() } : task),
+        audit_events: [...successes.map((result) => result.data.audit_event).filter(Boolean).map((event) => ({ ...event, actor_name: t("tb.audit.current_user") })), ...(current.audit_events || [])],
       }));
       const failed = results.length - successes.length;
       if (successes.length) setNotice(t("tb.documents.send_all_service_orders_result", { sent: successes.length, total: results.length }));
@@ -646,7 +648,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/remind-service-order`, {}, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
       setNotice(t("tb.documents.reminder_sent"));
     } catch (requestError) {
       setError(requestError?.response?.status === 429 ? t("tb.documents.reminder_cooldown") : requestError?.response?.data?.message || t("tb.documents.reminder_error"));
@@ -657,7 +659,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/request-documents`, {}, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), tasks: data.task ? [data.task, ...(current.tasks || []).filter((task) => !(task.task_type === data.task.task_type && Number(task.booking_id) === Number(data.task.booking_id) && !task.completed))] : current.tasks }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), tasks: data.task ? [data.task, ...(current.tasks || []).filter((task) => !(task.task_type === data.task.task_type && Number(task.booking_id) === Number(data.task.booking_id) && !task.completed))] : current.tasks, audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
       setNotice(t("tb.documents.document_request_sent")); return true;
     } catch (requestError) {
       setError(requestError?.response?.status === 429 ? t("tb.documents.document_request_cooldown") : requestError?.response?.data?.message || t("tb.documents.document_request_error")); return false;
@@ -672,7 +674,7 @@ export default function TourPackageWorkspace() {
     const sent = results.filter((result) => result.status === "fulfilled").map((result) => result.value);
     const updates = new Map(sent.map((entry) => [Number(entry.bookingId), entry.data.service_order_event]));
     const tasks = sent.map((entry) => entry.data.task).filter(Boolean);
-    setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => updates.has(Number(item.id)) ? { ...item, service_order_events: [updates.get(Number(item.id)), ...(item.service_order_events || [])] } : item), tasks: [...tasks, ...(current.tasks || []).filter((task) => !tasks.some((fresh) => fresh.task_type === task.task_type && Number(fresh.booking_id) === Number(task.booking_id) && !task.completed))] }));
+    setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => updates.has(Number(item.id)) ? { ...item, service_order_events: [updates.get(Number(item.id)), ...(item.service_order_events || [])] } : item), tasks: [...tasks, ...(current.tasks || []).filter((task) => !tasks.some((fresh) => fresh.task_type === task.task_type && Number(fresh.booking_id) === Number(task.booking_id) && !task.completed))], audit_events: [...sent.map((entry) => entry.data.audit_event).filter(Boolean).map((event) => ({ ...event, actor_name: t("tb.audit.current_user") })), ...(current.audit_events || [])] }));
     setNotice(t("tb.documents.request_all_documents_result", { sent: sent.length, total: targets.length }));
     if (sent.length < targets.length) setError(t("tb.documents.document_request_failed_count", { count: targets.length - sent.length }));
     setSaving(false);
@@ -683,7 +685,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/cancel-service-order`, {}, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), tasks: (current.tasks || []).map((task) => (data.closed_task_ids || []).includes(task.id) ? { ...task, completed: true, completed_at: new Date().toISOString() } : task) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, ...data, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), tasks: (current.tasks || []).map((task) => (data.closed_task_ids || []).includes(task.id) ? { ...task, completed: true, completed_at: new Date().toISOString() } : task), audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
       setNotice(t("tb.documents.service_order_cancelled_notice"));
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.documents.service_order_cancel_error"));
@@ -694,7 +696,7 @@ export default function TourPackageWorkspace() {
     setSaving(true); setError("");
     try {
       const { data } = await axios.post(`${API_BASE}/api/tour-packages/${id}/components/${bookingId}/message-service-order`, { message }, cfg());
-      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item) }));
+      setTourPackage((current) => ({ ...current, components: (current.components || []).map((item) => Number(item.id) === Number(bookingId) ? { ...item, service_order_events: data.service_order_event ? [data.service_order_event, ...(item.service_order_events || [])] : item.service_order_events } : item), audit_events: data.audit_event ? [{ ...data.audit_event, actor_name: t("tb.audit.current_user") }, ...(current.audit_events || [])] : current.audit_events }));
       setNotice(t("tb.documents.supplier_message_sent")); return true;
     } catch (requestError) {
       setError(requestError?.response?.data?.message || t("tb.documents.supplier_message_error")); return false;

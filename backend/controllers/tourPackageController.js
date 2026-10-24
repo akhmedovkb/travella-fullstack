@@ -2006,7 +2006,10 @@ async function sendTourPackageServiceOrder(req, res) {
        RETURNING id,event_type,actor_type,created_at,metadata`,
       [packageId, bookingId]
     );
-    return res.json({ sent: true, ...saved.rows[0], service_order_event: event.rows[0], closed_task_ids: closedTasks.rows.map((task) => task.id) });
+    const audit = await recordTourPackageAudit(pool, packageId, ownerId, "supplier_order_sent", {
+      booking_id: bookingId, service_title: item.service_title || null,
+    });
+    return res.json({ sent: true, ...saved.rows[0], service_order_event: event.rows[0], closed_task_ids: closedTasks.rows.map((task) => task.id), audit_event: audit.rows[0] });
   } catch (error) {
     console.error("sendTourPackageServiceOrder error:", error);
     return res.status(500).json({ message: "Failed to send supplier order" });
@@ -2062,7 +2065,10 @@ async function remindTourPackageServiceOrder(req, res) {
        RETURNING id,event_type,actor_type,created_at,metadata`,
       [packageId, bookingId]
     );
-    return res.json({ reminded: true, ...saved.rows[0], service_order_event: event.rows[0] });
+    const audit = await recordTourPackageAudit(pool, packageId, ownerId, "supplier_order_reminded", {
+      booking_id: bookingId, service_title: item.service_title || null,
+    });
+    return res.json({ reminded: true, ...saved.rows[0], service_order_event: event.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
     console.error("remindTourPackageServiceOrder error:", error);
     return res.status(500).json({ message: "Failed to send supplier reminder" });
@@ -2119,7 +2125,10 @@ async function requestTourPackageSupplierDocuments(req, res) {
        RETURNING id,title,task_type,booking_id,assigned_to,due_at,priority,completed,created_at,updated_at`,
       [packageId, `Follow up supplier documents: ${item.service_title || `#${bookingId}`}`, bookingId]
     );
-    return res.json({ requested: true, service_order_event: event.rows[0], task: task.rows[0] });
+    const audit = await recordTourPackageAudit(pool, packageId, ownerId, "supplier_documents_requested", {
+      booking_id: bookingId, service_title: item.service_title || null,
+    });
+    return res.json({ requested: true, service_order_event: event.rows[0], task: task.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
     console.error("requestTourPackageSupplierDocuments error:", error);
     return res.status(500).json({ message: "Failed to request supplier documents" });
@@ -2174,7 +2183,10 @@ async function cancelTourPackageServiceOrder(req, res) {
        RETURNING id,event_type,actor_type,created_at,metadata`,
       [packageId, bookingId, item.service_order_status]
     );
-    return res.json({ cancelled: true, ...saved.rows[0], service_order_event: event.rows[0], closed_task_ids: closedTasks.rows.map((task) => task.id) });
+    const audit = await recordTourPackageAudit(pool, packageId, ownerId, "supplier_order_cancelled", {
+      booking_id: bookingId, service_title: item.service_title || null, previous_status: item.service_order_status,
+    });
+    return res.json({ cancelled: true, ...saved.rows[0], service_order_event: event.rows[0], closed_task_ids: closedTasks.rows.map((task) => task.id), audit_event: audit.rows[0] });
   } catch (error) {
     console.error("cancelTourPackageServiceOrder error:", error);
     return res.status(500).json({ message: "Failed to cancel supplier order" });
@@ -2219,7 +2231,10 @@ async function messageTourPackageServiceOrder(req, res) {
        RETURNING id,event_type,actor_type,created_at,metadata`,
       [packageId, bookingId, note]
     );
-    return res.json({ sent: true, service_order_event: event.rows[0] });
+    const audit = await recordTourPackageAudit(pool, packageId, ownerId, "supplier_message_sent", {
+      booking_id: bookingId, service_title: item.service_title || null,
+    });
+    return res.json({ sent: true, service_order_event: event.rows[0], audit_event: audit.rows[0] });
   } catch (error) {
     console.error("messageTourPackageServiceOrder error:", error);
     return res.status(500).json({ message: "Failed to send supplier message" });
