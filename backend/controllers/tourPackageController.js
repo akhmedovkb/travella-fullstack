@@ -1713,10 +1713,10 @@ async function respondToTourProposal(req, res) {
     await ensureTourPackagesTable();
     await client.query("BEGIN");
     const result = await client.query(
-      `UPDATE tour_packages SET proposal_response=$2,
+      `UPDATE tour_packages SET proposal_response=$2::varchar,
          proposal_response_message=$3, proposal_response_reason=$4, proposal_responded_at=NOW(), updated_at=NOW()
-         ,accepted_revision=CASE WHEN $2='accepted' THEN current_revision ELSE NULL END,
-         status=CASE WHEN $2='accepted' THEN 'accepted' WHEN $2='declined' THEN 'lost' ELSE status END
+         ,accepted_revision=CASE WHEN $2::varchar='accepted' THEN current_revision ELSE NULL END,
+         status=CASE WHEN $2::varchar='accepted' THEN 'accepted' WHEN $2::varchar='declined' THEN 'lost' ELSE status END
        WHERE share_token_hash=$1 AND share_expires_at > NOW() AND proposal_response IS NULL
        RETURNING id,owner_provider_id,title,client_name,current_revision,proposal_response,proposal_response_reason,
          proposal_response_message,proposal_responded_at`,
