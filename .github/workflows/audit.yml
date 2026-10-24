@@ -8,6 +8,7 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         dir: [ "frontend", "backend" ]
 
@@ -40,3 +41,13 @@ jobs:
           fi
           npm ci --no-audit
           npm audit --omit=dev --audit-level=critical
+
+      - name: Build frontend
+        if: matrix.dir == 'frontend'
+        working-directory: frontend
+        run: npm run build
+
+      - name: Test backend
+        if: matrix.dir == 'backend'
+        working-directory: backend
+        run: npm run test:unit

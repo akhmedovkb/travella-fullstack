@@ -7,6 +7,7 @@
   },
   "scripts": {
     "start": "node index.js",
+    "test:unit": "node scripts/run-unit-tests.js",
     "test:payme": "node --test tests/paymeMerchant.test.js",
     "test:provider-services": "node --test tests/providerServiceCatalog.test.js",
     "smoke:provider-services": "node scripts/smoke-provider-service-catalog.js"

@@ -9,14 +9,14 @@ const fixedNow = new Date("2026-09-17T10:00:00+05:00");
 
 test("refused service actuality covers active and inactive lifecycle states", () => {
   const future = { category: "refused_tour", status: "published" };
-  assert.equal(isServiceActual({ isActive: true, startDate: "2026-10-03" }, future), true);
-  assert.equal(isServiceActual({ isActive: false, startDate: "2026-10-03" }, future), false);
-  assert.equal(isServiceActual({ isActive: true, startDate: "2026-09-01" }, future), false);
-  assert.equal(isServiceActual({ isActive: true, startDate: "2026-10-03" }, { ...future, status: "archived" }), false);
-  assert.equal(isServiceActual({ isActive: true, startDate: "2026-10-03" }, { ...future, status: "deleted" }), false);
-  assert.equal(isServiceActual({ isActive: true, startDate: "2026-10-03" }, { ...future, status: "inactive" }), false);
-  assert.equal(isServiceActual({ isActive: true, startDate: "2026-10-03" }, { ...future, status: "expired" }), false);
-  assert.equal(isServiceActual({ isActive: true, startDate: "2026-10-03" }, { ...future, status: "cancelled" }), false);
+  assert.equal(isServiceActual({ isActive: true, startDate: "2030-10-03" }, future), true);
+  assert.equal(isServiceActual({ isActive: false, startDate: "2030-10-03" }, future), false);
+  assert.equal(isServiceActual({ isActive: true, startDate: "2020-09-01" }, future), false);
+  assert.equal(isServiceActual({ isActive: true, startDate: "2030-10-03" }, { ...future, status: "archived" }), false);
+  assert.equal(isServiceActual({ isActive: true, startDate: "2030-10-03" }, { ...future, status: "deleted" }), false);
+  assert.equal(isServiceActual({ isActive: true, startDate: "2030-10-03" }, { ...future, status: "inactive" }), false);
+  assert.equal(isServiceActual({ isActive: true, startDate: "2030-10-03" }, { ...future, status: "expired" }), false);
+  assert.equal(isServiceActual({ isActive: true, startDate: "2030-10-03" }, { ...future, status: "cancelled" }), false);
 });
 
 test("urgency scale covers every expiration band", () => {
