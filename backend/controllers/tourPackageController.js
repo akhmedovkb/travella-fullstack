@@ -1319,7 +1319,8 @@ async function getTourPackage(req, res) {
       [req.params.id]
     );
     const auditEvents = await pool.query(
-      `SELECT event.id,event.action,event.metadata,event.created_at,provider.name AS actor_name
+      `SELECT event.id,event.action,event.metadata,event.created_at,provider.name AS actor_name,
+              COUNT(*) OVER()::int AS total_count
          FROM tour_package_audit_events event
          LEFT JOIN providers provider ON provider.id=event.actor_provider_id
         WHERE event.package_id=$1::uuid ORDER BY event.created_at DESC,event.id DESC LIMIT 100`,
@@ -1369,7 +1370,8 @@ async function getTourPackage(req, res) {
       revisions: revisions.rows,
       payment_events: paymentEvents.rows,
       refund_events: refundEvents.rows,
-      audit_events: auditEvents.rows,
+      audit_events: auditEvents.rows.map(({ total_count, ...event }) => event),
+      audit_total: Number(auditEvents.rows[0]?.total_count || 0),
       client_contacts: clientContacts.rows,
       travelers: travelers.rows,
       tasks: tasks.rows,
@@ -1402,6 +1404,40 @@ async function getTourPackage(req, res) {
   } catch (error) {
     console.error("getTourPackage error:", error);
     return res.status(500).json({ message: "Failed to load tour package" });
+  }
+}
+
+async function getTourPackageAudit(req, res) {
+  try {
+    const ownerId = requireProviderOwner(req, res);
+    if (!ownerId) return;
+    await ensureTourPackagesTable();
+    const tour = await pool.query(
+      `SELECT id FROM tour_packages WHERE id=$1::uuid AND owner_provider_id=$2`,
+      [req.params.id, ownerId]
+    );
+    if (!tour.rowCount) return res.status(404).json({ message: "Tour package not found" });
+    const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 100));
+    const offset = Math.max(0, Number.parseInt(req.query.offset, 10) || 0);
+    const result = await pool.query(
+      `SELECT event.id,event.action,event.metadata,event.created_at,provider.name AS actor_name,
+              COUNT(*) OVER()::int AS total_count
+         FROM tour_package_audit_events event
+         LEFT JOIN providers provider ON provider.id=event.actor_provider_id
+        WHERE event.package_id=$1::uuid
+        ORDER BY event.created_at DESC,event.id DESC LIMIT $2 OFFSET $3`,
+      [req.params.id, limit, offset]
+    );
+    const total = Number(result.rows[0]?.total_count || 0);
+    return res.json({
+      items: result.rows.map(({ total_count, ...event }) => event),
+      total,
+      offset,
+      has_more: offset + result.rowCount < total,
+    });
+  } catch (error) {
+    console.error("getTourPackageAudit error:", error);
+    return res.status(500).json({ message: "Failed to load tour audit" });
   }
 }
 
@@ -2559,6 +2595,7 @@ module.exports = {
   listTourPackages,
   listSupplierPerformance,
   getTourPackage,
+  getTourPackageAudit,
   exportTourPackageAudit,
   updateTourPackage,
   updateTourPackageManager,
