@@ -489,7 +489,6 @@ export default function Header() {
     || location.pathname.startsWith("/provider/hotels/");
   const toolsActive = location.pathname.startsWith("/dashboard/passport-parser");
   const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
-  const isProviderProfile = role === "provider" && location.pathname === "/dashboard/profile";
 
   const changeProviderPassword = async (event) => {
     event.preventDefault();
@@ -838,7 +837,7 @@ export default function Header() {
             <div className="ml-1 border-l border-white/10 pl-2">
               <LanguageSelector />
             </div>
-            {isProviderProfile && (
+            {role === "provider" && (
               <div ref={passwordAnchorRef} className="ml-1 flex items-center gap-1 border-l border-white/10 pl-2" aria-label={t("provider_profile_ui.account_actions")}>
                 <button
                   type="button"
@@ -915,7 +914,7 @@ export default function Header() {
                 <RowGroupDark title={t("provider_profile_ui.header.tools")}>
                   <NavItemMobileDark to="/dashboard/passport-parser" label={t("nav.passport_parser")} icon={<IconDoc />} />
                 </RowGroupDark>
-                {isProviderProfile && (
+                {role === "provider" && (
                   <RowGroupDark title={t("provider_profile_ui.account_actions")}>
                     <button type="button" onClick={() => { setPasswordOpen(true); closeNavigationMenus(); }} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-white/85 transition hover:bg-white/10 hover:text-white">
                       <LockKeyhole aria-hidden="true" className="h-4 w-4" />{t("change_password")}
@@ -989,7 +988,7 @@ export default function Header() {
         onClose={() => setLogoutOpen(false)}
         onConfirm={handleProviderLogout}
       />
-      {passwordOpen && isProviderProfile ? (
+      {passwordOpen && role === "provider" ? (
         <div
           ref={passwordPopoverRef}
           id="header-password-popover"
