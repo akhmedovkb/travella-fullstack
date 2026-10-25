@@ -22,6 +22,30 @@ const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number(value));
 const cityLabel = (value) => String(value || "").trim().replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toUpperCase());
 const blankRateVariant = () => ({ id: globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2), audience: "all", validFrom: "", validTo: "", minGuests: "1", maxGuests: "", price: "", halfDayPrice: "", fullDayPrice: "", extraHourPrice: "" });
+const normalizedText = (value) => String(value || "").trim().toLowerCase();
+const serviceDetails = (service) => {
+  if (service?.details && typeof service.details === "object") return service.details;
+  if (typeof service?.details !== "string") return {};
+  try { return JSON.parse(service.details) || {}; } catch { return {}; }
+};
+const firstStored = (...values) => values.find((value) => value !== undefined && value !== null && value !== "") ?? "";
+const fleetSelectionValue = (vehicleModel, seats, fleet) => {
+  const model = normalizedText(vehicleModel);
+  if (!model) return "";
+  const seatCount = number(seats);
+  const exact = fleet.find((car) => normalizedText(car?.model) === model && (!seatCount || number(car?.seats) === seatCount));
+  const matched = exact || fleet.find((car) => normalizedText(car?.model) === model);
+  const index = matched ? fleet.indexOf(matched) : -1;
+  return matched ? String(matched.id ?? index) : "";
+};
+const serviceCities = (service) => {
+  const details = serviceDetails(service);
+  return [
+    firstStored(details.city_slug, details.citySlug, details.city),
+    firstStored(details.origin_city, details.originCity, details.from_city, details.fromCity),
+    firstStored(details.destination_city, details.destinationCity, details.to_city, details.toCity),
+  ].filter(Boolean);
+};
 
 function validateRateVariants(variants, pricingMode, w) {
   const normalized = (variants || []).map((variant) => ({
@@ -99,7 +123,7 @@ const blankForm = () => ({
 });
 
 function pricingLabel(service, w) {
-  const details = service?.details || {};
+  const details = serviceDetails(service);
   if (details.pricing_mode === "hourly") return w("pricing_hourly_summary", { price: money(service.price), hours: details.minimum_hours || 1 });
   if (details.pricing_mode === "packages") {
     return w("pricing_packages_summary", { halfHours: details.half_day_hours || 4, halfPrice: money(details.half_day_price), fullHours: details.full_day_hours || 8, fullPrice: money(details.full_day_price) });
@@ -108,7 +132,8 @@ function pricingLabel(service, w) {
 }
 
 function rateConditionsSummary(service, w) {
-  const variants = Array.isArray(service?.details?.rate_variants) ? service.details.rate_variants : [];
+  const details = serviceDetails(service);
+  const variants = Array.isArray(details.rate_variants) ? details.rate_variants : Array.isArray(details.rateVariants) ? details.rateVariants : [];
   if (!variants.length) return "";
   const audiences = new Set(variants.map((variant) => variant.resident_type || "all"));
   const audienceLabels = [...audiences].map((audience) => audience === "res" ? w("residents") : audience === "nrs" ? w("nonresidents") : w("all_travelers"));
@@ -170,12 +195,21 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const serviceTitle = (current) => INTERCITY_CATEGORIES.has(current.category)
     ? `${serviceLabel(current.category)} · ${cityLabel(current.originCity) || t("provider_services.from", "Откуда")} → ${cityLabel(current.destinationCity) || t("provider_services.to", "Куда")}`
     : `${serviceLabel(current.category)}${current.citySlug ? ` · ${cityLabel(current.citySlug)}` : ""}`;
-  const includesTransport = (service) => service?.category === LEGACY_GUIDE_WITH_TRANSPORT || service?.details?.transport_included === true;
-  const storedServiceTitle = (row) => row.details?.destination_city
-    ? `${serviceLabel(row.category)} · ${cityLabel(row.details.origin_city || row.details.city_slug)} → ${cityLabel(row.details.destination_city)}`
-    : `${serviceLabel(row.category)}${row.details?.city_slug ? ` · ${cityLabel(row.details.city_slug)}` : ""}`;
+  const includesTransport = (service) => {
+    const details = serviceDetails(service);
+    return service?.category === LEGACY_GUIDE_WITH_TRANSPORT || details.transport_included === true || details.transportIncluded === true;
+  };
+  const storedServiceTitle = (row) => {
+    const details = serviceDetails(row);
+    const destination = firstStored(details.destination_city, details.destinationCity, details.to_city, details.toCity);
+    const origin = firstStored(details.origin_city, details.originCity, details.from_city, details.fromCity, details.city_slug, details.citySlug);
+    const city = firstStored(details.city_slug, details.citySlug, details.city);
+    return destination
+      ? `${serviceLabel(row.category)} · ${cityLabel(origin)} → ${cityLabel(destination)}`
+      : `${serviceLabel(row.category)}${city ? ` · ${cityLabel(city)}` : ""}`;
+  };
   const duplicateKey = (service) => {
-    const details = service.details || {};
+    const details = serviceDetails(service);
     const normalize = (value) => String(value || "").trim().toLowerCase();
     return [
       normalize(service.category),
@@ -347,43 +381,45 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   }
 
   function beginEdit(row) {
-    const details = row.details || {};
+    const details = serviceDetails(row);
+    const surcharges = details.surcharges && typeof details.surcharges === "object" ? details.surcharges : {};
+    const rateVariants = firstStored(details.rate_variants, details.rateVariants, details.pricing_conditions, details.pricingConditions);
     const group = catalogGroup(row.category, categoryGroups);
     setEditingId(row.id);
     setDraft({
       catalogGroup: group?.id || "",
       category: catalogCategory(row.category),
       title: row.title || "",
-      citySlug: details.city_slug || "",
-      originCity: details.origin_city || details.city_slug || "",
-      destinationCity: details.destination_city || "",
-      seats: details.seats || "",
-      vehicleModel: details.vehicle_model || "",
+      citySlug: firstStored(details.city_slug, details.citySlug, details.city),
+      originCity: firstStored(details.origin_city, details.originCity, details.from_city, details.fromCity, details.city_slug, details.citySlug),
+      destinationCity: firstStored(details.destination_city, details.destinationCity, details.to_city, details.toCity),
+      seats: firstStored(details.seats, details.passenger_seats, details.passengerSeats, details.max_guests, row.seats),
+      vehicleModel: firstStored(details.vehicle_model, details.vehicleModel, row.vehicle_model, row.vehicleModel),
       transportIncluded: includesTransport(row),
-      pricingMode: details.pricing_mode || "fixed",
+      pricingMode: firstStored(details.pricing_mode, details.pricingMode, "fixed"),
       price: row.price || "",
-      minimumHours: details.minimum_hours || "2",
-      halfDayHours: details.half_day_hours || "4",
-      halfDayPrice: details.half_day_price || "",
-      fullDayHours: details.full_day_hours || "8",
-      fullDayPrice: details.full_day_price || "",
-      extraHourPrice: details.extra_hour_price || "",
-      nightSurchargePercent: details.surcharges?.night_percent || "",
-      nightFrom: details.surcharges?.night_from || "22:00",
-      nightTo: details.surcharges?.night_to || "06:00",
-      holidaySurchargePercent: details.surcharges?.holiday_percent || "",
-      holidayDates: Array.isArray(details.surcharges?.holiday_dates) ? details.surcharges.holiday_dates.join(", ") : "",
-      rateVariants: Array.isArray(details.rate_variants) ? details.rate_variants.map((variant) => ({
+      minimumHours: firstStored(details.minimum_hours, details.minimumHours, "2"),
+      halfDayHours: firstStored(details.half_day_hours, details.halfDayHours, "4"),
+      halfDayPrice: firstStored(details.half_day_price, details.halfDayPrice),
+      fullDayHours: firstStored(details.full_day_hours, details.fullDayHours, "8"),
+      fullDayPrice: firstStored(details.full_day_price, details.fullDayPrice),
+      extraHourPrice: firstStored(details.extra_hour_price, details.extraHourPrice),
+      nightSurchargePercent: firstStored(surcharges.night_percent, surcharges.nightPercent),
+      nightFrom: firstStored(surcharges.night_from, surcharges.nightFrom, "22:00"),
+      nightTo: firstStored(surcharges.night_to, surcharges.nightTo, "06:00"),
+      holidaySurchargePercent: firstStored(surcharges.holiday_percent, surcharges.holidayPercent),
+      holidayDates: Array.isArray(firstStored(surcharges.holiday_dates, surcharges.holidayDates)) ? firstStored(surcharges.holiday_dates, surcharges.holidayDates).join(", ") : firstStored(surcharges.holiday_dates, surcharges.holidayDates),
+      rateVariants: Array.isArray(rateVariants) ? rateVariants.map((variant) => ({
         id: variant.id || globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
-        audience: variant.resident_type || "all",
-        validFrom: variant.valid_from || "",
-        validTo: variant.valid_to || "",
-        minGuests: variant.min_guests || "1",
-        maxGuests: variant.max_guests || "",
+        audience: firstStored(variant.resident_type, variant.residentType, variant.audience, "all"),
+        validFrom: firstStored(variant.valid_from, variant.validFrom),
+        validTo: firstStored(variant.valid_to, variant.validTo),
+        minGuests: firstStored(variant.min_guests, variant.minGuests, "1"),
+        maxGuests: firstStored(variant.max_guests, variant.maxGuests),
         price: variant.price || "",
-        halfDayPrice: variant.half_day_price || "",
-        fullDayPrice: variant.full_day_price || "",
-        extraHourPrice: variant.extra_hour_price || "",
+        halfDayPrice: firstStored(variant.half_day_price, variant.halfDayPrice),
+        fullDayPrice: firstStored(variant.full_day_price, variant.fullDayPrice),
+        extraHourPrice: firstStored(variant.extra_hour_price, variant.extraHourPrice),
       })) : [],
     });
   }
@@ -410,7 +446,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
           ? `${serviceLabel(draft.category)} · ${draft.originCity} → ${draft.destinationCity}`
           : `${serviceLabel(draft.category)} · ${draft.citySlug}`,
         price: draft.pricingMode === "packages" ? number(draft.halfDayPrice) : number(draft.price),
-        details: detailsFrom(draft, row.details || {}),
+        details: detailsFrom(draft, serviceDetails(row)),
         vehicle_model: (transportCategory(draft.category) || (guideCategory(draft.category) && draft.transportIncluded)) ? String(draft.vehicleModel || "").trim() : null,
       });
       setEditingId(null);
@@ -445,11 +481,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       count: rows.filter((row) => group.services.some((service) => service.id === catalogCategory(row.category))).length,
     }))
     .filter((group) => group.count > 0), [categoryGroups, rows]);
-  const availableCities = useMemo(() => Array.from(new Set(rows.flatMap((row) => [
-    row.details?.city_slug,
-    row.details?.origin_city,
-    row.details?.destination_city,
-  ]).filter(Boolean))).sort((a, b) => cityLabel(a).localeCompare(cityLabel(b))), [rows]);
+  const availableCities = useMemo(() => Array.from(new Set(rows.flatMap(serviceCities))).sort((a, b) => cityLabel(a).localeCompare(cityLabel(b))), [rows]);
   const hasFilters = Boolean(query.trim()) || categoryFilter !== "all" || cityFilter !== "all" || statusFilter !== "all";
   const clearFilters = () => {
     setQuery("");
@@ -459,8 +491,9 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   };
 
   const filtered = useMemo(() => rows.filter((row) => {
-    const rowCities = [row.details?.city_slug, row.details?.origin_city, row.details?.destination_city].filter(Boolean);
-    const text = `${row.title || ""} ${serviceLabel(row.category)} ${rowCities.map(cityLabel).join(" ")} ${row.details?.vehicle_model || ""}`.toLowerCase();
+    const details = serviceDetails(row);
+    const rowCities = serviceCities(row);
+    const text = `${row.title || ""} ${serviceLabel(row.category)} ${rowCities.map(cityLabel).join(" ")} ${firstStored(details.vehicle_model, details.vehicleModel, row.vehicle_model, row.vehicleModel)}`.toLowerCase();
     const matchesText = text.includes(query.trim().toLowerCase());
     const matchesCategory = categoryFilter === "all"
       || catalogGroup(row.category, categoryGroups)?.id === categoryFilter;
@@ -517,7 +550,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                 }))}
               />}
               {usesVehicle && <div className="mt-4 grid gap-4 border-t border-slate-100 pt-4 md:grid-cols-3">
-                {fleet.length > 0 ? <SelectField label={w("profile_vehicle")} value="" onChange={applyVehicle} options={fleet.map((car, index) => ({ value: String(car.id ?? index), label: `${car.model || w("vehicle")} · ${w("seats_count", { count: car.seats || "?" })}` }))} placeholder={w("choose_vehicle")} /> : <div className="md:col-span-3 text-sm text-amber-700">{w("add_vehicle")}</div>}
+                {fleet.length > 0 ? <SelectField label={w("profile_vehicle")} value={fleetSelectionValue(form.vehicleModel, form.seats, fleet)} onChange={applyVehicle} options={fleet.map((car, index) => ({ value: String(car.id ?? index), label: `${car.model || w("vehicle")} · ${w("seats_count", { count: car.seats || "?" })}` }))} placeholder={w("choose_vehicle")} /> : <div className="md:col-span-3 text-sm text-amber-700">{w("add_vehicle")}</div>}
                 <ReadOnlyValue label={w("model")} value={form.vehicleModel || w("not_selected")} />
                 <ReadOnlyValue label={w("capacity")} value={form.seats ? w("seats_count", { count: form.seats }) : "—"} />
               </div>}
@@ -580,6 +613,9 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         <div className="mt-4 divide-y divide-slate-200 border-y border-slate-200">
           {loading ? <div className="py-8 text-center text-slate-500">{w("loading")}</div> : filtered.length === 0 ? <div className="flex flex-col items-center py-10 text-center"><Search size={24} className="mb-2 text-slate-300" aria-hidden="true" /><div className="font-semibold text-slate-700">{w("services_not_found")}</div><div className="mt-1 text-sm text-slate-500">{f("try_other_filters")}</div>{hasFilters && <button type="button" onClick={clearFilters} className="mt-3 text-sm font-semibold text-orange-600 hover:text-orange-700">{f("reset_filters")}</button>}</div> : filtered.map((row) => {
             const expanded = editingId === row.id;
+            const rowDetails = serviceDetails(row);
+            const rowVehicle = firstStored(rowDetails.vehicle_model, rowDetails.vehicleModel, row.vehicle_model, row.vehicleModel);
+            const rowSeats = firstStored(rowDetails.seats, rowDetails.passenger_seats, rowDetails.passengerSeats, row.seats);
             const draftCategoryGroup = expanded && draft
               ? categoryGroups.find((group) => group.id === draft.catalogGroup) || catalogGroup(draft.category, categoryGroups)
               : null;
@@ -588,7 +624,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
             const draftIsIntercity = Boolean(expanded && draft && INTERCITY_CATEGORIES.has(draft.category));
             return <div id={`provider-service-${row.id}`} key={row.id} className={`scroll-mt-24 py-4 ${expanded ? "bg-orange-50/30" : ""}`}>
               <div className="grid items-center gap-4 md:grid-cols-[minmax(240px,1.5fr)_minmax(220px,1fr)_120px_auto]">
-                <div><div className="font-semibold text-slate-950">{storedServiceTitle(row)}</div><div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-slate-500"><span>{serviceLabel(row.category)}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${w("seats_count", { count: row.details.seats })}` : ""}</span>{guideCategory(row.category) && <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${includesTransport(row) ? "bg-blue-50 text-blue-700" : "bg-violet-50 text-violet-700"}`}>{includesTransport(row) ? f("transport_included") : f("guide_only")}</span>}</div></div>
+                <div><div className="font-semibold text-slate-950">{storedServiceTitle(row)}</div><div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-slate-500"><span>{serviceLabel(row.category)}{rowVehicle ? ` · ${rowVehicle}` : ""}{rowSeats ? ` · ${w("seats_count", { count: rowSeats })}` : ""}</span>{guideCategory(row.category) && <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${includesTransport(row) ? "bg-blue-50 text-blue-700" : "bg-violet-50 text-violet-700"}`}>{includesTransport(row) ? f("transport_included") : f("guide_only")}</span>}</div></div>
                 <div><div className="font-semibold text-slate-900">{pricingLabel(row, w)}</div><div className="text-xs text-slate-500">{rateConditionsSummary(row, w) || w("tour_builder_rate")}</div></div>
                 <div className={`text-sm font-semibold ${row.is_active ? 'text-emerald-700' : 'text-slate-400'}`}>{row.is_active ? w("enabled") : w("disabled")}</div>
                 <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? w("close") : w("edit")}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? w("disable") : w("enable")}</button><button type="button" onClick={() => setPendingDelete(row)} disabled={deletingId === row.id} title={w("delete")} aria-label={w("delete")} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"><Trash2 size={16} aria-hidden="true" /></button></div>
@@ -622,8 +658,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                       </select>
                     </label>
                     {draftIsIntercity ? <>
-                      <CitySelect compact label={w("from")} value={draft.originCity} cities={cities} onChange={(value) => setDraft({ ...draft, originCity: value, destinationCity: draft.destinationCity === value ? "" : draft.destinationCity })} placeholder={w("choose_city")} />
-                      <CitySelect compact label={w("to")} value={draft.destinationCity} cities={cities.filter((city) => city !== draft.originCity)} onChange={(value) => setDraft({ ...draft, destinationCity: value })} placeholder={w("choose_city")} />
+                      <CitySelect compact label={w("from")} value={draft.originCity} cities={cities} onChange={(value) => setDraft({ ...draft, originCity: value, destinationCity: normalizedText(draft.destinationCity) === normalizedText(value) ? "" : draft.destinationCity })} placeholder={w("choose_city")} />
+                      <CitySelect compact label={w("to")} value={draft.destinationCity} cities={cities.filter((city) => normalizedText(city) !== normalizedText(draft.originCity))} onChange={(value) => setDraft({ ...draft, destinationCity: value })} placeholder={w("choose_city")} />
                     </> : <CitySelect compact label={w("service_city")} value={draft.citySlug} cities={cities} onChange={(value) => setDraft({ ...draft, citySlug: value })} placeholder={w("choose_city")} />}
                   </div>
 
@@ -637,7 +673,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                   {draftUsesVehicle && (
                     <div className="mt-4 grid gap-3 rounded-md border border-slate-200 bg-white p-3 md:grid-cols-3">
                       {fleet.length > 0 && <label className="text-xs font-semibold text-slate-600">{w("profile_vehicle")}
-                        <select defaultValue="" onChange={(event) => {
+                        <select value={fleetSelectionValue(draft.vehicleModel, draft.seats, fleet)} onChange={(event) => {
                           const car = fleet.find((item, index) => String(item.id ?? index) === event.target.value);
                           if (car) setDraft({ ...draft, vehicleModel: String(car.model || ""), seats: car.seats ? String(car.seats) : "" });
                         }} className="mt-1 h-10 w-full rounded border border-slate-300 bg-white px-3 text-sm font-normal">
@@ -811,8 +847,11 @@ function TransportMode({ value, onChange, labels, compact = false }) {
 }
 function CitySelect({ label, value, cities, onChange, placeholder, compact = false, allowNew = false }) {
   const listId = React.useId();
+  const options = [...cities];
+  if (value && !options.some((city) => normalizedText(city) === normalizedText(value))) options.unshift(value);
+  const selectedValue = options.find((city) => normalizedText(city) === normalizedText(value)) || value;
   const fieldClass = `${compact ? "h-10 text-sm" : "h-11"} mt-1 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-50`;
-  return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}{allowNew ? <><input list={listId} value={value} onChange={(event) => onChange(event.target.value)} onBlur={(event) => onChange(event.target.value.trim())} placeholder={placeholder} className={fieldClass} /><datalist id={listId}>{cities.map((city) => <option key={city} value={cityLabel(city)} />)}</datalist></> : <select value={value} onChange={(event) => onChange(event.target.value)} disabled={!cities.length} className={fieldClass}><option value="">{placeholder}</option>{cities.map((city) => <option key={city} value={city}>{cityLabel(city)}</option>)}</select>}</label>;
+  return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}{allowNew ? <><input list={listId} value={value} onChange={(event) => onChange(event.target.value)} onBlur={(event) => onChange(event.target.value.trim())} placeholder={placeholder} className={fieldClass} /><datalist id={listId}>{options.map((city) => <option key={city} value={cityLabel(city)} />)}</datalist></> : <select value={selectedValue} onChange={(event) => onChange(event.target.value)} disabled={!options.length} className={fieldClass}><option value="">{placeholder}</option>{options.map((city) => <option key={city} value={city}>{cityLabel(city)}</option>)}</select>}</label>;
 }
 function ReadOnlyValue({ label, value, compact = false }) {
   return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<div className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 flex items-center rounded-md border border-slate-200 bg-slate-100 px-3 font-normal text-slate-600`}>{value}</div></label>;
