@@ -915,31 +915,44 @@ if (bot && !TG_DISABLED) {
   console.log("[tg-bot] index.js: starting bot (polling) ...");
 
   (async () => {
-    try {
-      // 🔥 критично: выключаем webhook у CLIENT-бота перед polling
-      await bot.telegram.deleteWebhook({ drop_pending_updates: true });
-      console.log("[tg-bot] webhook deleted (drop pending updates)");
+    const retryDelaysMs = [5000, 15000, 30000, 60000];
+    for (let attempt = 0; attempt <= retryDelaysMs.length; attempt += 1) {
+      try {
+        await bot.telegram.deleteWebhook({ drop_pending_updates: attempt === 0 });
+        console.log("[tg-bot] webhook deleted", { attempt: attempt + 1 });
+        await bot.launch();
+        console.log("🤖 Telegram bot started (polling)");
+        return;
+      } catch (e) {
+        const desc =
+          (e && e.response && e.response.description) ||
+          e?.description ||
+          e?.message ||
+          String(e);
 
-      await bot.launch();
-      console.log("🤖 Telegram bot started (polling)");
-    } catch (e) {
-      const desc =
-        (e && e.response && e.response.description) ||
-        e?.description ||
-        e?.message ||
-        String(e);
+        if (desc && desc.includes("Conflict: terminated by other getUpdates request")) {
+          console.warn(
+            "[tg-bot] 409 Conflict: другой процесс уже делает getUpdates этим токеном. " +
+              "Этот экземпляр бота не будет получать обновления, но API продолжит работать.",
+            desc
+          );
+          return;
+        }
 
-      if (desc && desc.includes("Conflict: terminated by other getUpdates request")) {
-        console.warn(
-          "[tg-bot] 409 Conflict: другой процесс уже делает getUpdates этим токеном. " +
-            "Этот экземпляр бота не будет получать обновления, но API продолжит работать.",
-          desc
-        );
-      } else {
-        console.error(
-          "[tg-bot] start error — бот будет отключён, но API продолжит работать:",
-          desc
-        );
+        const retryDelay = retryDelaysMs[attempt];
+        if (retryDelay == null) {
+          console.error(
+            "[tg-bot] start error after retries — бот будет отключён, но API продолжит работать:",
+            desc
+          );
+          return;
+        }
+        console.warn("[tg-bot] temporary start error; retry scheduled", {
+          attempt: attempt + 1,
+          retryInMs: retryDelay,
+          error: desc,
+        });
+        await new Promise((resolve) => setTimeout(resolve, retryDelay));
       }
     }
   })();
