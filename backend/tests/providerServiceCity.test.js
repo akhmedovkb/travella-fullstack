@@ -43,3 +43,24 @@ test("repairs profile cities from existing intercity service destinations", asyn
     7,
   ]);
 });
+
+test("repairs destinations stored in legacy service titles and JSON strings", async () => {
+  const calls = [];
+  const db = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (sql.includes("SELECT location")) {
+        return { rowCount: 1, rows: [{ location: ["Tashkent"], city_slugs: ["tashkent"] }] };
+      }
+      return { rowCount: 1, rows: [] };
+    },
+  };
+
+  const changed = await syncProviderCitiesFromServices(db, 7, [
+    { title: "Intercity transfer · Tashkent → Samarkand", details: "{}" },
+    { details: JSON.stringify({ destinationCity: "Bukhara" }) },
+  ]);
+
+  assert.equal(changed, true);
+  assert.deepEqual(calls[1].params[0], ["Tashkent", "Samarkand", "Bukhara"]);
+});
