@@ -827,6 +827,16 @@ const serviceUnitPrice = (service, dateKey, pax, residentType = "nrs") => {
   return toNum(match.variant?.price ?? match.variant?.half_day_price, toNum(service?.price, 0));
 };
 
+const serviceVatPercent = (service) => Math.min(100, Math.max(0, toNum(
+  service?.raw?.details?.vat_percent ?? service?.details?.vat_percent,
+  0,
+)));
+
+const serviceUnitPriceWithVat = (service, dateKey, pax, residentType = "nrs") => {
+  const net = serviceUnitPrice(service, dateKey, pax, residentType);
+  return net * (1 + serviceVatPercent(service) / 100);
+};
+
 const serviceRateExplanation = (service, dateKey, pax, residentType, t) => {
   const { variant, hasVariants } = matchingServiceRate(service, dateKey, pax, residentType);
   if (!hasVariants) return "";
@@ -849,6 +859,7 @@ const serviceListSignature = (services = []) =>
       service.category,
       service.vehicle_model,
       JSON.stringify(service.raw?.details?.rate_variants || []),
+      service.raw?.details?.vat_percent || 0,
     ].join(":"))
     .sort()
     .join("|");
@@ -1910,7 +1921,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     });
     const holidayDates = new Set((Array.isArray(surcharge.holiday_dates) ? surcharge.holiday_dates : []).map((date) => String(date).slice(0, 10)));
     const percent = (hasNight ? toNum(surcharge.night_percent, 0) : 0) + (holidayDates.has(String(dateKey).slice(0, 10)) ? toNum(surcharge.holiday_percent, 0) : 0);
-    return amount + amount * percent / 100;
+    const netWithSurcharge = amount + amount * percent / 100;
+    const vatPercent = Math.min(100, Math.max(0, toNum(details?.vat_percent, 0)));
+    return netWithSurcharge * (1 + vatPercent / 100);
   };
 
   const priceForDuration = (service, durationHours, fallback = 0, dateKey = "", timeSlots = []) => {
@@ -2995,8 +3008,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
                           const transportIncluded = s.category === "city_tour_guide_with_transport" || s?.raw?.details?.transport_included;
                            const base = t(`provider_services.items.${s.category}`, { defaultValue: s.title || CATEGORY_LABELS[s.category] || "Service" });
-                          const effectivePrice = serviceUnitPrice(s, k, Math.max(1, toNum(adt) + toNum(chd)), residentType);
-                          const parts = [base, transportIncluded ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only"), seats ? `${seats} pax` : null, vm, `${effectivePrice.toFixed(2)} ${s.currency}`]
+                          const effectivePrice = serviceUnitPriceWithVat(s, k, Math.max(1, toNum(adt) + toNum(chd)), residentType);
+                          const vatPercent = serviceVatPercent(s);
+                          const parts = [base, transportIncluded ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only"), seats ? `${seats} pax` : null, vm, `${effectivePrice.toFixed(2)} ${s.currency}`, vatPercent > 0 ? t("provider_services.workspace.vat_short", { percent: vatPercent }) : null]
                             .filter(Boolean)
                             .join(" — ");
                           return (
@@ -3347,8 +3361,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           const seats = svcSeats(s);
                           const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
                            const base = t(`provider_services.items.${s.category}`, { defaultValue: s.title || CATEGORY_LABELS[s.category] || "Service" });
-                          const effectivePrice = serviceUnitPrice(s, k, Math.max(1, toNum(adt) + toNum(chd)), residentType);
-                          const parts = [base, seats ? `${seats} pax` : null, vm, `${effectivePrice.toFixed(2)} ${s.currency}`]
+                          const effectivePrice = serviceUnitPriceWithVat(s, k, Math.max(1, toNum(adt) + toNum(chd)), residentType);
+                          const vatPercent = serviceVatPercent(s);
+                          const parts = [base, seats ? `${seats} pax` : null, vm, `${effectivePrice.toFixed(2)} ${s.currency}`, vatPercent > 0 ? t("provider_services.workspace.vat_short", { percent: vatPercent }) : null]
                             .filter(Boolean)
                             .join(" — ");
                           return (
