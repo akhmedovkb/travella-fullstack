@@ -117,7 +117,7 @@
     "payment_hold_expired": "Payment time expired",
     "response_timer_no_limit": "There is no automatic response deadline",
     "waiting_provider_elapsed": "Waiting for provider: {{time}}",
-    "waiting_requester_elapsed": "Waiting for requester: {{time}}",
+    "waiting_requester_elapsed": "Waiting for travel agent: {{time}}",
     "waiting_your_response_elapsed": "Waiting for your response: {{time}}",
     "pay_now": "Pay now",
     "payment_error": "Could not create payment",
@@ -139,22 +139,22 @@
     "need_action": "Action required: {{count}}",
     "no_action": "No requests require action",
     "package_request_sent": {
-      "incoming": "The agent sent you a request",
+      "incoming": "The travel agent sent you a request",
       "outgoing": "You sent requests to providers"
     },
     "perspective_filters": {
-      "incoming": { "pending": "Your response needed", "quoted": "Waiting for requester", "awaiting_payment": "Requester is paying" },
+      "incoming": { "pending": "Your response needed", "quoted": "Waiting for travel agent", "awaiting_payment": "Travel agent is paying" },
       "outgoing": { "pending": "Waiting for provider", "quoted": "Your response needed", "awaiting_payment": "Payment due from you" }
     },
     "perspective_status": {
       "incoming": {
         "pending": "Respond to the request",
-        "quoted": "Your price was sent — waiting for requester",
-        "awaiting_payment": "Requester needs to pay",
+        "quoted": "Your price was sent — waiting for travel agent",
+        "awaiting_payment": "Travel agent needs to pay",
         "confirmed": "Paid — booking confirmed",
         "active": "Service active",
-        "paid": "Requester paid",
-        "cancelled_unpaid": "Requester did not pay in time",
+        "paid": "Travel agent paid",
+        "cancelled_unpaid": "Travel agent did not pay in time",
         "expired": "Response time expired"
       },
       "outgoing": {
@@ -174,11 +174,11 @@
     "services_count": "services",
     "full_reference": "Package number",
     "city_unknown": "City not specified",
-    "requester": "Requester",
+    "requester": "Travel agent",
     "client": "Client",
-    "customer": "Customer",
+    "customer": "Travel agent",
     "provider": "Provider",
-    "customer_contacts": "Customer contacts",
+    "customer_contacts": "Travel agent contacts",
     "provider_contacts": "Provider contacts",
     "stay_date": "Stay date",
     "service_date": "Service date",
@@ -191,9 +191,9 @@
     "published_tour_builder_rate": "Published Tour Builder rate: {{title}}",
     "published_tour_builder_rate_generic": "Published Tour Builder rate",
     "fixed_tour_builder_rate": "Tour Builder rate locked",
-    "accepted_awaiting_payment": "Request accepted. Waiting for the requester to pay.",
+    "accepted_awaiting_payment": "Request accepted. Waiting for the travel agent to pay.",
     "provider_cancel_reason": "Specify cancellation reason",
-    "waiting_for_requester": "Offer sent. Waiting for client confirmation.",
+    "waiting_for_requester": "Offer sent. Waiting for travel agent confirmation.",
     "empty": "No bookings yet.",
     "item": "Booking",
     "tabs": {
@@ -222,13 +222,13 @@
         "you": "Rejected: by you",
         "provider": "Rejected: by provider",
         "quoted": "awaiting confirmation",
-        "requester": "Rejected: by requester",
+        "requester": "Rejected: by travel agent",
         "client": "Rejected: by client"
       },
       "cancelled": {
         "you": "Cancelled: by you",
         "provider": "Cancelled: by provider",
-        "requester": "Cancelled: by requester",
+        "requester": "Cancelled: by travel agent",
         "client": "Cancelled: by client"
       }
     },
