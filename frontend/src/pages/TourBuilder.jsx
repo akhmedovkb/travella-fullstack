@@ -3735,6 +3735,16 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 </div>
                 )}
 
+                <div className="mt-3 flex justify-end border-t border-slate-200 pt-3">
+                  <button
+                    type="button"
+                    onClick={() => setExpandedComponents((previous) => ({ ...previous, [k]: null }))}
+                    className="inline-flex h-10 min-w-28 items-center justify-center rounded-md bg-slate-950 px-4 text-sm font-bold text-white hover:bg-slate-800"
+                  >
+                    {t("tb.timeline.done")}
+                  </button>
+                </div>
+
                 </>
                 ) : (
                   <button
