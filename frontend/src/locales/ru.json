@@ -132,6 +132,7 @@
     "incoming_short": "Брони ваших услуг",
     "outgoing": "Исходящие",
     "outgoing_short": "Брони, созданные вами",
+    "withdraw_request": "Отозвать заявку",
     "need_action": "Требуют действия: {{count}}",
     "no_action": "Нет заявок, требующих действия",
     "source": "Источник",

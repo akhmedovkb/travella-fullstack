@@ -330,7 +330,8 @@ const profileHref = useMemo(() => {
     return note;
   }, [booking?.provider_note, t]);
   const canAccept =
-    (viewerRole !== "provider" || allowProviderAccept) &&
+    viewerRole === "provider" &&
+    allowProviderAccept &&
     String(booking?.status) === "pending" &&
     (!needPriceForAccept || alreadyQuoted) &&
     !hideAcceptIfQuoted;
@@ -549,7 +550,7 @@ const profileHref = useMemo(() => {
               onClick={() => onCancel?.(booking)}
               className="rounded-lg bg-gray-200 px-4 py-2 text-gray-800 hover:bg-gray-300"
             >
-              {t("actions.cancel", { defaultValue: "Отмена" })}
+              {t("bookings.withdraw_request", { defaultValue: "Отозвать заявку" })}
             </button>
           ) : null}
         </div>

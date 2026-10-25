@@ -130,6 +130,7 @@
     "incoming_short": "Xizmatlaringiz bronlari",
     "outgoing": "Chiquvchi",
     "outgoing_short": "Siz yaratgan bronlar",
+    "withdraw_request": "So‘rovni qaytarib olish",
     "need_action": "Amal talab etiladi: {{count}}",
     "no_action": "Amal talab qiladigan so‘rovlar yo‘q",
     "source": "Manba",
