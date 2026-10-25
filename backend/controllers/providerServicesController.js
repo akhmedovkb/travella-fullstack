@@ -4,6 +4,7 @@ const pool = require("../db");
 const { TRANSPORT_SERVICE_CATEGORY_SET: TRANSPORT_ALLOWED } = require("../utils/providerServiceCatalog");
 const { addServiceCity, slugifyCity } = require("../utils/cities");
 const VEHICLE_INCLUDED_GUIDE_CATEGORIES = new Set(["city_tour_guide_with_transport"]);
+const ROUTE_DESTINATION_CATEGORIES = new Set(["intercity_transfer", "border_transfer", "one_way_transfer"]);
 
 // транспортные категории — только для них разрешаем seats
 
@@ -24,6 +25,7 @@ const normPrice = (v) => {
 async function syncProviderCitiesFromServices(db, providerId, services) {
   const destinations = (Array.isArray(services) ? services : [])
     .map((service) => {
+      if (!ROUTE_DESTINATION_CATEGORIES.has(String(service?.category || ""))) return null;
       let details = service?.details || {};
       if (typeof details === "string") {
         try { details = JSON.parse(details); } catch { details = {}; }
@@ -39,18 +41,27 @@ async function syncProviderCitiesFromServices(db, providerId, services) {
       return arrowIndex >= 0 ? normStr(route.slice(arrowIndex + (route.includes("→", arrowIndex) ? 1 : 2))) : null;
     })
     .filter(Boolean);
-  if (!destinations.length) return false;
-
   const profileQ = await db.query(
     `SELECT location, city_slugs FROM providers WHERE id = $1`,
     [providerId]
   );
   if (!profileQ.rowCount) return false;
 
+  const storedLocations = Array.isArray(profileQ.rows[0].location) ? profileQ.rows[0].location : [];
+  const invalidLocationSlugs = new Set(
+    storedLocations
+      .filter((value) => /(?:·|→|->)/.test(String(value || "")))
+      .map(slugifyCity)
+      .filter(Boolean)
+  );
+  const cleanLocations = storedLocations.filter((value) => !invalidLocationSlugs.has(slugifyCity(value)));
+  const storedSlugs = Array.isArray(profileQ.rows[0].city_slugs) ? profileQ.rows[0].city_slugs : [];
+  const cleanSlugs = storedSlugs.filter((slug) => !invalidLocationSlugs.has(String(slug || "")));
+
   let merged = {
-    location: Array.isArray(profileQ.rows[0].location) ? profileQ.rows[0].location : [],
-    city_slugs: Array.isArray(profileQ.rows[0].city_slugs) ? profileQ.rows[0].city_slugs : [],
-    added: false,
+    location: cleanLocations,
+    city_slugs: cleanSlugs,
+    added: cleanLocations.length !== storedLocations.length || cleanSlugs.length !== storedSlugs.length,
   };
   for (const destination of destinations) {
     const next = addServiceCity(merged.location, merged.city_slugs, destination);

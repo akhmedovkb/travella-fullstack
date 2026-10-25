@@ -819,7 +819,7 @@ const getProviderProfile = async (req, res) => {
     // Repair profiles created before service destinations were mirrored to location.
     const { syncProviderCitiesFromServices } = require("./providerServicesController");
     const serviceRows = await pool.query(
-      `SELECT title, COALESCE(details, '{}'::jsonb) AS details
+      `SELECT category, title, COALESCE(details, '{}'::jsonb) AS details
          FROM provider_services
         WHERE provider_id = $1`,
       [id]
