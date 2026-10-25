@@ -137,6 +137,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       normalize(details.destination_city),
       String(includesTransport(service)),
       normalize(details.vehicle_model || service.vehicle_model),
+      normalize(details.pricing_mode || "fixed"),
     ].join("\u001f");
   };
   const formDuplicateKey = (current) => duplicateKey({
