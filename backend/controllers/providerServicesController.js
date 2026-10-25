@@ -2,6 +2,7 @@
 
 const pool = require("../db");
 const { TRANSPORT_SERVICE_CATEGORY_SET: TRANSPORT_ALLOWED } = require("../utils/providerServiceCatalog");
+const { addServiceCity, slugifyCity } = require("../utils/cities");
 const VEHICLE_INCLUDED_GUIDE_CATEGORIES = new Set(["city_tour_guide_with_transport"]);
 
 // транспортные категории — только для них разрешаем seats
@@ -65,10 +66,13 @@ async function listProviderServices(req, res) {
 
 /** POST /api/providers/:providerId/services */
 async function createProviderService(req, res) {
+  let client;
   try {
     const providerId = Number(req.params.providerId);
     if (!Number.isFinite(providerId))
       return res.status(400).json({ message: "Bad providerId" });
+    if (Number(req.user?.id) !== providerId && !req.user?.is_admin)
+      return res.status(403).json({ message: "Forbidden" });
 
     const { category, title, price, currency, is_active = true, details } =
       req.body || {};
@@ -78,18 +82,45 @@ async function createProviderService(req, res) {
     const priceNum = normPrice(price);
     const curr = normCurrency(currency);
     const detailsObj = normDetails(details, category);
+    const destinationCity = normStr(detailsObj.destination_city);
+    const destinationSlug = slugifyCity(destinationCity);
 
-    const ins = await pool.query(
+    client = await pool.connect();
+    await client.query("BEGIN");
+
+    if (destinationSlug) {
+      const profileQ = await client.query(
+        `SELECT location, city_slugs FROM providers WHERE id = $1 FOR UPDATE`,
+        [providerId]
+      );
+      if (!profileQ.rowCount) {
+        await client.query("ROLLBACK");
+        return res.status(404).json({ message: "Provider not found" });
+      }
+
+      const mergedCities = addServiceCity(profileQ.rows[0].location, profileQ.rows[0].city_slugs, destinationCity);
+
+      await client.query(
+        `UPDATE providers SET location = $1::text[], city_slugs = $2::text[], updated_at = NOW() WHERE id = $3`,
+        [mergedCities.location, mergedCities.city_slugs, providerId]
+      );
+    }
+
+    const ins = await client.query(
       `INSERT INTO provider_services (provider_id, category, title, price, currency, is_active, details)
        VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb)
        RETURNING id, provider_id, category, title, price, currency, is_active, details`,
       [providerId, category, titleStr, priceNum, curr, !!is_active, JSON.stringify(detailsObj)]
     );
 
+    await client.query("COMMIT");
     res.status(201).json(ins.rows[0]);
   } catch (err) {
+    if (client) await client.query("ROLLBACK").catch(() => {});
     console.error("createProviderService:", err);
     res.status(500).json({ message: "Server error" });
+  } finally {
+    client?.release();
   }
 }
 
