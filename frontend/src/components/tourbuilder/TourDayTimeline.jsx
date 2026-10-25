@@ -8,6 +8,33 @@ const COMPONENT_TYPES = [
   { value: "meal", label: "Питание", legacyType: "meal" },
 ];
 
+const COMPONENT_TONES = {
+  transfer: {
+    active: "border-blue-500 bg-blue-50/80",
+    idle: "border-blue-200 bg-blue-50/40 hover:bg-blue-50/70",
+    badge: "bg-blue-100 text-blue-800",
+    selected: "text-blue-700",
+  },
+  hotel: {
+    active: "border-cyan-500 bg-cyan-50/80",
+    idle: "border-cyan-200 bg-cyan-50/40 hover:bg-cyan-50/70",
+    badge: "bg-cyan-100 text-cyan-800",
+    selected: "text-cyan-700",
+  },
+  tour: {
+    active: "border-violet-500 bg-violet-50/80",
+    idle: "border-violet-200 bg-violet-50/40 hover:bg-violet-50/70",
+    badge: "bg-violet-100 text-violet-800",
+    selected: "text-violet-700",
+  },
+  meal: {
+    active: "border-emerald-500 bg-emerald-50/80",
+    idle: "border-emerald-200 bg-emerald-50/40 hover:bg-emerald-50/70",
+    badge: "bg-emerald-100 text-emerald-800",
+    selected: "text-emerald-700",
+  },
+};
+
 const SUPPORT_TO_TOUR_SUBTYPE = {
   escort: "support_escort",
   meet: "support_meet",
@@ -176,6 +203,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
             const active = item.id === activeId;
             const invalid = hasOverlap(item, normalized);
             const component = componentMeta(item.active_service_category);
+            const tone = COMPONENT_TONES[component.value] || COMPONENT_TONES.transfer;
             const isHotel = component.value === "hotel";
             const checkoutDate = isHotel ? addDays(dayKey, item.end_day_offset || 1) : "";
             const checkoutLabel = checkoutDate
@@ -191,14 +219,14 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                     {isHotel ? t("tb.timeline.nights", { count: item.end_day_offset || 1 }) : invalid ? t("tb.timeline.check_interval") : durationText(item.start_time, item.end_time, t)}
                   </div>
                 </div>
-                <div className={`min-w-0 rounded-md border-l-4 px-3 py-3 transition ${active ? "border-orange-500 bg-orange-50/60" : "border-transparent bg-slate-50 hover:bg-slate-100"}`}>
+                <div className={`min-w-0 rounded-md border-l-4 px-3 py-3 transition ${active ? tone.active : tone.idle}`}>
                   <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                   <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { select(item.id); onExpandedChange?.(null); }}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-bold text-slate-950">{t(`tb.timeline.components.${component.value}`)}</div>
                         <div className="mt-1 flex flex-wrap gap-1">
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{t(`tb.timeline.components.${component.value}`)}</span>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${tone.badge}`}>{t(`tb.timeline.components.${component.value}`)}</span>
                           {item.provider_name && <span className="max-w-full break-words rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{item.provider_name}</span>}
                           {item.services?.guide?.provider_name && <span className="max-w-full break-words rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{t("tb.timeline.guide")}: {item.services.guide.provider_name}</span>}
                           {item.services?.tour?.subtype && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{t(`tb.timeline.tour_types.${item.services.tour.subtype}`)}</span>}
@@ -212,7 +240,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                           {item.services?.meal?.items?.length > 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{t("tb.meals")}</span>}
                         </div>
                       </div>
-                      {active && <span className="hidden text-xs font-semibold text-orange-700 sm:inline">{t("tb.timeline.selected")}</span>}
+                      {active && <span className={`hidden text-xs font-semibold sm:inline ${tone.selected}`}>{t("tb.timeline.selected")}</span>}
                     </div>
                   </button>
                   {expandedId !== item.id && (
