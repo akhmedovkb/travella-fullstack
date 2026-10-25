@@ -42,3 +42,13 @@ test("allows conditions separated by group size", () => {
     { min_guests: 5, max_guests: 20, price: 220 },
   ] }), null);
 });
+
+test("selects different prices for residents and non-residents", () => {
+  const service = { price: 100, details: { pricing_mode: "fixed", rate_variants: [
+    { id: "resident", resident_type: "res", min_guests: 1, price: 80 },
+    { id: "non-resident", resident_type: "nrs", min_guests: 1, price: 140 },
+  ] } };
+  assert.equal(quoteProviderService({ service, dates: ["2026-07-10"], pax: 2, residentType: "res" }).amount, 80);
+  assert.equal(quoteProviderService({ service, dates: ["2026-07-10"], pax: 2, residentType: "nrs" }).amount, 140);
+  assert.equal(validateRateVariants(service.details), null);
+});

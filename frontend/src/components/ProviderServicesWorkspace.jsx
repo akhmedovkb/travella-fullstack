@@ -21,7 +21,7 @@ const catalogGroup = (value, groups) => findServiceGroup(catalogCategory(value),
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number(value));
 const cityLabel = (value) => String(value || "").trim().replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toUpperCase());
-const blankRateVariant = () => ({ id: globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2), validFrom: "", validTo: "", minGuests: "1", maxGuests: "", price: "" });
+const blankRateVariant = () => ({ id: globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2), audience: "all", validFrom: "", validTo: "", minGuests: "1", maxGuests: "", price: "" });
 
 function validateRateVariants(variants, w) {
   const normalized = (variants || []).map((variant) => ({
@@ -30,6 +30,7 @@ function validateRateVariants(variants, w) {
     min: Math.max(1, number(variant.minGuests) || 1),
     max: number(variant.maxGuests) > 0 ? number(variant.maxGuests) : Infinity,
     price: number(variant.price),
+    audience: variant.audience || "all",
   }));
   for (const variant of normalized) {
     if (variant.price <= 0) return w("validation_condition_price");
@@ -40,7 +41,8 @@ function validateRateVariants(variants, w) {
     for (let right = left + 1; right < normalized.length; right += 1) {
       const dateOverlap = normalized[left].from <= normalized[right].to && normalized[right].from <= normalized[left].to;
       const guestOverlap = normalized[left].min <= normalized[right].max && normalized[right].min <= normalized[left].max;
-      if (dateOverlap && guestOverlap) return w("validation_condition_overlap");
+      const audienceOverlap = normalized[left].audience === "all" || normalized[right].audience === "all" || normalized[left].audience === normalized[right].audience;
+      if (dateOverlap && guestOverlap && audienceOverlap) return w("validation_condition_overlap");
     }
   }
   return "";
@@ -252,6 +254,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     } : {}),
     rate_variants: current.pricingMode === "packages" ? [] : (current.rateVariants || []).map((variant) => ({
       id: variant.id,
+      resident_type: variant.audience || "all",
       valid_from: variant.validFrom || null,
       valid_to: variant.validTo || null,
       min_guests: Math.max(1, number(variant.minGuests) || 1),
@@ -335,6 +338,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       extraHourPrice: details.extra_hour_price || "",
       rateVariants: Array.isArray(details.rate_variants) ? details.rate_variants.map((variant) => ({
         id: variant.id || globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
+        audience: variant.resident_type || "all",
         validFrom: variant.valid_from || "",
         validTo: variant.valid_to || "",
         minGuests: variant.min_guests || "1",
@@ -657,14 +661,16 @@ function MoneyField({ label, value, onChange }) {
 function RateVariantsEditor({ variants, basePrice, pricingMode, onChange, w, compact = false }) {
   const [previewDate, setPreviewDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [previewGuests, setPreviewGuests] = useState("2");
+  const [previewAudience, setPreviewAudience] = useState("nrs");
   const update = (index, key, value) => onChange(variants.map((variant, current) => current === index ? { ...variant, [key]: value } : variant));
   const matchingIndex = variants.findIndex((variant) => {
     const from = variant.validFrom || "0000-01-01";
     const to = variant.validTo || "9999-12-31";
     const min = Math.max(1, number(variant.minGuests) || 1);
     const max = number(variant.maxGuests) > 0 ? number(variant.maxGuests) : Infinity;
+    const audience = variant.audience || "all";
     const guests = Math.max(1, number(previewGuests) || 1);
-    return number(variant.price) > 0 && previewDate >= from && previewDate <= to && guests >= min && guests <= max;
+    return number(variant.price) > 0 && (audience === "all" || audience === previewAudience) && previewDate >= from && previewDate <= to && guests >= min && guests <= max;
   });
   const matching = matchingIndex >= 0 ? variants[matchingIndex] : null;
   const previewPrice = matching ? number(matching.price) : number(basePrice);
@@ -673,6 +679,8 @@ function RateVariantsEditor({ variants, basePrice, pricingMode, onChange, w, com
     {variants.length > 0 && <div className="mt-3 space-y-3">{variants.map((variant, index) => <div key={variant.id || index} className={`min-w-0 border-l-2 p-3 ${matchingIndex === index ? "border-emerald-500 bg-emerald-50/60" : "border-orange-400 bg-orange-50/40"}`}>
       <div className="mb-3 flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase text-slate-500">{w("condition_number", { number: index + 1 })}</span><button type="button" onClick={() => onChange(variants.filter((_, current) => current !== index))} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"><Trash2 size={15} />{w("delete_condition")}</button></div>
       <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <SelectField label={w("rate_audience")} value={variant.audience || "all"} onChange={(value) => update(index, "audience", value)} placeholder={w("all_travelers")} options={[{ value: "all", label: w("all_travelers") }, { value: "res", label: w("residents") }, { value: "nrs", label: w("nonresidents") }]} />
+        <div className="hidden sm:block" />
         <DateField label={w("valid_from")} value={variant.validFrom} onChange={(value) => update(index, "validFrom", value)} />
         <DateField label={w("valid_to")} value={variant.validTo} onChange={(value) => update(index, "validTo", value)} />
         <NumberField label={w("min_guests")} value={variant.minGuests} onChange={(value) => update(index, "minGuests", value)} />
@@ -684,6 +692,7 @@ function RateVariantsEditor({ variants, basePrice, pricingMode, onChange, w, com
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[150px] flex-1"><DateField label={w("test_date")} value={previewDate} onChange={setPreviewDate} /></div>
         <div className="w-32"><NumberField label={w("test_guests")} value={previewGuests} onChange={setPreviewGuests} /></div>
+        <div className="min-w-[180px] flex-1"><SelectField label={w("test_audience")} value={previewAudience} onChange={setPreviewAudience} placeholder={w("nonresidents")} options={[{ value: "nrs", label: w("nonresidents") }, { value: "res", label: w("residents") }]} /></div>
         <div className="min-w-[180px] flex-1 pb-1"><span className="block text-xs font-semibold text-slate-500">{matching ? w("condition_applied", { number: matchingIndex + 1 }) : w("base_price_applied")}</span><strong className="mt-1 block text-lg text-slate-950">{money(previewPrice)} UZS {pricingMode === "hourly" ? w("per_hour_short") : ""}</strong></div>
       </div>
     </div>

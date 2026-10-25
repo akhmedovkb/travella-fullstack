@@ -9,6 +9,7 @@ function validateRateVariants(details = {}) {
     min: Math.max(1, amount(variant.min_guests, 1)),
     max: amount(variant.max_guests) > 0 ? amount(variant.max_guests) : Infinity,
     price: amount(variant.price),
+    audience: String(variant.resident_type || "all").toLowerCase(),
   }));
   for (const variant of normalized) {
     if (variant.price <= 0) return "rate_variant_price_invalid";
@@ -19,13 +20,14 @@ function validateRateVariants(details = {}) {
     for (let right = left + 1; right < normalized.length; right += 1) {
       const dateOverlap = normalized[left].from <= normalized[right].to && normalized[right].from <= normalized[left].to;
       const guestOverlap = normalized[left].min <= normalized[right].max && normalized[right].min <= normalized[left].max;
-      if (dateOverlap && guestOverlap) return "rate_variants_overlap";
+      const audienceOverlap = normalized[left].audience === "all" || normalized[right].audience === "all" || normalized[left].audience === normalized[right].audience;
+      if (dateOverlap && guestOverlap && audienceOverlap) return "rate_variants_overlap";
     }
   }
   return null;
 }
 
-function selectRateVariant(details = {}, date, pax) {
+function selectRateVariant(details = {}, date, pax, residentType = "nrs") {
   const targetDate = dateKey(date);
   const guests = Math.max(1, amount(pax, 1));
   return (Array.isArray(details.rate_variants) ? details.rate_variants : [])
@@ -34,7 +36,9 @@ function selectRateVariant(details = {}, date, pax) {
       const to = dateKey(variant.valid_to);
       const min = Math.max(1, amount(variant.min_guests, 1));
       const max = amount(variant.max_guests) > 0 ? amount(variant.max_guests) : Infinity;
+      const audience = String(variant.resident_type || "all").toLowerCase();
       return amount(variant.price) > 0
+        && (audience === "all" || audience === residentType)
         && (!from || targetDate >= from)
         && (!to || targetDate <= to)
         && guests >= min
@@ -52,9 +56,9 @@ function durationForDate(timeSlots = [], date) {
   }, 0);
 }
 
-function priceForDate(service, date, pax, timeSlots = []) {
+function priceForDate(service, date, pax, timeSlots = [], residentType = "nrs") {
   const details = service?.details || {};
-  const variant = selectRateVariant(details, date, pax);
+  const variant = selectRateVariant(details, date, pax, residentType);
   const basePrice = amount(variant?.price, amount(service?.price));
   const mode = String(details.pricing_mode || "fixed").toLowerCase();
   const hours = Math.max(amount(details.minimum_hours, 1), durationForDate(timeSlots, date));
@@ -72,14 +76,14 @@ function priceForDate(service, date, pax, timeSlots = []) {
   return { amount: basePrice, unitAmount: basePrice, variant };
 }
 
-function quoteProviderService({ service, dates = [], pax = 1, timeSlots = [] }) {
+function quoteProviderService({ service, dates = [], pax = 1, timeSlots = [], residentType = "nrs" }) {
   const uniqueDates = [...new Set(dates.map(dateKey).filter(Boolean))].sort();
-  const breakdown = uniqueDates.map((date) => ({ date, ...priceForDate(service, date, pax, timeSlots) }));
+  const breakdown = uniqueDates.map((date) => ({ date, ...priceForDate(service, date, pax, timeSlots, residentType) }));
   return {
     amount: breakdown.reduce((total, item) => total + item.amount, 0),
     unitAmount: breakdown[0]?.unitAmount || amount(service?.price),
     units: uniqueDates.length,
-    breakdown: breakdown.map((item) => ({ date: item.date, amount: item.amount, unit_amount: item.unitAmount, variant_id: item.variant?.id || null })),
+    breakdown: breakdown.map((item) => ({ date: item.date, amount: item.amount, unit_amount: item.unitAmount, variant_id: item.variant?.id || null, resident_type: residentType })),
   };
 }
 
