@@ -820,7 +820,7 @@ function OptionalNumberField({ label, value, onChange }) {
   return <label className="text-xs font-semibold text-slate-600">{label}<input type="number" min="1" value={value} placeholder="∞" onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal" /></label>;
 }
 function NumberField({ label, value, onChange, min = 1, max, suffix }) {
-  return <label className="text-sm font-semibold text-slate-700">{label}<div className="mt-1 flex h-11 overflow-hidden rounded-md border border-slate-300 bg-white"><input type="number" min={min} max={max} value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 px-3 font-normal outline-none" />{suffix && <span className="flex items-center border-l border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-600">{suffix}</span>}</div></label>;
+  return <label className="text-sm font-semibold text-slate-700">{label}<div className="mt-1 flex h-11 overflow-hidden rounded-md border border-slate-300 bg-white"><input type="number" min={min} max={max} value={value} onChange={(event) => onChange(event.target.value)} onWheel={(event) => event.currentTarget.blur()} className="min-w-0 flex-1 px-3 font-normal outline-none" />{suffix && <span className="flex items-center border-l border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-600">{suffix}</span>}</div></label>;
 }
 function ReadOnlyCurrency({ label }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<input value="UZS" readOnly className="mt-1 h-11 w-full rounded-md border border-slate-200 bg-slate-50 px-3 font-normal text-slate-600" /></label>;
