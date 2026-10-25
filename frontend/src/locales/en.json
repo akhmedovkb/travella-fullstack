@@ -131,6 +131,7 @@
     "incoming_short": "Bookings for your services",
     "outgoing": "Outgoing",
     "outgoing_short": "Bookings created by you",
+    "withdraw_request": "Withdraw request",
     "need_action": "Action required: {{count}}",
     "no_action": "No requests require action",
     "source": "Source",
