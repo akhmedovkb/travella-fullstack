@@ -437,14 +437,19 @@ export default function Header() {
   const providerRequests = (counts?.requests_open || 0) + (counts?.requests_accepted || 0);
   const bookingsBadge = (counts?.bookings_pending ?? counts?.bookings_total ?? 0) || 0;
 
-  useEffect(() => {
+  const closeNavigationMenus = () => {
     setMobileOpen(false);
+    setProductsOpen(false);
     setAdminOpen(false);
     setServicesOpen(false);
     setWorkspaceOpen(false);
     setToolsOpen(false);
     setDonasOpen(false);
     setDonasMobileOpen(false);
+  };
+
+  useEffect(() => {
+    closeNavigationMenus();
   }, [location]);
 
   const servicesActive = location.pathname.startsWith("/dashboard/services/")
@@ -454,7 +459,12 @@ export default function Header() {
   const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
 
   return (
-    <header className="sticky top-0 z-40 border-b border-black/40 bg-[#111] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
+    <header
+      className="sticky top-0 z-40 border-b border-black/40 bg-[#111] text-white shadow-[0_8px_24px_rgba(0,0,0,0.18)]"
+      onClickCapture={(event) => {
+        if (event.target.closest("a")) closeNavigationMenus();
+      }}
+    >
       <div className="mx-auto max-w-7xl px-2 sm:px-3">
         <div className="relative z-10 flex min-h-14 items-center justify-between gap-2 py-1.5">
           <div className="flex min-w-0 items-center gap-2">
