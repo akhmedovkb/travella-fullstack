@@ -798,7 +798,7 @@ const vehicleModel =
   };
 };
 
-const serviceUnitPrice = (service, dateKey, pax) => {
+const matchingServiceRate = (service, dateKey, pax) => {
   const details = service?.raw?.details || service?.details || {};
   const variants = Array.isArray(details.rate_variants) ? details.rate_variants : [];
   const date = String(dateKey || "").slice(0, 10);
@@ -810,7 +810,23 @@ const serviceUnitPrice = (service, dateKey, pax) => {
     const max = Number(variant.max_guests) > 0 ? Number(variant.max_guests) : Infinity;
     return Number(variant.price) > 0 && (!from || date >= from) && (!to || date <= to) && guests >= min && guests <= max;
   }).sort((a, b) => (Number(b.min_guests) || 1) - (Number(a.min_guests) || 1));
-  return toNum(matching[0]?.price, toNum(service?.price, 0));
+  return { variant: matching[0] || null, hasVariants: variants.length > 0 };
+};
+
+const serviceUnitPrice = (service, dateKey, pax) => {
+  const match = matchingServiceRate(service, dateKey, pax);
+  return toNum(match.variant?.price, toNum(service?.price, 0));
+};
+
+const serviceRateExplanation = (service, dateKey, pax, t) => {
+  const { variant, hasVariants } = matchingServiceRate(service, dateKey, pax);
+  if (!hasVariants) return "";
+  if (!variant) return t("provider_services.workspace.base_price_applied");
+  const min = Math.max(1, Number(variant.min_guests) || 1);
+  const max = Number(variant.max_guests) > 0 ? Number(variant.max_guests) : null;
+  const guests = max ? `${min}–${max}` : `${min}+`;
+  const dates = [variant.valid_from, variant.valid_to].filter(Boolean).join(" — ");
+  return t("provider_services.workspace.rate_explanation", { guests, dates: dates || t("provider_services.workspace.any_dates") });
 };
 
 const serviceListSignature = (services = []) =>
@@ -2950,6 +2966,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       <span>{activeGuideService ? `${t(`provider_services.items.${activeGuideService.category}`, { defaultValue: t("tb.ui.selected_service") })} · ${(activeGuideService.category === "city_tour_guide_with_transport" || activeGuideService.raw?.details?.transport_included) ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only")}` : t("tb.ui.service_not_selected")}</span>
                       <strong className="text-sm text-slate-950">{activeGuideService ? calcGuideForDay(k).toFixed(2) : "0.00"} {activeGuideService?.currency || st.guide?.currency || "UZS"}</strong>
                     </div>
+                    {activeGuideService && serviceRateExplanation(activeGuideService, k, Math.max(1, toNum(adt) + toNum(chd)), t) && <div className="mt-2 text-xs font-medium text-emerald-700">{serviceRateExplanation(activeGuideService, k, Math.max(1, toNum(adt) + toNum(chd)), t)}</div>}
                     </div>
                   </div>
                   
@@ -3301,6 +3318,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       <span>{activeTransportService ? t(`provider_services.items.${activeTransportService.category}`, { defaultValue: t("tb.ui.selected_service") }) : t("tb.ui.service_not_selected")}</span>
                       <strong className="text-sm text-slate-950">{activeTransportService ? calcTransportForDay(k).toFixed(2) : "0.00"} {activeTransportService?.currency || st.transport?.currency || "UZS"}</strong>
                     </div>
+                    {activeTransportService && serviceRateExplanation(activeTransportService, k, Math.max(1, toNum(adt) + toNum(chd)), t) && <div className="mt-2 text-xs font-medium text-emerald-700">{serviceRateExplanation(activeTransportService, k, Math.max(1, toNum(adt) + toNum(chd)), t)}</div>}
                     </>}
                     </div>
                   </div>

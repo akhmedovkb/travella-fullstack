@@ -486,7 +486,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
               {form.pricingMode === "fixed" && <div className="grid gap-4 sm:grid-cols-2"><MoneyField label={w("price_per_service")} value={form.price} onChange={(value) => setField("price", value)} /><ReadOnlyCurrency label={w("currency")} /></div>}
               {form.pricingMode === "hourly" && <div className="grid gap-4 sm:grid-cols-3"><MoneyField label={w("price_per_hour")} value={form.price} onChange={(value) => setField("price", value)} /><NumberField label={w("minimum_hours")} value={form.minimumHours} onChange={(value) => setField("minimumHours", value)} /><ReadOnlyCurrency label={w("currency")} /></div>}
               {form.pricingMode === "packages" && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={form.halfDayHours} onChange={(value) => setField("halfDayHours", value)} /><MoneyField label={w("half_day_price")} value={form.halfDayPrice} onChange={(value) => setField("halfDayPrice", value)} /><NumberField label={w("full_day_hours")} value={form.fullDayHours} onChange={(value) => setField("fullDayHours", value)} /><MoneyField label={w("full_day_price")} value={form.fullDayPrice} onChange={(value) => setField("fullDayPrice", value)} /><MoneyField label={w("extra_hour")} value={form.extraHourPrice} onChange={(value) => setField("extraHourPrice", value)} /></div>}
-              {form.pricingMode !== "packages" && <RateVariantsEditor variants={form.rateVariants} onChange={(rateVariants) => setField("rateVariants", rateVariants)} w={w} />}
+              {form.pricingMode !== "packages" && <RateVariantsEditor variants={form.rateVariants} basePrice={form.price} pricingMode={form.pricingMode} onChange={(rateVariants) => setField("rateVariants", rateVariants)} w={w} />}
             </FormStep>
           </div>
 
@@ -619,7 +619,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                       {draft.pricingMode === "hourly" && <NumberField label={w("minimum_hours")} value={draft.minimumHours} onChange={(value) => setDraft({ ...draft, minimumHours: value })} />}
                     </div>
                     {draft.pricingMode === "packages" && <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={draft.halfDayHours} onChange={(value) => setDraft({ ...draft, halfDayHours: value })} /><MoneyField label={w("half_day_price")} value={draft.halfDayPrice} onChange={(value) => setDraft({ ...draft, halfDayPrice: value })} /><NumberField label={w("full_day_hours")} value={draft.fullDayHours} onChange={(value) => setDraft({ ...draft, fullDayHours: value })} /><MoneyField label={w("full_day_price")} value={draft.fullDayPrice} onChange={(value) => setDraft({ ...draft, fullDayPrice: value })} /><MoneyField label={w("extra_hour")} value={draft.extraHourPrice} onChange={(value) => setDraft({ ...draft, extraHourPrice: value })} /></div>}
-                    {draft.pricingMode !== "packages" && <RateVariantsEditor compact variants={draft.rateVariants || []} onChange={(rateVariants) => setDraft({ ...draft, rateVariants })} w={w} />}
+                    {draft.pricingMode !== "packages" && <RateVariantsEditor compact variants={draft.rateVariants || []} basePrice={draft.price} pricingMode={draft.pricingMode} onChange={(rateVariants) => setDraft({ ...draft, rateVariants })} w={w} />}
                   </div>
                   <div className="mt-5 flex justify-between gap-3 border-t border-slate-200 pt-4">
                     <button type="button" onClick={() => setPendingDelete(row)} className="h-10 rounded-md border border-rose-200 px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50">{w("delete")}</button>
@@ -654,11 +654,23 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 function MoneyField({ label, value, onChange }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<div className="mt-1 flex h-11 overflow-hidden rounded-md border border-slate-300 bg-white"><input inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value.replace(",", ".").replace(/[^\d.]/g, ""))} placeholder="0" className="min-w-0 flex-1 px-3 font-normal outline-none" /><span className="flex items-center border-l border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-600">UZS</span></div></label>;
 }
-function RateVariantsEditor({ variants, onChange, w, compact = false }) {
+function RateVariantsEditor({ variants, basePrice, pricingMode, onChange, w, compact = false }) {
+  const [previewDate, setPreviewDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [previewGuests, setPreviewGuests] = useState("2");
   const update = (index, key, value) => onChange(variants.map((variant, current) => current === index ? { ...variant, [key]: value } : variant));
+  const matchingIndex = variants.findIndex((variant) => {
+    const from = variant.validFrom || "0000-01-01";
+    const to = variant.validTo || "9999-12-31";
+    const min = Math.max(1, number(variant.minGuests) || 1);
+    const max = number(variant.maxGuests) > 0 ? number(variant.maxGuests) : Infinity;
+    const guests = Math.max(1, number(previewGuests) || 1);
+    return number(variant.price) > 0 && previewDate >= from && previewDate <= to && guests >= min && guests <= max;
+  });
+  const matching = matchingIndex >= 0 ? variants[matchingIndex] : null;
+  const previewPrice = matching ? number(matching.price) : number(basePrice);
   return <div className={`${compact ? "mt-4" : "mt-5"} border-t border-slate-200 pt-4`}>
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h5 className="text-sm font-bold text-slate-900">{w("price_conditions")}</h5><p className="mt-0.5 text-xs text-slate-500">{w("price_conditions_hint")}</p></div><button type="button" onClick={() => onChange([...variants, blankRateVariant()])} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Plus size={16} />{w("add_price_condition")}</button></div>
-    {variants.length > 0 && <div className="mt-3 space-y-3">{variants.map((variant, index) => <div key={variant.id || index} className="min-w-0 border-l-2 border-orange-400 bg-orange-50/40 p-3">
+    {variants.length > 0 && <div className="mt-3 space-y-3">{variants.map((variant, index) => <div key={variant.id || index} className={`min-w-0 border-l-2 p-3 ${matchingIndex === index ? "border-emerald-500 bg-emerald-50/60" : "border-orange-400 bg-orange-50/40"}`}>
       <div className="mb-3 flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase text-slate-500">{w("condition_number", { number: index + 1 })}</span><button type="button" onClick={() => onChange(variants.filter((_, current) => current !== index))} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"><Trash2 size={15} />{w("delete_condition")}</button></div>
       <div className="grid min-w-0 gap-3 sm:grid-cols-2">
         <DateField label={w("valid_from")} value={variant.validFrom} onChange={(value) => update(index, "validFrom", value)} />
@@ -668,6 +680,13 @@ function RateVariantsEditor({ variants, onChange, w, compact = false }) {
         <div className="min-w-0 sm:col-span-2"><MoneyField label={w("condition_price")} value={variant.price} onChange={(value) => update(index, "price", value)} /></div>
       </div>
     </div>)}</div>}
+    <div className="mt-3 border border-slate-200 bg-slate-50 p-3">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-[150px] flex-1"><DateField label={w("test_date")} value={previewDate} onChange={setPreviewDate} /></div>
+        <div className="w-32"><NumberField label={w("test_guests")} value={previewGuests} onChange={setPreviewGuests} /></div>
+        <div className="min-w-[180px] flex-1 pb-1"><span className="block text-xs font-semibold text-slate-500">{matching ? w("condition_applied", { number: matchingIndex + 1 }) : w("base_price_applied")}</span><strong className="mt-1 block text-lg text-slate-950">{money(previewPrice)} UZS {pricingMode === "hourly" ? w("per_hour_short") : ""}</strong></div>
+      </div>
+    </div>
   </div>;
 }
 function DateField({ label, value, onChange }) {
