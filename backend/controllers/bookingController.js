@@ -511,6 +511,7 @@ const createBooking = async (req, res) => {
         service: rate,
         dates: days,
         pax: Number(req.body?.pax_adult || bag.pax_adult || 0) + Number(req.body?.pax_child || bag.pax_child || 0),
+        residentType: String(req.body?.resident_type || bag.resident_type || "nrs").toLowerCase(),
         timeSlots: Array.isArray(req.body?.time_slots) ? req.body.time_slots : (Array.isArray(bag.time_slots) ? bag.time_slots : []),
       });
       publishedTourBuilderRate = {
