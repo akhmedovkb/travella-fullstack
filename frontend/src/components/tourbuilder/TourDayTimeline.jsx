@@ -215,17 +215,18 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                       {active && <span className="hidden text-xs font-semibold text-orange-700 sm:inline">{t("tb.timeline.selected")}</span>}
                     </div>
                   </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const nextExpandedId = expandedId === item.id ? null : item.id;
-                      select(item.id);
-                      onExpandedChange?.(nextExpandedId);
-                    }}
-                    className="w-full shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 sm:w-auto"
-                  >
-                    {expandedId === item.id ? t("tb.timeline.done") : t("tb.timeline.configure")}
-                  </button>
+                  {expandedId !== item.id && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        select(item.id);
+                        onExpandedChange?.(item.id);
+                      }}
+                      className="w-full shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 sm:w-auto"
+                    >
+                      {t("tb.timeline.configure")}
+                    </button>
+                  )}
                   </div>
 
                   {expandedId === item.id && (
