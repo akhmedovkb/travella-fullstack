@@ -1,5 +1,5 @@
 // frontend/src/pages/ProviderBookings.jsx
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import axios from "axios";
 import { useTranslation } from "react-i18next";
 import BookingRow from "../components/BookingRow";
@@ -230,22 +230,9 @@ export default function ProviderBookings() {
   const [cancelReason, setCancelReason] = useState("");
   const [cancelBusy, setCancelBusy] = useState(false);
 
-  useEffect(() => {
-    load();
-  }, []);
-  useEffect(() => {
-    setFilter("all");
-  }, [tab]);
-  useEffect(() => {
-    // при переключении «исходящие» — по умолчанию показываем пакеты TB
-    if (tab === "outgoing") setOutSubTab((v) => v || "tb");
-    // при переключении «входящие» — по умолчанию тоже пакеты TB
-    if (tab === "incoming") setInSubTab((v) => v || "tb");
-  }, [tab]);
-
-  const load = async () => {
+  const load = useCallback(async ({ background = false } = {}) => {
     if (!getToken()) return;
-    setLoading(true);
+    if (!background) setLoading(true);
     try {
       const [incRes, outRes, packagesRes] = await Promise.all([
         axios.get(`${API_BASE}/api/bookings/provider`, cfg()),
@@ -257,12 +244,41 @@ export default function ProviderBookings() {
       setTourPackages(Array.isArray(packagesRes.data) ? packagesRes.data : []);
     } catch (e) {
       console.error("load provider bookings failed", e);
-      setIncoming([]);
-      setOutgoing([]);
+      if (!background) {
+        setIncoming([]);
+        setOutgoing([]);
+      }
     } finally {
-      setLoading(false);
+      if (!background) setLoading(false);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+  useEffect(() => {
+    setFilter("all");
+  }, [tab]);
+  useEffect(() => {
+    // при переключении «исходящие» — по умолчанию показываем пакеты TB
+    if (tab === "outgoing") setOutSubTab((v) => v || "tb");
+    // при переключении «входящие» — по умолчанию тоже пакеты TB
+    if (tab === "incoming") setInSubTab((v) => v || "tb");
+  }, [tab]);
+
+  useEffect(() => {
+    const refresh = () => {
+      if (document.visibilityState === "visible") load({ background: true });
+    };
+    const timer = window.setInterval(refresh, 10000);
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
+  }, [load]);
 
   const openProposal = (tourPackage) => {
     const fallback = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
