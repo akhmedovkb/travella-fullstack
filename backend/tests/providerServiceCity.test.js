@@ -32,8 +32,8 @@ test("repairs profile cities from existing intercity service destinations", asyn
   };
 
   const changed = await syncProviderCitiesFromServices(db, 7, [
-    { details: { destination_city: "Samarkand" } },
-    { details: { destination_city: "Buxoro" } },
+    { category: "intercity_transfer", details: { destination_city: "Samarkand" } },
+    { category: "intercity_transfer", details: { destination_city: "Buxoro" } },
   ]);
 
   assert.equal(changed, true);
@@ -57,10 +57,41 @@ test("repairs destinations stored in legacy service titles and JSON strings", as
   };
 
   const changed = await syncProviderCitiesFromServices(db, 7, [
-    { title: "Intercity transfer · Tashkent → Samarkand", details: "{}" },
-    { details: JSON.stringify({ destinationCity: "Bukhara" }) },
+    { category: "intercity_transfer", title: "Intercity transfer · Tashkent → Samarkand", details: "{}" },
+    { category: "intercity_transfer", details: JSON.stringify({ destinationCity: "Bukhara" }) },
   ]);
 
   assert.equal(changed, true);
   assert.deepEqual(calls[1].params[0], ["Tashkent", "Samarkand", "Bukhara"]);
+});
+
+test("removes route fragments created from non-intercity service titles", async () => {
+  const calls = [];
+  const db = {
+    async query(sql, params) {
+      calls.push({ sql, params });
+      if (sql.includes("SELECT location")) {
+        return {
+          rowCount: 1,
+          rows: [{
+            location: ["Tashkent", "Отель · Tashkent", "Аэропорт · Tashkent", "Samarkand", "Bukhara"],
+            city_slugs: ["tashkent", "otel-tashkent", "aeroport-tashkent", "samarkand", "bukhara"],
+          }],
+        };
+      }
+      return { rowCount: 1, rows: [] };
+    },
+  };
+
+  const changed = await syncProviderCitiesFromServices(db, 7, [
+    { category: "airport_to_hotel_transfer", title: "Transfer · Аэропорт → Отель · Tashkent", details: {} },
+    { category: "intercity_transfer", title: "Intercity transfer · Tashkent → Samarkand", details: {} },
+  ]);
+
+  assert.equal(changed, true);
+  assert.deepEqual(calls[1].params, [
+    ["Tashkent", "Samarkand", "Bukhara"],
+    ["tashkent", "samarkand", "bukhara"],
+    7,
+  ]);
 });
