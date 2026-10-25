@@ -52,3 +52,27 @@ test("selects different prices for residents and non-residents", () => {
   assert.equal(quoteProviderService({ service, dates: ["2026-07-10"], pax: 2, residentType: "nrs" }).amount, 140);
   assert.equal(validateRateVariants(service.details), null);
 });
+
+test("applies package prices from a matching condition", () => {
+  const service = { price: 400, details: {
+    pricing_mode: "packages", half_day_hours: 4, full_day_hours: 8,
+    half_day_price: 400, full_day_price: 700, extra_hour_price: 100,
+    rate_variants: [{ id: "summer", valid_from: "2026-06-01", valid_to: "2026-08-31", min_guests: 1, half_day_price: 500, full_day_price: 900, extra_hour_price: 150 }],
+  } };
+  const quote = quoteProviderService({ service, dates: ["2026-07-10"], pax: 2, timeSlots: [
+    { date: "2026-07-10", start_time: "09:00", end_time: "19:00" },
+  ] });
+  assert.equal(quote.amount, 1200);
+  assert.equal(quote.breakdown[0].variant_id, "summer");
+});
+
+test("adds night and holiday surcharges to the selected rate", () => {
+  const service = { price: 1000, details: { pricing_mode: "fixed", surcharges: {
+    night_percent: 20, night_from: "22:00", night_to: "06:00", holiday_percent: 10, holiday_dates: ["2026-12-31"],
+  } } };
+  const quote = quoteProviderService({ service, dates: ["2026-12-31"], pax: 2, timeSlots: [
+    { date: "2026-12-31", start_time: "23:00", end_time: "23:30" },
+  ] });
+  assert.equal(quote.amount, 1300);
+  assert.deepEqual(quote.breakdown[0].surcharge_reasons, ["night", "holiday"]);
+});

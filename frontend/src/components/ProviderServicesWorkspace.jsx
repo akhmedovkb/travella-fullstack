@@ -21,19 +21,21 @@ const catalogGroup = (value, groups) => findServiceGroup(catalogCategory(value),
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number(value));
 const cityLabel = (value) => String(value || "").trim().replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toUpperCase());
-const blankRateVariant = () => ({ id: globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2), audience: "all", validFrom: "", validTo: "", minGuests: "1", maxGuests: "", price: "" });
+const blankRateVariant = () => ({ id: globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2), audience: "all", validFrom: "", validTo: "", minGuests: "1", maxGuests: "", price: "", halfDayPrice: "", fullDayPrice: "", extraHourPrice: "" });
 
-function validateRateVariants(variants, w) {
+function validateRateVariants(variants, pricingMode, w) {
   const normalized = (variants || []).map((variant) => ({
     from: variant.validFrom || "0000-01-01",
     to: variant.validTo || "9999-12-31",
     min: Math.max(1, number(variant.minGuests) || 1),
     max: number(variant.maxGuests) > 0 ? number(variant.maxGuests) : Infinity,
     price: number(variant.price),
+    halfDayPrice: number(variant.halfDayPrice),
+    fullDayPrice: number(variant.fullDayPrice),
     audience: variant.audience || "all",
   }));
   for (const variant of normalized) {
-    if (variant.price <= 0) return w("validation_condition_price");
+    if (pricingMode === "packages" ? (variant.halfDayPrice <= 0 || variant.fullDayPrice <= 0) : variant.price <= 0) return w("validation_condition_price");
     if (variant.from > variant.to) return w("validation_condition_dates");
     if (variant.min > variant.max) return w("validation_condition_guests");
   }
@@ -88,6 +90,11 @@ const blankForm = () => ({
   fullDayHours: "8",
   fullDayPrice: "",
   extraHourPrice: "",
+  nightSurchargePercent: "",
+  nightFrom: "22:00",
+  nightTo: "06:00",
+  holidaySurchargePercent: "",
+  holidayDates: "",
   rateVariants: [],
 });
 
@@ -98,6 +105,19 @@ function pricingLabel(service, w) {
     return w("pricing_packages_summary", { halfHours: details.half_day_hours || 4, halfPrice: money(details.half_day_price), fullHours: details.full_day_hours || 8, fullPrice: money(details.full_day_price) });
   }
   return w("pricing_fixed_summary", { price: money(service?.price) });
+}
+
+function rateConditionsSummary(service, w) {
+  const variants = Array.isArray(service?.details?.rate_variants) ? service.details.rate_variants : [];
+  if (!variants.length) return "";
+  const audiences = new Set(variants.map((variant) => variant.resident_type || "all"));
+  const audienceLabels = [...audiences].map((audience) => audience === "res" ? w("residents") : audience === "nrs" ? w("nonresidents") : w("all_travelers"));
+  const dated = variants.filter((variant) => variant.valid_from || variant.valid_to);
+  return w("conditions_summary", {
+    count: variants.length,
+    audiences: audienceLabels.join(" / "),
+    periods: dated.length ? w("dated_conditions", { count: dated.length }) : w("any_dates"),
+  });
 }
 
 function calculatedPreview(form, w) {
@@ -226,10 +246,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     if ((transportCategory(current.category) || (guideCategory(current.category) && current.transportIncluded)) && !String(current.vehicleModel || "").trim()) return w("validation_vehicle");
     if (current.pricingMode === "packages" && (number(current.halfDayPrice) <= 0 || number(current.fullDayPrice) <= 0)) return w("validation_package_prices");
     if (current.pricingMode !== "packages" && number(current.price) <= 0) return current.pricingMode === "hourly" ? w("validation_hourly_price") : w("validation_price");
-    if (current.pricingMode !== "packages") {
-      const variantsError = validateRateVariants(current.rateVariants, w);
-      if (variantsError) return variantsError;
-    }
+    const variantsError = validateRateVariants(current.rateVariants, current.pricingMode, w);
+    if (variantsError) return variantsError;
+    const holidayDates = String(current.holidayDates || "").split(/[,;\s]+/).filter(Boolean);
+    if (holidayDates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date))) return w("validation_holiday_dates");
     return "";
   }
 
@@ -252,7 +272,14 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       full_day_price: number(current.fullDayPrice),
       extra_hour_price: number(current.extraHourPrice),
     } : {}),
-    rate_variants: current.pricingMode === "packages" ? [] : (current.rateVariants || []).map((variant) => ({
+    surcharges: {
+      night_percent: number(current.nightSurchargePercent),
+      night_from: current.nightFrom || "22:00",
+      night_to: current.nightTo || "06:00",
+      holiday_percent: number(current.holidaySurchargePercent),
+      holiday_dates: String(current.holidayDates || "").split(/[,;\s]+/).map((date) => date.trim()).filter(Boolean),
+    },
+    rate_variants: (current.rateVariants || []).map((variant) => ({
       id: variant.id,
       resident_type: variant.audience || "all",
       valid_from: variant.validFrom || null,
@@ -260,7 +287,12 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       min_guests: Math.max(1, number(variant.minGuests) || 1),
       max_guests: number(variant.maxGuests) > 0 ? number(variant.maxGuests) : null,
       price: number(variant.price),
-    })).filter((variant) => variant.price > 0),
+      ...(current.pricingMode === "packages" ? {
+        half_day_price: number(variant.halfDayPrice),
+        full_day_price: number(variant.fullDayPrice),
+        extra_hour_price: number(variant.extraHourPrice),
+      } : {}),
+    })).filter((variant) => current.pricingMode === "packages" ? variant.half_day_price > 0 && variant.full_day_price > 0 : variant.price > 0),
   });
 
   async function addService() {
@@ -336,6 +368,11 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       fullDayHours: details.full_day_hours || "8",
       fullDayPrice: details.full_day_price || "",
       extraHourPrice: details.extra_hour_price || "",
+      nightSurchargePercent: details.surcharges?.night_percent || "",
+      nightFrom: details.surcharges?.night_from || "22:00",
+      nightTo: details.surcharges?.night_to || "06:00",
+      holidaySurchargePercent: details.surcharges?.holiday_percent || "",
+      holidayDates: Array.isArray(details.surcharges?.holiday_dates) ? details.surcharges.holiday_dates.join(", ") : "",
       rateVariants: Array.isArray(details.rate_variants) ? details.rate_variants.map((variant) => ({
         id: variant.id || globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
         audience: variant.resident_type || "all",
@@ -344,6 +381,9 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         minGuests: variant.min_guests || "1",
         maxGuests: variant.max_guests || "",
         price: variant.price || "",
+        halfDayPrice: variant.half_day_price || "",
+        fullDayPrice: variant.full_day_price || "",
+        extraHourPrice: variant.extra_hour_price || "",
       })) : [],
     });
   }
@@ -490,7 +530,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
               {form.pricingMode === "fixed" && <div className="grid gap-4 sm:grid-cols-2"><MoneyField label={w("price_per_service")} value={form.price} onChange={(value) => setField("price", value)} /><ReadOnlyCurrency label={w("currency")} /></div>}
               {form.pricingMode === "hourly" && <div className="grid gap-4 sm:grid-cols-3"><MoneyField label={w("price_per_hour")} value={form.price} onChange={(value) => setField("price", value)} /><NumberField label={w("minimum_hours")} value={form.minimumHours} onChange={(value) => setField("minimumHours", value)} /><ReadOnlyCurrency label={w("currency")} /></div>}
               {form.pricingMode === "packages" && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={form.halfDayHours} onChange={(value) => setField("halfDayHours", value)} /><MoneyField label={w("half_day_price")} value={form.halfDayPrice} onChange={(value) => setField("halfDayPrice", value)} /><NumberField label={w("full_day_hours")} value={form.fullDayHours} onChange={(value) => setField("fullDayHours", value)} /><MoneyField label={w("full_day_price")} value={form.fullDayPrice} onChange={(value) => setField("fullDayPrice", value)} /><MoneyField label={w("extra_hour")} value={form.extraHourPrice} onChange={(value) => setField("extraHourPrice", value)} /></div>}
-              {form.pricingMode !== "packages" && <RateVariantsEditor variants={form.rateVariants} basePrice={form.price} pricingMode={form.pricingMode} onChange={(rateVariants) => setField("rateVariants", rateVariants)} w={w} />}
+              <RateVariantsEditor variants={form.rateVariants} basePrice={form.price} basePackage={{ halfDayPrice: form.halfDayPrice, fullDayPrice: form.fullDayPrice, extraHourPrice: form.extraHourPrice, halfDayHours: form.halfDayHours, fullDayHours: form.fullDayHours }} pricingMode={form.pricingMode} onChange={(rateVariants) => setField("rateVariants", rateVariants)} w={w} />
+              <SurchargesEditor value={form} onChange={setField} w={w} />
             </FormStep>
           </div>
 
@@ -548,7 +589,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
             return <div id={`provider-service-${row.id}`} key={row.id} className={`scroll-mt-24 py-4 ${expanded ? "bg-orange-50/30" : ""}`}>
               <div className="grid items-center gap-4 md:grid-cols-[minmax(240px,1.5fr)_minmax(220px,1fr)_120px_auto]">
                 <div><div className="font-semibold text-slate-950">{storedServiceTitle(row)}</div><div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-slate-500"><span>{serviceLabel(row.category)}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${w("seats_count", { count: row.details.seats })}` : ""}</span>{guideCategory(row.category) && <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${includesTransport(row) ? "bg-blue-50 text-blue-700" : "bg-violet-50 text-violet-700"}`}>{includesTransport(row) ? f("transport_included") : f("guide_only")}</span>}</div></div>
-                <div><div className="font-semibold text-slate-900">{pricingLabel(row, w)}</div><div className="text-xs text-slate-500">{w("tour_builder_rate")}</div></div>
+                <div><div className="font-semibold text-slate-900">{pricingLabel(row, w)}</div><div className="text-xs text-slate-500">{rateConditionsSummary(row, w) || w("tour_builder_rate")}</div></div>
                 <div className={`text-sm font-semibold ${row.is_active ? 'text-emerald-700' : 'text-slate-400'}`}>{row.is_active ? w("enabled") : w("disabled")}</div>
                 <div className="flex justify-end gap-2"><button type="button" onClick={() => expanded ? (setEditingId(null), setDraft(null)) : beginEdit(row)} className="h-9 rounded-md border border-slate-300 px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">{expanded ? w("close") : w("edit")}</button><button type="button" onClick={() => patchService(row.id, { is_active: !row.is_active })} className="h-9 rounded-md border border-slate-300 px-3 text-sm text-slate-600">{row.is_active ? w("disable") : w("enable")}</button><button type="button" onClick={() => setPendingDelete(row)} disabled={deletingId === row.id} title={w("delete")} aria-label={w("delete")} className="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-rose-200 text-rose-600 hover:bg-rose-50 disabled:cursor-wait disabled:opacity-50"><Trash2 size={16} aria-hidden="true" /></button></div>
               </div>
@@ -623,7 +664,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                       {draft.pricingMode === "hourly" && <NumberField label={w("minimum_hours")} value={draft.minimumHours} onChange={(value) => setDraft({ ...draft, minimumHours: value })} />}
                     </div>
                     {draft.pricingMode === "packages" && <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={draft.halfDayHours} onChange={(value) => setDraft({ ...draft, halfDayHours: value })} /><MoneyField label={w("half_day_price")} value={draft.halfDayPrice} onChange={(value) => setDraft({ ...draft, halfDayPrice: value })} /><NumberField label={w("full_day_hours")} value={draft.fullDayHours} onChange={(value) => setDraft({ ...draft, fullDayHours: value })} /><MoneyField label={w("full_day_price")} value={draft.fullDayPrice} onChange={(value) => setDraft({ ...draft, fullDayPrice: value })} /><MoneyField label={w("extra_hour")} value={draft.extraHourPrice} onChange={(value) => setDraft({ ...draft, extraHourPrice: value })} /></div>}
-                    {draft.pricingMode !== "packages" && <RateVariantsEditor compact variants={draft.rateVariants || []} basePrice={draft.price} pricingMode={draft.pricingMode} onChange={(rateVariants) => setDraft({ ...draft, rateVariants })} w={w} />}
+                    <RateVariantsEditor compact variants={draft.rateVariants || []} basePrice={draft.price} basePackage={{ halfDayPrice: draft.halfDayPrice, fullDayPrice: draft.fullDayPrice, extraHourPrice: draft.extraHourPrice, halfDayHours: draft.halfDayHours, fullDayHours: draft.fullDayHours }} pricingMode={draft.pricingMode} onChange={(rateVariants) => setDraft({ ...draft, rateVariants })} w={w} />
+                    <SurchargesEditor value={draft} onChange={(key, value) => setDraft({ ...draft, [key]: value })} w={w} compact />
                   </div>
                   <div className="mt-5 flex justify-between gap-3 border-t border-slate-200 pt-4">
                     <button type="button" onClick={() => setPendingDelete(row)} className="h-10 rounded-md border border-rose-200 px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50">{w("delete")}</button>
@@ -658,10 +700,11 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 function MoneyField({ label, value, onChange }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<div className="mt-1 flex h-11 overflow-hidden rounded-md border border-slate-300 bg-white"><input inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value.replace(",", ".").replace(/[^\d.]/g, ""))} placeholder="0" className="min-w-0 flex-1 px-3 font-normal outline-none" /><span className="flex items-center border-l border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-600">UZS</span></div></label>;
 }
-function RateVariantsEditor({ variants, basePrice, pricingMode, onChange, w, compact = false }) {
+function RateVariantsEditor({ variants, basePrice, basePackage = {}, pricingMode, onChange, w, compact = false }) {
   const [previewDate, setPreviewDate] = useState(() => new Date().toISOString().slice(0, 10));
   const [previewGuests, setPreviewGuests] = useState("2");
   const [previewAudience, setPreviewAudience] = useState("nrs");
+  const [previewHours, setPreviewHours] = useState("8");
   const update = (index, key, value) => onChange(variants.map((variant, current) => current === index ? { ...variant, [key]: value } : variant));
   const matchingIndex = variants.findIndex((variant) => {
     const from = variant.validFrom || "0000-01-01";
@@ -670,10 +713,18 @@ function RateVariantsEditor({ variants, basePrice, pricingMode, onChange, w, com
     const max = number(variant.maxGuests) > 0 ? number(variant.maxGuests) : Infinity;
     const audience = variant.audience || "all";
     const guests = Math.max(1, number(previewGuests) || 1);
-    return number(variant.price) > 0 && (audience === "all" || audience === previewAudience) && previewDate >= from && previewDate <= to && guests >= min && guests <= max;
+    const hasPrice = pricingMode === "packages" ? number(variant.halfDayPrice) > 0 && number(variant.fullDayPrice) > 0 : number(variant.price) > 0;
+    return hasPrice && (audience === "all" || audience === previewAudience) && previewDate >= from && previewDate <= to && guests >= min && guests <= max;
   });
   const matching = matchingIndex >= 0 ? variants[matchingIndex] : null;
-  const previewPrice = matching ? number(matching.price) : number(basePrice);
+  const packageSource = matching || basePackage;
+  const hours = Math.max(1, number(previewHours) || 1);
+  const halfHours = Math.max(1, number(basePackage.halfDayHours) || 4);
+  const fullHours = Math.max(halfHours, number(basePackage.fullDayHours) || 8);
+  const previewPrice = pricingMode !== "packages" ? (matching ? number(matching.price) : number(basePrice))
+    : hours <= halfHours ? number(packageSource.halfDayPrice)
+    : hours <= fullHours ? number(packageSource.fullDayPrice)
+    : number(packageSource.fullDayPrice) + (hours - fullHours) * number(packageSource.extraHourPrice);
   return <div className={`${compact ? "mt-4" : "mt-5"} border-t border-slate-200 pt-4`}>
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h5 className="text-sm font-bold text-slate-900">{w("price_conditions")}</h5><p className="mt-0.5 text-xs text-slate-500">{w("price_conditions_hint")}</p></div><button type="button" onClick={() => onChange([...variants, blankRateVariant()])} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Plus size={16} />{w("add_price_condition")}</button></div>
     {variants.length > 0 && <div className="mt-3 space-y-3">{variants.map((variant, index) => <div key={variant.id || index} className={`min-w-0 border-l-2 p-3 ${matchingIndex === index ? "border-emerald-500 bg-emerald-50/60" : "border-orange-400 bg-orange-50/40"}`}>
@@ -685,13 +736,18 @@ function RateVariantsEditor({ variants, basePrice, pricingMode, onChange, w, com
         <DateField label={w("valid_to")} value={variant.validTo} onChange={(value) => update(index, "validTo", value)} />
         <NumberField label={w("min_guests")} value={variant.minGuests} onChange={(value) => update(index, "minGuests", value)} />
         <OptionalNumberField label={w("max_guests")} value={variant.maxGuests} onChange={(value) => update(index, "maxGuests", value)} />
-        <div className="min-w-0 sm:col-span-2"><MoneyField label={w("condition_price")} value={variant.price} onChange={(value) => update(index, "price", value)} /></div>
+        {pricingMode === "packages" ? <>
+          <MoneyField label={w("half_day_price")} value={variant.halfDayPrice} onChange={(value) => update(index, "halfDayPrice", value)} />
+          <MoneyField label={w("full_day_price")} value={variant.fullDayPrice} onChange={(value) => update(index, "fullDayPrice", value)} />
+          <div className="min-w-0 sm:col-span-2"><MoneyField label={w("extra_hour")} value={variant.extraHourPrice} onChange={(value) => update(index, "extraHourPrice", value)} /></div>
+        </> : <div className="min-w-0 sm:col-span-2"><MoneyField label={w("condition_price")} value={variant.price} onChange={(value) => update(index, "price", value)} /></div>}
       </div>
     </div>)}</div>}
     <div className="mt-3 border border-slate-200 bg-slate-50 p-3">
       <div className="flex flex-wrap items-end gap-3">
         <div className="min-w-[150px] flex-1"><DateField label={w("test_date")} value={previewDate} onChange={setPreviewDate} /></div>
         <div className="w-32"><NumberField label={w("test_guests")} value={previewGuests} onChange={setPreviewGuests} /></div>
+        {pricingMode === "packages" && <div className="w-32"><NumberField label={w("test_hours")} value={previewHours} onChange={setPreviewHours} /></div>}
         <div className="min-w-[180px] flex-1"><SelectField label={w("test_audience")} value={previewAudience} onChange={setPreviewAudience} placeholder={w("nonresidents")} options={[{ value: "nrs", label: w("nonresidents") }, { value: "res", label: w("residents") }]} /></div>
         <div className="min-w-[180px] flex-1 pb-1"><span className="block text-xs font-semibold text-slate-500">{matching ? w("condition_applied", { number: matchingIndex + 1 }) : w("base_price_applied")}</span><strong className="mt-1 block text-lg text-slate-950">{money(previewPrice)} UZS {pricingMode === "hourly" ? w("per_hour_short") : ""}</strong></div>
       </div>
@@ -700,6 +756,19 @@ function RateVariantsEditor({ variants, basePrice, pricingMode, onChange, w, com
 }
 function DateField({ label, value, onChange }) {
   return <label className="text-xs font-semibold text-slate-600">{label}<input type="date" value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal" /></label>;
+}
+function SurchargesEditor({ value, onChange, w, compact = false }) {
+  return <div className={`${compact ? "mt-4" : "mt-5"} border-t border-slate-200 pt-4`}>
+    <h5 className="text-sm font-bold text-slate-900">{w("automatic_surcharges")}</h5>
+    <p className="mt-0.5 text-xs text-slate-500">{w("automatic_surcharges_hint")}</p>
+    <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <NumberField label={w("night_surcharge_percent")} value={value.nightSurchargePercent} onChange={(next) => onChange("nightSurchargePercent", next)} />
+      <label className="text-sm font-semibold text-slate-700">{w("night_from")}<input type="time" value={value.nightFrom} onChange={(event) => onChange("nightFrom", event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal" /></label>
+      <label className="text-sm font-semibold text-slate-700">{w("night_to")}<input type="time" value={value.nightTo} onChange={(event) => onChange("nightTo", event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal" /></label>
+      <NumberField label={w("holiday_surcharge_percent")} value={value.holidaySurchargePercent} onChange={(next) => onChange("holidaySurchargePercent", next)} />
+      <label className="text-sm font-semibold text-slate-700 sm:col-span-2 xl:col-span-4">{w("holiday_dates")}<input value={value.holidayDates} onChange={(event) => onChange("holidayDates", event.target.value)} placeholder="2026-01-01, 2026-03-21" className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal" /><span className="mt-1 block text-xs font-normal text-slate-500">{w("holiday_dates_hint")}</span></label>
+    </div>
+  </div>;
 }
 function OptionalNumberField({ label, value, onChange }) {
   return <label className="text-xs font-semibold text-slate-600">{label}<input type="number" min="1" value={value} placeholder="∞" onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal" /></label>;

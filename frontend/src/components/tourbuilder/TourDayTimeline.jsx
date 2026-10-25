@@ -180,7 +180,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
               ? new Intl.DateTimeFormat(i18n.language || "ru", { day: "2-digit", month: "2-digit" }).format(new Date(`${checkoutDate}T12:00:00`))
               : "";
             return (
-              <div key={item.id} className="grid gap-2 py-2.5 sm:grid-cols-[96px_minmax(0,1fr)] sm:gap-3">
+              <div key={item.id} className="grid min-w-0 gap-2 py-2.5 sm:grid-cols-[96px_minmax(0,1fr)] sm:gap-3">
                 <div className="flex items-center justify-between gap-3 px-1 sm:block sm:px-0 sm:pt-2">
                   <div className="text-sm font-bold text-slate-900">
                     {isHotel ? `${item.start_time} → ${checkoutLabel} ${item.end_time}` : `${item.start_time}–${item.end_time}`}
@@ -190,22 +190,22 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                   </div>
                 </div>
                 <div className={`min-w-0 rounded-md border px-3 py-2.5 transition ${active ? "border-orange-500 bg-orange-50/40 ring-1 ring-orange-200" : "border-slate-200 bg-white hover:border-slate-400"}`}>
-                  <div className="flex items-center gap-3">
+                  <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                   <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { select(item.id); onExpandedChange?.(null); }}>
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-bold text-slate-950">{t(`tb.timeline.components.${component.value}`)}</div>
                         <div className="mt-1 flex flex-wrap gap-1">
                           <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-semibold text-slate-700">{t(`tb.timeline.components.${component.value}`)}</span>
-                          {item.provider_name && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{item.provider_name}</span>}
-                          {item.services?.guide?.provider_name && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{t("tb.timeline.guide")}: {item.services.guide.provider_name}</span>}
+                          {item.provider_name && <span className="max-w-full break-words rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{item.provider_name}</span>}
+                          {item.services?.guide?.provider_name && <span className="max-w-full break-words rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{t("tb.timeline.guide")}: {item.services.guide.provider_name}</span>}
                           {item.services?.tour?.subtype && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{t(`tb.timeline.tour_types.${item.services.tour.subtype}`)}</span>}
                           {item.services?.support?.subtype && <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-semibold text-violet-700">{t(`tb.timeline.support_types.${item.services.support.subtype}`)}</span>}
                           {item.services?.transport?.subtype && <span className="rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-semibold text-indigo-700">{t(`tb.timeline.transport_types.${item.services.transport.subtype}`)}</span>}
-                          {item.services?.transport?.provider_name && <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">{t("tb.transport")}: {item.services.transport.provider_name}</span>}
+                          {item.services?.transport?.provider_name && <span className="max-w-full break-words rounded-full bg-blue-50 px-2 py-0.5 text-xs font-semibold text-blue-700">{t("tb.transport")}: {item.services.transport.provider_name}</span>}
                           {item.services?.transport?.flight?.raw_offer_id && <span className="rounded-full bg-sky-50 px-2 py-0.5 text-xs font-semibold text-sky-700">{t("tb.timeline.flight_selected")}</span>}
                           {item.services?.transport?.rail?.price > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-800">{t("tb.timeline.rail")} · {Number(item.services.transport.rail.price).toLocaleString()} {item.services.transport.rail.currency || "UZS"} / {t("tb.timeline.person_short")}</span>}
-                          {item.services?.hotel?.provider_name && <span className="rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700">{t("tb.hotel")}: {item.services.hotel.provider_name}</span>}
+                          {item.services?.hotel?.provider_name && <span className="max-w-full break-words rounded-full bg-cyan-50 px-2 py-0.5 text-xs font-semibold text-cyan-700">{t("tb.hotel")}: {item.services.hotel.provider_name}</span>}
                           {item.services?.attractions?.items?.length > 0 && <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-semibold text-amber-700">{t("tb.timeline.attractions")}: {item.services.attractions.items.length}</span>}
                           {item.services?.meal?.items?.length > 0 && <span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-semibold text-emerald-700">{t("tb.meals")}</span>}
                         </div>
@@ -220,14 +220,14 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                       select(item.id);
                       onExpandedChange?.(nextExpandedId);
                     }}
-                    className="shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100"
+                    className="w-full shrink-0 rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-100 sm:w-auto"
                   >
                     {expandedId === item.id ? t("tb.timeline.done") : t("tb.timeline.configure")}
                   </button>
                   </div>
 
                   {expandedId === item.id && (
-                    <div className="mt-3 grid items-end gap-3 border-t border-slate-200 pt-3 md:grid-cols-[120px_160px_1fr_auto]">
+                    <div className="mt-3 grid min-w-0 items-end gap-3 border-t border-slate-200 pt-3 sm:grid-cols-2 xl:grid-cols-[120px_160px_minmax(0,1fr)_auto]">
                       <label className="flex h-full flex-col justify-end text-xs font-semibold text-slate-500">{t(isHotel ? "tb.timeline.checkin" : "tb.timeline.start")}<input type="time" value={item.start_time} onChange={(e) => patch(item.id, { start_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
                       <label className="flex h-full flex-col justify-end text-xs font-semibold text-slate-500">{t(isHotel ? "tb.timeline.checkout_next_day" : "tb.timeline.end")}<input type="time" value={item.end_time} onChange={(e) => patch(item.id, { end_time: e.target.value })} className="mt-1 h-10 w-full rounded-md border border-slate-300 px-2 text-sm text-slate-900" /></label>
                       <label className="flex h-full flex-col justify-end text-xs font-semibold text-slate-500">{t("tb.timeline.component")}<select value={component.value} onChange={(e) => { const next = componentMeta(e.target.value); const hotelDefaults = next.value === "hotel" && component.value !== "hotel" ? { start_time: "14:00", end_time: "12:00", end_day_offset: 1 } : { end_day_offset: 0 }; patch(item.id, { active_service_category: next.value, type: next.legacyType, title: next.label, ...hotelDefaults }); }} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-900">{COMPONENT_TYPES.map((option) => <option key={option.value} value={option.value}>{t(`tb.timeline.components.${option.value}`)}</option>)}</select></label>
