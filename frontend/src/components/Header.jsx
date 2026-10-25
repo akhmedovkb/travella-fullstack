@@ -586,20 +586,12 @@ export default function Header() {
                       />
 
                       {role === "provider" && (
-                        <>
-                          <DropdownItem
-                            to="/tour-builder"
-                            label={t("nav.tour_builder")}
-                            description={t("nav.tour_builder_desc")}
-                            icon={<IconDoc />}
-                          />
-                          <DropdownItem
-                            to="/dashboard/tour-packages"
-                            label={t("nav.my_tours")}
-                            description={t("nav.my_tours_desc")}
-                            icon={<IconBookings />}
-                          />
-                        </>
+                        <DropdownItem
+                          to="/tour-builder"
+                          label={t("nav.tour_builder")}
+                          description={t("nav.tour_builder_desc")}
+                          icon={<IconDoc />}
+                        />
                       )}
 
                       <DropdownItem
@@ -675,7 +667,7 @@ export default function Header() {
 
                 <div className="relative" ref={workspaceRef}>
                   <MenuButton
-                    active={workspaceOpen}
+                    active={workspaceOpen || location.pathname.startsWith("/dashboard/tour-packages")}
                     open={workspaceOpen}
                     icon={<IconDashboard />}
                     label={t("provider_profile_ui.header.work")}
@@ -716,6 +708,13 @@ export default function Header() {
                           "Брони"
                         )}
                         description={loading ? "…" : t("nav.bookings_count", { count: bookingsBadge })}
+                        icon={<IconBookings />}
+                      />
+
+                      <DropdownItem
+                        to="/dashboard/tour-packages"
+                        label={t("nav.my_tours")}
+                        description={t("nav.my_tours_desc")}
                         icon={<IconBookings />}
                       />
 
@@ -881,7 +880,6 @@ export default function Header() {
             <RowGroupDark title={t("nav.products")}>
               <NavItemMobileDark to="/" label={t("nav.marketplace")} icon={<IconChecklist />} end />
               {role === "provider" && <NavItemMobileDark to="/tour-builder" label={t("nav.tour_builder")} icon={<IconDoc />} />}
-              {role === "provider" && <NavItemMobileDark to="/dashboard/tour-packages" label={t("nav.my_tours")} icon={<IconBookings />} />}
               <NavItemMobileDark to="/hotels" label={t("nav.hotel_catalog")} icon={<IconHotel />} />
               <NavItemMobileDark to="/community" label={t("nav.community")} icon={<IconUsers />} />
             </RowGroupDark>
@@ -906,6 +904,7 @@ export default function Header() {
                 <RowGroupDark title={t("provider_profile_ui.header.client_work")}>
                   <NavItemMobileDark to="/dashboard/requests" label={t("nav.requests", "Запросы")} icon={<IconRequests />} badge={providerRequests} loading={loading} />
                   <NavItemMobileDark to="/dashboard/bookings" label={t("nav.bookings", "Бронирования")} icon={<IconBookings />} badge={bookingsBadge} loading={loading} />
+                  <NavItemMobileDark to="/dashboard/tour-packages" label={t("nav.my_tours")} icon={<IconBookings />} />
                   <NavItemMobileDark to="/dashboard/favorites" label={t("nav.favorites", "Избранное")} icon={<IconHeart />} badge={favCount} />
                   <NavItemMobileDark to="/dashboard/finance" label={t("nav.provider_finance", "Спрос и клиенты")} icon={<IconWallet />} badge={demandNewCount} />
                   <NavItemMobileDark to="/dashboard/social" label={t("nav.publications")} icon={<IconDoc />} />
