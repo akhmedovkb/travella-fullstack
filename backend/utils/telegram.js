@@ -10,7 +10,7 @@ const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
 // новый клиентский бот (отказные)
 const CLIENT_BOT_TOKEN = (process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
 
-const SITE = (process.env.SITE_PUBLIC_URL || "").replace(/\/+$/, "");
+const SITE = (process.env.SITE_PUBLIC_URL || "https://travella.uz").replace(/\/+$/, "");
 
 // enabled — это “включён ли основной бот”
 const enabled = !!BOT_TOKEN;
@@ -429,6 +429,8 @@ async function getBookingActors(input) {
     `
     SELECT
       b.id, COALESCE(b.status,'') AS status,
+      b.provider_price, COALESCE(b.currency, 'UZS') AS currency,
+      b.client_message, b.attachments, b.hold_until,
       COALESCE(
         (SELECT array_agg(d.date::date ORDER BY d.date)
            FROM booking_dates d
@@ -484,6 +486,13 @@ async function getBookingActors(input) {
     dates: row.dates || [],
     serviceTitle: row.service_title || "",
     serviceCategory: row.service_category || "",
+    price: Number(row.provider_price || 0),
+    currency: row.currency || "UZS",
+    clientMessage: row.client_message || "",
+    details: typeof row.attachments === "string"
+      ? (() => { try { return JSON.parse(row.attachments); } catch { return {}; } })()
+      : (row.attachments || {}),
+    holdUntil: row.hold_until || null,
     provider: {
       id: row.provider__id,
       name: row.provider__name,
@@ -508,6 +517,52 @@ async function getBookingActors(input) {
         }
       : null,
   };
+}
+
+function bookingSummaryLines(a) {
+  const details = a?.details && typeof a.details === "object" ? a.details : {};
+  const kind = String(details.tb_kind || details.type || a.serviceCategory || "").toLowerCase();
+  const kindLabels = {
+    guide: "Гид / экскурсия",
+    transport: "Транспорт",
+    hotel: "Отель",
+    entry: "Входные билеты",
+  };
+  const title = a.serviceTitle || kindLabels[kind] || "Услуга";
+  const adults = Number(details.pax_adult || 0);
+  const children = Number(details.pax_child || 0);
+  const guests = adults + children;
+  const from = String(details.from_city || "").trim();
+  const to = String(details.to_city || "").trim();
+  const residency = String(details.resident_type || "").toLowerCase();
+  const lines = [
+    `🏷️ Услуга: <b>${esc(title)}</b>`,
+    `📅 Даты: <b>${fmtDates(a.dates)}</b>`,
+  ];
+  if (from || to) lines.push(`📍 Маршрут: <b>${esc([from, to].filter(Boolean).join(" → "))}</b>`);
+  if (guests > 0) {
+    const breakdown = [adults ? `взрослых ${adults}` : "", children ? `детей ${children}` : ""].filter(Boolean).join(", ");
+    lines.push(`👥 Гости: <b>${guests}</b>${breakdown ? ` (${breakdown})` : ""}`);
+  }
+  if (residency) {
+    const label = residency === "nrs" ? "нерезиденты" : residency === "res" ? "резиденты" : residency;
+    lines.push(`🎫 Тариф: <b>${esc(label)}</b>`);
+  }
+  if (a.price > 0) {
+    lines.push(`💵 Сумма: <b>${a.price.toLocaleString("ru-RU")} ${esc(a.currency)}</b>`);
+  }
+  return lines;
+}
+
+function applicantLines(a) {
+  if (a.agent) {
+    const lines = [lineContact("🧑‍💼", "Турагент", a.agent.name, a.agent.phone, a.agent.username)];
+    if (a.client?.name || a.client?.phone || a.client?.username) {
+      lines.push(lineContact("👤", "Турист", a.client.name, a.client.phone, a.client.username));
+    }
+    return lines;
+  }
+  return [lineContact("👤", "Заказчик", a.client?.name, a.client?.phone, a.client?.username)];
 }
 
 async function getRequestActors(requestId) {
@@ -588,28 +643,12 @@ async function notifyNewRequest({ booking }) {
     const a = await getBookingActors(booking);
     if (!a?.provider?.chatId) return;
 
-    const title = a.serviceTitle || "Услуга";
-    const dates = fmtDates(a.dates);
-    const lines = [];
-
-    lines.push(`<b>🆕 Заявка на бронь №${a.id}</b>`);
-    lines.push(`🏷️ Услуга: <b>${esc(title)}</b>`);
-    lines.push(`📅 Даты: <b>${dates}</b>`);
-
-    if (a.agent) {
-      lines.push(
-        lineContact("🧑‍💼", "Агент", a.agent.name, a.agent.phone, a.agent.username)
-      );
-      if (a.client?.name || a.client?.phone || a.client?.username) {
-        lines.push(
-          lineContact("👤", "Клиент", a.client.name, a.client.phone, a.client.username)
-        );
-      }
-    } else {
-      lines.push(
-        lineContact("👤", "Клиент", a.client?.name, a.client?.phone, a.client?.username)
-      );
-    }
+    const lines = [
+      `<b>🆕 Новая заявка №${a.id}</b>`,
+      ...bookingSummaryLines(a),
+      ...applicantLines(a),
+    ];
+    if (a.clientMessage) lines.push(`📝 Комментарий: ${esc(a.clientMessage)}`);
 
     lines.push("");
     lines.push(`🔗 Открыть: ${urlProvider("bookings")}`);
@@ -665,40 +704,16 @@ async function notifyConfirmed({ booking }) {
     const a = await getBookingActors(booking);
     if (!a) return;
 
-    const base = [];
-    base.push(`<b>✅ Бронь подтверждена №${a.id}</b>`);
-    if (a.serviceTitle) base.push(`🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>`);
-    base.push(`📅 Даты: <b>${fmtDates(a.dates)}</b>`);
-
-    const applicantLines = [];
-    if (a.agent) {
-      applicantLines.push(
-        lineContact("🧑‍💼", "Агент", a.agent.name, a.agent.phone, a.agent.username)
-      );
-      if (a.client?.name || a.client?.phone || a.client?.username) {
-        applicantLines.push(
-          lineContact("👤", "Клиент", a.client.name, a.client.phone, a.client.username)
-        );
-      }
-    } else {
-      applicantLines.push(
-        lineContact(
-          "👤",
-          "Клиент",
-          a.client?.name,
-          a.client?.phone,
-          a.client?.username
-        )
-      );
-    }
+    const base = [`<b>✅ Бронь подтверждена №${a.id}</b>`, ...bookingSummaryLines(a)];
 
     const textForProvider = [
       ...base,
-      ...applicantLines,
+      ...applicantLines(a),
       "",
       `🔗 Открыть: ${urlProvider("bookings")}`,
     ].join("\n");
 
+    const requesterUrl = a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings");
     const textForClient = [
       ...base,
       lineContact(
@@ -709,7 +724,7 @@ async function notifyConfirmed({ booking }) {
         a.provider?.username
       ),
       "",
-      `🔗 Открыть: ${urlClient("bookings")}`,
+      `🔗 Открыть: ${requesterUrl}`,
     ].join("\n");
 
     // refused_*:
@@ -717,11 +732,74 @@ async function notifyConfirmed({ booking }) {
     // - провайдер: старый
     const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
 
-    if (a.client?.chatId) await tgSend(a.client.chatId, textForClient, {}, tokenOverride);
+    if (a.client?.chatId && !a.agent?.chatId) await tgSend(a.client.chatId, textForClient, {}, tokenOverride);
     if (a.provider?.chatId) await tgSend(a.provider.chatId, textForProvider);
-    if (a.agent?.chatId) await tgSend(a.agent.chatId, textForProvider, {}, tokenOverride);
+    if (a.agent?.chatId) await tgSend(a.agent.chatId, textForClient, {}, tokenOverride);
   } catch (e) {
     console.error("[tg] notifyConfirmed failed:", e?.response?.data || e?.message || e);
+  }
+}
+
+async function notifyBookingAcceptedAwaitingPayment({ booking }) {
+  try {
+    const a = await getBookingActors(booking);
+    if (!a) return;
+    const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
+    const paymentDeadline = a.holdUntil
+      ? new Date(a.holdUntil).toLocaleString("ru-RU", { timeZone: "Asia/Tashkent", dateStyle: "short", timeStyle: "short" })
+      : "30 минут после подтверждения";
+    const requesterUrl = a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings");
+    const requesterText = [
+      `<b>✅ Поставщик принял заявку №${a.id}</b>`,
+      ...bookingSummaryLines(a),
+      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
+      `⏳ Оплатить до: <b>${esc(paymentDeadline)}</b>`,
+      "",
+      `🔗 Перейти к оплате: ${requesterUrl}`,
+    ].join("\n");
+    const providerText = [
+      `<b>✅ Вы приняли заявку №${a.id}</b>`,
+      ...bookingSummaryLines(a),
+      ...applicantLines(a),
+      "⏳ Статус: <b>ожидается оплата заказчика</b>",
+      "",
+      `🔗 Открыть заявку: ${urlProvider("bookings")}`,
+    ].join("\n");
+    const requesterChat = a.agent?.chatId || a.client?.chatId;
+    if (requesterChat) await tgSend(requesterChat, requesterText, {}, tokenOverride);
+    if (a.provider?.chatId) await tgSend(a.provider.chatId, providerText);
+  } catch (e) {
+    console.error("[tg] notifyBookingAcceptedAwaitingPayment failed:", e?.response?.data || e?.message || e);
+  }
+}
+
+async function notifyBookingPaidConfirmed({ booking }) {
+  try {
+    const a = await getBookingActors(booking);
+    if (!a) return;
+    const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
+    const requesterUrl = a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings");
+    const requesterText = [
+      `<b>💳 Оплата подтверждена · бронь №${a.id}</b>`,
+      ...bookingSummaryLines(a),
+      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
+      "✅ Статус: <b>бронь подтверждена</b>",
+      "",
+      `🔗 Открыть бронь: ${requesterUrl}`,
+    ].join("\n");
+    const providerText = [
+      `<b>💳 Заказчик оплатил бронь №${a.id}</b>`,
+      ...bookingSummaryLines(a),
+      ...applicantLines(a),
+      "✅ Статус: <b>можно готовить услугу</b>",
+      "",
+      `🔗 Открыть бронь: ${urlProvider("bookings")}`,
+    ].join("\n");
+    const requesterChat = a.agent?.chatId || a.client?.chatId;
+    if (requesterChat) await tgSend(requesterChat, requesterText, {}, tokenOverride);
+    if (a.provider?.chatId) await tgSend(a.provider.chatId, providerText);
+  } catch (e) {
+    console.error("[tg] notifyBookingPaidConfirmed failed:", e?.response?.data || e?.message || e);
   }
 }
 
@@ -1349,6 +1427,8 @@ module.exports = {
   notifyNewRequest,
   notifyQuote,
   notifyConfirmed,
+  notifyBookingAcceptedAwaitingPayment,
+  notifyBookingPaidConfirmed,
   notifyRejected,
   notifyCancelled,
   notifyCancelledByRequester,
