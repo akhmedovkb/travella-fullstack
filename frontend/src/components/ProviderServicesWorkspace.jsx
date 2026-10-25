@@ -107,6 +107,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const isGuideService = guideCategory(form.category);
   const usesVehicle = isTransport || (isGuideService && form.transportIncluded);
   const isIntercity = INTERCITY_CATEGORIES.has(form.category);
+  const isNewDestination = isIntercity && Boolean(form.destinationCity)
+    && !cities.some((city) => String(city).trim().toLowerCase() === String(form.destinationCity).trim().toLowerCase());
   const preview = calculatedPreview(form, w);
   const serviceLabel = (category) => t(`provider_services.items.${category}`, { defaultValue: LABELS[category] || category || "Услуга" });
   const groupLabel = (group) => t(`provider_services.groups.${group.id}`, { defaultValue: group.label });
@@ -174,7 +176,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     if (!cities.length) return w("validation_profile_cities");
     if (INTERCITY_CATEGORIES.has(current.category)) {
       if (!current.originCity || !current.destinationCity) return w("validation_route");
-      if (current.originCity === current.destinationCity) return w("validation_different_cities");
+      if (String(current.originCity).trim().toLowerCase() === String(current.destinationCity).trim().toLowerCase()) return w("validation_different_cities");
     } else if (!current.citySlug) return w("validation_city");
     if ((transportCategory(current.category) || (guideCategory(current.category) && current.transportIncluded)) && !String(current.vehicleModel || "").trim()) return w("validation_vehicle");
     if (current.pricingMode === "packages" && (number(current.halfDayPrice) <= 0 || number(current.fullDayPrice) <= 0)) return w("validation_package_prices");
@@ -221,6 +223,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         }),
       });
       setRows((current) => [created, ...current]);
+      if (isNewDestination) {
+        const refreshedProfile = await fetchJSON("/api/providers/profile").catch(() => null);
+        if (refreshedProfile) setProfile(refreshedProfile);
+      }
       setForm(blankForm());
       tSuccess(w("created"));
     } catch (error) {
@@ -374,9 +380,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
               <div className={`grid gap-4 ${isIntercity ? "md:grid-cols-2" : "md:max-w-md"}`}>
                 {isIntercity ? <>
                   <CitySelect label={w("from")} value={form.originCity} cities={cities} onChange={(value) => setForm((current) => ({ ...current, originCity: value, destinationCity: current.destinationCity === value ? "" : current.destinationCity }))} placeholder={w("choose_city")} />
-                  <CitySelect label={w("to")} value={form.destinationCity} cities={cities.filter((city) => city !== form.originCity)} onChange={(value) => setField("destinationCity", value)} placeholder={w("choose_city")} />
+                  <CitySelect allowNew label={w("to")} value={form.destinationCity} cities={cities.filter((city) => city !== form.originCity)} onChange={(value) => setField("destinationCity", value)} placeholder={w("choose_or_add_city")} />
                 </> : <CitySelect label={w("service_city")} value={form.citySlug} cities={cities} onChange={(value) => setField("citySlug", value)} placeholder={w("choose_city")} />}
               </div>
+              {isNewDestination && <div className="mt-3 flex items-center gap-2 rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm font-medium text-sky-800"><Plus size={16} className="shrink-0" />{w("destination_will_be_added", { city: cityLabel(form.destinationCity) })}</div>}
               {isGuideService && <TransportMode
                 value={form.transportIncluded}
                 labels={{ title: f("service_format"), guide: f("guide_only"), guideHint: f("guide_only_hint"), transport: f("guide_with_transport"), transportHint: f("guide_with_transport_hint") }}
@@ -600,8 +607,10 @@ function TransportMode({ value, onChange, labels, compact = false }) {
     </div>
   </fieldset>;
 }
-function CitySelect({ label, value, cities, onChange, placeholder, compact = false }) {
-  return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={!cities.length} className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-50`}><option value="">{placeholder}</option>{cities.map((city) => <option key={city} value={city}>{cityLabel(city)}</option>)}</select></label>;
+function CitySelect({ label, value, cities, onChange, placeholder, compact = false, allowNew = false }) {
+  const listId = React.useId();
+  const fieldClass = `${compact ? "h-10 text-sm" : "h-11"} mt-1 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-50`;
+  return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}{allowNew ? <><input list={listId} value={value} onChange={(event) => onChange(event.target.value)} onBlur={(event) => onChange(event.target.value.trim())} placeholder={placeholder} className={fieldClass} /><datalist id={listId}>{cities.map((city) => <option key={city} value={cityLabel(city)} />)}</datalist></> : <select value={value} onChange={(event) => onChange(event.target.value)} disabled={!cities.length} className={fieldClass}><option value="">{placeholder}</option>{cities.map((city) => <option key={city} value={city}>{cityLabel(city)}</option>)}</select>}</label>;
 }
 function ReadOnlyValue({ label, value, compact = false }) {
   return <label className={`${compact ? "text-xs text-slate-600" : "text-sm text-slate-700"} font-semibold`}>{label}<div className={`${compact ? "h-10 text-sm" : "h-11"} mt-1 flex items-center rounded-md border border-slate-200 bg-slate-100 px-3 font-normal text-slate-600`}>{value}</div></label>;

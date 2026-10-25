@@ -72,7 +72,23 @@ async function resolveCitySlugs(_pool, inputs) {
   return Array.from(new Set(slugs));
 }
 
+function addServiceCity(location, citySlugs, city) {
+  const displayCity = String(city || "").trim().replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toUpperCase());
+  const slug = slugifyCity(displayCity);
+  const locations = toArray(location).map((value) => String(value || "").trim()).filter(Boolean);
+  const slugs = toArray(citySlugs).map((value) => String(value || "").trim()).filter(Boolean);
+  if (!slug) return { location: locations, city_slugs: Array.from(new Set(slugs)), added: false };
+
+  const hasCity = locations.some((value) => slugifyCity(value) === slug);
+  return {
+    location: hasCity ? locations : [...locations, displayCity],
+    city_slugs: Array.from(new Set([...slugs, slug])),
+    added: !hasCity || !slugs.includes(slug),
+  };
+}
+
 module.exports = {
   resolveCitySlugs,
   slugifyCity,
+  addServiceCity,
 };
