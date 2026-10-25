@@ -1498,7 +1498,9 @@
       "start_required": "Boshlanish sanasini ko‘rsating.",
       "template_empty": "Shablonda kunlar yo‘q.",
       "invalid_date": "Noto‘g‘ri sana.",
-      "past_forbidden": "Boshlanish sanasi o‘tgan bo‘lishi mumkin emas."
+      "past_forbidden": "Boshlanish sanasi o‘tgan bo‘lishi mumkin emas.",
+      "hotel_not_calculated": "So‘rovni yaratib bo‘lmaydi: {{date}} sanasidagi mehmonxona hisoblanmagan ({{reason}}).",
+      "providers_missing": "Kamida bitta yetkazib beruvchi yoki hisoblangan mehmonxonani tanlang."
     },
     "hotel_category": "Mehmonxonalar toifasi",
     "any": "Istalgan",
@@ -1506,6 +1508,7 @@
     "templates": "Shablonlar",
     "templates_open": "Shablonlarni ochish",
     "templates_count": "{{count}} ta",
+    "no_templates": "Hozircha shablonlar yo‘q. Birinchi shablonni Shablonlar bo‘limida yarating.",
     "transfers": "Shaharlararo transferlar",
     "transfer_from_ph": "Qayerdan (shahar)",
     "transfer_to_ph": "Qayerga (shahar)",

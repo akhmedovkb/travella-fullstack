@@ -1500,7 +1500,9 @@
       "start_required": "Specify the start date.",
       "template_empty": "The template has no days.",
       "invalid_date": "Invalid date.",
-      "past_forbidden": "Start date cannot be in the past."
+      "past_forbidden": "Start date cannot be in the past.",
+      "hotel_not_calculated": "Cannot create the request: the hotel for {{date}} has not been calculated ({{reason}}).",
+      "providers_missing": "Select at least one supplier or a calculated hotel."
     },
     "hotel_category": "Hotel category",
     "any": "Any",
@@ -1508,6 +1510,7 @@
     "templates": "Templates",
     "templates_open": "Open templates",
     "templates_count": "{{count}} pcs.",
+    "no_templates": "No templates yet. Create the first one in Templates.",
     "transfers": "Intercity transfers",
     "transfer_from_ph": "From (city)",
     "transfer_to_ph": "To (city)",

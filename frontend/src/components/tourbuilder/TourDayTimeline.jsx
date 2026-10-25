@@ -153,8 +153,8 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
   };
 
   return (
-    <section data-tour-event-day={dayKey} className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-4 py-3">
+    <section data-tour-event-day={dayKey} className="overflow-hidden border-y border-slate-200 bg-white">
+      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 px-1 py-3 sm:px-3">
         <div>
           <h3 className="text-base font-bold text-slate-950">{t("tb.timeline.title")}</h3>
           <p className="text-xs text-slate-500">{t("tb.timeline.subtitle")}</p>
@@ -169,7 +169,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
           {t("tb.timeline.create_first")}
         </button>
       ) : (
-        <div className="divide-y divide-slate-100 px-4">
+        <div className="divide-y divide-slate-100 px-1 sm:px-3">
           {normalized.map((item) => {
             const active = item.id === activeId;
             const invalid = hasOverlap(item, normalized);

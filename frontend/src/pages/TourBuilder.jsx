@@ -2075,7 +2075,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   if (invalidHotelDay) {
     const [date, state] = invalidHotelDay;
     const reason = state?.hotelBreakdown?.warnings?.map((warning) => hotelQuoteWarningText(warning, t)).join("; ") || t("tb.ui.calculation_not_ready");
-    return alert(`Нельзя создать заявку: отель на ${date} не рассчитан (${reason}).`);
+    return alert(t("tb.err.hotel_not_calculated", { date, reason }));
   }
 
   const hotelQuoteSnapshots = hotelDays
@@ -2084,7 +2084,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
   const payloads = buildBookings();
   if (!payloads.length)
-    return alert("Не выбраны провайдеры (гид/транспорт).");
+    return alert(t("tb.err.providers_missing"));
 
   const routeCities = computeRouteCities(byDay);
   const legs = buildLegsFromByDay(byDay);
@@ -2364,8 +2364,6 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
           <div className="flex items-center gap-5 text-sm">
             <div><span className="text-slate-500">{t("tb.ui.days")}</span><strong className="ml-2 text-slate-950">{days.length}</strong></div>
             <div><span className="text-slate-500">PAX</span><strong className="ml-2 text-slate-950">{Math.max(0, toNum(adt) + toNum(chd))}</strong></div>
-            <div className="rounded-md bg-slate-950 px-3 py-2 text-white"><span className="text-slate-300">{t("tb.summary.net_cost")}</span><strong className="ml-2">{totals.net.toLocaleString()} UZS</strong></div>
-            <div className="rounded-md bg-orange-600 px-3 py-2 text-white"><span className="text-orange-100">{t("tb.summary.sale_price")}</span><strong className="ml-2">{Math.round(commercialTotals.gross).toLocaleString()} {summaryCurrency}</strong></div>
           </div>
         </div>
         <section className="border border-slate-200 bg-slate-50 px-4 py-4">
@@ -2436,7 +2434,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
             {!tpls.length && (
               <span className="text-sm text-gray-500">
-                Нет шаблонов. Создайте в /templates
+                {t("tb.no_templates")}
               </span>
             )}
           </div>
@@ -2445,6 +2443,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
           <Link className="ml-auto text-sm underline mt-2 shrink-0" to="/templates">
             {t('tb.templates_open')}
           </Link>
+        </div>
+
+        <div className="sticky bottom-2 z-30 sm:bottom-auto sm:top-16">
+          <div className="ml-auto grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 shadow-lg sm:grid-cols-4">
+            <div className="bg-white px-3 py-2"><span className="block text-[11px] text-slate-500">{t("tb.summary.net_cost")}</span><strong className="block truncate text-sm text-slate-950">{commercialTotals.net.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+            <div className="bg-white px-3 py-2"><span className="block text-[11px] text-slate-500">{t("tb.summary.markup")}</span><strong className="block truncate text-sm text-slate-950">{commercialTotals.markup.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+            <div className="bg-slate-950 px-3 py-2 text-white"><span className="block text-[11px] text-slate-400">{t("tb.summary.sale_price")}</span><strong className="block truncate text-sm">{commercialTotals.gross.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+            <div className="bg-orange-600 px-3 py-2 text-white"><span className="block text-[11px] text-orange-100">{t("tb.summary.per_person")}</span><strong className="block truncate text-sm">{commercialTotals.perPax.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+          </div>
         </div>
 
         <div className="grid gap-4 md:grid-cols-3 min-w-0">
@@ -2699,7 +2706,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             return (
               <div
                 key={k}
-                className="space-y-3 rounded-lg border border-slate-200 bg-white p-3 shadow-sm"
+                className="space-y-3 rounded-lg border border-slate-200 bg-white p-3"
               >
                 <div className="-mx-3 -mt-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-3 lg:grid-cols-[auto_minmax(220px,1fr)_auto_minmax(130px,auto)_minmax(140px,auto)_auto_auto]">
                   <div className="col-start-1 row-start-1 grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">D{i + 1}</div>
@@ -2762,19 +2769,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 />
 
                 {selectedSchedule && expandedComponents[k] === selectedSchedule.id && <>
-                <div className="border-l-4 border-orange-500 bg-orange-50/70 px-4 py-3 text-slate-950">
-                  <div className="flex flex-wrap items-center gap-3">
-                    <div className="grid h-8 w-8 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">{activeEventService === "tour" ? "ST" : activeEventService === "transfer" ? "TR" : "•"}</div>
-                    <div className="mr-auto">
-                      <strong className="block text-sm">{t(`tb.timeline.components.${activeEventService}`, { defaultValue: t("tb.ui.component_services") })}</strong>
-                      <span className="text-xs text-slate-500">{t("tb.ui.choose_component_services")}</span>
-                    </div>
-                    {selectedSchedule && <span className="rounded-md bg-white px-2.5 py-1 text-xs font-semibold text-slate-700 ring-1 ring-slate-200">{selectedSchedule.start_time}–{selectedSchedule.end_time}</span>}
-                  </div>
-                </div>
-
                 {selectedSchedule ? (<>
-                <div className="grid gap-3 border-x border-b border-slate-200 bg-slate-50/70 p-3 xl:grid-cols-3">
+                <div className="grid gap-3 border border-orange-200 bg-orange-50/30 p-3 xl:grid-cols-3">
                   {/* Guide */}
                   {activeEventService === "tour" && <>
                   {activeEventService === "tour" && <div className="rounded-md border border-slate-200 bg-white p-3 xl:col-span-3">
