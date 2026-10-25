@@ -350,6 +350,7 @@ function fmtDates(arr) {
     const mm1 = monthNames[d1.getUTCMonth()];
     const mm2 = monthNames[d2.getUTCMonth()];
     const YYYY = d2.getUTCFullYear();
+    if (d1.getTime() === d2.getTime()) return `${dd1} ${mm1} ${YYYY}`;
     return sameMonth
       ? `${dd1}–${dd2} ${mm2} ${YYYY}`
       : `${dd1} ${mm1} – ${dd2} ${mm2} ${YYYY}`;
@@ -670,11 +671,8 @@ async function notifyQuote({ booking, price, currency, note }) {
       : { chatId: a.client?.chatId, isProv: false };
     if (!dest.chatId) return;
 
-    const lines = [];
-    lines.push(`<b>💬 Предложение по брони №${a.id}</b>`);
-    if (a.serviceTitle) lines.push(`🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>`);
-    lines.push(`📅 Даты: <b>${fmtDates(a.dates)}</b>`);
-    lines.push(`💵 Цена: <b>${Number(price) || 0} ${esc(currency || "USD")}</b>`);
+    const lines = [`<b>💬 Предложение по брони №${a.id}</b>`, ...bookingSummaryLines(a)];
+    lines.push(`💵 Предложенная цена: <b>${Number(price || 0).toLocaleString("ru-RU")} ${esc(currency || "USD")}</b>`);
     if (note) lines.push(`📝 Комментарий: ${esc(note)}`);
 
     lines.push(
@@ -813,10 +811,7 @@ async function notifyRejected({ booking, reason }) {
       : { chatId: a.client?.chatId, isProv: false };
     if (!dest.chatId) return;
 
-    const lines = [];
-    lines.push(`<b>❌ Бронь отклонена №${a.id}</b>`);
-    if (a.serviceTitle) lines.push(`🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>`);
-    lines.push(`📅 Даты: <b>${fmtDates(a.dates)}</b>`);
+    const lines = [`<b>❌ Поставщик отклонил заявку №${a.id}</b>`, ...bookingSummaryLines(a)];
     if (reason) lines.push(`📝 Причина: ${esc(reason)}`);
 
     lines.push(
@@ -851,11 +846,13 @@ async function notifyCancelled({ booking }) {
       : { chatId: a.client?.chatId, isProv: false };
     if (!dest.chatId) return;
 
-    const text =
-      `<b>⚠️ Бронь отменена №${a.id}</b>\n` +
-      (a.serviceTitle ? `🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>\n` : "") +
-      `📅 Даты: <b>${fmtDates(a.dates)}</b>\n\n` +
-      `🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`;
+    const text = [
+      `<b>⚠️ Поставщик отменил бронь №${a.id}</b>`,
+      ...bookingSummaryLines(a),
+      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
+      "",
+      `🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`,
+    ].join("\n");
 
     const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
     await tgSend(dest.chatId, text, {}, tokenOverride);
@@ -869,11 +866,13 @@ async function notifyCancelledByRequester({ booking }) {
     const a = await getBookingActors(booking);
     if (!a?.provider?.chatId) return;
 
-    const text =
-      `<b>⚠️ Заявитель отменил бронь №${a.id}</b>\n` +
-      (a.serviceTitle ? `🏷️ Услуга: <b>${esc(a.serviceTitle)}</b>\n` : "") +
-      `📅 Даты: <b>${fmtDates(a.dates)}</b>\n\n` +
-      `🔗 Открыть: ${urlProvider("bookings")}`;
+    const text = [
+      `<b>⚠️ Заказчик отозвал заявку №${a.id}</b>`,
+      ...bookingSummaryLines(a),
+      ...applicantLines(a),
+      "",
+      `🔗 Открыть: ${urlProvider("bookings")}`,
+    ].join("\n");
 
     await tgSend(a.provider.chatId, text);
   } catch (e) {
