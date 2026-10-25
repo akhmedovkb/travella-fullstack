@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { TourBuilderModal } from "./TourBuilderModal";
 
 export default function HotelQuoteConfirmModal({ open, quotes = [], requestCount = 0, tourEndDate = "", sending = false, onClose, onConfirm }) {
   const { t, i18n } = useTranslation();
@@ -18,14 +19,7 @@ export default function HotelQuoteConfirmModal({ open, quotes = [], requestCount
   const locale = i18n.language === "uz" ? "uz-UZ" : i18n.language === "en" ? "en-GB" : "ru-RU";
 
   return (
-    <div className="fixed inset-0 z-[13000] flex items-center justify-center bg-black/45 p-4" role="dialog" aria-modal="true" aria-labelledby="hotel-quote-confirm-title">
-      <div className="max-h-[88vh] w-full max-w-3xl overflow-y-auto rounded-lg bg-white shadow-2xl">
-        <div className="border-b border-slate-200 px-5 py-4">
-          <div className="text-xs font-bold uppercase text-orange-600">{t("tb.hotel_confirm.eyebrow")}</div>
-          <h2 id="hotel-quote-confirm-title" className="mt-1 text-xl font-bold text-slate-950">{t("tb.hotel_confirm.title")}</h2>
-          <p className="mt-1 text-sm text-slate-500">{t("tb.hotel_confirm.subtitle", { count: requestCount })}</p>
-        </div>
-
+    <TourBuilderModal open title={t("tb.hotel_confirm.title")} eyebrow={t("tb.hotel_confirm.eyebrow")} description={t("tb.hotel_confirm.subtitle", { count: requestCount })} onClose={sending ? undefined : onClose} maxWidth="max-w-3xl" footer={<><button type="button" disabled={sending} onClick={onClose} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{t("tb.hotel_confirm.back")}</button><button type="button" disabled={sending || (extendedQuotes.length > 0 && !extendedStayConfirmed)} onClick={onConfirm} className="rounded-md bg-[#FF5722] px-5 py-2 text-sm font-bold text-white hover:bg-[#e84d1d] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">{sending ? t("tb.hotel_confirm.sending") : t("tb.hotel_confirm.confirm")}</button></>}>
         <div className="divide-y divide-slate-100">
           {quotes.length ? quotes.map((quote) => (
             <div key={`${quote.date}-${quote.quote_version}`} className="grid gap-3 px-5 py-4 md:grid-cols-[120px_1fr_auto] md:items-center">
@@ -50,11 +44,6 @@ export default function HotelQuoteConfirmModal({ open, quotes = [], requestCount
           </label>
         ) : null}
 
-        <div className="sticky bottom-0 flex justify-end gap-2 border-t border-slate-200 bg-white px-5 py-4">
-          <button type="button" disabled={sending} onClick={onClose} className="rounded-md border border-slate-300 px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{t("tb.hotel_confirm.back")}</button>
-          <button type="button" disabled={sending || (extendedQuotes.length > 0 && !extendedStayConfirmed)} onClick={onConfirm} className="rounded-md bg-orange-600 px-5 py-2 text-sm font-bold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">{sending ? t("tb.hotel_confirm.sending") : t("tb.hotel_confirm.confirm")}</button>
-        </div>
-      </div>
-    </div>
+    </TourBuilderModal>
   );
 }

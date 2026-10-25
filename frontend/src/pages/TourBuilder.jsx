@@ -15,6 +15,7 @@ import BookingResultModal from "../components/tourbuilder/BookingResultModal";
 import HotelQuoteConfirmModal from "../components/tourbuilder/HotelQuoteConfirmModal";
 import TourDayTimeline, { normalizeScheduleItems } from "../components/tourbuilder/TourDayTimeline";
 import TransportSegmentEditor from "../components/tourbuilder/TransportSegmentEditor";
+import { TourBuilderModal, TourBuilderNoticeModal } from "../components/tourbuilder/TourBuilderModal";
 import { ArrowRight, BedDouble, BusFront, Check, Circle, Landmark, MapPin, MoreHorizontal, ReceiptText, Sparkles, Utensils, UserRound } from "lucide-react";
 import {
   GUIDE_CATEGORY_IDS,
@@ -1614,12 +1615,9 @@ export default function TourBuilder() {
    resetDayOptionCaches();
  };
 
- const removeTourDay = (dateKey) => {
+  const removeTourDayNow = (dateKey) => {
    const keys = sortedDayKeys(byDay);
    if (!keys.includes(dateKey)) return;
-
-   const ask = t("tb.delete_day_confirm");
-   if (typeof window !== "undefined" && !window.confirm(ask)) return;
 
    if (keys.length <= 1) {
      setByDay({});
@@ -1644,6 +1642,14 @@ export default function TourBuilder() {
    setRange({ from: startOfDay(range.from), to: addDays(startOfDay(range.to), -1) });
    resetDayOptionCaches();
  };
+
+  const removeTourDay = (dateKey) => setNotice({
+    title: t("tb.ui.delete_day_title", { defaultValue: "Delete itinerary day?" }),
+    message: t("tb.delete_day_confirm"),
+    cancelLabel: t("tb.tpl_btn_cancel"),
+    actionLabel: t("tb.delete_day"),
+    action: () => removeTourDayNow(dateKey),
+  });
 
   // автоподбор по конкретному дню
   const autoPickForDay = (dateKey) => {
@@ -2140,20 +2146,31 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   };
 
   const [sending, setSending] = useState(false);
+  const [notice, setNotice] = useState(null);
   const bookingSendLockRef = useRef(false);
+  const showNotice = (message, options = {}) => setNotice({
+    title: options.title || t("tb.ui.action_required", { defaultValue: "Action required" }),
+    message,
+    ...options,
+  });
   
   const handleSendRequests = async () => {
   if (demoMode)
-    return alert(t("tb.onboarding.demo_send_blocked"));
+    return showNotice(t("tb.onboarding.demo_send_blocked"));
   if (!range?.from || !range?.to)
-    return alert(t("tb.select_route_dates"));
+    return showNotice(t("tb.select_route_dates"));
 
   const hotelDays = Object.entries(byDay).filter(([, state]) => state?.hotel?.id);
   const invalidHotelDay = hotelDays.find(([, state]) => state?.hotelBreakdown?.quoteValid !== true);
   if (invalidHotelDay) {
     const [date, state] = invalidHotelDay;
     const reason = state?.hotelBreakdown?.warnings?.map((warning) => hotelQuoteWarningText(warning, t)).join("; ") || t("tb.ui.calculation_not_ready");
-    return alert(t("tb.err.hotel_not_calculated", { date, reason }));
+    return showNotice(t("tb.err.hotel_not_calculated", { date, reason }), {
+      title: t("tb.ui.hotel_needs_attention", { defaultValue: "Hotel setup is incomplete" }),
+      detail: t("tb.ui.hotel_error_help", { defaultValue: "Open the hotel component for this date, select a room and supplier rate, then check the calculated total." }),
+      actionLabel: t("tb.ui.review_hotel", { defaultValue: "Review hotel" }),
+      action: () => document.querySelector(`[data-tour-event-day="${date}"]`)?.scrollIntoView({ behavior: "smooth", block: "center" }),
+    });
   }
 
   const hotelQuoteSnapshots = hotelDays
@@ -2162,7 +2179,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
   const payloads = buildBookings();
   if (!payloads.length)
-    return alert(t("tb.err.providers_missing"));
+    return showNotice(t("tb.err.providers_missing"));
 
   const routeCities = computeRouteCities(byDay);
   const legs = buildLegsFromByDay(byDay);
@@ -2352,15 +2369,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
   function applyTemplateNow() {
     const tpl = getTemplate(applyTplId);
-    if (!tpl) return alert(t('tb.err.select_template'));
-    if (!applyFrom) return alert(t('tb.err.start_required'));
-    if (!tpl.days?.length) return alert(t('tb.err.template_empty'));
+    if (!tpl) return showNotice(t('tb.err.select_template'));
+    if (!applyFrom) return showNotice(t('tb.err.start_required'));
+    if (!tpl.days?.length) return showNotice(t('tb.err.template_empty'));
     const start = new Date(applyFrom);
-    if (isNaN(start)) return alert(t('tb.err.invalid_date'));
+    if (isNaN(start)) return showNotice(t('tb.err.invalid_date'));
        // ❗ не допускаем прошлые даты (сравнение по началу суток)
    const today = startOfDay(new Date());
    if (start < today) {
-     alert(t('tb.err.past_forbidden'));
+      showNotice(t('tb.err.past_forbidden'));
      return;
    }
 
@@ -3922,18 +3939,16 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         </div>
       </section>
       </div>
-            {/* [TPL] Модал применения шаблона */}
-      {applyOpen && (
-        <div
-          className="fixed inset-0 z-[12000] bg-black/30 flex items-center justify-center"
-          onClick={() => setApplyOpen(false)}
-        >
-          <div className="bg-white rounded-xl shadow-xl border w-[92vw] max-w-md p-4" onClick={(e)=>e.stopPropagation()}>
-            <div className="text-lg font-semibold mb-2">{t('tb.tpl_apply_title')}</div>
-            <div className="space-y-3">
+      <TourBuilderModal
+        open={applyOpen}
+        title={t('tb.tpl_apply_title')}
+        onClose={() => setApplyOpen(false)}
+        footer={<><button className="h-10 rounded-md border border-slate-300 bg-white px-4 text-sm font-bold text-slate-700 hover:bg-slate-50" onClick={() => setApplyOpen(false)}>{t('tb.tpl_btn_cancel')}</button><button className="h-10 rounded-md bg-[#FF5722] px-5 text-sm font-bold text-white hover:bg-[#e84d1d]" onClick={applyTemplateNow}>{t('tb.tpl_btn_apply')}</button></>}
+      >
+            <div className="space-y-4 px-5 py-5">
               <div>
-                <label className="block text-sm mb-1">{t('tb.tpl_select')}</label>
-                <select className="w-full h-10 border rounded px-2"
+                <label className="mb-1 block text-sm font-semibold text-slate-700">{t('tb.tpl_select')}</label>
+                <select className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm"
                         value={applyTplId}
                         onChange={e=>setApplyTplId(e.target.value)}>
                   <option value="">{t('tb.tpl_select_placeholder')}</option>
@@ -3941,10 +3956,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 </select>
               </div>
               <div>
-                <label className="block text-sm mb-1">{t('tb.tpl_start_date')}</label>
+                <label className="mb-1 block text-sm font-semibold text-slate-700">{t('tb.tpl_start_date')}</label>
                <input
                  type="date"
-                 className="w-full h-10 border rounded px-2"
+                 className="h-10 w-full rounded-md border border-slate-300 px-3 text-sm"
                  value={applyFrom}
                  min={ymd(startOfDay(new Date()))}     // ❗ запрет прошлых дат
                  onChange={(e) => setApplyFrom(e.target.value)}
@@ -3958,13 +3973,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 </div>
               </div>
             </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <button className="px-3 py-2 border rounded" onClick={()=>setApplyOpen(false)}>{t('tb.tpl_btn_cancel')}</button>
-              <button className="px-3 py-2 rounded bg-orange-500 text-white" onClick={applyTemplateNow}>{t('tb.tpl_btn_apply')}</button>
-            </div>
-          </div>
-        </div>
-      )}
+      </TourBuilderModal>
+      <TourBuilderNoticeModal notice={notice} onClose={() => setNotice(null)} />
             {/* Модал результата создания бронирований */}
       <HotelQuoteConfirmModal
         open={!!bookingConfirmation}
