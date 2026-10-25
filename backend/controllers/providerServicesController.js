@@ -21,6 +21,36 @@ const normPrice = (v) => {
   return Number.isFinite(n) && n >= 0 ? Number(n.toFixed(2)) : 0;
 };
 
+async function syncProviderCitiesFromServices(db, providerId, services) {
+  const destinations = (Array.isArray(services) ? services : [])
+    .map((service) => normStr(service?.details?.destination_city))
+    .filter(Boolean);
+  if (!destinations.length) return false;
+
+  const profileQ = await db.query(
+    `SELECT location, city_slugs FROM providers WHERE id = $1`,
+    [providerId]
+  );
+  if (!profileQ.rowCount) return false;
+
+  let merged = {
+    location: Array.isArray(profileQ.rows[0].location) ? profileQ.rows[0].location : [],
+    city_slugs: Array.isArray(profileQ.rows[0].city_slugs) ? profileQ.rows[0].city_slugs : [],
+    added: false,
+  };
+  for (const destination of destinations) {
+    const next = addServiceCity(merged.location, merged.city_slugs, destination);
+    merged = { ...next, added: merged.added || next.added };
+  }
+  if (!merged.added) return false;
+
+  await db.query(
+    `UPDATE providers SET location = $1::text[], city_slugs = $2::text[], updated_at = NOW() WHERE id = $3`,
+    [merged.location, merged.city_slugs, providerId]
+  );
+  return true;
+}
+
 // безопасно нормализуем details + seats
 function normDetails(input, category) {
   let obj = {};
@@ -48,6 +78,8 @@ async function listProviderServices(req, res) {
     const providerId = Number(req.params.providerId);
     if (!Number.isFinite(providerId))
       return res.status(400).json({ message: "Bad providerId" });
+    if (Number(req.user?.id) !== providerId && !req.user?.is_admin)
+      return res.status(403).json({ message: "Forbidden" });
 
     const q = await pool.query(
            `SELECT id, provider_id, category, title, price, currency, is_active,
@@ -57,6 +89,7 @@ async function listProviderServices(req, res) {
         ORDER BY id DESC`,
       [providerId]
     );
+    await syncProviderCitiesFromServices(pool, providerId, q.rows);
     res.json(q.rows); // важно: здесь уже уходит details -> фронт увидит seats
   } catch (err) {
     console.error("listProviderServices:", err);
@@ -187,4 +220,5 @@ module.exports = {
   listProviderServices,
   createProviderService,
   patchProviderService,
+  syncProviderCitiesFromServices,
 };
