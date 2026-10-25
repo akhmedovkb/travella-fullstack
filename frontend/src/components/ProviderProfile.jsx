@@ -701,6 +701,17 @@ const ProviderProfile = () => {
       });
   };
 
+  const handleCancelEditing = () => {
+    setIsEditing(false);
+    setNewPhoto(null);
+    setNewCertificate(null);
+    setNewSocial(profile.social || "");
+    setNewPhone(profile.phone || "");
+    setNewAddress(profile.address || "");
+    setRegions(normalizeLocationList(profile.location).map((city) => ({ value: city, label: city })));
+    setCarFleet(Array.isArray(profile.car_fleet) ? profile.car_fleet : []);
+  };
+
   // ---------- RENDER ----------
 
   const publicName = profile?.name || "Travella";
@@ -773,14 +784,7 @@ const ProviderProfile = () => {
           </div>
 
           <div className="mt-3 flex flex-wrap gap-2">
-            {isEditing ? (
-              <>
-                <button type="button" onClick={handleSaveProfile} className="inline-flex items-center gap-2 rounded-lg bg-orange-500 px-4 py-2 text-sm font-black text-white shadow-lg shadow-orange-950/20 transition hover:bg-orange-600"><Save aria-hidden="true" className="h-4 w-4" />{t("save", { defaultValue: "Сохранить" })}</button>
-                <button type="button" onClick={() => {
-                  setIsEditing(false); setNewPhoto(null); setNewCertificate(null); setNewSocial(profile.social || ""); setNewPhone(profile.phone || ""); setNewAddress(profile.address || ""); setRegions(normalizeLocationList(profile.location).map((c) => ({ value: c, label: c }))); setCarFleet(Array.isArray(profile.car_fleet) ? profile.car_fleet : []);
-                }} className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15"><X aria-hidden="true" className="h-4 w-4" />{t("cancel", { defaultValue: "Отмена" })}</button>
-              </>
-            ) : (
+            {!isEditing && (
               <button type="button" onClick={() => setIsEditing(true)} className="inline-flex items-center gap-2 rounded-lg bg-white px-4 py-2 text-sm font-black text-slate-950 transition hover:bg-orange-50"><Pencil aria-hidden="true" className="h-4 w-4" />{t("edit", { defaultValue: "Редактировать" })}</button>
             )}
             <a href={publicPreviewUrl} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg bg-white/10 px-4 py-2 text-sm font-black text-white ring-1 ring-white/15 transition hover:bg-white/15"><Eye aria-hidden="true" className="h-4 w-4" />{t("provider_profile_ui.view_as_client")}</a>
@@ -803,6 +807,18 @@ const ProviderProfile = () => {
             </button>
           ))}
         </nav>
+        {isEditing && (
+          <div className="flex shrink-0 items-center gap-1.5 border-l border-slate-200 pl-2">
+            <button type="button" onClick={handleCancelEditing} className="inline-flex h-9 items-center gap-2 rounded-lg px-3 text-sm font-bold text-slate-600 transition hover:bg-slate-100 hover:text-slate-950">
+              <X aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">{t("cancel", { defaultValue: "Отмена" })}</span>
+            </button>
+            <button type="button" onClick={handleSaveProfile} className="inline-flex h-9 items-center gap-2 rounded-lg bg-orange-500 px-3 text-sm font-black text-white transition hover:bg-orange-600">
+              <Save aria-hidden="true" className="h-4 w-4" />
+              <span className="hidden sm:inline">{t("save", { defaultValue: "Сохранить" })}</span>
+            </button>
+          </div>
+        )}
       </div>
 
       {requiresLanguages && !hasLanguages && (
