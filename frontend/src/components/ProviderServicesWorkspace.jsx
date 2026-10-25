@@ -658,13 +658,15 @@ function RateVariantsEditor({ variants, onChange, w, compact = false }) {
   const update = (index, key, value) => onChange(variants.map((variant, current) => current === index ? { ...variant, [key]: value } : variant));
   return <div className={`${compact ? "mt-4" : "mt-5"} border-t border-slate-200 pt-4`}>
     <div className="flex flex-wrap items-start justify-between gap-3"><div><h5 className="text-sm font-bold text-slate-900">{w("price_conditions")}</h5><p className="mt-0.5 text-xs text-slate-500">{w("price_conditions_hint")}</p></div><button type="button" onClick={() => onChange([...variants, blankRateVariant()])} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Plus size={16} />{w("add_price_condition")}</button></div>
-    {variants.length > 0 && <div className="mt-3 space-y-3">{variants.map((variant, index) => <div key={variant.id || index} className="grid gap-3 border-l-2 border-orange-400 bg-orange-50/40 p-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_110px_110px_1fr_40px]">
-      <DateField label={w("valid_from")} value={variant.validFrom} onChange={(value) => update(index, "validFrom", value)} />
-      <DateField label={w("valid_to")} value={variant.validTo} onChange={(value) => update(index, "validTo", value)} />
-      <NumberField label={w("min_guests")} value={variant.minGuests} onChange={(value) => update(index, "minGuests", value)} />
-      <OptionalNumberField label={w("max_guests")} value={variant.maxGuests} onChange={(value) => update(index, "maxGuests", value)} />
-      <MoneyField label={w("condition_price")} value={variant.price} onChange={(value) => update(index, "price", value)} />
-      <button type="button" onClick={() => onChange(variants.filter((_, current) => current !== index))} title={w("delete_condition")} className="mt-6 grid h-10 w-10 place-items-center rounded-md text-rose-600 hover:bg-rose-50"><Trash2 size={16} /></button>
+    {variants.length > 0 && <div className="mt-3 space-y-3">{variants.map((variant, index) => <div key={variant.id || index} className="min-w-0 border-l-2 border-orange-400 bg-orange-50/40 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3"><span className="text-xs font-bold uppercase text-slate-500">{w("condition_number", { number: index + 1 })}</span><button type="button" onClick={() => onChange(variants.filter((_, current) => current !== index))} className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs font-semibold text-rose-600 hover:bg-rose-50"><Trash2 size={15} />{w("delete_condition")}</button></div>
+      <div className="grid min-w-0 gap-3 sm:grid-cols-2">
+        <DateField label={w("valid_from")} value={variant.validFrom} onChange={(value) => update(index, "validFrom", value)} />
+        <DateField label={w("valid_to")} value={variant.validTo} onChange={(value) => update(index, "validTo", value)} />
+        <NumberField label={w("min_guests")} value={variant.minGuests} onChange={(value) => update(index, "minGuests", value)} />
+        <OptionalNumberField label={w("max_guests")} value={variant.maxGuests} onChange={(value) => update(index, "maxGuests", value)} />
+        <div className="min-w-0 sm:col-span-2"><MoneyField label={w("condition_price")} value={variant.price} onChange={(value) => update(index, "price", value)} /></div>
+      </div>
     </div>)}</div>}
   </div>;
 }
