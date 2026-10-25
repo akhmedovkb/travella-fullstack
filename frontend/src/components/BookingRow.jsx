@@ -4,6 +4,7 @@ import React, { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import BookingHoldCountdown from "./BookingHoldCountdown";
+import BookingResponseTimer from "./BookingResponseTimer";
 
 /* ================= helpers ================= */
 
@@ -383,6 +384,16 @@ const profileHref = useMemo(() => {
         ) : null}
         {statusKey(booking.status) === "awaiting_payment" && booking.hold_until ? (
           <BookingHoldCountdown holdUntil={booking.hold_until} onExpired={onHoldExpired} />
+        ) : null}
+        {["pending", "quoted"].includes(statusKey(booking.status)) && booking.created_at ? (
+          <BookingResponseTimer
+            startedAt={
+              statusKey(booking.status) === "quoted"
+                ? booking.updated_at || booking.created_at
+                : booking.created_at
+            }
+            waitingFor={statusKey(booking.status) === "quoted" ? "requester" : "provider"}
+          />
         ) : null}
         {String(booking.payment_status || "").toLowerCase() === "paid" ? (
           <span className="inline-flex items-center rounded-md bg-emerald-50 px-2 py-1 text-xs font-semibold text-emerald-700">
