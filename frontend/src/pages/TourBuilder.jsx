@@ -724,6 +724,7 @@ function hotelQuoteWarningText(warning, t) {
   if (value === "room_required" || value === "не выбран номер") return t("tb.ui.warning_room_required");
   if (value === "offer_required" || value === "не выбран тариф поставщика") return t("tb.ui.warning_offer_required");
   if (value === "dates_required" || value === "не выбраны даты") return t("tb.ui.warning_dates_required");
+  if (value === "quote_failed") return t("tb.ui.warning_quote_failed");
   if (value === "usd_rate_required") return t("tb.ui.warning_usd_rate_required");
   if (value.startsWith("room_not_found:")) return t("tb.ui.warning_room_not_found", { room: value.slice("room_not_found:".length) });
   if (value.startsWith("room_stock_exceeded:")) return t("tb.ui.warning_room_stock_exceeded", { room: value.slice("room_stock_exceeded:".length) });
@@ -1193,11 +1194,12 @@ const ProviderOption = (props) => {
 
 
 const HotelOption = (props) => {
+  const { t } = useTranslation();
   const h = props.data?.raw;
   const tip = [
     h?.name,
-    h?.city ? `Город: ${h.city}` : "",
-    typeof h?.price === "number" && h?.price > 0 ? `Цена/ночь: ${h.price} ${h.currency || "UZS"}` : "",
+    h?.city ? `${t("tb.ui.city_label")}: ${h.city}` : "",
+    typeof h?.price === "number" && h?.price > 0 ? `${t("tb.price_per_night")}: ${h.price} ${h.currency || "UZS"}` : "",
   ].filter(Boolean).join("\n");
   return (
     <div title={tip}>
@@ -1616,9 +1618,7 @@ export default function TourBuilder() {
    const keys = sortedDayKeys(byDay);
    if (!keys.includes(dateKey)) return;
 
-   const ask = t("tb.delete_day_confirm", {
-     defaultValue: "Удалить этот день программы? Данные этого дня будут удалены.",
-   });
+   const ask = t("tb.delete_day_confirm");
    if (typeof window !== "undefined" && !window.confirm(ask)) return;
 
    if (keys.length <= 1) {
@@ -2595,14 +2595,14 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             {/* фильтр: категория (звёзды) отелей */}
             <div>
               <div className="text-sm font-medium mb-1">
-                {t('tb.hotel_category', { defaultValue: 'Категория отелей' })}
+                {t('tb.hotel_category')}
               </div>
               <select
                 className="w-full h-9 border rounded px-2 text-sm"
                 value={hotelStars}
                 onChange={(e) => setHotelStars(e.target.value)}
               >
-                <option value="">{t('tb.any', { defaultValue: 'Любая' })}</option>
+                <option value="">{t('tb.any')}</option>
                 {[1,2,3,4,5,6,7].map(n => <option key={n} value={n}>{n}★</option>)}
               </select>
             </div>
@@ -3173,7 +3173,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             <input
                               value={activeRail.from || ""}
                               onChange={(event) => updateRailSegment({ from: event.target.value })}
-                              placeholder="Например, Tashkent"
+                              placeholder={t("tb.ui.example_city_from")}
                               className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                             />
                           </label>
@@ -3182,7 +3182,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             <input
                               value={activeRail.to || ""}
                               onChange={(event) => updateRailSegment({ to: event.target.value })}
-                              placeholder="Например, Samarkand"
+                              placeholder={t("tb.ui.example_city_to")}
                               className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                             />
                           </label>
@@ -3191,7 +3191,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             <input
                               value={activeRail.number || ""}
                               onChange={(event) => updateRailSegment({ number: event.target.value })}
-                              placeholder="Например, Afrosiyob 764"
+                              placeholder={t("tb.ui.example_train_number")}
                               className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                             />
                           </label>
@@ -3446,7 +3446,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                             {st.hotelOffers.map((offer) => (
                               <option key={offer.id} value={offer.id}>
                                 {offer.is_direct ? t("tb.ui.hotel_direct") : offer.provider_name}
-                                {offer.min_rate ? ` — от ${Number(offer.min_rate).toLocaleString("ru-RU")} ${offer.currency}` : ""}
+                                {offer.min_rate ? ` — ${t("tb.ui.from_price")} ${Number(offer.min_rate).toLocaleString("ru-RU")} ${offer.currency}` : ""}
                                 {` — ${offerAvailabilityText(offer, t)}`}
                               </option>
                             ))}
@@ -3762,17 +3762,17 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 {/* Программа дня завершает карточку дня. */}
                 <details className="group rounded-lg border border-slate-200 bg-white">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-slate-800">
-                    <span>{t('tb.day_program', { defaultValue: 'Программа дня' })}</span>
+                    <span>{t('tb.day_program')}</span>
                     <span className="text-xs font-medium text-slate-500 group-open:hidden">{t("tb.ui.open_description")}</span>
                     <span className="hidden text-xs font-medium text-slate-500 group-open:inline">{t("tb.ui.collapse")}</span>
                   </summary>
                   <div className="border-t border-slate-200 p-3">
                     <div className="mb-2 flex flex-wrap justify-end gap-1">
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs hover:bg-orange-50" onClick={() => generateProgramForDay(k, { overwrite: true })}>
-                        {t('tb.generate_day_program', { defaultValue: 'Сгенерировать день' })}
+                        {t('tb.generate_day_program')}
                       </button>
                       <button type="button" className="rounded border bg-white px-2 py-1 text-xs hover:bg-orange-50" onClick={() => generateProgramForAllDays({ overwrite: true })}>
-                        {t('tb.generate_all_program', { defaultValue: 'Сгенерировать все' })}
+                        {t('tb.generate_all_program')}
                       </button>
                       {TB_PROGRAM_LANGS.map((code) => {
                         const active = (st._programTab || String(i18n.language || 'ru').slice(0, 2) || 'ru') === code;
@@ -3789,7 +3789,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       return (
                         <textarea
                           className="min-h-[90px] w-full rounded border bg-white px-3 py-2 text-sm"
-                          placeholder={t('tb.day_program_ph', { defaultValue: 'Описание программы этого дня...' })}
+                          placeholder={t('tb.day_program_ph')}
                           value={st.program_i18n?.[activeLang] || ""}
                           onChange={(e) => {
                             const value = e.target.value;
@@ -4126,7 +4126,7 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
           vatIncluded: false, nights: quoteNightDates.length, pax: paxCount,
           currency: String(hotelBrief?.currency || "UZS").toUpperCase(),
           quoteValid: false,
-          warnings: [error?.message || "сервер не смог рассчитать отель"]
+          warnings: [error?.message || "quote_failed"]
         });
       } finally {
         if (sequence === quoteSequence.current) setQuoteLoading(false);
@@ -4150,7 +4150,7 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
         {/* Доп. место и подсказка по тур. сбору */}
       <div className="mb-2 grid gap-2 lg:grid-cols-2">
         <label className="grid min-w-0 grid-cols-[minmax(0,1fr)_72px] items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
-          <span className="min-w-0 break-words text-sm leading-tight">{t('tb.extra_beds_qty') || 'Доп. место (шт)'}</span>
+          <span className="min-w-0 break-words text-sm leading-tight">{t('tb.extra_beds_qty')}</span>
           <input
             type="number"
             min={0}

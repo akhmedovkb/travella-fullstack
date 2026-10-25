@@ -32,6 +32,14 @@
     "confirm": "Confirm",
     "reject": "Reject"
   },
+  "tour_builder": {
+    "result_title": "Bookings created",
+    "result_created_one": "{{count}} booking created.",
+    "result_created_other": "{{count}} bookings created.",
+    "result_group_id": "Package ID",
+    "result_hint": "The package is available in Bookings.",
+    "result_open_package": "Open package"
+  },
   "address": "Address",
   "add_error": "Add error",
   "adt": "Adults (ADT)",
@@ -1481,6 +1489,12 @@
       "support_types": { "escort": "Group escort", "meet": "Guest meet and greet", "seeoff": "Departure assistance", "translation": "Interpreter", "coordinator": "Coordinator" }
     },
     "ui": {
+      "city_label": "City",
+      "example_city_from": "For example, Tashkent",
+      "example_city_to": "For example, Samarkand",
+      "example_train_number": "For example, Afrosiyob 764",
+      "from_price": "from",
+      "warning_quote_failed": "The server could not calculate the hotel price",
       "subtitle": "Build the itinerary by day, assign services and review the total before submitting.", "days": "Days", "total": "Total", "completed": "Completed {{count}} of 5", "expand": "Expand", "collapse": "Collapse", "component_services": "Component services", "choose_component_services": "Choose the component setup and matching services", "program_type": "Program type", "city_required": "Enter the city in the day header to see available suppliers.", "supplier": "Supplier", "selected_service": "Service selected", "service_not_selected": "Service not selected", "transport_type": "Transport type", "choose_transport": "Choose type, supplier and tariff", "intercity_method": "Intercity travel method", "transport_supplier": "Transport supplier", "transport_supplier_hint": "Car, minivan or bus", "rail_transport": "Rail transport", "rail_hint": "Enter the ticket price per person manually", "from": "From", "to": "To", "train_number": "Train / service", "price_per_person": "Price / person", "group_total": "Group total", "people_short": "people", "route": "Route", "route_required": "Use different cities on adjacent days to find an intercity tariff.", "attractions": "Attractions", "attractions_hint": "Sights and admission tickets", "selected_attractions": "Attractions selected: {{count}}", "no_attractions": "No attractions selected", "open_description": "Open description", "direct_hotel": "Direct hotel rate", "best_price": "Best available price", "free_sale": "Free sale", "on_request": "On request", "refundable": "Refundable", "nonrefundable": "Non-refundable", "supplier_and_tariff": "Supplier and tariff", "hotel_direct": "Hotel direct", "allotment": "Allotment up to {{count}}", "min_nights": "Min. {{count}} nights", "no_hotel_offer": "No published tariff offer for the selected date.", "select_component": "Select a day component to add services", "calculating": "Calculating…", "up_to_guests": "up to {{count}} guests", "no_room_categories": "No published room categories in the selected offer."
       ,
       "day_actions": "Day actions", "air_transport": "Flight", "air_hint": "Search for a flight or enter the air ticket manually",
@@ -2313,6 +2327,9 @@
     "days_count_hint_other": "{{count}} days in the itinerary",
     "add_day": "+ Add day",
     "generate_all_program": "Generate all",
+    "generate_day_program": "Generate day",
+    "day_program_ph": "Describe this day's itinerary...",
+    "delete_day_confirm": "Delete this itinerary day? Its data will be removed.",
     "dates_span": "{{from}} — {{to}} • {{days}} days",
     "pax": "Guests (PAX)",
     "load_draft": "Load draft",

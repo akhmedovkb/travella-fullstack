@@ -15,30 +15,26 @@ export default function BookingResultModal({ open, result, onClose }) {
         <div className="border-b border-slate-200 px-5 py-4">
         <div className="text-xs font-bold uppercase text-orange-600">Tour Builder</div>
         <h3 id="booking-result-title" className="mt-1 text-xl font-bold text-slate-950">
-          {t("tour_builder.result_title", "Бронирования созданы")}
+          {t("tour_builder.result_title")}
         </h3></div>
 
         <div className="space-y-3 px-5 py-5 text-sm text-gray-700">
           <p>
             {t("tour_builder.result_created", {
               count: created,
-              defaultValue: "Создано бронирований: {{count}}.",
             })}
           </p>
 
           {groupId && (
             <p className="text-xs text-gray-500">
-              {t("tour_builder.result_group_id", "ID пакета")}:{" "}
+              {t("tour_builder.result_group_id")}:{" "}
               <span className="font-mono">{groupId}</span>
             </p>
           )}
 
           {url && (
             <p className="text-xs text-gray-500">
-              {t(
-                "tour_builder.result_hint",
-                "Вы можете открыть пакет в разделе бронирований."
-              )}
+              {t("tour_builder.result_hint")}
             </p>
           )}
         </div>
@@ -50,10 +46,7 @@ export default function BookingResultModal({ open, result, onClose }) {
               className="rounded-md bg-orange-600 px-4 py-2 text-sm font-bold text-white hover:bg-orange-500"
               onClick={onClose}
             >
-              {t(
-                "tour_builder.result_open_package",
-                "Открыть пакет в Dashboard"
-              )}
+              {t("tour_builder.result_open_package")}
             </a>
           )}
 

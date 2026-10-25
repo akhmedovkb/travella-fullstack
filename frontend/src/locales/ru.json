@@ -32,6 +32,15 @@
     "confirm": "Подтвердить",
     "reject": "Отклонить"
   },
+  "tour_builder": {
+    "result_title": "Бронирования созданы",
+    "result_created_one": "Создано бронирование: {{count}}.",
+    "result_created_few": "Создано бронирования: {{count}}.",
+    "result_created_many": "Создано бронирований: {{count}}.",
+    "result_group_id": "ID пакета",
+    "result_hint": "Пакет доступен в разделе бронирований.",
+    "result_open_package": "Открыть пакет"
+  },
   "address": "Адрес",
   "add_error": "Ошибка добавления",
   "adt": "Взрослые (ADT)",
@@ -1398,6 +1407,12 @@
       "support_types": { "escort": "Сопровождение группы", "meet": "Встреча гостей", "seeoff": "Проводы гостей", "translation": "Переводчик", "coordinator": "Координатор" }
     },
     "ui": {
+      "city_label": "Город",
+      "example_city_from": "Например, Ташкент",
+      "example_city_to": "Например, Самарканд",
+      "example_train_number": "Например, Afrosiyob 764",
+      "from_price": "от",
+      "warning_quote_failed": "Сервер не смог рассчитать стоимость отеля",
       "subtitle": "Соберите маршрут по дням, назначьте услуги и проверьте итог перед отправкой.", "days": "Дней", "total": "Итого", "completed": "Заполнено {{count}} из 5", "expand": "Развернуть", "collapse": "Свернуть", "component_services": "Услуги компонента", "choose_component_services": "Выберите состав компонента и подходящие услуги", "program_type": "Тип программы", "city_required": "Укажите город в шапке дня — после этого появятся доступные поставщики.", "supplier": "Поставщик", "selected_service": "Услуга выбрана", "service_not_selected": "Услуга не выбрана", "transport_type": "Тип транспорта", "choose_transport": "Выберите тип, поставщика и тариф", "intercity_method": "Как оформить межгород", "transport_supplier": "Транспортный поставщик", "transport_supplier_hint": "Автомобиль, минивэн или автобус", "rail_transport": "ЖД транспорт", "rail_hint": "Укажите маршрут и стоимость билета на одного человека", "from": "Откуда", "to": "Куда", "train_number": "Поезд / рейс", "price_per_person": "Цена / 1 чел.", "group_total": "Итого за группу", "people_short": "чел.", "route": "Маршрут", "route_required": "Укажите разные города в соседних днях, чтобы подобрать межгородний тариф.", "attractions": "Объекты", "attractions_hint": "Достопримечательности и входные билеты", "selected_attractions": "Выбрано объектов: {{count}}", "no_attractions": "Объекты не выбраны", "open_description": "Открыть описание", "direct_hotel": "Прямой тариф", "best_price": "Лучшая доступная цена", "free_sale": "Свободная продажа", "on_request": "По запросу", "refundable": "Возвратный", "nonrefundable": "Невозвратный", "supplier_and_tariff": "Поставщик и тариф", "hotel_direct": "Отель напрямую", "allotment": "Квота до {{count}}", "min_nights": "Мин. {{count}} ноч.", "no_hotel_offer": "Нет опубликованного тарифного предложения для выбранной даты.", "select_component": "Выберите компонент дня, чтобы добавить услуги", "calculating": "Расчёт…", "up_to_guests": "до {{count}} гост.", "no_room_categories": "В выбранном предложении нет опубликованных категорий номеров."
       ,
       "day_actions": "Действия с днём", "air_transport": "Авиаперелёт", "air_hint": "Найдите рейс или внесите авиабилет вручную",
@@ -2235,6 +2250,9 @@
     "days_count_hint_many": "В программе {{count}} дней",
     "add_day": "+ Добавить день",
     "generate_all_program": "Сгенерировать все",
+    "generate_day_program": "Сгенерировать день",
+    "day_program_ph": "Описание программы этого дня...",
+    "delete_day_confirm": "Удалить этот день программы? Данные этого дня будут удалены.",
     "dates_span": "{{from}} — {{to}} • {{days}} дн.",
     "pax": "Гости (PAX)",
     "load_draft": "Загрузить черновик",
