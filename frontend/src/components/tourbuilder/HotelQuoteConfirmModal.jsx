@@ -19,7 +19,18 @@ export default function HotelQuoteConfirmModal({ open, quotes = [], requestCount
   const locale = i18n.language === "uz" ? "uz-UZ" : i18n.language === "en" ? "en-GB" : "ru-RU";
 
   return (
-    <TourBuilderModal open title={t("tb.hotel_confirm.title")} eyebrow={t("tb.hotel_confirm.eyebrow")} description={t("tb.hotel_confirm.subtitle", { count: requestCount })} onClose={sending ? undefined : onClose} maxWidth="max-w-3xl" footer={<><button type="button" disabled={sending} onClick={onClose} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{t("tb.hotel_confirm.back")}</button><button type="button" disabled={sending || (extendedQuotes.length > 0 && !extendedStayConfirmed)} onClick={onConfirm} className="rounded-md bg-[#FF5722] px-5 py-2 text-sm font-bold text-white hover:bg-[#e84d1d] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">{sending ? t("tb.hotel_confirm.sending") : t("tb.hotel_confirm.confirm")}</button></>}>
+    <TourBuilderModal open title={t("tb.hotel_confirm.title")} eyebrow={t("tb.hotel_confirm.eyebrow")} description={t("tb.hotel_confirm.subtitle")} onClose={sending ? undefined : onClose} maxWidth="max-w-3xl" footer={<><button type="button" disabled={sending} onClick={onClose} className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-bold text-slate-700 hover:bg-slate-50 disabled:opacity-50">{t("tb.hotel_confirm.back")}</button><button type="button" disabled={sending || (extendedQuotes.length > 0 && !extendedStayConfirmed)} onClick={onConfirm} className="rounded-md bg-[#FF5722] px-5 py-2 text-sm font-bold text-white hover:bg-[#e84d1d] disabled:cursor-not-allowed disabled:bg-slate-300 disabled:text-slate-500">{sending ? t("tb.hotel_confirm.sending") : t("tb.hotel_confirm.confirm")}</button></>}>
+        <div className="grid grid-cols-2 gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4">
+          <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+            <div className="text-xs font-semibold text-slate-500">{t("tb.hotel_confirm.service_requests")}</div>
+            <div className="mt-1 text-lg font-bold text-slate-950">{requestCount}</div>
+          </div>
+          <div className="rounded-md border border-slate-200 bg-white px-3 py-2">
+            <div className="text-xs font-semibold text-slate-500">{t("tb.hotel_confirm.hotel_nights")}</div>
+            <div className="mt-1 text-lg font-bold text-slate-950">{quotes.length}</div>
+          </div>
+        </div>
+        {quotes.length > 0 && <div className="px-5 pt-4 text-xs font-bold uppercase text-slate-500">{t("tb.hotel_confirm.hotel_quotes")}</div>}
         <div className="divide-y divide-slate-100">
           {quotes.length ? quotes.map((quote) => (
             <div key={`${quote.date}-${quote.quote_version}`} className="grid gap-3 px-5 py-4 md:grid-cols-[120px_1fr_auto] md:items-center">
