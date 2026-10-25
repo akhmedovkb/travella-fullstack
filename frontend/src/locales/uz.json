@@ -117,6 +117,7 @@
     "response_timer_no_limit": "Javob uchun avtomatik muddat yo‘q",
     "waiting_provider_elapsed": "Yetkazib beruvchi kutilmoqda: {{time}}",
     "waiting_requester_elapsed": "Buyurtmachi kutilmoqda: {{time}}",
+    "waiting_your_response_elapsed": "Sizning javobingiz kutilmoqda: {{time}}",
     "pay_now": "To‘lash",
     "payment_error": "To‘lovni yaratib bo‘lmadi",
     "payment_confirmed": "To‘lov tasdiqlandi. Bron rasmiylashtirildi.",
@@ -136,6 +137,36 @@
     "withdraw_request": "So‘rovni qaytarib olish",
     "need_action": "Amal talab etiladi: {{count}}",
     "no_action": "Amal talab qiladigan so‘rovlar yo‘q",
+    "package_request_sent": {
+      "incoming": "Agent sizga so‘rov yubordi",
+      "outgoing": "Siz xizmat ko‘rsatuvchilarga so‘rov yubordingiz"
+    },
+    "perspective_filters": {
+      "incoming": { "pending": "Sizning javobingiz kerak", "quoted": "Buyurtmachi kutilmoqda", "awaiting_payment": "Buyurtmachi to‘laydi" },
+      "outgoing": { "pending": "Xizmat ko‘rsatuvchi kutilmoqda", "quoted": "Sizning javobingiz kerak", "awaiting_payment": "Siz to‘lashingiz kerak" }
+    },
+    "perspective_status": {
+      "incoming": {
+        "pending": "So‘rovga javob bering",
+        "quoted": "Narxingiz yuborildi — buyurtmachi kutilmoqda",
+        "awaiting_payment": "Buyurtmachi to‘lashi kerak",
+        "confirmed": "To‘landi — bron tasdiqlandi",
+        "active": "Xizmat faol",
+        "paid": "Buyurtmachi to‘ladi",
+        "cancelled_unpaid": "Buyurtmachi o‘z vaqtida to‘lamadi",
+        "expired": "Javob muddati tugadi"
+      },
+      "outgoing": {
+        "pending": "So‘rov yuborildi — xizmat ko‘rsatuvchi kutilmoqda",
+        "quoted": "Xizmat ko‘rsatuvchi narx taklif qildi — javob bering",
+        "awaiting_payment": "Xizmat ko‘rsatuvchi tasdiqladi — siz to‘lang",
+        "confirmed": "To‘landi — bron tasdiqlandi",
+        "active": "Xizmat faol",
+        "paid": "Siz to‘ladingiz",
+        "cancelled_unpaid": "Siz o‘z vaqtida to‘lamadingiz",
+        "expired": "Javob muddati tugadi"
+      }
+    },
     "source": "Manba",
     "other": "Boshqa bronlar",
     "request": "So‘rov",

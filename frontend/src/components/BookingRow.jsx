@@ -268,13 +268,10 @@ const statusText = React.useMemo(() => {
       : t("bookings.status_by.cancelled.you");      // «Отменено: вами»
   }
 
-  // Оффер отправлен поставщиком — ждём подтверждения заявителя
- if (s === "quoted") {
-   return t("bookings.status.quoted", { defaultValue: "ожидает подтверждения" });
- }
-  
-  // Базовые статусы
-  return t(`bookings.status.${s}`, { defaultValue: s });
+  const perspective = viewerRole === "provider" ? "incoming" : "outgoing";
+  return t(`bookings.perspective_status.${perspective}.${s}`, {
+    defaultValue: t(`bookings.status.${s}`, { defaultValue: s }),
+  });
 }, [booking?.status, viewerRole, t]);
 
 
@@ -392,7 +389,11 @@ const profileHref = useMemo(() => {
                 ? booking.updated_at || booking.created_at
                 : booking.created_at
             }
-            waitingFor={statusKey(booking.status) === "quoted" ? "requester" : "provider"}
+            waitingFor={
+              statusKey(booking.status) === "quoted"
+                ? (isIncoming ? "requester" : "you")
+                : (isIncoming ? "you" : "provider")
+            }
           />
         ) : null}
         {String(booking.payment_status || "").toLowerCase() === "paid" ? (

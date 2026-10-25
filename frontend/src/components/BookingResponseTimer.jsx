@@ -34,13 +34,17 @@ export default function BookingResponseTimer({ startedAt, waitingFor = "provider
       title={t("bookings.response_timer_no_limit", { defaultValue: "Автоматического срока ответа нет" })}
     >
       {t(
-        waitingFor === "requester"
-          ? "bookings.waiting_requester_elapsed"
-          : "bookings.waiting_provider_elapsed",
+        waitingFor === "you"
+          ? "bookings.waiting_your_response_elapsed"
+          : waitingFor === "requester"
+            ? "bookings.waiting_requester_elapsed"
+            : "bookings.waiting_provider_elapsed",
         {
-          defaultValue: waitingFor === "requester"
-            ? "Ожидаем заказчика: {{time}}"
-            : "Ожидаем поставщика: {{time}}",
+          defaultValue: waitingFor === "you"
+            ? "Ожидаем ваш ответ: {{time}}"
+            : waitingFor === "requester"
+              ? "Ожидаем заказчика: {{time}}"
+              : "Ожидаем поставщика: {{time}}",
           time: formatElapsed(elapsed),
         }
       )}

@@ -119,6 +119,7 @@
     "response_timer_no_limit": "Автоматического срока ответа нет",
     "waiting_provider_elapsed": "Ожидаем поставщика: {{time}}",
     "waiting_requester_elapsed": "Ожидаем заказчика: {{time}}",
+    "waiting_your_response_elapsed": "Ожидаем ваш ответ: {{time}}",
     "pay_now": "Оплатить",
     "payment_error": "Не удалось создать оплату",
     "payment_confirmed": "Оплата подтверждена. Бронирование оформлено.",
@@ -138,6 +139,36 @@
     "withdraw_request": "Отозвать заявку",
     "need_action": "Требуют действия: {{count}}",
     "no_action": "Нет заявок, требующих действия",
+    "package_request_sent": {
+      "incoming": "Агент отправил вам запрос",
+      "outgoing": "Вы отправили запросы поставщикам"
+    },
+    "perspective_filters": {
+      "incoming": { "pending": "Нужен ваш ответ", "quoted": "Ждём заказчика", "awaiting_payment": "Оплачивает заказчик" },
+      "outgoing": { "pending": "Ждём поставщика", "quoted": "Нужен ваш ответ", "awaiting_payment": "Оплатить вам" }
+    },
+    "perspective_status": {
+      "incoming": {
+        "pending": "Ответьте на запрос",
+        "quoted": "Ваша цена отправлена — ждём заказчика",
+        "awaiting_payment": "Заказчик должен оплатить",
+        "confirmed": "Оплачено — бронь подтверждена",
+        "active": "Услуга активна",
+        "paid": "Заказчик оплатил",
+        "cancelled_unpaid": "Заказчик не оплатил вовремя",
+        "expired": "Срок ответа истёк"
+      },
+      "outgoing": {
+        "pending": "Запрос отправлен — ждём поставщика",
+        "quoted": "Поставщик предложил цену — ответьте вы",
+        "awaiting_payment": "Поставщик подтвердил — оплатите вы",
+        "confirmed": "Оплачено — бронь подтверждена",
+        "active": "Услуга активна",
+        "paid": "Вы оплатили",
+        "cancelled_unpaid": "Вы не оплатили вовремя",
+        "expired": "Срок ответа истёк"
+      }
+    },
     "source": "Источник",
     "other": "Другие бронирования",
     "request": "Заявка",

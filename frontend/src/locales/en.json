@@ -118,6 +118,7 @@
     "response_timer_no_limit": "There is no automatic response deadline",
     "waiting_provider_elapsed": "Waiting for provider: {{time}}",
     "waiting_requester_elapsed": "Waiting for requester: {{time}}",
+    "waiting_your_response_elapsed": "Waiting for your response: {{time}}",
     "pay_now": "Pay now",
     "payment_error": "Could not create payment",
     "payment_confirmed": "Payment confirmed. Your booking is complete.",
@@ -137,6 +138,36 @@
     "withdraw_request": "Withdraw request",
     "need_action": "Action required: {{count}}",
     "no_action": "No requests require action",
+    "package_request_sent": {
+      "incoming": "The agent sent you a request",
+      "outgoing": "You sent requests to providers"
+    },
+    "perspective_filters": {
+      "incoming": { "pending": "Your response needed", "quoted": "Waiting for requester", "awaiting_payment": "Requester is paying" },
+      "outgoing": { "pending": "Waiting for provider", "quoted": "Your response needed", "awaiting_payment": "Payment due from you" }
+    },
+    "perspective_status": {
+      "incoming": {
+        "pending": "Respond to the request",
+        "quoted": "Your price was sent — waiting for requester",
+        "awaiting_payment": "Requester needs to pay",
+        "confirmed": "Paid — booking confirmed",
+        "active": "Service active",
+        "paid": "Requester paid",
+        "cancelled_unpaid": "Requester did not pay in time",
+        "expired": "Response time expired"
+      },
+      "outgoing": {
+        "pending": "Request sent — waiting for provider",
+        "quoted": "Provider offered a price — respond now",
+        "awaiting_payment": "Provider confirmed — payment due from you",
+        "confirmed": "Paid — booking confirmed",
+        "active": "Service active",
+        "paid": "You paid",
+        "cancelled_unpaid": "You did not pay in time",
+        "expired": "Response time expired"
+      }
+    },
     "source": "Source",
     "other": "Other bookings",
     "request": "Request",
