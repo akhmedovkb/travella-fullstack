@@ -455,6 +455,12 @@ const ProviderProfile = () => {
     );
   const updateCarImage = (idx, imgs) =>
     updateCar(idx, { images: imgs });
+  const removeCarImage = (carIdx, imageIdx) =>
+    setCarFleet((fleet) => fleet.map((car, idx) => (
+      idx === carIdx
+        ? { ...car, images: (car.images || []).filter((_, currentIdx) => currentIdx !== imageIdx) }
+        : car
+    )));
 
   // providerId для отзывов
   const providerIdRaw =
@@ -928,6 +934,24 @@ const ProviderProfile = () => {
                     <div key={idx} className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2"><VehicleModelInput className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" placeholder={t("provider_profile_ui.vehicle_model_placeholder")} value={car.model} onChange={(model) => updateCar(idx, { model })} onModelSelect={({ model, seats }) => updateCar(idx, { model, ...(seats ? { seats } : {}) })} /><input className="rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" type="number" min={1} placeholder={t("provider_profile_ui.seats_placeholder")} value={car.seats} onChange={(e) => updateCar(idx, { seats: e.target.value })} /></div>
                       <div className="mt-3 flex flex-wrap items-center gap-3"><label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-orange-500 px-3 py-2 text-sm font-black text-white transition hover:bg-orange-600"><Upload aria-hidden="true" className="h-4 w-4" />{t("choose_files", { defaultValue: "Выбрать файлы" })}<input type="file" accept="image/*" multiple className="hidden" onChange={async (e) => { const files = Array.from(e.target.files || []); const out = []; for (const f of files.slice(0, 10)) { try { out.push(await resizeImageFile(f, 1200, 800, 0.85, "image/jpeg")); } catch {} } updateCarImage(idx, [...(car.images || []), ...out].slice(0, 10)); e.target.value = ""; }} /></label><label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={car.is_active !== false} onChange={(e) => updateCar(idx, { is_active: e.target.checked })} /><span>{t("is_active", { defaultValue: "Активно" })}</span></label><button type="button" onClick={() => removeCar(idx)} className="ml-auto inline-flex items-center gap-1.5 text-sm font-black text-red-600"><Trash2 aria-hidden="true" className="h-4 w-4" />{t("delete", { defaultValue: "Удалить" })}</button></div>
+                      {!!car.images?.length && (
+                        <div className="mt-4 border-t border-slate-200 pt-3">
+                          <div className="mb-2 text-xs font-black uppercase tracking-wide text-slate-500">
+                            {t("provider_profile_ui.fleet_photos", { count: car.images.length, defaultValue: `Фотографии · ${car.images.length}/10` })}
+                          </div>
+                          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                            {car.images.map((image, imageIdx) => (
+                              <div key={`${imageIdx}-${String(image).slice(-16)}`} className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-slate-200 bg-white">
+                                <img src={image} alt={`${car.model || t("provider_profile_ui.vehicle", { defaultValue: "Автомобиль" })} ${imageIdx + 1}`} className="h-full w-full object-cover" />
+                                {imageIdx === 0 && <span className="absolute bottom-1.5 left-1.5 rounded-md bg-slate-950/80 px-2 py-1 text-[10px] font-black uppercase text-white">{t("provider_profile_ui.cover_photo", { defaultValue: "Обложка" })}</span>}
+                                <button type="button" onClick={() => removeCarImage(idx, imageIdx)} className="absolute right-1.5 top-1.5 inline-flex h-7 w-7 items-center justify-center rounded-lg bg-white/95 text-red-600 shadow-sm ring-1 ring-slate-200 transition hover:bg-red-50" aria-label={t("provider_profile_ui.remove_photo", { defaultValue: "Удалить фотографию" })} title={t("provider_profile_ui.remove_photo", { defaultValue: "Удалить фотографию" })}>
+                                  <Trash2 aria-hidden="true" className="h-3.5 w-3.5" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   ))}
                   <button type="button" onClick={addCar} className="inline-flex items-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-2 text-sm font-black text-orange-700 hover:bg-orange-100"><Plus aria-hidden="true" className="h-4 w-4" />{t("provider_profile_ui.add_another_vehicle")}</button>
