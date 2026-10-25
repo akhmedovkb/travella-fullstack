@@ -23,8 +23,6 @@ import {
   FileText,
   Globe2,
   LayoutDashboard,
-  LockKeyhole,
-  LogOut,
   Mail,
   MapPin,
   Plus,
@@ -436,6 +434,17 @@ const ProviderProfile = () => {
   const [oldPassword, setOldPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [pwdOpen, setPwdOpen] = useState(false);
+
+  useEffect(() => {
+    const openPasswordPanel = () => {
+      setPwdOpen(true);
+      window.requestAnimationFrame(() => {
+        document.getElementById("password-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    };
+    window.addEventListener("provider:open-password", openPasswordPanel);
+    return () => window.removeEventListener("provider:open-password", openPasswordPanel);
+  }, []);
   const [stats, setStats] = useState(null);
 
   const langRef = useRef(null);
@@ -745,15 +754,6 @@ const ProviderProfile = () => {
       });
   };
 
-  const handleLogout = () => {
-    if (!window.confirm(t("provider_profile_ui.logout_confirm"))) return;
-    if (typeof localStorage !== "undefined") {
-      localStorage.removeItem("token");
-      localStorage.removeItem("provider_id");
-    }
-    window.location.href = "/login";
-  };
-
   // ---------- RENDER ----------
 
   const publicName = profile?.name || "Travella";
@@ -856,14 +856,6 @@ const ProviderProfile = () => {
             </button>
           ))}
         </nav>
-        <div className="flex shrink-0 items-center gap-1 border-l border-slate-200 pl-2" aria-label={t("provider_profile_ui.account_actions")}>
-          <button type="button" onClick={() => setPwdOpen((value) => !value)} className={`inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-bold transition sm:px-3 ${pwdOpen ? "bg-orange-50 text-orange-700 ring-1 ring-orange-200" : "text-slate-600 hover:bg-slate-100"}`} aria-expanded={pwdOpen} aria-controls="password-panel" aria-label={t("change_password")}>
-            <LockKeyhole aria-hidden="true" className="h-4 w-4" /><span className="hidden xl:inline">{t("change_password")}</span>
-          </button>
-          <button type="button" onClick={handleLogout} className="inline-flex h-9 items-center gap-2 rounded-lg px-2.5 text-sm font-bold text-red-600 transition hover:bg-red-50 sm:px-3" aria-label={t("logout")}>
-            <LogOut aria-hidden="true" className="h-4 w-4" /><span className="hidden xl:inline">{t("logout")}</span>
-          </button>
-        </div>
       </div>
 
       {requiresLanguages && !hasLanguages && (

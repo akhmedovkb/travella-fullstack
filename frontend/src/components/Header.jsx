@@ -6,6 +6,7 @@ import { apiGet } from "../api";
 import { useTranslation } from "react-i18next";
 import { apiProviderFavorites } from "../api/providerFavorites";
 import AdminQuickTools from "./admin/AdminQuickTools";
+import { LockKeyhole, LogOut } from "lucide-react";
 
 /* --- Inline SVG icons --- */
 const IconChecklist = (p) => (
@@ -457,6 +458,19 @@ export default function Header() {
     || location.pathname.startsWith("/provider/hotels/");
   const toolsActive = location.pathname.startsWith("/dashboard/passport-parser");
   const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
+  const isProviderProfile = role === "provider" && location.pathname === "/dashboard/profile";
+
+  const openProviderPassword = () => {
+    window.dispatchEvent(new CustomEvent("provider:open-password"));
+  };
+
+  const handleProviderLogout = () => {
+    if (!window.confirm(t("provider_profile_ui.logout_confirm"))) return;
+    localStorage.removeItem("token");
+    localStorage.removeItem("providerToken");
+    localStorage.removeItem("provider_id");
+    window.location.href = "/login";
+  };
 
   return (
     <header
@@ -774,6 +788,28 @@ export default function Header() {
             <div className="ml-1 border-l border-white/10 pl-2">
               <LanguageSelector />
             </div>
+            {isProviderProfile && (
+              <div className="ml-1 flex items-center gap-1 border-l border-white/10 pl-2" aria-label={t("provider_profile_ui.account_actions")}>
+                <button
+                  type="button"
+                  onClick={openProviderPassword}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white/80 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  aria-label={t("change_password")}
+                  title={t("change_password")}
+                >
+                  <LockKeyhole aria-hidden="true" className="h-4 w-4" />
+                </button>
+                <button
+                  type="button"
+                  onClick={handleProviderLogout}
+                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-300 transition hover:bg-red-500/15 hover:text-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
+                  aria-label={t("logout")}
+                  title={t("logout")}
+                >
+                  <LogOut aria-hidden="true" className="h-4 w-4" />
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 xl:hidden">
@@ -827,6 +863,16 @@ export default function Header() {
                 <RowGroupDark title={t("provider_profile_ui.header.tools")}>
                   <NavItemMobileDark to="/dashboard/passport-parser" label={t("nav.passport_parser")} icon={<IconDoc />} />
                 </RowGroupDark>
+                {isProviderProfile && (
+                  <RowGroupDark title={t("provider_profile_ui.account_actions")}>
+                    <button type="button" onClick={() => { openProviderPassword(); closeNavigationMenus(); }} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-white/85 transition hover:bg-white/10 hover:text-white">
+                      <LockKeyhole aria-hidden="true" className="h-4 w-4" />{t("change_password")}
+                    </button>
+                    <button type="button" onClick={handleProviderLogout} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/15 hover:text-red-200">
+                      <LogOut aria-hidden="true" className="h-4 w-4" />{t("logout")}
+                    </button>
+                  </RowGroupDark>
+                )}
               </>
             )}
 
