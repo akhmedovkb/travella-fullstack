@@ -122,6 +122,31 @@ function TravelerSection({ travelers, setTravelers, capacity, onSave, saving, t 
   </section>;
 }
 
+function SupplierResponseProgress({ components, currency, t }) {
+  if (!components.length) return null;
+  const confirmed = components.filter((item) => confirmedStatuses.has(String(item.status || "").toLowerCase()));
+  const declined = components.filter((item) => ["declined", "rejected", "cancelled"].includes(String(item.status || "").toLowerCase()));
+  const pending = components.filter((item) => !confirmed.includes(item) && !declined.includes(item));
+  const priceChanges = components.filter((item) => item.actual_supplier_cost != null && Number(item.actual_supplier_cost) !== Number(item.provider_price || 0));
+  const details = [
+    ...declined.map((item) => ({ tone: "text-red-700", label: t("tb.workspace.progress_declined_item", { service: item.service_title || item.provider_name || `#${item.id}` }) })),
+    ...pending.map((item) => ({ tone: "text-amber-700", label: t("tb.workspace.progress_pending_item", { service: item.service_title || item.provider_name || `#${item.id}` }) })),
+    ...priceChanges.map((item) => ({ tone: "text-sky-700", label: t("tb.workspace.progress_price_item", { service: item.service_title || item.provider_name || `#${item.id}`, before: money(item.provider_price, item.currency || currency), after: money(item.actual_supplier_cost, item.currency || currency) }) })),
+  ];
+  const cards = [
+    ["progress_confirmed", confirmed.length, "border-emerald-500", "text-emerald-700"],
+    ["progress_pending", pending.length, "border-amber-500", "text-amber-700"],
+    ["progress_declined", declined.length, "border-red-500", "text-red-700"],
+    ["progress_price_changes", priceChanges.length, "border-sky-500", "text-sky-700"],
+  ];
+  return <section className="mt-6 border-y border-gray-200 py-5">
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><h2 className="text-xl font-bold">{t("tb.workspace.progress_title")}</h2><p className="mt-1 text-sm text-gray-500">{t("tb.workspace.progress_hint")}</p></div><div className="text-sm font-semibold text-gray-600">{confirmed.length}/{components.length}</div></div>
+    <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">{cards.map(([key, value, border, tone]) => <div key={key} className={`border-l-2 ${border} bg-gray-50 px-4 py-3`}><div className={`text-2xl font-bold ${tone}`}>{value}</div><div className="mt-1 text-xs font-semibold text-gray-600">{t(`tb.workspace.${key}`)}</div></div>)}</div>
+    {details.length > 0 && <div className="mt-4 grid gap-2 md:grid-cols-2">{details.map((item, index) => <div key={`${item.label}-${index}`} className={`text-sm font-semibold ${item.tone}`}>{item.label}</div>)}</div>}
+    {!details.length && <div className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-emerald-700"><CheckCircle2 size={17} />{t("tb.workspace.progress_all_confirmed")}</div>}
+  </section>;
+}
+
 function ComponentOperationsCard({ item, currency, saving, onSave, onSaveSupplierRefund, onSendOrder, onRemindOrder, onCancelOrder, onMessageOrder, onMarkRead, onClassifyAttachment, onReviewAttachment, onRequestDocuments, packageId, packageStatus, canIssueOrder, t }) {
   const cardRef = useRef(null);
   onReviewAttachment ||= async (bookingId, eventId, reviewStatus) => {
@@ -898,6 +923,7 @@ export default function TourPackageWorkspace() {
     {error && <div className="mt-4 border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-800">{error}</div>}
     {notice && <div className="mt-4 border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800">{notice}</div>}
     {shareUrl && <div className="mt-4 flex flex-col gap-2 border border-sky-200 bg-sky-50 p-3 sm:flex-row"><input readOnly value={shareUrl} className="h-10 min-w-0 flex-1 border border-sky-200 bg-white px-3 text-sm" /><button type="button" onClick={async () => { await navigator.clipboard.writeText(shareUrl); setNotice(t("tb.workspace.link_copied")); }} className="inline-flex h-10 items-center justify-center gap-2 bg-gray-950 px-4 text-sm font-semibold text-white"><Copy size={16} />{t("tb.workspace.copy_link")}</button></div>}
+    <SupplierResponseProgress components={components} currency={currency} t={t} />
     {tourPackage.status === "accepted" && <SaleConversionPanel confirmed={confirmed} total={components.length} saving={saving} onConfirm={confirmSale} t={t} />}
     {showCancellation && <section className="mt-5 grid gap-4 border-x border-t border-red-200 bg-red-50 p-5 sm:grid-cols-2"><label><span className="mb-1.5 block text-sm font-semibold text-red-900">{t("tb.workspace.cancellation_initiator")}</span><select value={cancellationInitiator} onChange={(event) => setCancellationInitiator(event.target.value)} className={fieldClass}>{["client", "supplier", "dmc", "external"].map((value) => <option key={value} value={value}>{t(`tb.workspace.cancellation_initiator_${value}`)}</option>)}</select></label><label><span className="mb-1.5 block text-sm font-semibold text-red-900">{t("tb.workspace.cancellation_reason_type")}</span><select value={cancellationReasonCode} onChange={(event) => setCancellationReasonCode(event.target.value)} className={fieldClass}>{["client_plans", "price", "visa", "flight", "supplier_failure", "force_majeure", "dmc_error", "other"].map((value) => <option key={value} value={value}>{t(`tb.workspace.cancellation_reason_${value}`)}</option>)}</select></label></section>}
     {showCancellation && <section className="mt-5 border border-red-200 bg-red-50 p-5"><div className="flex flex-wrap items-start justify-between gap-3"><div><h2 className="text-lg font-bold text-red-900">{t("tb.workspace.cancel_title")}</h2><p className="mt-1 text-sm text-red-800">{t("tb.workspace.cancel_hint")}</p></div><button type="button" onClick={() => { setShowCancellation(false); setCancellationReason(""); }} title={t("common.cancel")} className="inline-flex h-9 w-9 items-center justify-center text-red-700 hover:bg-red-100"><X size={18} /></button></div><label className="mt-4 block"><span className="mb-1.5 block text-sm font-semibold text-red-900">{t("tb.workspace.cancel_reason")}</span><textarea rows={3} maxLength={1000} value={cancellationReason} onChange={(event) => setCancellationReason(event.target.value)} placeholder={t("tb.workspace.cancel_reason_ph")} className="w-full border border-red-300 bg-white px-3 py-2 text-sm outline-none focus:border-red-500 focus:ring-2 focus:ring-red-100" /></label><div className="mt-4 flex justify-end"><button type="button" disabled={saving || cancellationReason.trim().length < 5} onClick={cancelTour} className="inline-flex h-11 items-center gap-2 bg-red-700 px-5 font-semibold text-white hover:bg-red-800 disabled:opacity-40"><X size={17} />{t("tb.workspace.confirm_cancel")}</button></div></section>}

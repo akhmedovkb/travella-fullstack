@@ -2,7 +2,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { listTemplates, getTemplate, syncTemplates } from "../store/templates"; // [TPL]
 import AsyncSelect from "react-select/async";
 import { components as SelectComponents } from "react-select";
@@ -1169,6 +1169,7 @@ const HotelOption = (props) => {
 /* =========================== PAGE =========================== */
 
 export default function TourBuilder() {
+  const [searchParams] = useSearchParams();
   const [isAdmin, setIsAdmin] = useState(false);
   const [bookingResult, setBookingResult] = useState(null);
   const [bookingConfirmation, setBookingConfirmation] = useState(null);
@@ -1226,6 +1227,7 @@ export default function TourBuilder() {
   const [markupValue, setMarkupValue] = useState(10);
 
   const [byDay, setByDay] = useState({});
+  const [demoMode, setDemoMode] = useState(false);
   const loadDemoTour = () => {
     const start = addDays(startOfDay(new Date()), 1);
     const demoDays = [start, addDays(start, 1), addDays(start, 2)];
@@ -1251,7 +1253,13 @@ export default function TourBuilder() {
     setByDay(next);
     setCollapsedDays({});
     setExpandedComponents({});
+    setDemoMode(true);
   };
+  useEffect(() => {
+    if (searchParams.get("demo") === "1") loadDemoTour();
+    // The query parameter is only an initial entry point.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   useEffect(() => {
     setByDay((prev) => {
       const copy = { ...prev };
@@ -1946,15 +1954,26 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     const hasComponents = hasRoute && states.every((state) => normalizeScheduleItems(state?.schedule).length > 0);
     const hasServices = states.some((state) => state?.guide?.id || state?.transport?.id || state?.hotel?.id);
     const hasPrice = totals.net > 0;
-    const steps = [
+    const requiredSteps = [
       { key: "dates", done: hasDates },
-      { key: "route", done: hasRoute },
-      { key: "components", done: hasComponents },
+      { key: "route", done: hasRoute && hasComponents },
       { key: "services", done: hasServices },
       { key: "price", done: hasPrice },
     ];
-    return { steps, completed: steps.filter((step) => step.done).length, ready: steps.every((step) => step.done) };
-  }, [byDay, days.length, totals.net]);
+    const ready = requiredSteps.every((step) => step.done);
+    const steps = [...requiredSteps, { key: "send", done: ready }];
+    const warnings = [
+      ...(demoMode ? ["demo"] : []),
+      ...(summaryCurrency === "USD" && Number(usdRate) <= 0 ? ["usd_rate"] : []),
+      ...(hasRoute && states.some((state) => !String(state?.program_i18n?.[lang] || state?.program_text || "").trim()) ? ["program"] : []),
+    ];
+    return { steps, completed: requiredSteps.filter((step) => step.done).length, requiredCount: requiredSteps.length, ready, warnings };
+  }, [byDay, days.length, demoMode, lang, summaryCurrency, totals.net, usdRate]);
+
+  const focusOnboardingStep = (key) => {
+    const target = key === "dates" ? "tb-step-dates" : key === "price" || key === "send" ? "tb-step-price" : "tb-step-route";
+    document.getElementById(target)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
   const buildTourProgram = () =>
     Object.entries(byDay)
       .sort(([a], [b]) => String(a).localeCompare(String(b)))
@@ -2067,6 +2086,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   const bookingSendLockRef = useRef(false);
   
   const handleSendRequests = async () => {
+  if (demoMode)
+    return alert(t("tb.onboarding.demo_send_blocked"));
   if (!range?.from || !range?.to)
     return alert(t("tb.select_route_dates"));
 
@@ -2192,7 +2213,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         ok,
         fail,
         groupId,
-        url: `/dashboard/bookings?tab=outgoing&package=${groupId}`,
+        url: `/dashboard/tour-packages/${groupId}`,
         errs,
       });
     } else if (ok && fail) {
@@ -2203,7 +2224,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         ok,
         fail,
         groupId,
-        url: `/dashboard/bookings?tab=outgoing&package=${groupId}`,
+        url: `/dashboard/tour-packages/${groupId}`,
         errs,
       });
     } else {
@@ -2372,8 +2393,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             <button type="button" onClick={loadDemoTour} className="inline-flex h-10 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-bold text-slate-800 hover:border-orange-400 hover:bg-orange-50"><Sparkles size={16} />{t("tb.onboarding.demo")}</button>
           </div>
           <div className="mt-4 grid gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 sm:grid-cols-5">
-            {builderReadiness.steps.map((step, index) => <div key={step.key} className={`flex items-center gap-2 bg-white px-3 py-3 text-sm ${step.done ? "text-emerald-700" : "text-slate-500"}`}>{step.done ? <Check size={16} className="shrink-0" /> : <Circle size={16} className="shrink-0" />}<span><span className="mr-1 text-xs font-bold text-slate-400">{index + 1}.</span>{t(`tb.onboarding.steps.${step.key}`)}</span></div>)}
+            {builderReadiness.steps.map((step, index) => <button type="button" onClick={() => focusOnboardingStep(step.key)} key={step.key} className={`flex items-center gap-2 bg-white px-3 py-3 text-left text-sm hover:bg-orange-50 ${step.done ? "text-emerald-700" : "text-slate-500"}`}>{step.done ? <Check size={16} className="shrink-0" /> : <Circle size={16} className="shrink-0" />}<span><span className="mr-1 text-xs font-bold text-slate-400">{index + 1}.</span>{t(`tb.onboarding.steps.${step.key}`)}</span></button>)}
           </div>
+          {demoMode && <div className="mt-3 flex flex-wrap items-center justify-between gap-3 border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-900"><span><strong>{t("tb.onboarding.demo_mode")}</strong> {t("tb.onboarding.demo_hint")}</span><button type="button" onClick={() => setDemoMode(false)} className="h-9 border border-sky-300 bg-white px-3 font-bold text-sky-900 hover:bg-sky-100">{t("tb.onboarding.use_demo")}</button></div>}
+          {builderReadiness.warnings.length > 0 && !demoMode && <div className="mt-3 flex flex-wrap gap-2">{builderReadiness.warnings.map((warning) => <span key={warning} className="border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">{t(`tb.onboarding.warnings.${warning}`)}</span>)}</div>}
         </section>
         {/* [TPL] панель шаблонов — аккордеон по странам */}
         <div className="flex items-start gap-3">
@@ -2454,7 +2477,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-3 min-w-0">
+        <div id="tb-step-dates" className="scroll-mt-24 grid min-w-0 gap-4 md:grid-cols-3">
           <div className="md:col-span-2 min-w-0">
             <label className="block text-sm font-medium mb-1">{t('tb.dates')}</label>
             <DayPicker
@@ -2530,7 +2553,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         </div>
 
         {/* days */}
-        <div className="space-y-6">
+        <div id="tb-step-route" className="scroll-mt-24 space-y-6">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/50 px-3 py-2">
             <div className="text-sm text-gray-700">
               {days.length
@@ -3794,7 +3817,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             {summaryCurrency === "USD" && Number(usdRate) <= 0 && <p className="mt-3 text-xs font-medium text-amber-700">{t("tb.usd_enter_valid_rate")}</p>}
           </div>
 
-          <aside className="flex flex-col justify-between bg-slate-950 p-5 text-white sm:p-6">
+          <aside id="tb-step-price" className="scroll-mt-24 flex flex-col justify-between bg-slate-950 p-5 text-white sm:p-6">
             <div>
               <div className="flex items-center gap-2 text-xs font-bold uppercase text-orange-400"><ReceiptText size={16} />{t("tb.summary.sale_price")}</div>
               <div className="mt-3 text-3xl font-bold">
@@ -3817,9 +3840,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
               </div>
             </div>
             <div className="mt-8">
-              {!builderReadiness.ready && <div className="mb-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">{t("tb.onboarding.missing", { count: builderReadiness.steps.length - builderReadiness.completed })}</div>}
-              <button type="button" onClick={handleSendRequests} disabled={sending || !builderReadiness.ready || (summaryCurrency === "USD" && Number(usdRate) <= 0)} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-4 font-bold text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" title={builderReadiness.ready ? t("tourBuilder.book") : t("tb.onboarding.complete_first")}>
-                {sending ? t("tourBuilder.booking_in_progress") : t("tourBuilder.book")}
+              {!builderReadiness.ready && <div className="mb-3 rounded-md border border-amber-400/30 bg-amber-400/10 px-3 py-2 text-xs leading-5 text-amber-100">{t("tb.onboarding.missing", { count: builderReadiness.requiredCount - builderReadiness.completed })}</div>}
+              <button type="button" onClick={handleSendRequests} disabled={sending || !builderReadiness.ready || demoMode || (summaryCurrency === "USD" && Number(usdRate) <= 0)} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-4 font-bold text-white transition hover:bg-orange-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-400" title={demoMode ? t("tb.onboarding.demo_send_blocked") : builderReadiness.ready ? t("tourBuilder.book") : t("tb.onboarding.complete_first")}>
+                {demoMode ? t("tb.onboarding.demo_cta") : sending ? t("tourBuilder.booking_in_progress") : t("tourBuilder.book")}
                 {!sending && <ArrowRight size={18} />}
               </button>
               <p className="mt-3 text-xs leading-5 text-slate-400">{t("tb.summary.booking_hint")}</p>
