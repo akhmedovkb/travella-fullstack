@@ -2,12 +2,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { NavLink, Link, useLocation } from "react-router-dom";
 import LanguageSelector from "./LanguageSelector";
-import { apiGet } from "../api";
+import { apiGet, apiPut } from "../api";
 import { useTranslation } from "react-i18next";
 import { apiProviderFavorites } from "../api/providerFavorites";
 import AdminQuickTools from "./admin/AdminQuickTools";
 import { LockKeyhole, LogOut } from "lucide-react";
 import ConfirmModal from "./ConfirmModal";
+import { tError, tSuccess, tWarn } from "../shared/toast";
 
 /* --- Inline SVG icons --- */
 const IconChecklist = (p) => (
@@ -233,6 +234,12 @@ export default function Header() {
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [logoutOpen, setLogoutOpen] = useState(false);
+  const [passwordOpen, setPasswordOpen] = useState(false);
+  const [oldPassword, setOldPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [passwordBusy, setPasswordBusy] = useState(false);
+  const passwordAnchorRef = useRef(null);
+  const passwordPopoverRef = useRef(null);
 
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -453,7 +460,29 @@ export default function Header() {
 
   useEffect(() => {
     closeNavigationMenus();
+    setPasswordOpen(false);
   }, [location]);
+
+  useEffect(() => {
+    if (!passwordOpen) return undefined;
+    const closePassword = (event) => {
+      if (event.key === "Escape") {
+        setPasswordOpen(false);
+        return;
+      }
+      if (event.type === "mousedown"
+        && !passwordAnchorRef.current?.contains(event.target)
+        && !passwordPopoverRef.current?.contains(event.target)) {
+        setPasswordOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", closePassword);
+    window.addEventListener("keydown", closePassword);
+    return () => {
+      document.removeEventListener("mousedown", closePassword);
+      window.removeEventListener("keydown", closePassword);
+    };
+  }, [passwordOpen]);
 
   const servicesActive = location.pathname.startsWith("/dashboard/services/")
     || location.pathname === "/dashboard/hotels"
@@ -462,8 +491,28 @@ export default function Header() {
   const donasActive = location.pathname.startsWith("/admin/donas-dosas/");
   const isProviderProfile = role === "provider" && location.pathname === "/dashboard/profile";
 
-  const openProviderPassword = () => {
-    window.dispatchEvent(new CustomEvent("provider:open-password"));
+  const changeProviderPassword = async (event) => {
+    event.preventDefault();
+    if (!oldPassword) {
+      tWarn(t("enter_current_password"));
+      return;
+    }
+    if (!newPassword || newPassword.length < 6) {
+      tWarn(t("password_too_short"));
+      return;
+    }
+    try {
+      setPasswordBusy(true);
+      await apiPut("/api/providers/password", { oldPassword, newPassword }, "provider");
+      setOldPassword("");
+      setNewPassword("");
+      setPasswordOpen(false);
+      tSuccess(t("password_changed"));
+    } catch (error) {
+      tError(error?.message || t("password_error"));
+    } finally {
+      setPasswordBusy(false);
+    }
   };
 
   const handleProviderLogout = () => {
@@ -790,13 +839,15 @@ export default function Header() {
               <LanguageSelector />
             </div>
             {isProviderProfile && (
-              <div className="ml-1 flex items-center gap-1 border-l border-white/10 pl-2" aria-label={t("provider_profile_ui.account_actions")}>
+              <div ref={passwordAnchorRef} className="ml-1 flex items-center gap-1 border-l border-white/10 pl-2" aria-label={t("provider_profile_ui.account_actions")}>
                 <button
                   type="button"
-                  onClick={openProviderPassword}
-                  className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-white/80 transition hover:bg-white/10 hover:text-white focus:outline-none focus:ring-2 focus:ring-orange-400"
+                  onClick={() => setPasswordOpen((value) => !value)}
+                  className={`inline-flex h-9 w-9 items-center justify-center rounded-lg transition focus:outline-none focus:ring-2 focus:ring-orange-400 ${passwordOpen ? "bg-white/10 text-white ring-1 ring-orange-400" : "text-white/80 hover:bg-white/10 hover:text-white"}`}
                   aria-label={t("change_password")}
                   title={t("change_password")}
+                  aria-expanded={passwordOpen}
+                  aria-controls="header-password-popover"
                 >
                   <LockKeyhole aria-hidden="true" className="h-4 w-4" />
                 </button>
@@ -866,7 +917,7 @@ export default function Header() {
                 </RowGroupDark>
                 {isProviderProfile && (
                   <RowGroupDark title={t("provider_profile_ui.account_actions")}>
-                    <button type="button" onClick={() => { openProviderPassword(); closeNavigationMenus(); }} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-white/85 transition hover:bg-white/10 hover:text-white">
+                    <button type="button" onClick={() => { setPasswordOpen(true); closeNavigationMenus(); }} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-white/85 transition hover:bg-white/10 hover:text-white">
                       <LockKeyhole aria-hidden="true" className="h-4 w-4" />{t("change_password")}
                     </button>
                     <button type="button" onClick={() => { setLogoutOpen(true); closeNavigationMenus(); }} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/15 hover:text-red-200">
@@ -938,6 +989,38 @@ export default function Header() {
         onClose={() => setLogoutOpen(false)}
         onConfirm={handleProviderLogout}
       />
+      {passwordOpen && isProviderProfile ? (
+        <div
+          ref={passwordPopoverRef}
+          id="header-password-popover"
+          className="fixed left-3 right-3 top-16 z-[90] overflow-hidden rounded-lg border border-slate-200 border-t-4 border-t-orange-500 bg-white text-slate-950 shadow-[0_20px_55px_rgba(15,23,42,0.28)] sm:left-auto sm:right-4 sm:w-[390px] xl:right-[max(1rem,calc((100vw-80rem)/2))]"
+        >
+          <div className="flex items-start justify-between gap-4 border-b border-slate-200 px-5 py-4">
+            <div>
+              <div className="text-[11px] font-black uppercase text-orange-600">TRAVELLA</div>
+              <h2 className="mt-1 text-base font-black">{t("change_password")}</h2>
+              <p className="mt-1 text-xs font-medium text-slate-500">{t("provider_profile_ui.password_panel_subtitle")}</p>
+            </div>
+            <button type="button" onClick={() => setPasswordOpen(false)} className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-slate-400 transition hover:bg-slate-100 hover:text-slate-700" aria-label={t("close", { defaultValue: "Закрыть" })}>
+              <IconClose className="h-4 w-4" />
+            </button>
+          </div>
+          <form onSubmit={changeProviderPassword} className="grid gap-3 p-5">
+            <label className="grid gap-1.5 text-xs font-bold text-slate-700">
+              {t("current_password")}
+              <input type="password" autoComplete="current-password" value={oldPassword} onChange={(event) => setOldPassword(event.target.value)} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100" autoFocus />
+            </label>
+            <label className="grid gap-1.5 text-xs font-bold text-slate-700">
+              {t("new_password")}
+              <input type="password" autoComplete="new-password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} placeholder={t("provider_profile_ui.password_minimum_hint")} className="h-10 rounded-lg border border-slate-300 px-3 text-sm outline-none transition focus:border-orange-500 focus:ring-4 focus:ring-orange-100" />
+            </label>
+            <button type="submit" disabled={passwordBusy} className="mt-1 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-slate-950 px-4 text-sm font-black text-white transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60">
+              <LockKeyhole aria-hidden="true" className="h-4 w-4" />
+              {passwordBusy ? t("saving", { defaultValue: "Сохранение..." }) : t("change")}
+            </button>
+          </form>
+        </div>
+      ) : null}
     </header>
   );
 }
