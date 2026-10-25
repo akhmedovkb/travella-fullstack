@@ -72,7 +72,7 @@ function BookingTimeSlots({ booking }) {
 
 /* =============== Карточка согласования цены (входящие) =============== */
 function PriceAgreementCard({ booking, onSent, onReject }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const [priceRaw, setPriceRaw] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [note, setNote] = useState("");
@@ -207,7 +207,7 @@ function PriceAgreementCard({ booking, onSent, onReject }) {
 
 /* ================= page ================= */
 export default function ProviderBookings() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   // под-вкладки
   const [inSubTab, setInSubTab] = useState("tb");  // tb | rest  (для входящих)
   const [tab, setTab] = useState("incoming"); // incoming | outgoing
