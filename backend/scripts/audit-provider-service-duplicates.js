@@ -8,10 +8,11 @@ async function main() {
            LOWER(TRIM(COALESCE(details->>'origin_city', ''))) AS origin,
            LOWER(TRIM(COALESCE(details->>'destination_city', ''))) AS destination,
            LOWER(TRIM(COALESCE(details->>'vehicle_model', vehicle_model, ''))) AS vehicle,
+           LOWER(TRIM(COALESCE(details->>'pricing_mode', 'fixed'))) AS pricing_mode,
            ARRAY_AGG(id ORDER BY id) AS service_ids,
            COUNT(*)::int AS count
       FROM provider_services
-     GROUP BY 1, 2, 3, 4, 5, 6
+     GROUP BY 1, 2, 3, 4, 5, 6, 7
     HAVING COUNT(*) > 1
      ORDER BY count DESC, provider_id
   `);

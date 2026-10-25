@@ -14,9 +14,10 @@ async function main() {
                LOWER(TRIM(COALESCE(details->>'city_slug', ''))),
                LOWER(TRIM(COALESCE(details->>'origin_city', ''))),
                LOWER(TRIM(COALESCE(details->>'destination_city', ''))),
-               LOWER(TRIM(COALESCE(details->>'vehicle_model', vehicle_model, '')))
+               LOWER(TRIM(COALESCE(details->>'vehicle_model', vehicle_model, ''))),
+               LOWER(TRIM(COALESCE(details->>'pricing_mode', 'fixed')))
           FROM provider_services
-         GROUP BY 1, 2, 3, 4, 5, 6
+         GROUP BY 1, 2, 3, 4, 5, 6, 7
         HAVING COUNT(*) > 1
       ) duplicate_groups
   `);
@@ -35,7 +36,8 @@ async function main() {
         LOWER(TRIM(COALESCE(details->>'city_slug', ''))),
         LOWER(TRIM(COALESCE(details->>'origin_city', ''))),
         LOWER(TRIM(COALESCE(details->>'destination_city', ''))),
-        LOWER(TRIM(COALESCE(details->>'vehicle_model', vehicle_model, '')))
+        LOWER(TRIM(COALESCE(details->>'vehicle_model', vehicle_model, ''))),
+        LOWER(TRIM(COALESCE(details->>'pricing_mode', 'fixed')))
       )
   `);
   console.log(`[provider-services] ${INDEX_NAME} ready`);

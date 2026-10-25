@@ -644,6 +644,7 @@ function providerServiceIdentity(service = {}) {
     origin: normalize(details.origin_city),
     destination: normalize(details.destination_city),
     vehicle: normalize(details.vehicle_model || service.vehicle_model),
+    pricingMode: normalize(details.pricing_mode || "fixed"),
   };
 }
 
@@ -658,7 +659,8 @@ async function findProviderServiceDuplicate(providerId, service, excludeId = nul
         AND LOWER(TRIM(COALESCE(details->>'origin_city', ''))) = $4
         AND LOWER(TRIM(COALESCE(details->>'destination_city', ''))) = $5
         AND LOWER(TRIM(COALESCE(details->>'vehicle_model', vehicle_model, ''))) = $6
-        AND ($7::bigint IS NULL OR id <> $7::bigint)
+        AND LOWER(TRIM(COALESCE(details->>'pricing_mode', 'fixed'))) = $7
+        AND ($8::bigint IS NULL OR id <> $8::bigint)
       LIMIT 1`,
     [
       providerId,
@@ -667,6 +669,7 @@ async function findProviderServiceDuplicate(providerId, service, excludeId = nul
       identity.origin,
       identity.destination,
       identity.vehicle,
+      identity.pricingMode,
       excludeId,
     ]
   );
