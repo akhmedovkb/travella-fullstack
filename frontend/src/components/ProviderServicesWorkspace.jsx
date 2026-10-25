@@ -149,10 +149,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     if (!pid) return;
     setLoading(true);
     try {
-      const [services, me] = await Promise.all([
-        fetchJSON(`/api/providers/${pid}/services`),
-        fetchJSON("/api/providers/profile").catch(() => ({})),
-      ]);
+      const services = await fetchJSON(`/api/providers/${pid}/services`);
+      const me = await fetchJSON("/api/providers/profile").catch(() => ({}));
       setRows(Array.isArray(services) ? services : []);
       setProfile(me || {});
     } catch (error) {
