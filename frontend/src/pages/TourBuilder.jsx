@@ -721,7 +721,9 @@ async function fetchHotelQuote(payload) {
 
 function hotelQuoteWarningText(warning, t) {
   const value = String(warning || "");
-  if (value === "room_required") return t("tb.ui.warning_room_required");
+  if (value === "room_required" || value === "не выбран номер") return t("tb.ui.warning_room_required");
+  if (value === "offer_required" || value === "не выбран тариф поставщика") return t("tb.ui.warning_offer_required");
+  if (value === "dates_required" || value === "не выбраны даты") return t("tb.ui.warning_dates_required");
   if (value === "usd_rate_required") return t("tb.ui.warning_usd_rate_required");
   if (value.startsWith("room_not_found:")) return t("tb.ui.warning_room_not_found", { room: value.slice("room_not_found:".length) });
   if (value.startsWith("room_stock_exceeded:")) return t("tb.ui.warning_room_stock_exceeded", { room: value.slice("room_stock_exceeded:".length) });
@@ -2985,9 +2987,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           );
                         })}
                     </select>
-                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
-                      <span>{activeGuideService ? `${t(`provider_services.items.${activeGuideService.category}`, { defaultValue: t("tb.ui.selected_service") })} · ${(activeGuideService.category === "city_tour_guide_with_transport" || activeGuideService.raw?.details?.transport_included) ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only")}` : t("tb.ui.service_not_selected")}</span>
-                      <strong className="text-sm text-slate-950">{activeGuideService ? calcGuideForDay(k).toFixed(2) : "0.00"} {activeGuideService?.currency || st.guide?.currency || "UZS"}</strong>
+                    <div className="mt-3 flex flex-wrap items-start justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                      <span className="min-w-0 flex-1 break-words">{activeGuideService ? `${t(`provider_services.items.${activeGuideService.category}`, { defaultValue: t("tb.ui.selected_service") })} · ${(activeGuideService.category === "city_tour_guide_with_transport" || activeGuideService.raw?.details?.transport_included) ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only")}` : t("tb.ui.service_not_selected")}</span>
+                      <strong className="shrink-0 whitespace-nowrap text-sm text-slate-950">{activeGuideService ? calcGuideForDay(k).toFixed(2) : "0.00"} {activeGuideService?.currency || st.guide?.currency || "UZS"}</strong>
                     </div>
                     {activeGuideService && serviceRateExplanation(activeGuideService, k, Math.max(1, toNum(adt) + toNum(chd)), residentType, t) && <div className="mt-2 text-xs font-medium text-emerald-700">{serviceRateExplanation(activeGuideService, k, Math.max(1, toNum(adt) + toNum(chd)), residentType, t)}</div>}
                     </div>
@@ -3193,7 +3195,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                               className="h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
                             />
                           </label>
-                          <div className="grid grid-cols-[1fr_92px] gap-2">
+                          <div className="grid grid-cols-[minmax(0,1fr)_92px] gap-2">
                             <label className="block">
                               <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">{t("tb.ui.price_per_person")}</span>
                               <input
@@ -3337,9 +3339,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           );
                         })}
                     </select>
-                    <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
-                      <span>{activeTransportService ? t(`provider_services.items.${activeTransportService.category}`, { defaultValue: t("tb.ui.selected_service") }) : t("tb.ui.service_not_selected")}</span>
-                      <strong className="text-sm text-slate-950">{activeTransportService ? calcTransportForDay(k).toFixed(2) : "0.00"} {activeTransportService?.currency || st.transport?.currency || "UZS"}</strong>
+                    <div className="mt-3 flex flex-wrap items-start justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                      <span className="min-w-0 flex-1 break-words">{activeTransportService ? t(`provider_services.items.${activeTransportService.category}`, { defaultValue: t("tb.ui.selected_service") }) : t("tb.ui.service_not_selected")}</span>
+                      <strong className="shrink-0 whitespace-nowrap text-sm text-slate-950">{activeTransportService ? calcTransportForDay(k).toFixed(2) : "0.00"} {activeTransportService?.currency || st.transport?.currency || "UZS"}</strong>
                     </div>
                     {activeTransportService && serviceRateExplanation(activeTransportService, k, Math.max(1, toNum(adt) + toNum(chd)), residentType, t) && <div className="mt-2 text-xs font-medium text-emerald-700">{serviceRateExplanation(activeTransportService, k, Math.max(1, toNum(adt) + toNum(chd)), residentType, t)}</div>}
                     </>}
@@ -3354,13 +3356,12 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   </>}
                   {/* Hotel */}
                   {activeEventService === "hotel" && (
-                  <div className="rounded-md bg-slate-50 p-3">
-                     <label
-                      className="block text-sm font-medium mb-1"
-                      style={{ color: BRAND.primary, borderBottom: `1px solid ${BRAND.accent}66`, paddingBottom: 2 }}
-                     >
-                      {t('tb.hotel')}
-                     </label>
+                  <div className="min-w-0 overflow-hidden rounded-md border border-slate-200 bg-white shadow-sm xl:col-span-3">
+                    <div className="flex min-w-0 items-center gap-3 border-b border-slate-200 px-4 py-3">
+                      <div className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-cyan-100 text-cyan-700"><BedDouble size={17} /></div>
+                      <div className="min-w-0"><div className="break-words text-sm font-bold text-slate-950">{t('tb.hotel')}</div><div className="break-words text-xs text-slate-500">{t("tb.rooms_and_meals")}</div></div>
+                    </div>
+                    <div className="min-w-0 p-4">
                       <AsyncSelect
                       key={`hotel-${k}-${st.city}`}              /* форс-ремоунт при смене города */
                       isDisabled={!cityChosen}
@@ -3432,8 +3433,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     {/* ▼ ФОРМА ВЫБОРА НОМЕРОВ + моментальный расчёт */}
                     {st.hotelLoading && <div className="text-xs text-gray-500 mt-2">{t('tb.loading_hotel')}</div>}
                       {st.hotel && st.hotelBrief && Array.isArray(st.hotelOffers) && st.hotelOffers.length > 0 ? (
-                        <div className="mt-2">
-                          <span className="mb-1 block text-xs font-medium text-gray-600">{t("tb.ui.supplier_and_tariff")}</span>
+                        <div className="mt-3 min-w-0">
+                          <span className="mb-1.5 block text-xs font-bold uppercase text-slate-500">{t("tb.ui.supplier_and_tariff")}</span>
                           <select
                             className="h-9 w-full rounded border px-2 text-sm"
                             value={st.hotelOffer?.id || ""}
@@ -3487,7 +3488,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       ) : null}
            
                     {/* Валюта отображения: итог всегда в UZS; базовую валюту отеля показываем справочно */}
-                     <div className="text-xs text-gray-600 mt-1">
+                     <div className="mt-3 break-words text-xs text-slate-600">
                        {t('tb.price_per_night')}:{" "}
                        <b style={{ color: BRAND.primary }}>
                          {toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)} {st.hotelOffer?.currency || st.hotelBrief?.currency || st.hotel?.currency || "UZS"}
@@ -3510,7 +3511,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
  
                     {/* Разбивка по отелю за ночь: номера / доп. места / тур. сбор */}
                     {!!st.hotelBreakdown && (
-                      <div className="text-xs text-gray-700 mt-2">
+                      <div className="mt-2 min-w-0 break-words text-xs text-slate-700">
                         {st.hotelBreakdown.quoteSnapshot?.offer ? (
                           <div className="mb-2 rounded border border-emerald-200 bg-emerald-50 px-2 py-1.5 text-emerald-800">
                             {t("tb.ui.quote_locked")}: <b>{st.hotelBreakdown.quoteSnapshot.offer.provider_name}</b> · {t("tb.ui.offer_number", { number: st.hotelBreakdown.quoteSnapshot.offer.id })} · {t("tb.ui.quote_version", { version: st.hotelBreakdown.quoteSnapshot.quote_version })}
@@ -3547,6 +3548,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                     {/*   <div className="text-xs text-gray-600 mt-1">
                       {t('tb.price_per_night')}: <b style={{ color: BRAND.primary }}>{toNum(st.hotelRoomsTotal, toNum(st.hotel?.price, 0)).toFixed(2)}</b> {st.hotel?.currency || st.hotelBrief?.currency || "UZS"}
                     </div>*/}
+                    </div>
                   </div>
                   )}
                   
@@ -3592,9 +3594,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                       menuPortalTarget={document.body}
                       styles={RS_STYLES}
                     />
-                   <div className="mt-3 flex items-center justify-between border-t border-slate-100 pt-3 text-xs text-slate-500">
-                     <span>{(st.entrySelected || []).length ? t("tb.ui.selected_attractions", { count: (st.entrySelected || []).length }) : t("tb.ui.no_attractions")}</span>
-                     <strong className="text-sm text-slate-950">{calcEntryForDay(k).toFixed(2)} UZS</strong>
+                   <div className="mt-3 flex flex-wrap items-start justify-between gap-2 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                     <span className="min-w-0 flex-1 break-words">{(st.entrySelected || []).length ? t("tb.ui.selected_attractions", { count: (st.entrySelected || []).length }) : t("tb.ui.no_attractions")}</span>
+                     <strong className="shrink-0 whitespace-nowrap text-sm text-slate-950">{calcEntryForDay(k).toFixed(2)} UZS</strong>
                    </div>
                    </div>
                   </div>
@@ -3883,19 +3885,19 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 {summaryCurrency === "USD" ? commercialTotals.gross.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(commercialTotals.gross).toLocaleString("ru-RU")} <span className="text-base text-slate-400">{summaryCurrency}</span>
               </div>
               <div className="mt-5 space-y-3 border-t border-slate-800 pt-4 text-sm">
-                <div className="flex items-center justify-between"><span className="text-slate-400">{t("tb.summary.net_cost")}</span><strong>{commercialTotals.net.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
-                <div className="flex items-center justify-between"><span className="text-slate-400">{t("tb.summary.markup")}</span><strong>{commercialTotals.markup.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+                <div className="flex items-start justify-between gap-3"><span className="min-w-0 break-words text-slate-400">{t("tb.summary.net_cost")}</span><strong className="shrink-0 whitespace-nowrap">{commercialTotals.net.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
+                <div className="flex items-start justify-between gap-3"><span className="min-w-0 break-words text-slate-400">{t("tb.summary.markup")}</span><strong className="shrink-0 whitespace-nowrap">{commercialTotals.markup.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
               </div>
-              <div className="mt-4 grid grid-cols-[110px_1fr] gap-2">
+              <div className="mt-4 grid grid-cols-[minmax(0,110px)_minmax(0,1fr)] gap-2">
                 <select value={markupType} onChange={(event) => setMarkupType(event.target.value)} className="h-10 rounded border border-slate-700 bg-slate-900 px-2 text-sm text-white">
                   <option value="percent">%</option>
                   <option value="fixed">{summaryCurrency}</option>
                 </select>
                 <input type="number" min="0" step={markupType === "percent" ? "0.1" : "1"} value={markupValue} onChange={(event) => setMarkupValue(Math.max(0, Number(event.target.value) || 0))} aria-label={t("tb.summary.markup")} className="h-10 min-w-0 rounded border border-slate-700 bg-slate-900 px-3 text-right text-sm font-bold text-white" />
               </div>
-              <div className="mt-5 flex items-center justify-between border-t border-slate-800 pt-4 text-sm">
-                <span className="text-slate-400">{t("tb.summary.per_person")}</span>
-                <strong>{summaryCurrency === "USD" ? commercialTotals.perPax.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(commercialTotals.perPax).toLocaleString("ru-RU")} {summaryCurrency}</strong>
+              <div className="mt-5 flex items-start justify-between gap-3 border-t border-slate-800 pt-4 text-sm">
+                <span className="min-w-0 break-words text-slate-400">{t("tb.summary.per_person")}</span>
+                <strong className="shrink-0 whitespace-nowrap">{summaryCurrency === "USD" ? commercialTotals.perPax.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : Math.round(commercialTotals.perPax).toLocaleString("ru-RU")} {summaryCurrency}</strong>
               </div>
             </div>
             <div className="mt-8">
@@ -4077,7 +4079,7 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
         vatIncluded: false, nights: quoteNightDates.length, pax: paxCount,
         currency: String(hotelBrief?.currency || "UZS").toUpperCase(),
         quoteValid: false,
-        warnings: [!offer?.id ? "не выбран тариф поставщика" : !selectedRooms ? "не выбран номер" : "не выбраны даты"]
+        warnings: [!offer?.id ? "offer_required" : !selectedRooms ? "room_required" : "dates_required"]
       });
       return undefined;
     }
@@ -4135,10 +4137,10 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
   }, [qty, meal, roomOptions, quoteNightDates, residentFlag, extraBeds, paxCount, hotelBrief?.id, hotelBrief?.currency, offer?.id, usdRate]);
 
   return (
-    <div className="mt-3 border rounded p-2">
-      <div className="flex items-center gap-3 mb-2">
-        <div className="text-sm font-medium">{t('tb.rooms_and_meals')}</div>
-        <select className="h-8 border rounded px-2 text-sm" value={meal} onChange={(e) => setMeal(e.target.value)}>
+    <div className="mt-3 min-w-0 rounded-md border border-slate-200 bg-slate-50 p-3">
+      <div className="mb-3 flex min-w-0 flex-wrap items-center gap-2">
+        <div className="min-w-0 break-words text-sm font-semibold text-slate-900">{t('tb.rooms_and_meals')}</div>
+        <select className="h-9 min-w-20 rounded-md border border-slate-300 bg-white px-2 text-sm" value={meal} onChange={(e) => setMeal(e.target.value)}>
           {availableMeals.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
         <div className="text-xs text-gray-500">({residentFlag ? t('tb.residents') : t('tb.nonresidents')})</div>
@@ -4146,19 +4148,19 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
       </div>
 
         {/* Доп. место и подсказка по тур. сбору */}
-      <div className="grid sm:grid-cols-2 gap-2 mb-2">
-        <label className="flex items-center justify-between border rounded px-2 py-1">
-          <span className="text-sm">{t('tb.extra_beds_qty') || 'Доп. место (шт)'}</span>
+      <div className="mb-2 grid gap-2 lg:grid-cols-2">
+        <label className="grid min-w-0 grid-cols-[minmax(0,1fr)_72px] items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+          <span className="min-w-0 break-words text-sm leading-tight">{t('tb.extra_beds_qty') || 'Доп. место (шт)'}</span>
           <input
             type="number"
             min={0}
-            className="h-8 w-20 border rounded px-2 text-sm"
+            className="h-9 w-full min-w-0 rounded border border-slate-300 px-2 text-sm"
             value={extraBeds}
             onChange={(e) => setExtraBeds(Math.max(0, Number(e.target.value) || 0))}
           />
         </label>
         
-          <div className="text-xs text-gray-600 flex items-center px-2">
+          <div className="flex min-w-0 items-center break-words rounded-md border border-slate-200 bg-white px-3 py-2 text-xs leading-5 text-slate-600">
           {(() => {
             const feeRes = pickNumeric(hotelBrief, [
               "taxes.touristTax.residentPerNight",
@@ -4186,17 +4188,17 @@ function HotelRoomPicker({ hotelBrief, offer, nightDates, residentFlag, paxCount
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-2">
+      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
         {roomOptions.map((option) => {
           const upperLimit = 99;
           return (
-            <label key={option.key} className="flex items-center justify-between border rounded px-2 py-1">
-              <span className="text-sm"><b>{option.type}</b>{option.occupancy !== "ROOM" ? ` · ${option.occupancy}` : ""}<span className="ml-1 text-xs text-gray-500">{t("tb.ui.up_to_guests", { count: option.guests })}</span></span>
+            <label key={option.key} className="grid min-w-0 grid-cols-[minmax(0,1fr)_72px] items-center gap-2 rounded-md border border-slate-200 bg-white px-3 py-2">
+              <span className="min-w-0 break-words text-sm leading-tight"><b>{option.type}</b>{option.occupancy !== "ROOM" ? ` · ${option.occupancy}` : ""}<span className="ml-1 text-xs text-gray-500">{t("tb.ui.up_to_guests", { count: option.guests })}</span></span>
               <input
                 type="number"
                 min={0}
                 max={upperLimit}
-                className="h-8 w-20 border rounded px-2 text-sm"
+                className="h-9 w-full min-w-0 rounded border border-slate-300 px-2 text-sm"
                 value={qty[option.key] ?? 0}
                 onChange={(e) => {
                   const v = Math.max(0, Math.min(Number(e.target.value || 0), upperLimit));
