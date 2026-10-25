@@ -2432,8 +2432,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
   /* ---------------- render ---------------- */
   return (
-    <div className="overflow-x-hidden bg-slate-100 p-3 md:p-5">
-      <div className="mx-auto max-w-[1440px] space-y-5 rounded-lg border border-slate-200 bg-white p-4 shadow-sm md:p-6">
+    <main className="min-h-screen overflow-x-hidden bg-slate-100 px-2 py-3 sm:px-3 lg:px-4 lg:py-4 2xl:px-6">
+      <div className="mx-auto w-full max-w-[1920px] space-y-4 bg-white px-3 py-4 sm:px-4 lg:px-5 lg:py-5 2xl:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-950">{t('tb.title')}</h1>
@@ -2456,10 +2456,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
           {builderReadiness.warnings.length > 0 && !demoMode && <div className="mt-3 flex flex-wrap gap-2">{builderReadiness.warnings.map((warning) => <span key={warning} className="border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800">{t(`tb.onboarding.warnings.${warning}`)}</span>)}</div>}
         </section>
         {/* [TPL] панель шаблонов — аккордеон по странам */}
-        <div className="flex items-start gap-3">
-          <div className="text-sm text-gray-700 mt-2 shrink-0">{t('tb.templates')}:</div>
+        <section className="border-y border-slate-200 py-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-sm font-bold text-slate-900">{t('tb.templates')}</h2>
+            <Link className="text-sm font-semibold text-slate-600 underline decoration-slate-300 underline-offset-4 hover:text-orange-600" to="/templates">
+              {t('tb.templates_open')}
+            </Link>
+          </div>
 
-          <div className="flex-1 space-y-2">
+          <div className="grid min-w-0 gap-2 xl:grid-cols-2">
             {Object.entries(
               tpls
                 .slice()
@@ -2475,18 +2480,18 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
               .map(([country, list]) => {
                 const open = !!openGroups[country];
                 return (
-                  <div key={country} className="border rounded-lg bg-white">
+                   <div key={country} className="min-w-0 rounded-md border border-slate-200 bg-white">
                     {/* шапка группы (кнопка UZB/...) */}
                     <button
                       type="button"
                       onClick={() => toggleGroup(country)}
-                      className="w-full flex items-center justify-between px-3 py-2"
+                      className="flex w-full items-center justify-between gap-3 px-3 py-2 text-left"
                     >
                       <span className="inline-flex items-center gap-2 text-sm font-semibold">
-                        <span className="inline-flex h-6 px-2 items-center rounded-full border">
+                        <span className="inline-flex h-6 shrink-0 items-center rounded-full border px-2">
                           {country}
                         </span>
-                        <span className="text-gray-500 font-normal">
+                         <span className="min-w-0 break-words font-normal text-gray-500">
                           {t('tb.templates_count', { count: list.length })}
                         </span>
                       </span>
@@ -2513,20 +2518,15 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
               })}
 
             {!tpls.length && (
-              <span className="text-sm text-gray-500">
+              <span className="text-sm text-gray-500 xl:col-span-2">
                 {t("tb.no_templates")}
               </span>
             )}
           </div>
-
-          {/* Ссылка на страницу управления шаблонами */}
-          <Link className="ml-auto text-sm underline mt-2 shrink-0" to="/templates">
-            {t('tb.templates_open')}
-          </Link>
-        </div>
+        </section>
 
         <div className="sticky bottom-2 z-30 sm:bottom-auto sm:top-16">
-          <div className="ml-auto grid max-w-3xl grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 shadow-lg sm:grid-cols-4">
+          <div className="ml-auto grid w-full grid-cols-2 gap-px overflow-hidden rounded-md border border-slate-200 bg-slate-200 shadow-lg sm:w-auto sm:min-w-[680px] sm:grid-cols-4 xl:min-w-[760px]">
             <div className="bg-white px-3 py-2"><span className="block text-[11px] text-slate-500">{t("tb.summary.net_cost")}</span><strong className="block truncate text-sm text-slate-950">{commercialTotals.net.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
             <div className="bg-white px-3 py-2"><span className="block text-[11px] text-slate-500">{t("tb.summary.markup")}</span><strong className="block truncate text-sm text-slate-950">{commercialTotals.markup.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
             <div className="bg-slate-950 px-3 py-2 text-white"><span className="block text-[11px] text-slate-400">{t("tb.summary.sale_price")}</span><strong className="block truncate text-sm">{commercialTotals.gross.toLocaleString(summaryCurrency === "USD" ? "en-US" : "ru-RU", { maximumFractionDigits: 2 })} {summaryCurrency}</strong></div>
@@ -2534,8 +2534,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
           </div>
         </div>
 
-        <div id="tb-step-dates" className="scroll-mt-24 grid min-w-0 gap-4 md:grid-cols-3">
-          <div className="md:col-span-2 min-w-0">
+        <section id="tb-step-dates" className="scroll-mt-24 grid min-w-0 gap-5 border-b border-slate-200 pb-5 lg:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] xl:grid-cols-[minmax(720px,2.35fr)_minmax(320px,1fr)]">
+          <div className="min-w-0">
             <label className="block text-sm font-medium mb-1">{t('tb.dates')}</label>
             <DayPicker
               key={`dp-${i18n.language}`}
@@ -2558,7 +2558,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             </p>
           </div>
 
-          <div className="space-y-3">
+          <div className="grid content-start gap-4 rounded-md border border-slate-200 bg-slate-50 p-4 sm:grid-cols-2 lg:grid-cols-1">
             <div>
               <div className="text-sm font-medium mb-1">PAX</div>
               <div className="grid grid-cols-2 gap-2">
@@ -2607,10 +2607,10 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
               </select>
             </div>
           </div>
-        </div>
+        </section>
 
         {/* days */}
-        <div id="tb-step-route" className="scroll-mt-24 space-y-6">
+        <section id="tb-step-route" className="scroll-mt-24 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-orange-100 bg-orange-50/50 px-3 py-2">
             <div className="text-sm text-gray-700">
               {days.length
@@ -3810,7 +3810,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
               </div>
             );
           })}
-        </div>
+        </section>
               {/* глобальные эффекты автоподбора на смену PAX и загрузку услуг */}
       <EffectAutoPick
         days={days}
@@ -3970,7 +3970,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
         result={bookingResult}
         onClose={() => setBookingResult(null)}
       />
-    </div>
+    </main>
   );
 }
 
