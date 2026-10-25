@@ -117,10 +117,10 @@ function normalizeTg(v) {
 const typeLabel = (raw, t) => {
   const r = String(raw || "").toLowerCase();
   if (!r) return "";
-  if (r === "guide") return t("types.guide", { defaultValue: "Гид" });
-  if (r === "transport") return t("types.transport", { defaultValue: "Транспорт" });
-  if (r === "agent" || r === "agency") return t("types.agent", { defaultValue: "Турагент" });
-  if (r === "hotel") return t("types.hotel", { defaultValue: "Отель" });
+  if (["guide", "гид", "gid"].includes(r)) return t("bookings.types.guide", { defaultValue: "Гид" });
+  if (["transport", "транспорт"].includes(r)) return t("bookings.types.transport", { defaultValue: "Транспорт" });
+  if (["agent", "agency", "турагент", "туроператор", "turoperator"].includes(r)) return t("bookings.types.agent", { defaultValue: "Турагент" });
+  if (["hotel", "отель", "mehmonxona"].includes(r)) return t("bookings.types.hotel", { defaultValue: "Отель" });
   return r;
 };
 const fmtPrice = (n) =>
@@ -213,7 +213,7 @@ export default function BookingRow({
   onRefund,
   embedded = false,
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   /* ---- контрагент (имя/контакты/тип) ---- */
   const counterpart = useMemo(() => {
@@ -314,7 +314,7 @@ const profileHref = useMemo(() => {
     ? new Date(booking.created_at)
     : null;
   const createdAtLabel = createdAt
-    ? createdAt.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" })
+    ? createdAt.toLocaleDateString(i18n.resolvedLanguage || i18n.language || "ru", { day: "2-digit", month: "short", year: "numeric" })
     : null;
   const alreadyQuoted = Number(booking?.provider_price) > 0;
   const providerNote = useMemo(() => {
@@ -322,13 +322,20 @@ const profileHref = useMemo(() => {
     if (!note) return "";
     const fixedRateTitle = note.replace(/^Опубликованный тариф Tour Builder:\s*/i, "");
     if (fixedRateTitle !== note) {
+      const language = String(i18n.resolvedLanguage || i18n.language || "ru").slice(0, 2);
+      if (language !== "ru") {
+        return t("bookings.published_tour_builder_rate_generic", { defaultValue: "Published Tour Builder rate" });
+      }
       return t("bookings.published_tour_builder_rate", {
         title: fixedRateTitle,
         defaultValue: `Опубликованный тариф Tour Builder: ${fixedRateTitle}`,
       });
     }
+    if (/^Тариф Tour Builder зафиксирован:/i.test(note) || /^Цена зафиксирована по опубликованному тарифу Tour Builder$/i.test(note)) {
+      return t("bookings.fixed_tour_builder_rate", { defaultValue: "Тариф Tour Builder зафиксирован" });
+    }
     return note;
-  }, [booking?.provider_note, t]);
+  }, [booking?.provider_note, i18n.language, i18n.resolvedLanguage, t]);
   const canAccept =
     viewerRole === "provider" &&
     allowProviderAccept &&
@@ -464,7 +471,7 @@ const profileHref = useMemo(() => {
           </div>
           <div className="text-sm text-gray-700">
             {dates.length
-              ? dates.map((d) => new Date(d).toLocaleDateString(undefined, {
+              ? dates.map((d) => new Date(d).toLocaleDateString(i18n.resolvedLanguage || i18n.language || "ru", {
                   day: "2-digit",
                   month: "short",
                   year: "numeric",

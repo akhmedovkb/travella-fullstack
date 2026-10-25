@@ -155,6 +155,8 @@
     "tariff_residents": "Rate: residents",
     "tb_empty": "No Tour Builder packages yet.",
     "published_tour_builder_rate": "Published Tour Builder rate: {{title}}",
+    "published_tour_builder_rate_generic": "Published Tour Builder rate",
+    "fixed_tour_builder_rate": "Tour Builder rate locked",
     "accepted_awaiting_payment": "Request accepted. Waiting for the requester to pay.",
     "provider_cancel_reason": "Specify cancellation reason",
     "waiting_for_requester": "Offer sent. Waiting for client confirmation.",
@@ -203,7 +205,8 @@
       "guide": "Guide",
       "transport": "Transport",
       "agent": "Travel agent",
-      "hotel": "Hotel"
+      "hotel": "Hotel",
+      "entry": "Entry fees"
     },
     "actions": {
       "confirm": "Confirm",

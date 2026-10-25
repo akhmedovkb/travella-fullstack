@@ -72,7 +72,7 @@ function BookingTimeSlots({ booking }) {
 
 /* =============== Карточка согласования цены (входящие) =============== */
 function PriceAgreementCard({ booking, onSent, onReject }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [priceRaw, setPriceRaw] = useState("");
   const [currency, setCurrency] = useState("USD");
   const [note, setNote] = useState("");
@@ -667,8 +667,16 @@ export default function ProviderBookings() {
     if (!iso) return "";
     const d = new Date(iso);
     if (!Number.isFinite(d.getTime())) return "";
-    return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+    return d.toLocaleDateString(i18n.resolvedLanguage || i18n.language || "ru", { day: "2-digit", month: "short", year: "numeric" });
   };
+
+  const serviceClassLabel = (klass) => ({
+    HOTEL: t("bookings.types.hotel", { defaultValue: "Отель" }),
+    GUIDE: t("bookings.types.guide", { defaultValue: "Гид" }),
+    TRANSPORT: t("bookings.types.transport", { defaultValue: "Транспорт" }),
+    "ENTRY FEES": t("bookings.types.entry", { defaultValue: "Входные билеты" }),
+    SERVICE: t("bookings.service", { defaultValue: "Услуга" }),
+  }[klass] || klass);
 
   // Собираем [{date,label,city,dateLabel,sections:[[klass,[names]]]}]
   const buildDailyMatrix = (items = []) => {
@@ -704,7 +712,7 @@ export default function ProviderBookings() {
     if (!iso) return "";
     const d = new Date(iso);
     if (!Number.isFinite(d.getTime())) return "";
-    return d.toLocaleDateString(undefined, { day: "2-digit", month: "short" });
+    return d.toLocaleDateString(i18n.resolvedLanguage || i18n.language || "ru", { day: "2-digit", month: "short" });
   };
 
   const renderPackageOverview = (group) => {
@@ -787,7 +795,7 @@ export default function ProviderBookings() {
                       {row.sections.map(([klass, names]) =>
                         names.length ? (
                           <div key={klass}>
-                            <span className="font-semibold text-gray-500">{klass}:</span> {names.join(", ")}
+                            <span className="font-semibold text-gray-500">{serviceClassLabel(klass)}:</span> {names.join(", ")}
                           </div>
                         ) : null
                       )}
@@ -1069,7 +1077,7 @@ export default function ProviderBookings() {
                               {r.sections.map(([klass, names]) =>
                                 names.length ? (
                                   <div key={klass} className="text-gray-700">
-                                    <span className="font-medium">{klass}:</span> {names.join(", ")}
+                                    <span className="font-medium">{serviceClassLabel(klass)}:</span> {names.join(", ")}
                                   </div>
                                 ) : null
                               )}

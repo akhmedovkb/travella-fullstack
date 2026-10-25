@@ -156,6 +156,8 @@
     "tariff_residents": "Тариф: для резидентов",
     "tb_empty": "Пакетов Tour Builder пока нет.",
     "published_tour_builder_rate": "Опубликованный тариф Tour Builder: {{title}}",
+    "published_tour_builder_rate_generic": "Опубликованный тариф Tour Builder",
+    "fixed_tour_builder_rate": "Тариф Tour Builder зафиксирован",
     "accepted_awaiting_payment": "Заявка принята. Ожидаем оплату от заказчика.",
     "provider_cancel_reason": "Укажите причину отмены",
     "waiting_for_requester": "Предложение отправлено. Ожидаем подтверждения клиента/заявителя.",
@@ -204,7 +206,8 @@
       "guide": "Гид",
       "transport": "Транспорт",
       "agent": "Турагент",
-      "hotel": "Отель"
+      "hotel": "Отель",
+      "entry": "Входные билеты"
     },
     "actions": {
       "confirm": "Подтвердить",

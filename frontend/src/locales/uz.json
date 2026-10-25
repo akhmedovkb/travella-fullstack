@@ -154,6 +154,8 @@
     "tariff_residents": "Tarif: rezidentlar uchun",
     "tb_empty": "Tour Builder paketlari hali yo‘q.",
     "published_tour_builder_rate": "Tour Builder e’lon qilingan tarifi: {{title}}",
+    "published_tour_builder_rate_generic": "Tour Builder e’lon qilingan tarifi",
+    "fixed_tour_builder_rate": "Tour Builder tarifi belgilandi",
     "accepted_awaiting_payment": "So‘rov qabul qilindi. Buyurtmachining to‘lovi kutilmoqda.",
     "provider_cancel_reason": "Bekor qilish sababini ko‘rsating",
     "waiting_for_requester": "Taklif yuborildi. Mijoz tasdig‘i kutilmoqda.",
@@ -202,7 +204,8 @@
       "guide": "Gid",
       "transport": "Transport",
       "agent": "Turoperator",
-      "hotel": "Mehmonxona"
+      "hotel": "Mehmonxona",
+      "entry": "Kirish chiptalari"
     },
     "actions": {
       "confirm": "Tasdiqlash",
