@@ -798,6 +798,21 @@ const vehicleModel =
   };
 };
 
+const serviceUnitPrice = (service, dateKey, pax) => {
+  const details = service?.raw?.details || service?.details || {};
+  const variants = Array.isArray(details.rate_variants) ? details.rate_variants : [];
+  const date = String(dateKey || "").slice(0, 10);
+  const guests = Math.max(1, Number(pax) || 1);
+  const matching = variants.filter((variant) => {
+    const from = String(variant.valid_from || "").slice(0, 10);
+    const to = String(variant.valid_to || "").slice(0, 10);
+    const min = Math.max(1, Number(variant.min_guests) || 1);
+    const max = Number(variant.max_guests) > 0 ? Number(variant.max_guests) : Infinity;
+    return Number(variant.price) > 0 && (!from || date >= from) && (!to || date <= to) && guests >= min && guests <= max;
+  }).sort((a, b) => (Number(b.min_guests) || 1) - (Number(a.min_guests) || 1));
+  return toNum(matching[0]?.price, toNum(service?.price, 0));
+};
+
 const serviceListSignature = (services = []) =>
   services
     .map((service) => [
@@ -807,6 +822,7 @@ const serviceListSignature = (services = []) =>
       service.title,
       service.category,
       service.vehicle_model,
+      JSON.stringify(service.raw?.details?.rate_variants || []),
     ].join(":"))
     .sort()
     .join("|");
@@ -1853,11 +1869,11 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     }, 0);
   };
 
-  const priceForDuration = (service, durationHours, fallback = 0) => {
+  const priceForDuration = (service, durationHours, fallback = 0, dateKey = "") => {
     if (!service) return toNum(fallback, 0);
     const details = service?.raw?.details || service?.details || {};
     const mode = String(details.pricing_mode || "fixed").toLowerCase();
-    const basePrice = toNum(service.price, toNum(fallback, 0));
+    const basePrice = serviceUnitPrice(service, dateKey, Math.max(1, toNum(adt) + toNum(chd))) || toNum(fallback, 0);
     const hours = Math.max(toNum(details.minimum_hours, 1), toNum(durationHours, 0));
     if (mode === "hourly") return basePrice * Math.max(hours, 1);
     if (mode === "packages") {
@@ -1876,13 +1892,13 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   const calcGuideForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
     const hours = durationHoursForProvider(st, "guide", st?.guide?.id);
-    return priceForDuration(st?.guideService, hours, st?.guide?.price_per_day);
+    return priceForDuration(st?.guideService, hours, st?.guide?.price_per_day, dateKey);
   };
   const calcTransportForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
     if (st?.guideService?.category === "city_tour_guide_with_transport" || st?.guideService?.raw?.details?.transport_included) return 0;
     const hours = durationHoursForProvider(st, "transport", st?.transport?.id);
-    return priceForDuration(st?.transportService, hours, st?.transport?.price_per_day);
+    return priceForDuration(st?.transportService, hours, st?.transport?.price_per_day, dateKey);
   };
   
   const moneyToUZS = (amount, currency) => {
@@ -2921,7 +2937,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
                           const transportIncluded = s.category === "city_tour_guide_with_transport" || s?.raw?.details?.transport_included;
                            const base = t(`provider_services.items.${s.category}`, { defaultValue: s.title || CATEGORY_LABELS[s.category] || "Service" });
-                          const parts = [base, transportIncluded ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only"), seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
+                          const effectivePrice = serviceUnitPrice(s, k, Math.max(1, toNum(adt) + toNum(chd)));
+                          const parts = [base, transportIncluded ? t("provider_services_filters.transport_included") : t("provider_services_filters.guide_only"), seats ? `${seats} pax` : null, vm, `${effectivePrice.toFixed(2)} ${s.currency}`]
                             .filter(Boolean)
                             .join(" — ");
                           return (
@@ -3271,7 +3288,8 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                           const seats = svcSeats(s);
                           const vm = s.vehicle_model || s?.raw?.vehicle_model || s?.raw?.details?.vehicle_model || s?.raw?.details?.model;
                            const base = t(`provider_services.items.${s.category}`, { defaultValue: s.title || CATEGORY_LABELS[s.category] || "Service" });
-                          const parts = [base, seats ? `${seats} pax` : null, vm, `${s.price.toFixed(2)} ${s.currency}`]
+                          const effectivePrice = serviceUnitPrice(s, k, Math.max(1, toNum(adt) + toNum(chd)));
+                          const parts = [base, seats ? `${seats} pax` : null, vm, `${effectivePrice.toFixed(2)} ${s.currency}`]
                             .filter(Boolean)
                             .join(" — ");
                           return (
