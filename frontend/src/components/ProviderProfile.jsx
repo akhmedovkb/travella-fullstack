@@ -431,20 +431,6 @@ const ProviderProfile = () => {
   const [regions, setRegions] = useState([]); // [{value,label}, ...] EN
   const [newSocial, setNewSocial] = useState("");
   const [newPhone, setNewPhone] = useState("");
-  const [oldPassword, setOldPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [pwdOpen, setPwdOpen] = useState(false);
-
-  useEffect(() => {
-    const openPasswordPanel = () => {
-      setPwdOpen(true);
-      window.requestAnimationFrame(() => {
-        document.getElementById("password-panel")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      });
-    };
-    window.addEventListener("provider:open-password", openPasswordPanel);
-    return () => window.removeEventListener("provider:open-password", openPasswordPanel);
-  }, []);
   const [stats, setStats] = useState(null);
 
   const langRef = useRef(null);
@@ -715,45 +701,6 @@ const ProviderProfile = () => {
       });
   };
 
-  const handleChangePassword = () => {
-    if (!oldPassword) {
-      tWarn(
-        t("enter_current_password") ||
-          "Введите текущий пароль"
-      );
-      return;
-    }
-    if (!newPassword || newPassword.length < 6) {
-      tWarn(
-        t("password_too_short") ||
-          "Минимум 6 символов"
-      );
-      return;
-    }
-
-    api
-      .put(`/api/providers/password`, {
-        oldPassword,
-        newPassword,
-      })
-      .then(() => {
-        setOldPassword("");
-        setNewPassword("");
-        tSuccess(
-          t("password_changed") || "Пароль обновлён"
-        );
-        setPwdOpen(false);
-      })
-      .catch((err) => {
-        console.error("Ошибка смены пароля", err);
-        tError(
-          extractApiErrorText(err) ||
-            t("password_error") ||
-            "Ошибка смены пароля"
-        );
-      });
-  };
-
   // ---------- RENDER ----------
 
   const publicName = profile?.name || "Travella";
@@ -879,31 +826,6 @@ const ProviderProfile = () => {
           </button>
         </section>
       )}
-
-      {pwdOpen && <section id="password-panel" className="rounded-xl border border-orange-200 bg-white p-4 shadow-sm" aria-labelledby="password-panel-title">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 id="password-panel-title" className="font-black text-slate-950">{t("change_password")}</h2>
-            <p className="mt-1 text-sm font-medium text-slate-500">{t("provider_profile_ui.password_panel_subtitle")}</p>
-          </div>
-          <button type="button" onClick={() => setPwdOpen(false)} className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-slate-500 transition hover:bg-slate-100 hover:text-slate-950" aria-label={t("close", { defaultValue: "Закрыть" })}>
-            <X aria-hidden="true" className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] md:items-end">
-          <label className="grid gap-1.5 text-sm font-bold text-slate-700">
-            {t("current_password")}
-            <input type="password" autoComplete="current-password" placeholder={t("current_password")} value={oldPassword} onChange={(e) => setOldPassword(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
-          </label>
-          <label className="grid gap-1.5 text-sm font-bold text-slate-700">
-            {t("new_password")}
-            <input type="password" autoComplete="new-password" placeholder={t("provider_profile_ui.password_minimum_hint")} value={newPassword} onChange={(e) => setNewPassword(e.target.value)} className="h-11 rounded-xl border border-slate-200 px-3 text-sm font-medium outline-none transition focus:border-orange-400 focus:ring-4 focus:ring-orange-100" />
-          </label>
-          <button type="button" onClick={handleChangePassword} className="inline-flex h-11 items-center justify-center gap-2 rounded-xl bg-slate-950 px-5 text-sm font-black text-white transition hover:bg-slate-800">
-            <Save aria-hidden="true" className="h-4 w-4" />{t("change")}
-          </button>
-        </div>
-      </section>}
 
       <div className={`grid grid-cols-1 gap-3 ${activeSection === "overview" ? "xl:grid-cols-[1.1fr_0.9fr]" : activeSection === "profile" ? "xl:grid-cols-[minmax(0,2fr)_minmax(280px,0.7fr)]" : ""}`}>
         <main className="space-y-3">
