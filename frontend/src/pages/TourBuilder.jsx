@@ -2433,7 +2433,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   /* ---------------- render ---------------- */
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-100 px-2 py-3 sm:px-3 lg:px-4 lg:py-4 2xl:px-6">
-      <div className="mx-auto w-full max-w-[1680px] space-y-4 bg-white px-3 py-4 sm:px-4 lg:px-5 lg:py-5 2xl:px-6">
+      <div className="mx-auto w-full max-w-[1520px] space-y-4 bg-white px-3 py-4 sm:px-4 lg:px-5 lg:py-5 2xl:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-950">{t('tb.title')}</h1>
@@ -2786,9 +2786,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
             return (
               <div
                 key={k}
-                className="space-y-3 rounded-lg border border-slate-200 bg-white p-3"
+                className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm"
               >
-                <div className="-mx-3 -mt-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-3 lg:grid-cols-[auto_minmax(220px,1fr)_auto_minmax(130px,auto)_minmax(140px,auto)_auto_auto] xl:grid-cols-[auto_minmax(360px,720px)_minmax(0,1fr)_minmax(130px,auto)_minmax(140px,auto)_auto_auto]">
+                <div className="grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 border-b border-slate-200 bg-slate-100/80 px-3 py-3 lg:grid-cols-[auto_minmax(220px,1fr)_auto_minmax(130px,auto)_minmax(140px,auto)_auto_auto] xl:grid-cols-[auto_minmax(320px,600px)_minmax(0,1fr)_minmax(130px,auto)_minmax(140px,auto)_auto_auto]">
                   <div className="col-start-1 row-start-1 grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">D{i + 1}</div>
                   <input
                     className="col-start-2 row-start-1 h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 lg:min-w-[220px]"
@@ -2825,7 +2825,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                   <button type="button" aria-expanded={!collapsed} className="col-span-2 col-start-2 row-start-3 justify-self-start rounded-md border border-slate-300 bg-white px-3 py-2 text-xs font-semibold text-slate-800 hover:bg-slate-100 lg:col-span-1 lg:col-start-auto lg:row-start-auto" onClick={() => setCollapsedDays((previous) => ({ ...previous, [k]: !previous[k] }))}>{collapsed ? t("tb.ui.expand") : t("tb.ui.collapse")}</button>
                 </div>
 
-                {!collapsed && <>
+                {!collapsed && <div className="space-y-3 p-3">
                 <TourDayTimeline
                   dayKey={k}
                   items={st.schedule}
@@ -3758,9 +3758,9 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
 
                 </>}
 
-                </>}
+                </div>}
 
-                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-t border-slate-200 px-1 pt-3 text-xs text-slate-500">
                   <span>{t('tb.guide')} <strong className="text-slate-900">{calcGuideForDay(k).toLocaleString("ru-RU")}</strong></span>
                   <span>{t('tb.transport')} <strong className="text-slate-900">{(calcTransportForDay(k) + calcTransfersForDay(k)).toLocaleString("ru-RU")}</strong></span>
                   <span>{t('tb.hotel_short')} <strong className="text-slate-900">{calcHotelForDay(k).toLocaleString("ru-RU")}</strong></span>
@@ -3770,7 +3770,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 </div>
 
                 {/* Программа дня завершает карточку дня. */}
-                <details className="group rounded-lg border border-slate-200 bg-white">
+                <details className="group border-t border-slate-200 bg-white">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold text-slate-800">
                     <span>{t('tb.day_program')}</span>
                     <span className="text-xs font-medium text-slate-500 group-open:hidden">{t("tb.ui.open_description")}</span>
