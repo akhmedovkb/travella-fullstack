@@ -21,6 +21,30 @@ const catalogGroup = (value, groups) => findServiceGroup(catalogCategory(value),
 const number = (value) => (Number.isFinite(Number(value)) ? Number(value) : 0);
 const money = (value) => new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 0 }).format(number(value));
 const cityLabel = (value) => String(value || "").trim().replace(/(^|[\s-])\p{L}/gu, (letter) => letter.toUpperCase());
+const blankRateVariant = () => ({ id: globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2), validFrom: "", validTo: "", minGuests: "1", maxGuests: "", price: "" });
+
+function validateRateVariants(variants, w) {
+  const normalized = (variants || []).map((variant) => ({
+    from: variant.validFrom || "0000-01-01",
+    to: variant.validTo || "9999-12-31",
+    min: Math.max(1, number(variant.minGuests) || 1),
+    max: number(variant.maxGuests) > 0 ? number(variant.maxGuests) : Infinity,
+    price: number(variant.price),
+  }));
+  for (const variant of normalized) {
+    if (variant.price <= 0) return w("validation_condition_price");
+    if (variant.from > variant.to) return w("validation_condition_dates");
+    if (variant.min > variant.max) return w("validation_condition_guests");
+  }
+  for (let left = 0; left < normalized.length; left += 1) {
+    for (let right = left + 1; right < normalized.length; right += 1) {
+      const dateOverlap = normalized[left].from <= normalized[right].to && normalized[right].from <= normalized[left].to;
+      const guestOverlap = normalized[left].min <= normalized[right].max && normalized[right].min <= normalized[left].max;
+      if (dateOverlap && guestOverlap) return w("validation_condition_overlap");
+    }
+  }
+  return "";
+}
 
 async function fetchJSON(path, init = {}) {
   const base = import.meta.env.VITE_API_BASE_URL || "";
@@ -62,6 +86,7 @@ const blankForm = () => ({
   fullDayHours: "8",
   fullDayPrice: "",
   extraHourPrice: "",
+  rateVariants: [],
 });
 
 function pricingLabel(service, w) {
@@ -199,6 +224,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     if ((transportCategory(current.category) || (guideCategory(current.category) && current.transportIncluded)) && !String(current.vehicleModel || "").trim()) return w("validation_vehicle");
     if (current.pricingMode === "packages" && (number(current.halfDayPrice) <= 0 || number(current.fullDayPrice) <= 0)) return w("validation_package_prices");
     if (current.pricingMode !== "packages" && number(current.price) <= 0) return current.pricingMode === "hourly" ? w("validation_hourly_price") : w("validation_price");
+    if (current.pricingMode !== "packages") {
+      const variantsError = validateRateVariants(current.rateVariants, w);
+      if (variantsError) return variantsError;
+    }
     return "";
   }
 
@@ -221,6 +250,14 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       full_day_price: number(current.fullDayPrice),
       extra_hour_price: number(current.extraHourPrice),
     } : {}),
+    rate_variants: current.pricingMode === "packages" ? [] : (current.rateVariants || []).map((variant) => ({
+      id: variant.id,
+      valid_from: variant.validFrom || null,
+      valid_to: variant.validTo || null,
+      min_guests: Math.max(1, number(variant.minGuests) || 1),
+      max_guests: number(variant.maxGuests) > 0 ? number(variant.maxGuests) : null,
+      price: number(variant.price),
+    })).filter((variant) => variant.price > 0),
   });
 
   async function addService() {
@@ -296,6 +333,14 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       fullDayHours: details.full_day_hours || "8",
       fullDayPrice: details.full_day_price || "",
       extraHourPrice: details.extra_hour_price || "",
+      rateVariants: Array.isArray(details.rate_variants) ? details.rate_variants.map((variant) => ({
+        id: variant.id || globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
+        validFrom: variant.valid_from || "",
+        validTo: variant.valid_to || "",
+        minGuests: variant.min_guests || "1",
+        maxGuests: variant.max_guests || "",
+        price: variant.price || "",
+      })) : [],
     });
   }
 
@@ -441,6 +486,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
               {form.pricingMode === "fixed" && <div className="grid gap-4 sm:grid-cols-2"><MoneyField label={w("price_per_service")} value={form.price} onChange={(value) => setField("price", value)} /><ReadOnlyCurrency label={w("currency")} /></div>}
               {form.pricingMode === "hourly" && <div className="grid gap-4 sm:grid-cols-3"><MoneyField label={w("price_per_hour")} value={form.price} onChange={(value) => setField("price", value)} /><NumberField label={w("minimum_hours")} value={form.minimumHours} onChange={(value) => setField("minimumHours", value)} /><ReadOnlyCurrency label={w("currency")} /></div>}
               {form.pricingMode === "packages" && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={form.halfDayHours} onChange={(value) => setField("halfDayHours", value)} /><MoneyField label={w("half_day_price")} value={form.halfDayPrice} onChange={(value) => setField("halfDayPrice", value)} /><NumberField label={w("full_day_hours")} value={form.fullDayHours} onChange={(value) => setField("fullDayHours", value)} /><MoneyField label={w("full_day_price")} value={form.fullDayPrice} onChange={(value) => setField("fullDayPrice", value)} /><MoneyField label={w("extra_hour")} value={form.extraHourPrice} onChange={(value) => setField("extraHourPrice", value)} /></div>}
+              {form.pricingMode !== "packages" && <RateVariantsEditor variants={form.rateVariants} onChange={(rateVariants) => setField("rateVariants", rateVariants)} w={w} />}
             </FormStep>
           </div>
 
@@ -573,6 +619,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                       {draft.pricingMode === "hourly" && <NumberField label={w("minimum_hours")} value={draft.minimumHours} onChange={(value) => setDraft({ ...draft, minimumHours: value })} />}
                     </div>
                     {draft.pricingMode === "packages" && <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={draft.halfDayHours} onChange={(value) => setDraft({ ...draft, halfDayHours: value })} /><MoneyField label={w("half_day_price")} value={draft.halfDayPrice} onChange={(value) => setDraft({ ...draft, halfDayPrice: value })} /><NumberField label={w("full_day_hours")} value={draft.fullDayHours} onChange={(value) => setDraft({ ...draft, fullDayHours: value })} /><MoneyField label={w("full_day_price")} value={draft.fullDayPrice} onChange={(value) => setDraft({ ...draft, fullDayPrice: value })} /><MoneyField label={w("extra_hour")} value={draft.extraHourPrice} onChange={(value) => setDraft({ ...draft, extraHourPrice: value })} /></div>}
+                    {draft.pricingMode !== "packages" && <RateVariantsEditor compact variants={draft.rateVariants || []} onChange={(rateVariants) => setDraft({ ...draft, rateVariants })} w={w} />}
                   </div>
                   <div className="mt-5 flex justify-between gap-3 border-t border-slate-200 pt-4">
                     <button type="button" onClick={() => setPendingDelete(row)} className="h-10 rounded-md border border-rose-200 px-4 text-sm font-semibold text-rose-700 hover:bg-rose-50">{w("delete")}</button>
@@ -606,6 +653,26 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
 function MoneyField({ label, value, onChange }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<div className="mt-1 flex h-11 overflow-hidden rounded-md border border-slate-300 bg-white"><input inputMode="decimal" value={value} onChange={(event) => onChange(event.target.value.replace(",", ".").replace(/[^\d.]/g, ""))} placeholder="0" className="min-w-0 flex-1 px-3 font-normal outline-none" /><span className="flex items-center border-l border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-600">UZS</span></div></label>;
+}
+function RateVariantsEditor({ variants, onChange, w, compact = false }) {
+  const update = (index, key, value) => onChange(variants.map((variant, current) => current === index ? { ...variant, [key]: value } : variant));
+  return <div className={`${compact ? "mt-4" : "mt-5"} border-t border-slate-200 pt-4`}>
+    <div className="flex flex-wrap items-start justify-between gap-3"><div><h5 className="text-sm font-bold text-slate-900">{w("price_conditions")}</h5><p className="mt-0.5 text-xs text-slate-500">{w("price_conditions_hint")}</p></div><button type="button" onClick={() => onChange([...variants, blankRateVariant()])} className="inline-flex h-9 items-center gap-2 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"><Plus size={16} />{w("add_price_condition")}</button></div>
+    {variants.length > 0 && <div className="mt-3 space-y-3">{variants.map((variant, index) => <div key={variant.id || index} className="grid gap-3 border-l-2 border-orange-400 bg-orange-50/40 p-3 sm:grid-cols-2 xl:grid-cols-[1fr_1fr_110px_110px_1fr_40px]">
+      <DateField label={w("valid_from")} value={variant.validFrom} onChange={(value) => update(index, "validFrom", value)} />
+      <DateField label={w("valid_to")} value={variant.validTo} onChange={(value) => update(index, "validTo", value)} />
+      <NumberField label={w("min_guests")} value={variant.minGuests} onChange={(value) => update(index, "minGuests", value)} />
+      <OptionalNumberField label={w("max_guests")} value={variant.maxGuests} onChange={(value) => update(index, "maxGuests", value)} />
+      <MoneyField label={w("condition_price")} value={variant.price} onChange={(value) => update(index, "price", value)} />
+      <button type="button" onClick={() => onChange(variants.filter((_, current) => current !== index))} title={w("delete_condition")} className="mt-6 grid h-10 w-10 place-items-center rounded-md text-rose-600 hover:bg-rose-50"><Trash2 size={16} /></button>
+    </div>)}</div>}
+  </div>;
+}
+function DateField({ label, value, onChange }) {
+  return <label className="text-xs font-semibold text-slate-600">{label}<input type="date" value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal" /></label>;
+}
+function OptionalNumberField({ label, value, onChange }) {
+  return <label className="text-xs font-semibold text-slate-600">{label}<input type="number" min="1" value={value} placeholder="∞" onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal" /></label>;
 }
 function NumberField({ label, value, onChange }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<input type="number" min="1" value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" /></label>;

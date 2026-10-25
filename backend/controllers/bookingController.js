@@ -484,7 +484,7 @@ const createBooking = async (req, res) => {
     let publishedTourBuilderRate = null;
     if (isTourBuilder && tourBuilderKind !== "hotel" && Number.isInteger(providerServiceId) && providerServiceId > 0) {
       const rateResult = await pool.query(
-        `SELECT id, title, price, currency, category
+        `SELECT id, title, price, currency, category, details
            FROM provider_services
           WHERE id=$1 AND provider_id=$2 AND is_active=TRUE AND price > 0
           LIMIT 1`,
@@ -506,15 +506,24 @@ const createBooking = async (req, res) => {
           error: "provider_service_type_mismatch",
         });
       }
+      const { quoteProviderService } = require("../utils/providerServicePricing");
+      const quoted = quoteProviderService({
+        service: rate,
+        dates: days,
+        pax: Number(req.body?.pax_adult || bag.pax_adult || 0) + Number(req.body?.pax_child || bag.pax_child || 0),
+        timeSlots: Array.isArray(req.body?.time_slots) ? req.body.time_slots : (Array.isArray(bag.time_slots) ? bag.time_slots : []),
+      });
       publishedTourBuilderRate = {
-        amount: Number(rate.price) * new Set(days).size,
-        unitAmount: Number(rate.price),
-        units: new Set(days).size,
+        amount: quoted.amount,
+        unitAmount: quoted.unitAmount,
+        units: quoted.units,
         currency: rate.currency || "UZS",
         title: rate.title || null,
+        breakdown: quoted.breakdown,
       };
       bag.provider_service_id = Number(rate.id);
       bag.fixed_catalog_rate = true;
+      bag.provider_rate_snapshot = publishedTourBuilderRate.breakdown;
     }
     const initialStatus = managedHotelPrice ? "awaiting_payment" : "pending";
 
@@ -542,7 +551,7 @@ const createBooking = async (req, res) => {
         publishedMarketplaceRate?.title
           ? `Опубликованная цена Marketplace: ${publishedMarketplaceRate.title} (${publishedMarketplaceRate.unitAmount} × ${publishedMarketplaceRate.units} дн.)`
           : publishedTourBuilderRate?.title
-          ? `Опубликованный тариф Tour Builder: ${publishedTourBuilderRate.title} (${publishedTourBuilderRate.unitAmount} × ${publishedTourBuilderRate.units} дн.)`
+          ? `Тариф Tour Builder зафиксирован: ${publishedTourBuilderRate.title}, ${publishedTourBuilderRate.amount} ${publishedTourBuilderRate.currency}`
           : "Цена зафиксирована по опубликованному тарифу Tour Builder"
       );
       if (managedHotelPrice && cols.hold_until) {

@@ -2170,6 +2170,11 @@ const createProviderService = async (req, res) => {
       return sendInvalidProviderServiceCategory(res, providerType, category);
     }
 
+    const rateVariantError = require("../utils/providerServicePricing").validateRateVariants(details);
+    if (rateVariantError) {
+      return res.status(400).json({ code: rateVariantError, message: "Некорректные условия цены" });
+    }
+
     const duplicateId = await findProviderServiceDuplicate(providerId, {
       category,
       details,
@@ -2230,6 +2235,10 @@ const patchProviderService = async (req, res) => {
     const nextDetails = Object.prototype.hasOwnProperty.call(req.body, "details")
       ? patch.details
       : current.details || {};
+    const rateVariantError = require("../utils/providerServicePricing").validateRateVariants(nextDetails);
+    if (rateVariantError) {
+      return res.status(400).json({ code: rateVariantError, message: "Некорректные условия цены" });
+    }
     const nextVehicle = isTransportCategory(effectiveCategory)
       ? String(req.body.vehicle_model || nextDetails.vehicle_model || current.vehicle_model || "").trim() || null
       : null;
