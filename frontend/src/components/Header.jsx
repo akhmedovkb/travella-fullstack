@@ -7,6 +7,7 @@ import { useTranslation } from "react-i18next";
 import { apiProviderFavorites } from "../api/providerFavorites";
 import AdminQuickTools from "./admin/AdminQuickTools";
 import { LockKeyhole, LogOut } from "lucide-react";
+import ConfirmModal from "./ConfirmModal";
 
 /* --- Inline SVG icons --- */
 const IconChecklist = (p) => (
@@ -231,6 +232,7 @@ export default function Header() {
   const productsRef = useRef(null);
 
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [logoutOpen, setLogoutOpen] = useState(false);
 
   const [counts, setCounts] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -465,7 +467,6 @@ export default function Header() {
   };
 
   const handleProviderLogout = () => {
-    if (!window.confirm(t("provider_profile_ui.logout_confirm"))) return;
     localStorage.removeItem("token");
     localStorage.removeItem("providerToken");
     localStorage.removeItem("provider_id");
@@ -801,7 +802,7 @@ export default function Header() {
                 </button>
                 <button
                   type="button"
-                  onClick={handleProviderLogout}
+                  onClick={() => setLogoutOpen(true)}
                   className="inline-flex h-9 w-9 items-center justify-center rounded-lg text-red-300 transition hover:bg-red-500/15 hover:text-red-200 focus:outline-none focus:ring-2 focus:ring-red-400"
                   aria-label={t("logout")}
                   title={t("logout")}
@@ -868,7 +869,7 @@ export default function Header() {
                     <button type="button" onClick={() => { openProviderPassword(); closeNavigationMenus(); }} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-white/85 transition hover:bg-white/10 hover:text-white">
                       <LockKeyhole aria-hidden="true" className="h-4 w-4" />{t("change_password")}
                     </button>
-                    <button type="button" onClick={handleProviderLogout} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/15 hover:text-red-200">
+                    <button type="button" onClick={() => { setLogoutOpen(true); closeNavigationMenus(); }} className="flex w-full items-center gap-3 px-3 py-3 text-left text-sm font-semibold text-red-300 transition hover:bg-red-500/15 hover:text-red-200">
                       <LogOut aria-hidden="true" className="h-4 w-4" />{t("logout")}
                     </button>
                   </RowGroupDark>
@@ -927,6 +928,16 @@ export default function Header() {
           </nav>
         </div>
       </div>
+      <ConfirmModal
+        open={logoutOpen}
+        title={t("logout")}
+        message={t("provider_profile_ui.logout_confirm")}
+        confirmLabel={t("logout")}
+        cancelLabel={t("cancel", { defaultValue: "Отмена" })}
+        danger
+        onClose={() => setLogoutOpen(false)}
+        onConfirm={handleProviderLogout}
+      />
     </header>
   );
 }
