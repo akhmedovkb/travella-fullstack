@@ -159,13 +159,15 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
           <h3 className="text-base font-bold text-slate-950">{t("tb.timeline.title")}</h3>
           <p className="text-xs text-slate-500">{t("tb.timeline.subtitle")}</p>
         </div>
-        <button type="button" onClick={add} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:border-orange-300 hover:bg-orange-50">
-          {t("tb.timeline.add")}
-        </button>
+        {normalized.length > 0 && (
+          <button type="button" onClick={add} className="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm font-semibold text-slate-800 hover:border-orange-300 hover:bg-orange-50">
+            {t("tb.timeline.add")}
+          </button>
+        )}
       </header>
 
       {normalized.length === 0 ? (
-        <button type="button" onClick={add} className="m-4 flex min-h-28 w-[calc(100%-2rem)] items-center justify-center rounded-md border border-dashed border-slate-300 text-sm font-semibold text-slate-500 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700">
+        <button type="button" onClick={add} className="mx-3 my-2 flex min-h-16 w-[calc(100%-1.5rem)] items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50/60 px-4 text-sm font-semibold text-slate-600 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700">
           {t("tb.timeline.create_first")}
         </button>
       ) : (

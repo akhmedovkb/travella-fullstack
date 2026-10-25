@@ -2433,7 +2433,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
   /* ---------------- render ---------------- */
   return (
     <main className="min-h-screen overflow-x-hidden bg-slate-100 px-2 py-3 sm:px-3 lg:px-4 lg:py-4 2xl:px-6">
-      <div className="mx-auto w-full max-w-[1920px] space-y-4 bg-white px-3 py-4 sm:px-4 lg:px-5 lg:py-5 2xl:px-6">
+      <div className="mx-auto w-full max-w-[1680px] space-y-4 bg-white px-3 py-4 sm:px-4 lg:px-5 lg:py-5 2xl:px-6">
         <div className="flex flex-wrap items-end justify-between gap-3 border-b border-slate-200 pb-4">
           <div>
             <h1 className="text-2xl font-bold text-slate-950">{t('tb.title')}</h1>
@@ -2788,7 +2788,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
                 key={k}
                 className="space-y-3 rounded-lg border border-slate-200 bg-white p-3"
               >
-                <div className="-mx-3 -mt-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-3 lg:grid-cols-[auto_minmax(220px,1fr)_auto_minmax(130px,auto)_minmax(140px,auto)_auto_auto]">
+                <div className="-mx-3 -mt-3 grid grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 rounded-t-lg border-b border-slate-200 bg-slate-50 px-3 py-3 lg:grid-cols-[auto_minmax(220px,1fr)_auto_minmax(130px,auto)_minmax(140px,auto)_auto_auto] xl:grid-cols-[auto_minmax(360px,720px)_minmax(0,1fr)_minmax(130px,auto)_minmax(140px,auto)_auto_auto]">
                   <div className="col-start-1 row-start-1 grid h-10 w-10 shrink-0 place-items-center rounded-md bg-slate-950 text-sm font-bold text-white">D{i + 1}</div>
                   <input
                     className="col-start-2 row-start-1 h-10 min-w-0 rounded-md border border-slate-300 bg-white px-3 text-sm font-semibold outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 lg:min-w-[220px]"
