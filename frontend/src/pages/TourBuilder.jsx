@@ -3979,7 +3979,7 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
       <HotelQuoteConfirmModal
         open={!!bookingConfirmation}
         quotes={bookingConfirmation?.hotelQuoteSnapshots || []}
-        requestCount={bookingConfirmation?.payloads?.length || 0}
+        requestCount={bookingConfirmation?.payloads?.filter((payload) => payload?.tb_kind !== "hotel").length || 0}
         tourEndDate={range?.to ? ymd(range.to) : ""}
         sending={sending}
         onClose={() => !sending && setBookingConfirmation(null)}
