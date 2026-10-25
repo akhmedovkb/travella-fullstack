@@ -33,7 +33,14 @@ async function fetchJSON(path, init = {}) {
       ...(init.headers || {}),
     },
   });
-  if (!response.ok) throw new Error((await response.text().catch(() => "")) || `HTTP ${response.status}`);
+  if (!response.ok) {
+    const raw = await response.text().catch(() => "");
+    let payload = {};
+    try { payload = JSON.parse(raw); } catch { payload = {}; }
+    const error = new Error(payload.message || raw || `HTTP ${response.status}`);
+    Object.assign(error, payload, { status: response.status });
+    throw error;
+  }
   return response.status === 204 ? null : response.json();
 }
 
@@ -221,8 +228,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       setFormError(error);
       return tError(error);
     }
-    const duplicate = rows.some((row) => duplicateKey(row) === formDuplicateKey(form));
-    if (duplicate) return tError(w("duplicate"));
+    const duplicate = rows.find((row) => duplicateKey(row) === formDuplicateKey(form));
+    if (duplicate) return openExistingService(duplicate);
     setSaving(true);
     try {
       const created = await fetchJSON(`/api/providers/${pid}/services`, {
@@ -244,6 +251,11 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       setFormError("");
       tSuccess(w("created"));
     } catch (error) {
+      if (error.code === "duplicate_provider_service") {
+        const existing = rows.find((row) => Number(row.id) === Number(error.duplicateId))
+          || rows.find((row) => duplicateKey(row) === formDuplicateKey(form));
+        if (existing) return openExistingService(existing);
+      }
       tError(w("create_error", { error: error.message }));
     } finally {
       setSaving(false);
@@ -286,13 +298,20 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     });
   }
 
+  function openExistingService(row) {
+    if (!row) return;
+    beginEdit(row);
+    window.setTimeout(() => document.getElementById(`provider-service-${row.id}`)?.scrollIntoView({ behavior: "smooth", block: "center" }), 0);
+    tError(w("duplicate_opened"));
+  }
+
   async function saveEdit(row) {
     const error = validate(draft);
     if (error) return tError(error);
-    const duplicate = rows.some(
+    const duplicate = rows.find(
       (item) => item.id !== row.id && duplicateKey(item) === formDuplicateKey(draft)
     );
-    if (duplicate) return tError(w("duplicate"));
+    if (duplicate) return openExistingService(duplicate);
     setSaving(true);
     try {
       await patchService(row.id, {
@@ -475,7 +494,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
             const draftIsGuide = Boolean(expanded && draft && guideCategory(draft.category));
             const draftUsesVehicle = Boolean(expanded && draft && (transportCategory(draft.category) || (draftIsGuide && draft.transportIncluded)));
             const draftIsIntercity = Boolean(expanded && draft && INTERCITY_CATEGORIES.has(draft.category));
-            return <div key={row.id} className="py-4">
+            return <div id={`provider-service-${row.id}`} key={row.id} className={`scroll-mt-24 py-4 ${expanded ? "bg-orange-50/30" : ""}`}>
               <div className="grid items-center gap-4 md:grid-cols-[minmax(240px,1.5fr)_minmax(220px,1fr)_120px_auto]">
                 <div><div className="font-semibold text-slate-950">{storedServiceTitle(row)}</div><div className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm text-slate-500"><span>{serviceLabel(row.category)}{row.details?.vehicle_model ? ` · ${row.details.vehicle_model}` : ""}{row.details?.seats ? ` · ${w("seats_count", { count: row.details.seats })}` : ""}</span>{guideCategory(row.category) && <span className={`rounded px-1.5 py-0.5 text-[11px] font-semibold ${includesTransport(row) ? "bg-blue-50 text-blue-700" : "bg-violet-50 text-violet-700"}`}>{includesTransport(row) ? f("transport_included") : f("guide_only")}</span>}</div></div>
                 <div><div className="font-semibold text-slate-900">{pricingLabel(row, w)}</div><div className="text-xs text-slate-500">{w("tour_builder_rate")}</div></div>

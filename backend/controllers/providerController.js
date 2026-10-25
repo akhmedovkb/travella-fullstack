@@ -2184,6 +2184,9 @@ const createProviderService = async (req, res) => {
     res.status(201).json(ins.rows[0]);
   } catch (err) {
     console.error("createProviderService error:", err);
+    if (err?.code === "23505" && err?.constraint === "ux_provider_services_business_identity") {
+      return sendDuplicateProviderService(res, null);
+    }
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
@@ -2297,6 +2300,9 @@ const patchProviderService = async (req, res) => {
     res.json(upd.rows[0]);
   } catch (err) {
     console.error("patchProviderService error:", err);
+    if (err?.code === "23505" && err?.constraint === "ux_provider_services_business_identity") {
+      return sendDuplicateProviderService(res, null);
+    }
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
@@ -2362,6 +2368,9 @@ const bulkCreateProviderServices = async (req, res) => {
     res.status(201).json({ items: q.rows });
   } catch (err) {
     console.error("bulkCreateProviderServices error:", err);
+    if (err?.code === "23505" && err?.constraint === "ux_provider_services_business_identity") {
+      return sendDuplicateProviderService(res, null);
+    }
     res.status(500).json({ message: "Ошибка сервера" });
   }
 };
