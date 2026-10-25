@@ -153,8 +153,8 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
   };
 
   return (
-    <section data-tour-event-day={dayKey} className="overflow-hidden rounded-md border border-slate-200 bg-white">
-      <header className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-50/70 px-3 py-3">
+    <section data-tour-event-day={dayKey} className="bg-white">
+      <header className="flex flex-wrap items-center justify-between gap-3 px-1 py-2">
         <div>
           <h3 className="text-base font-bold text-slate-950">{t("tb.timeline.title")}</h3>
           <p className="text-xs text-slate-500">{t("tb.timeline.subtitle")}</p>
@@ -167,11 +167,11 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
       </header>
 
       {normalized.length === 0 ? (
-        <button type="button" onClick={add} className="mx-3 my-2 flex min-h-16 w-[calc(100%-1.5rem)] items-center justify-center rounded-md border border-dashed border-slate-300 bg-slate-50/60 px-4 text-sm font-semibold text-slate-600 hover:border-orange-300 hover:bg-orange-50 hover:text-orange-700">
+        <button type="button" onClick={add} className="my-2 flex min-h-16 w-full items-center justify-center rounded-md bg-slate-50 px-4 text-sm font-semibold text-slate-600 ring-1 ring-inset ring-slate-200 hover:bg-orange-50 hover:text-orange-700 hover:ring-orange-200">
           {t("tb.timeline.create_first")}
         </button>
       ) : (
-        <div className="divide-y divide-slate-100 px-1 sm:px-3">
+        <div className="space-y-2 py-2">
           {normalized.map((item) => {
             const active = item.id === activeId;
             const invalid = hasOverlap(item, normalized);
@@ -191,7 +191,7 @@ export default function TourDayTimeline({ dayKey, items, onChange, selectedId, o
                     {isHotel ? t("tb.timeline.nights", { count: item.end_day_offset || 1 }) : invalid ? t("tb.timeline.check_interval") : durationText(item.start_time, item.end_time, t)}
                   </div>
                 </div>
-                <div className={`min-w-0 rounded-md border px-3 py-2.5 transition ${active ? "border-orange-500 bg-orange-50/40 ring-1 ring-orange-200" : "border-slate-200 bg-white hover:border-slate-400"}`}>
+                <div className={`min-w-0 rounded-md border-l-4 px-3 py-3 transition ${active ? "border-orange-500 bg-orange-50/60" : "border-transparent bg-slate-50 hover:bg-slate-100"}`}>
                   <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
                   <button type="button" className="min-w-0 flex-1 text-left" onClick={() => { select(item.id); onExpandedChange?.(null); }}>
                     <div className="flex items-center justify-between gap-3">
