@@ -100,6 +100,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const [deletingId, setDeletingId] = useState(null);
   const [pendingDelete, setPendingDelete] = useState(null);
   const [draft, setDraft] = useState(null);
+  const [formError, setFormError] = useState("");
 
   const fleet = useMemo(() => (Array.isArray(profile?.car_fleet) ? profile.car_fleet.filter((car) => car && car.is_active !== false) : []), [profile]);
   const cities = useMemo(() => (Array.isArray(profile?.city_slugs) ? profile.city_slugs : []), [profile]);
@@ -144,6 +145,15 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   }, [providerType]);
   const activeCategoryGroup = categoryGroups.find((group) => group.id === form.catalogGroup)
     || catalogGroup(form.category, categoryGroups);
+  const stepOneComplete = Boolean(form.category);
+  const locationComplete = isIntercity
+    ? Boolean(form.originCity && form.destinationCity && String(form.originCity).trim().toLowerCase() !== String(form.destinationCity).trim().toLowerCase())
+    : Boolean(form.citySlug);
+  const vehicleComplete = !usesVehicle || Boolean(String(form.vehicleModel || "").trim());
+  const stepTwoComplete = stepOneComplete && locationComplete && vehicleComplete;
+  const stepThreeComplete = stepTwoComplete && (form.pricingMode === "packages"
+    ? number(form.halfDayPrice) > 0 && number(form.fullDayPrice) > 0
+    : number(form.price) > 0);
 
   async function load() {
     if (!pid) return;
@@ -161,6 +171,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   }
 
   useEffect(() => { load(); }, [pid]);
+
+  useEffect(() => { setFormError(""); }, [form]);
 
   const setField = (key, value) => setForm((current) => ({ ...current, [key]: value }));
   const applyVehicle = (value) => {
@@ -205,7 +217,10 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
   async function addService() {
     const error = validate(form);
-    if (error) return tError(error);
+    if (error) {
+      setFormError(error);
+      return tError(error);
+    }
     const duplicate = rows.some((row) => duplicateKey(row) === formDuplicateKey(form));
     if (duplicate) return tError(w("duplicate"));
     setSaving(true);
@@ -226,6 +241,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         if (refreshedProfile) setProfile(refreshedProfile);
       }
       setForm(blankForm());
+      setFormError("");
       tSuccess(w("created"));
     } catch (error) {
       tError(w("create_error", { error: error.message }));
@@ -367,14 +383,14 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
         {!cities.length && <div className="mb-5 rounded-md border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">{w("add_profile_locations")}</div>}
         <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
           <div className="overflow-hidden rounded-lg border border-slate-200 bg-white">
-            <FormStep icon={Layers3} number="1" title={w("choose_service")} description={w("catalog_same_for_all")} stepLabel={w("step")}>
+            <FormStep icon={Layers3} number="1" title={w("choose_service")} description={w("catalog_same_for_all")} stepLabel={w("step")} status={stepOneComplete ? "complete" : "current"} statusLabels={{ complete: w("step_complete"), current: w("step_current"), pending: w("step_pending") }}>
               <div className="grid gap-4 md:grid-cols-2">
                 <SelectField label={w("category")} value={activeCategoryGroup?.id || ""} onChange={(value) => setForm((current) => ({ ...current, catalogGroup: value, category: "", title: "" }))} options={categoryGroups.map((group) => ({ value: group.id, label: groupLabel(group) }))} placeholder={w("choose_category")} />
                 <SelectField label={w("service")} value={form.category} disabled={!activeCategoryGroup} onChange={(value) => setField("category", value)} options={(activeCategoryGroup?.services || []).map((service) => ({ value: service.id, label: serviceLabel(service.id) }))} placeholder={w("choose_specific_service")} />
               </div>
             </FormStep>
 
-            <FormStep icon={MapPin} number="2" title={isIntercity ? w("specify_route") : w("choose_location")} description={w("profile_cities_only")} stepLabel={w("step")}>
+            <FormStep icon={MapPin} number="2" title={isIntercity ? w("specify_route") : w("choose_location")} description={w("profile_cities_only")} stepLabel={w("step")} disabled={!stepOneComplete} status={stepTwoComplete ? "complete" : stepOneComplete ? "current" : "pending"} statusLabels={{ complete: w("step_complete"), current: w("step_current"), pending: w("step_pending") }}>
               <div className={`grid gap-4 ${isIntercity ? "md:grid-cols-2" : "md:max-w-md"}`}>
                 {isIntercity ? <>
                   <CitySelect label={w("from")} value={form.originCity} cities={cities} onChange={(value) => setForm((current) => ({ ...current, originCity: value, destinationCity: current.destinationCity === value ? "" : current.destinationCity }))} placeholder={w("choose_city")} />
@@ -398,7 +414,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
               </div>}
             </FormStep>
 
-            <FormStep icon={WalletCards} number="3" title={w("specify_price")} description={w("duration_calculation")} stepLabel={w("step")}>
+            <FormStep icon={WalletCards} number="3" title={w("specify_price")} description={w("duration_calculation")} stepLabel={w("step")} disabled={!stepTwoComplete} status={stepThreeComplete ? "complete" : stepTwoComplete ? "current" : "pending"} statusLabels={{ complete: w("step_complete"), current: w("step_current"), pending: w("step_pending") }}>
               <div className="mb-4 inline-flex max-w-full flex-wrap rounded-md border border-slate-300 bg-slate-50 p-1" role="group" aria-label={w("rate_type")}>
                 {[['fixed',w('per_service')],['hourly',w('per_hour')],['packages',w('packages')]].map(([key,label]) => <button key={key} type="button" onClick={() => setField("pricingMode", key)} className={`h-9 rounded px-4 text-sm font-semibold ${form.pricingMode === key ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-white'}`}>{label}</button>)}
               </div>
@@ -411,7 +427,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
           <aside className="overflow-hidden rounded-lg bg-slate-950 text-white xl:sticky xl:top-20 xl:z-10 xl:self-start">
             <div className="border-b border-white/10 px-5 py-4"><div className="text-xs font-bold uppercase text-orange-400">{w("preview")}</div><div className="mt-1 text-xs text-slate-400">{w("preview_hint")}</div></div>
             <div className="px-5 py-5"><div className="text-lg font-bold leading-snug">{serviceTitle(form)}</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-300"><MapPin size={16} />{isIntercity ? `${cityLabel(form.originCity) || w("from")} → ${cityLabel(form.destinationCity) || w("to")}` : cityLabel(form.citySlug) || w("location_not_selected")}</div><div className="mt-6 border-t border-white/10 pt-4"><div className="text-xs uppercase text-slate-400">{w("example_calculation")}</div><div className="mt-1 text-sm text-slate-300">{preview.duration} · {preview.rule}</div><div className="mt-2 text-2xl font-bold">{money(preview.total)} <span className="text-base font-semibold text-slate-300">UZS</span></div></div></div>
-            <div className="px-5 pb-5"><button type="button" onClick={addService} disabled={saving || !cities.length} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-5 font-bold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={19} />{saving ? w("saving") : w("add_rate")}</button></div>
+            <div className="px-5 pb-5">{formError && <div role="alert" className="mb-3 border-l-2 border-amber-400 bg-white/5 px-3 py-2 text-sm font-semibold text-amber-200">{formError}</div>}<button type="button" onClick={addService} disabled={saving || !cities.length || !stepThreeComplete} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-5 font-bold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={19} />{saving ? w("saving") : stepThreeComplete ? w("add_rate") : w("complete_steps")}</button><p className="mt-2 text-center text-xs text-slate-400">{stepThreeComplete ? w("ready_to_publish") : w("complete_steps_hint")}</p></div>
           </aside>
         </div>
       </section>
@@ -577,8 +593,10 @@ function NumberField({ label, value, onChange }) {
 function ReadOnlyCurrency({ label }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<input value="UZS" readOnly className="mt-1 h-11 w-full rounded-md border border-slate-200 bg-slate-50 px-3 font-normal text-slate-600" /></label>;
 }
-function FormStep({ icon: Icon, number, title, description, stepLabel, children }) {
-  return <section className="border-b border-slate-200 p-5 last:border-b-0"><div className="mb-4 flex items-start gap-3"><div className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-slate-950 text-white"><Icon size={18} /></div><div className="min-w-0"><div className="flex items-center gap-2"><span className="text-xs font-bold text-orange-600">{stepLabel} {number}</span><h4 className="font-bold text-slate-950">{title}</h4></div><p className="mt-0.5 text-sm text-slate-500">{description}</p></div></div>{children}</section>;
+function FormStep({ icon: Icon, number, title, description, stepLabel, children, disabled = false, status = "pending", statusLabels }) {
+  const complete = status === "complete";
+  const current = status === "current";
+  return <section aria-disabled={disabled} className={`border-b border-slate-200 p-5 last:border-b-0 ${disabled ? "bg-slate-50/70" : "bg-white"}`}><div className="flex items-start gap-3"><div className={`grid h-9 w-9 shrink-0 place-items-center rounded-md ${complete ? "bg-emerald-600 text-white" : current ? "bg-slate-950 text-white" : "bg-slate-200 text-slate-500"}`}>{complete ? <CheckCircle2 size={18} /> : <Icon size={18} />}</div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className={`text-xs font-bold ${current ? "text-orange-600" : "text-slate-500"}`}>{stepLabel} {number}</span><h4 className={`font-bold ${disabled ? "text-slate-500" : "text-slate-950"}`}>{title}</h4><span className={`ml-auto text-xs font-semibold ${complete ? "text-emerald-700" : current ? "text-orange-700" : "text-slate-400"}`}>{statusLabels?.[status]}</span></div><p className="mt-0.5 text-sm text-slate-500">{description}</p></div></div>{!disabled && <div className="mt-4">{children}</div>}</section>;
 }
 function SelectField({ label, value, onChange, options, placeholder, disabled = false }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<select value={value} onChange={(event) => onChange(event.target.value)} disabled={disabled} className="mt-1 h-11 w-full rounded-md border border-slate-300 bg-white px-3 font-normal text-slate-900 outline-none focus:border-orange-400 focus:ring-2 focus:ring-orange-100 disabled:bg-slate-100 disabled:text-slate-400"><option value="">{placeholder}</option>{options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>;

@@ -79,9 +79,9 @@ export default function ProviderServicesTourBuilder() {
   const isAllowed = allowedTypes.includes(profile.type);
 
   return (
-    <main className="flex flex-col gap-4 md:gap-6 p-4 md:p-6 bg-gray-50 min-h-[calc(var(--vh,1vh)*100)] pb-[env(safe-area-inset-bottom)]">
-      <div className="w-full max-w-6xl mx-auto bg-white p-6 rounded-xl shadow-md">
-        <div className="flex items-center justify-between mb-4">
+    <main className="min-h-[calc(var(--vh,1vh)*100)] bg-gray-50 p-4 pb-[env(safe-area-inset-bottom)] md:p-6">
+      <div className="mx-auto w-full max-w-6xl">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
           <h1 className="text-2xl md:text-3xl font-bold">
             {t("provider_services_tourbuilder_title")}
           </h1>
@@ -102,7 +102,7 @@ export default function ProviderServicesTourBuilder() {
             {t("provider_services_tourbuilder_not_allowed")}
           </div>
         ) : (
-          <div className="mb-2">
+          <div>
             <ProviderServicesCard
               providerId={profile.id}
               providerType={profile.type}
