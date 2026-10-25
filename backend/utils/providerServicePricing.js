@@ -5,6 +5,8 @@ function validateRateVariants(details = {}) {
   const variants = Array.isArray(details.rate_variants) ? details.rate_variants : [];
   const pricingMode = String(details.pricing_mode || "fixed").toLowerCase();
   const holidayDates = Array.isArray(details?.surcharges?.holiday_dates) ? details.surcharges.holiday_dates : [];
+  const vatPercent = amount(details.vat_percent);
+  if (vatPercent < 0 || vatPercent > 100) return "vat_percent_invalid";
   if (holidayDates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(String(date)))) return "surcharge_holiday_dates_invalid";
   const normalized = variants.map((variant) => ({
     from: dateKey(variant.valid_from) || "0000-01-01",
@@ -109,7 +111,18 @@ function priceForDate(service, date, pax, timeSlots = [], residentType = "nrs") 
   }
   if (!priced) priced = { amount: basePrice, unitAmount: basePrice, variant };
   const surcharge = surchargeForDate(details, date, priced.amount, timeSlots);
-  return { ...priced, amount: priced.amount + surcharge.amount, surcharge };
+  const netAmount = priced.amount + surcharge.amount;
+  const vatPercent = Math.min(100, Math.max(0, amount(details.vat_percent)));
+  const vatAmount = netAmount * vatPercent / 100;
+  return {
+    ...priced,
+    amount: netAmount + vatAmount,
+    unitAmount: priced.unitAmount * (1 + vatPercent / 100),
+    netAmount,
+    vatPercent,
+    vatAmount,
+    surcharge,
+  };
 }
 
 function quoteProviderService({ service, dates = [], pax = 1, timeSlots = [], residentType = "nrs" }) {
@@ -119,7 +132,7 @@ function quoteProviderService({ service, dates = [], pax = 1, timeSlots = [], re
     amount: breakdown.reduce((total, item) => total + item.amount, 0),
     unitAmount: breakdown[0]?.unitAmount || amount(service?.price),
     units: uniqueDates.length,
-    breakdown: breakdown.map((item) => ({ date: item.date, amount: item.amount, unit_amount: item.unitAmount, variant_id: item.variant?.id || null, resident_type: residentType, surcharge_amount: item.surcharge?.amount || 0, surcharge_percent: item.surcharge?.percent || 0, surcharge_reasons: item.surcharge?.reasons || [] })),
+    breakdown: breakdown.map((item) => ({ date: item.date, amount: item.amount, net_amount: item.netAmount, unit_amount: item.unitAmount, vat_percent: item.vatPercent, vat_amount: item.vatAmount, variant_id: item.variant?.id || null, resident_type: residentType, surcharge_amount: item.surcharge?.amount || 0, surcharge_percent: item.surcharge?.percent || 0, surcharge_reasons: item.surcharge?.reasons || [] })),
   };
 }
 

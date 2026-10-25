@@ -76,3 +76,20 @@ test("adds night and holiday surcharges to the selected rate", () => {
   assert.equal(quote.amount, 1300);
   assert.deepEqual(quote.breakdown[0].surcharge_reasons, ["night", "holiday"]);
 });
+
+test("adds VAT after service surcharges and exposes the tax breakdown", () => {
+  const service = { price: 1000, details: {
+    pricing_mode: "fixed",
+    vat_percent: 12,
+    surcharges: { holiday_percent: 10, holiday_dates: ["2026-12-31"] },
+  } };
+  const quote = quoteProviderService({ service, dates: ["2026-12-31"], pax: 2 });
+  assert.equal(quote.amount, 1232);
+  assert.equal(quote.breakdown[0].net_amount, 1100);
+  assert.equal(quote.breakdown[0].vat_percent, 12);
+  assert.equal(quote.breakdown[0].vat_amount, 132);
+});
+
+test("rejects VAT outside the supported percentage range", () => {
+  assert.equal(validateRateVariants({ vat_percent: 101 }), "vat_percent_invalid");
+});

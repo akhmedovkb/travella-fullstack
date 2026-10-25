@@ -119,16 +119,19 @@ const blankForm = () => ({
   nightTo: "06:00",
   holidaySurchargePercent: "",
   holidayDates: "",
+  vatPercent: "",
   rateVariants: [],
 });
 
 function pricingLabel(service, w) {
   const details = serviceDetails(service);
-  if (details.pricing_mode === "hourly") return w("pricing_hourly_summary", { price: money(service.price), hours: details.minimum_hours || 1 });
+  const vat = Math.max(0, number(details.vat_percent));
+  const suffix = vat > 0 ? ` · ${w("vat_short", { percent: vat })}` : "";
+  if (details.pricing_mode === "hourly") return `${w("pricing_hourly_summary", { price: money(service.price), hours: details.minimum_hours || 1 })}${suffix}`;
   if (details.pricing_mode === "packages") {
-    return w("pricing_packages_summary", { halfHours: details.half_day_hours || 4, halfPrice: money(details.half_day_price), fullHours: details.full_day_hours || 8, fullPrice: money(details.full_day_price) });
+    return `${w("pricing_packages_summary", { halfHours: details.half_day_hours || 4, halfPrice: money(details.half_day_price), fullHours: details.full_day_hours || 8, fullPrice: money(details.full_day_price) })}${suffix}`;
   }
-  return w("pricing_fixed_summary", { price: money(service?.price) });
+  return `${w("pricing_fixed_summary", { price: money(service?.price) })}${suffix}`;
 }
 
 function rateConditionsSummary(service, w) {
@@ -190,6 +193,8 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
   const isNewDestination = isIntercity && Boolean(form.destinationCity)
     && !cities.some((city) => String(city).trim().toLowerCase() === String(form.destinationCity).trim().toLowerCase());
   const preview = calculatedPreview(form, w);
+  const previewVat = preview.total * Math.max(0, number(form.vatPercent)) / 100;
+  const previewTotal = preview.total + previewVat;
   const serviceLabel = (category) => t(`provider_services.items.${category}`, { defaultValue: LABELS[category] || category || "Услуга" });
   const groupLabel = (group) => t(`provider_services.groups.${group.id}`, { defaultValue: group.label });
   const serviceTitle = (current) => INTERCITY_CATEGORIES.has(current.category)
@@ -284,6 +289,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
     if (variantsError) return variantsError;
     const holidayDates = String(current.holidayDates || "").split(/[,;\s]+/).filter(Boolean);
     if (holidayDates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(date))) return w("validation_holiday_dates");
+    if (number(current.vatPercent) < 0 || number(current.vatPercent) > 100) return w("validation_vat_percent");
     return "";
   }
 
@@ -298,6 +304,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       ? { seats: Math.max(1, number(current.seats) || 1), vehicle_model: String(current.vehicleModel || "" ).trim(), max_guests: null, transport_included: Boolean(guideCategory(current.category) && current.transportIncluded) }
       : { seats: null, vehicle_model: null, max_guests: number(current.seats) > 0 ? number(current.seats) : null, transport_included: false }),
     pricing_mode: current.pricingMode,
+    vat_percent: Math.min(100, Math.max(0, number(current.vatPercent))),
     minimum_hours: Math.max(1, number(current.minimumHours) || 1),
     ...(current.pricingMode === "packages" ? {
       half_day_hours: Math.max(1, number(current.halfDayHours) || 4),
@@ -409,6 +416,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
       nightTo: firstStored(surcharges.night_to, surcharges.nightTo, "06:00"),
       holidaySurchargePercent: firstStored(surcharges.holiday_percent, surcharges.holidayPercent),
       holidayDates: Array.isArray(firstStored(surcharges.holiday_dates, surcharges.holidayDates)) ? firstStored(surcharges.holiday_dates, surcharges.holidayDates).join(", ") : firstStored(surcharges.holiday_dates, surcharges.holidayDates),
+      vatPercent: firstStored(details.vat_percent, details.vatPercent),
       rateVariants: Array.isArray(rateVariants) ? rateVariants.map((variant) => ({
         id: variant.id || globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2),
         audience: firstStored(variant.resident_type, variant.residentType, variant.audience, "all"),
@@ -563,6 +571,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
               {form.pricingMode === "fixed" && <div className="grid gap-4 sm:grid-cols-2"><MoneyField label={w("price_per_service")} value={form.price} onChange={(value) => setField("price", value)} /><ReadOnlyCurrency label={w("currency")} /></div>}
               {form.pricingMode === "hourly" && <div className="grid gap-4 sm:grid-cols-3"><MoneyField label={w("price_per_hour")} value={form.price} onChange={(value) => setField("price", value)} /><NumberField label={w("minimum_hours")} value={form.minimumHours} onChange={(value) => setField("minimumHours", value)} /><ReadOnlyCurrency label={w("currency")} /></div>}
               {form.pricingMode === "packages" && <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={form.halfDayHours} onChange={(value) => setField("halfDayHours", value)} /><MoneyField label={w("half_day_price")} value={form.halfDayPrice} onChange={(value) => setField("halfDayPrice", value)} /><NumberField label={w("full_day_hours")} value={form.fullDayHours} onChange={(value) => setField("fullDayHours", value)} /><MoneyField label={w("full_day_price")} value={form.fullDayPrice} onChange={(value) => setField("fullDayPrice", value)} /><MoneyField label={w("extra_hour")} value={form.extraHourPrice} onChange={(value) => setField("extraHourPrice", value)} /></div>}
+              <div className="mt-4 max-w-xs"><NumberField label={w("vat_percent")} value={form.vatPercent} onChange={(value) => setField("vatPercent", value)} min={0} max={100} suffix="%" /><p className="mt-1 text-xs text-slate-500">{w("vat_hint")}</p></div>
               <RateVariantsEditor variants={form.rateVariants} basePrice={form.price} basePackage={{ halfDayPrice: form.halfDayPrice, fullDayPrice: form.fullDayPrice, extraHourPrice: form.extraHourPrice, halfDayHours: form.halfDayHours, fullDayHours: form.fullDayHours }} pricingMode={form.pricingMode} onChange={(rateVariants) => setField("rateVariants", rateVariants)} w={w} />
               <SurchargesEditor value={form} onChange={setField} w={w} />
             </FormStep>
@@ -570,7 +579,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
 
           <aside className="overflow-hidden rounded-lg bg-slate-950 text-white xl:sticky xl:top-20 xl:z-10 xl:self-start">
             <div className="border-b border-white/10 px-5 py-4"><div className="text-xs font-bold uppercase text-orange-400">{w("preview")}</div><div className="mt-1 text-xs text-slate-400">{w("preview_hint")}</div></div>
-            <div className="px-5 py-5"><div className="text-lg font-bold leading-snug">{serviceTitle(form)}</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-300"><MapPin size={16} />{isIntercity ? `${cityLabel(form.originCity) || w("from")} → ${cityLabel(form.destinationCity) || w("to")}` : cityLabel(form.citySlug) || w("location_not_selected")}</div><div className="mt-6 border-t border-white/10 pt-4"><div className="text-xs uppercase text-slate-400">{w("example_calculation")}</div><div className="mt-1 text-sm text-slate-300">{preview.duration} · {preview.rule}</div><div className="mt-2 text-2xl font-bold">{money(preview.total)} <span className="text-base font-semibold text-slate-300">UZS</span></div></div></div>
+            <div className="px-5 py-5"><div className="text-lg font-bold leading-snug">{serviceTitle(form)}</div><div className="mt-4 flex items-center gap-2 text-sm text-slate-300"><MapPin size={16} />{isIntercity ? `${cityLabel(form.originCity) || w("from")} → ${cityLabel(form.destinationCity) || w("to")}` : cityLabel(form.citySlug) || w("location_not_selected")}</div><div className="mt-6 border-t border-white/10 pt-4"><div className="text-xs uppercase text-slate-400">{w("example_calculation")}</div><div className="mt-1 text-sm text-slate-300">{preview.duration} · {preview.rule}</div>{number(form.vatPercent) > 0 && <div className="mt-3 space-y-1 text-xs text-slate-300"><div className="flex justify-between gap-3"><span>{w("price_without_vat")}</span><span>{money(preview.total)} UZS</span></div><div className="flex justify-between gap-3"><span>{w("vat_short", { percent: number(form.vatPercent) })}</span><span>{money(previewVat)} UZS</span></div></div>}<div className="mt-2 text-2xl font-bold">{money(previewTotal)} <span className="text-base font-semibold text-slate-300">UZS</span></div>{number(form.vatPercent) > 0 && <div className="mt-1 text-xs text-emerald-300">{w("price_with_vat")}</div>}</div></div>
             <div className="px-5 pb-5">{formError && <div role="alert" className="mb-3 border-l-2 border-amber-400 bg-white/5 px-3 py-2 text-sm font-semibold text-amber-200">{formError}</div>}<button type="button" onClick={addService} disabled={saving || !cities.length || !stepThreeComplete} className="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-orange-600 px-5 font-bold text-white hover:bg-orange-500 disabled:cursor-not-allowed disabled:opacity-50"><Plus size={19} />{saving ? w("saving") : stepThreeComplete ? w("add_rate") : w("complete_steps")}</button><p className="mt-2 text-center text-xs text-slate-400">{stepThreeComplete ? w("ready_to_publish") : w("complete_steps_hint")}</p></div>
           </aside>
         </div>
@@ -700,6 +709,7 @@ export default function ProviderServicesWorkspace({ providerId, providerType }) 
                       {draft.pricingMode === "hourly" && <NumberField label={w("minimum_hours")} value={draft.minimumHours} onChange={(value) => setDraft({ ...draft, minimumHours: value })} />}
                     </div>
                     {draft.pricingMode === "packages" && <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-5"><NumberField label={w("half_day_hours")} value={draft.halfDayHours} onChange={(value) => setDraft({ ...draft, halfDayHours: value })} /><MoneyField label={w("half_day_price")} value={draft.halfDayPrice} onChange={(value) => setDraft({ ...draft, halfDayPrice: value })} /><NumberField label={w("full_day_hours")} value={draft.fullDayHours} onChange={(value) => setDraft({ ...draft, fullDayHours: value })} /><MoneyField label={w("full_day_price")} value={draft.fullDayPrice} onChange={(value) => setDraft({ ...draft, fullDayPrice: value })} /><MoneyField label={w("extra_hour")} value={draft.extraHourPrice} onChange={(value) => setDraft({ ...draft, extraHourPrice: value })} /></div>}
+                    <div className="mt-3 max-w-xs"><NumberField label={w("vat_percent")} value={draft.vatPercent} onChange={(value) => setDraft({ ...draft, vatPercent: value })} min={0} max={100} suffix="%" /><p className="mt-1 text-xs text-slate-500">{w("vat_hint")}</p></div>
                     <RateVariantsEditor compact variants={draft.rateVariants || []} basePrice={draft.price} basePackage={{ halfDayPrice: draft.halfDayPrice, fullDayPrice: draft.fullDayPrice, extraHourPrice: draft.extraHourPrice, halfDayHours: draft.halfDayHours, fullDayHours: draft.fullDayHours }} pricingMode={draft.pricingMode} onChange={(rateVariants) => setDraft({ ...draft, rateVariants })} w={w} />
                     <SurchargesEditor value={draft} onChange={(key, value) => setDraft({ ...draft, [key]: value })} w={w} compact />
                   </div>
@@ -809,8 +819,8 @@ function SurchargesEditor({ value, onChange, w, compact = false }) {
 function OptionalNumberField({ label, value, onChange }) {
   return <label className="text-xs font-semibold text-slate-600">{label}<input type="number" min="1" value={value} placeholder="∞" onChange={(event) => onChange(event.target.value)} className="mt-1 h-10 w-full rounded-md border border-slate-300 bg-white px-3 text-sm font-normal" /></label>;
 }
-function NumberField({ label, value, onChange }) {
-  return <label className="text-sm font-semibold text-slate-700">{label}<input type="number" min="1" value={value} onChange={(event) => onChange(event.target.value)} className="mt-1 h-11 w-full rounded-md border border-slate-300 px-3 font-normal" /></label>;
+function NumberField({ label, value, onChange, min = 1, max, suffix }) {
+  return <label className="text-sm font-semibold text-slate-700">{label}<div className="mt-1 flex h-11 overflow-hidden rounded-md border border-slate-300 bg-white"><input type="number" min={min} max={max} value={value} onChange={(event) => onChange(event.target.value)} className="min-w-0 flex-1 px-3 font-normal outline-none" />{suffix && <span className="flex items-center border-l border-slate-200 bg-slate-50 px-3 text-sm font-semibold text-slate-600">{suffix}</span>}</div></label>;
 }
 function ReadOnlyCurrency({ label }) {
   return <label className="text-sm font-semibold text-slate-700">{label}<input value="UZS" readOnly className="mt-1 h-11 w-full rounded-md border border-slate-200 bg-slate-50 px-3 font-normal text-slate-600" /></label>;
