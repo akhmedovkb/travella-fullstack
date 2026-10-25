@@ -801,6 +801,7 @@ const vehicleModel =
 const matchingServiceRate = (service, dateKey, pax, residentType = "nrs") => {
   const details = service?.raw?.details || service?.details || {};
   const variants = Array.isArray(details.rate_variants) ? details.rate_variants : [];
+  const pricingMode = String(details.pricing_mode || "fixed").toLowerCase();
   const date = String(dateKey || "").slice(0, 10);
   const guests = Math.max(1, Number(pax) || 1);
   const matching = variants.filter((variant) => {
@@ -809,14 +810,17 @@ const matchingServiceRate = (service, dateKey, pax, residentType = "nrs") => {
     const min = Math.max(1, Number(variant.min_guests) || 1);
     const max = Number(variant.max_guests) > 0 ? Number(variant.max_guests) : Infinity;
     const audience = String(variant.resident_type || "all").toLowerCase();
-    return Number(variant.price) > 0 && (audience === "all" || audience === residentType) && (!from || date >= from) && (!to || date <= to) && guests >= min && guests <= max;
+    const hasPrice = pricingMode === "packages"
+      ? Number(variant.half_day_price) > 0 && Number(variant.full_day_price) > 0
+      : Number(variant.price) > 0;
+    return hasPrice && (audience === "all" || audience === residentType) && (!from || date >= from) && (!to || date <= to) && guests >= min && guests <= max;
   }).sort((a, b) => (Number(b.min_guests) || 1) - (Number(a.min_guests) || 1));
   return { variant: matching[0] || null, hasVariants: variants.length > 0 };
 };
 
 const serviceUnitPrice = (service, dateKey, pax, residentType = "nrs") => {
   const match = matchingServiceRate(service, dateKey, pax, residentType);
-  return toNum(match.variant?.price, toNum(service?.price, 0));
+  return toNum(match.variant?.price ?? match.variant?.half_day_price, toNum(service?.price, 0));
 };
 
 const serviceRateExplanation = (service, dateKey, pax, residentType, t) => {
@@ -1887,36 +1891,53 @@ const makeTransportLoader = (dateKey, allowedCategories = TRANSPORT_ALLOWED_ARR)
     }, 0);
   };
 
-  const priceForDuration = (service, durationHours, fallback = 0, dateKey = "") => {
+  const withServiceSurcharge = (amount, details, dateKey, timeSlots = []) => {
+    const surcharge = details?.surcharges || {};
+    const nightFrom = String(surcharge.night_from || "22:00");
+    const nightTo = String(surcharge.night_to || "06:00");
+    const hasNight = timeSlots.some((slot) => {
+      const start = String(slot.start_time || "").slice(0, 5);
+      const end = String(slot.end_time || "").slice(0, 5);
+      return (start && (start >= nightFrom || start < nightTo)) || (end && (end > nightFrom || end <= nightTo));
+    });
+    const holidayDates = new Set((Array.isArray(surcharge.holiday_dates) ? surcharge.holiday_dates : []).map((date) => String(date).slice(0, 10)));
+    const percent = (hasNight ? toNum(surcharge.night_percent, 0) : 0) + (holidayDates.has(String(dateKey).slice(0, 10)) ? toNum(surcharge.holiday_percent, 0) : 0);
+    return amount + amount * percent / 100;
+  };
+
+  const priceForDuration = (service, durationHours, fallback = 0, dateKey = "", timeSlots = []) => {
     if (!service) return toNum(fallback, 0);
     const details = service?.raw?.details || service?.details || {};
     const mode = String(details.pricing_mode || "fixed").toLowerCase();
     const basePrice = serviceUnitPrice(service, dateKey, Math.max(1, toNum(adt) + toNum(chd)), residentType) || toNum(fallback, 0);
     const hours = Math.max(toNum(details.minimum_hours, 1), toNum(durationHours, 0));
-    if (mode === "hourly") return basePrice * Math.max(hours, 1);
+    if (mode === "hourly") return withServiceSurcharge(basePrice * Math.max(hours, 1), details, dateKey, timeSlots);
     if (mode === "packages") {
+      const { variant } = matchingServiceRate(service, dateKey, Math.max(1, toNum(adt) + toNum(chd)), residentType);
       const halfHours = Math.max(1, toNum(details.half_day_hours, 4));
       const fullHours = Math.max(halfHours, toNum(details.full_day_hours, 8));
-      const halfPrice = toNum(details.half_day_price, basePrice);
-      const fullPrice = toNum(details.full_day_price, halfPrice || basePrice);
-      const extraHourPrice = toNum(details.extra_hour_price, basePrice);
-      if (hours <= halfHours) return halfPrice;
-      if (hours <= fullHours) return fullPrice;
-      return fullPrice + (hours - fullHours) * extraHourPrice;
+      const halfPrice = toNum(variant?.half_day_price, toNum(details.half_day_price, basePrice));
+      const fullPrice = toNum(variant?.full_day_price, toNum(details.full_day_price, halfPrice || basePrice));
+      const extraHourPrice = toNum(variant?.extra_hour_price, toNum(details.extra_hour_price, basePrice));
+      if (hours <= halfHours) return withServiceSurcharge(halfPrice, details, dateKey, timeSlots);
+      if (hours <= fullHours) return withServiceSurcharge(fullPrice, details, dateKey, timeSlots);
+      return withServiceSurcharge(fullPrice + (hours - fullHours) * extraHourPrice, details, dateKey, timeSlots);
     }
-    return basePrice;
+    return withServiceSurcharge(basePrice, details, dateKey, timeSlots);
   };
 
   const calcGuideForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
     const hours = durationHoursForProvider(st, "guide", st?.guide?.id);
-    return priceForDuration(st?.guideService, hours, st?.guide?.price_per_day, dateKey);
+    const slots = normalizeScheduleItems(st?.schedule).filter((item) => item.type === "guide" && String(item.provider_id || "") === String(st?.guide?.id || ""));
+    return priceForDuration(st?.guideService, hours, st?.guide?.price_per_day, dateKey, slots);
   };
   const calcTransportForDay = (dateKey) => {
     const st = byDay[dateKey] || {};
     if (st?.guideService?.category === "city_tour_guide_with_transport" || st?.guideService?.raw?.details?.transport_included) return 0;
     const hours = durationHoursForProvider(st, "transport", st?.transport?.id);
-    return priceForDuration(st?.transportService, hours, st?.transport?.price_per_day, dateKey);
+    const slots = normalizeScheduleItems(st?.schedule).filter((item) => item.type === "transport" && String(item.provider_id || "") === String(st?.transport?.id || ""));
+    return priceForDuration(st?.transportService, hours, st?.transport?.price_per_day, dateKey, slots);
   };
   
   const moneyToUZS = (amount, currency) => {

@@ -3,16 +3,21 @@ const dateKey = (value) => String(value || "").slice(0, 10);
 
 function validateRateVariants(details = {}) {
   const variants = Array.isArray(details.rate_variants) ? details.rate_variants : [];
+  const pricingMode = String(details.pricing_mode || "fixed").toLowerCase();
+  const holidayDates = Array.isArray(details?.surcharges?.holiday_dates) ? details.surcharges.holiday_dates : [];
+  if (holidayDates.some((date) => !/^\d{4}-\d{2}-\d{2}$/.test(String(date)))) return "surcharge_holiday_dates_invalid";
   const normalized = variants.map((variant) => ({
     from: dateKey(variant.valid_from) || "0000-01-01",
     to: dateKey(variant.valid_to) || "9999-12-31",
     min: Math.max(1, amount(variant.min_guests, 1)),
     max: amount(variant.max_guests) > 0 ? amount(variant.max_guests) : Infinity,
     price: amount(variant.price),
+    halfDayPrice: amount(variant.half_day_price),
+    fullDayPrice: amount(variant.full_day_price),
     audience: String(variant.resident_type || "all").toLowerCase(),
   }));
   for (const variant of normalized) {
-    if (variant.price <= 0) return "rate_variant_price_invalid";
+    if (pricingMode === "packages" ? (variant.halfDayPrice <= 0 || variant.fullDayPrice <= 0) : variant.price <= 0) return "rate_variant_price_invalid";
     if (variant.from > variant.to) return "rate_variant_dates_invalid";
     if (variant.min > variant.max) return "rate_variant_guests_invalid";
   }
@@ -30,6 +35,7 @@ function validateRateVariants(details = {}) {
 function selectRateVariant(details = {}, date, pax, residentType = "nrs") {
   const targetDate = dateKey(date);
   const guests = Math.max(1, amount(pax, 1));
+  const pricingMode = String(details.pricing_mode || "fixed").toLowerCase();
   return (Array.isArray(details.rate_variants) ? details.rate_variants : [])
     .filter((variant) => {
       const from = dateKey(variant.valid_from);
@@ -37,7 +43,10 @@ function selectRateVariant(details = {}, date, pax, residentType = "nrs") {
       const min = Math.max(1, amount(variant.min_guests, 1));
       const max = amount(variant.max_guests) > 0 ? amount(variant.max_guests) : Infinity;
       const audience = String(variant.resident_type || "all").toLowerCase();
-      return amount(variant.price) > 0
+      const hasPrice = pricingMode === "packages"
+        ? amount(variant.half_day_price) > 0 && amount(variant.full_day_price) > 0
+        : amount(variant.price) > 0;
+      return hasPrice
         && (audience === "all" || audience === residentType)
         && (!from || targetDate >= from)
         && (!to || targetDate <= to)
@@ -56,24 +65,51 @@ function durationForDate(timeSlots = [], date) {
   }, 0);
 }
 
+function surchargeForDate(details, date, baseAmount, timeSlots = []) {
+  const surcharge = details?.surcharges || {};
+  const holidayDates = new Set((Array.isArray(surcharge.holiday_dates) ? surcharge.holiday_dates : []).map(dateKey));
+  const daySlots = timeSlots.filter((slot) => dateKey(slot.date) === dateKey(date));
+  const nightFrom = String(surcharge.night_from || "22:00");
+  const nightTo = String(surcharge.night_to || "06:00");
+  const hasNight = daySlots.some((slot) => {
+    const start = String(slot.start_time || "").slice(0, 5);
+    const end = String(slot.end_time || "").slice(0, 5);
+    return (start && (start >= nightFrom || start < nightTo)) || (end && (end > nightFrom || end <= nightTo));
+  });
+  const reasons = [];
+  let percent = 0;
+  if (hasNight && amount(surcharge.night_percent) > 0) {
+    percent += amount(surcharge.night_percent);
+    reasons.push("night");
+  }
+  if (holidayDates.has(dateKey(date)) && amount(surcharge.holiday_percent) > 0) {
+    percent += amount(surcharge.holiday_percent);
+    reasons.push("holiday");
+  }
+  return { amount: baseAmount * percent / 100, percent, reasons };
+}
+
 function priceForDate(service, date, pax, timeSlots = [], residentType = "nrs") {
   const details = service?.details || {};
   const variant = selectRateVariant(details, date, pax, residentType);
   const basePrice = amount(variant?.price, amount(service?.price));
   const mode = String(details.pricing_mode || "fixed").toLowerCase();
   const hours = Math.max(amount(details.minimum_hours, 1), durationForDate(timeSlots, date));
-  if (mode === "hourly") return { amount: basePrice * Math.max(hours, 1), unitAmount: basePrice, variant };
+  let priced;
+  if (mode === "hourly") priced = { amount: basePrice * Math.max(hours, 1), unitAmount: basePrice, variant };
   if (mode === "packages") {
     const halfHours = Math.max(1, amount(details.half_day_hours, 4));
     const fullHours = Math.max(halfHours, amount(details.full_day_hours, 8));
-    const halfPrice = amount(details.half_day_price, basePrice);
-    const fullPrice = amount(details.full_day_price, halfPrice || basePrice);
-    const extraHourPrice = amount(details.extra_hour_price, basePrice);
-    if (hours <= halfHours) return { amount: halfPrice, unitAmount: halfPrice, variant: null };
-    if (hours <= fullHours) return { amount: fullPrice, unitAmount: fullPrice, variant: null };
-    return { amount: fullPrice + (hours - fullHours) * extraHourPrice, unitAmount: fullPrice, variant: null };
+    const halfPrice = amount(variant?.half_day_price, amount(details.half_day_price, basePrice));
+    const fullPrice = amount(variant?.full_day_price, amount(details.full_day_price, halfPrice || basePrice));
+    const extraHourPrice = amount(variant?.extra_hour_price, amount(details.extra_hour_price, basePrice));
+    if (hours <= halfHours) priced = { amount: halfPrice, unitAmount: halfPrice, variant };
+    else if (hours <= fullHours) priced = { amount: fullPrice, unitAmount: fullPrice, variant };
+    else priced = { amount: fullPrice + (hours - fullHours) * extraHourPrice, unitAmount: fullPrice, variant };
   }
-  return { amount: basePrice, unitAmount: basePrice, variant };
+  if (!priced) priced = { amount: basePrice, unitAmount: basePrice, variant };
+  const surcharge = surchargeForDate(details, date, priced.amount, timeSlots);
+  return { ...priced, amount: priced.amount + surcharge.amount, surcharge };
 }
 
 function quoteProviderService({ service, dates = [], pax = 1, timeSlots = [], residentType = "nrs" }) {
@@ -83,7 +119,7 @@ function quoteProviderService({ service, dates = [], pax = 1, timeSlots = [], re
     amount: breakdown.reduce((total, item) => total + item.amount, 0),
     unitAmount: breakdown[0]?.unitAmount || amount(service?.price),
     units: uniqueDates.length,
-    breakdown: breakdown.map((item) => ({ date: item.date, amount: item.amount, unit_amount: item.unitAmount, variant_id: item.variant?.id || null, resident_type: residentType })),
+    breakdown: breakdown.map((item) => ({ date: item.date, amount: item.amount, unit_amount: item.unitAmount, variant_id: item.variant?.id || null, resident_type: residentType, surcharge_amount: item.surcharge?.amount || 0, surcharge_percent: item.surcharge?.percent || 0, surcharge_reasons: item.surcharge?.reasons || [] })),
   };
 }
 
