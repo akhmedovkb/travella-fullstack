@@ -333,13 +333,13 @@ function ProfileCard({ title, subtitle, children, action }) {
 
 function ProfileInfoBox({ label, icon: Icon, hint, children }) {
   return (
-    <div className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+    <div className="min-w-0 rounded-lg border border-slate-200 bg-slate-50 p-3">
       <div className="mb-1 flex items-center gap-1.5 text-[11px] font-black uppercase text-slate-400">
         {Icon ? <Icon aria-hidden="true" className="h-3.5 w-3.5 shrink-0" strokeWidth={2} /> : null}
         <span>{label}</span>
       </div>
       {hint ? <div className="mb-2 text-xs font-semibold text-slate-400">{hint}</div> : null}
-      <div className="text-sm font-bold leading-5 text-slate-800">{children}</div>
+      <div className="min-w-0 break-words text-sm font-bold leading-5 text-slate-800">{children}</div>
     </div>
   );
 }
@@ -948,7 +948,7 @@ const ProviderProfile = () => {
               <ProfileInfoBox label={t("phone", { defaultValue: "Телефон" })} icon={Phone}>
                 {isEditing ? <input type="tel" placeholder={t("phone")} value={newPhone} onChange={(e) => setNewPhone(e.target.value)} className="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:border-orange-400 focus:ring-4 focus:ring-orange-100" /> : <span>{profile.phone || t("not_specified", { defaultValue: "Не указан" })}</span>}
               </ProfileInfoBox>
-              <ProfileInfoBox label={t("email", { defaultValue: "Email" })} icon={Mail}><span>{profile.email || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
+              <ProfileInfoBox label={t("email", { defaultValue: "Email" })} icon={Mail}><span className="block min-w-0 break-all [overflow-wrap:anywhere]">{profile.email || t("not_specified", { defaultValue: "Не указан" })}</span></ProfileInfoBox>
             </div>
 
             <div className="mt-4">

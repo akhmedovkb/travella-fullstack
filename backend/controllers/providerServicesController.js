@@ -23,7 +23,21 @@ const normPrice = (v) => {
 
 async function syncProviderCitiesFromServices(db, providerId, services) {
   const destinations = (Array.isArray(services) ? services : [])
-    .map((service) => normStr(service?.details?.destination_city))
+    .map((service) => {
+      let details = service?.details || {};
+      if (typeof details === "string") {
+        try { details = JSON.parse(details); } catch { details = {}; }
+      }
+      const storedDestination = normStr(
+        details.destination_city || details.destinationCity || details.to_city || details.toCity
+      );
+      if (storedDestination) return storedDestination;
+
+      // Older intercity rates only kept the human-readable route in title.
+      const route = normStr(service?.title);
+      const arrowIndex = route ? Math.max(route.lastIndexOf("→"), route.lastIndexOf("->")) : -1;
+      return arrowIndex >= 0 ? normStr(route.slice(arrowIndex + (route.includes("→", arrowIndex) ? 1 : 2))) : null;
+    })
     .filter(Boolean);
   if (!destinations.length) return false;
 
@@ -208,6 +222,8 @@ async function patchProviderService(req, res) {
         providerId,
       ]
     );
+
+    await syncProviderCitiesFromServices(pool, providerId, upd.rows);
 
     res.json(upd.rows[0]);
   } catch (err) {

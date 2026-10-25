@@ -816,6 +816,16 @@ const getProviderProfile = async (req, res) => {
   try {
     const id = req.user.id;
 
+    // Repair profiles created before service destinations were mirrored to location.
+    const { syncProviderCitiesFromServices } = require("./providerServicesController");
+    const serviceRows = await pool.query(
+      `SELECT title, COALESCE(details, '{}'::jsonb) AS details
+         FROM provider_services
+        WHERE provider_id = $1`,
+      [id]
+    );
+    await syncProviderCitiesFromServices(pool, id, serviceRows.rows);
+
     const cols = await tableHasColumns(pool, "providers", ["hotel_id"]);
     const hotelSelect = cols.hotel_id ? "hotel_id" : "NULL::int AS hotel_id";
 
