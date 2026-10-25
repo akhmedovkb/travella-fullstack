@@ -721,6 +721,11 @@ export default function ProviderBookings() {
     const tourPackage = group.package;
     const currency = tourPackage?.currency || "UZS";
     const status = String(tourPackage?.status || "request_sent");
+    const packageStatusLabel = status === "request_sent"
+      ? t(`bookings.package_request_sent.${tab}`, {
+          defaultValue: tab === "incoming" ? "Агент отправил вам запрос" : "Вы отправили запросы поставщикам",
+        })
+      : t(`tb.package_status.${status}`, { defaultValue: status });
     const validUntil = tourPackage?.quote_valid_until ? new Date(tourPackage.quote_valid_until) : null;
     const componentCount = Number(tourPackage?.component_count || group.items.length || 0);
     const confirmedCount = Number(tourPackage?.confirmed_count || 0);
@@ -734,7 +739,7 @@ export default function ProviderBookings() {
             <div className="mt-1 flex flex-wrap items-center gap-2">
               {tourPackage ? <Link to={`/dashboard/tour-packages/${tourPackage.id}`} className="text-lg font-bold text-gray-950 hover:text-orange-700 hover:underline">{tourPackage.title}</Link> : <h2 className="text-lg font-bold text-gray-950">{`${t("bookings.request", { defaultValue: "Заявка" })} ${reference ? `№ ${reference}` : ""}`}</h2>}
               <span className="rounded-full bg-sky-50 px-2 py-1 text-xs font-semibold text-sky-700 ring-1 ring-sky-200">
-                {t(`tb.package_status.${status}`, { defaultValue: status })}
+                {packageStatusLabel}
               </span>
               <span className="text-xs text-gray-500">
                 {group.items.length} {t("bookings.services_count", { defaultValue: "услуг" })}
@@ -1320,9 +1325,9 @@ export default function ProviderBookings() {
       <div className="mb-5 flex flex-wrap items-center gap-5 border-b border-gray-200 bg-white px-1">
         {[
           { key: "all", label: t("filter.all", { defaultValue: "Все" }), count: counts.all },
-          { key: "pending", label: t("filter.pending", { defaultValue: "Ожидает" }), count: counts.pending },
-          { key: "quoted", label: t("filter.quoted", { defaultValue: "Цена предложена" }), count: counts.quoted },
-          { key: "payment", label: t("filter.awaiting_payment", { defaultValue: "Ожидает оплату" }), count: counts.payment },
+          { key: "pending", label: t(`bookings.perspective_filters.${tab}.pending`, { defaultValue: tab === "incoming" ? "Нужен ваш ответ" : "Ждём поставщика" }), count: counts.pending },
+          { key: "quoted", label: t(`bookings.perspective_filters.${tab}.quoted`, { defaultValue: tab === "incoming" ? "Ждём заказчика" : "Нужен ваш ответ" }), count: counts.quoted },
+          { key: "payment", label: t(`bookings.perspective_filters.${tab}.awaiting_payment`, { defaultValue: tab === "incoming" ? "Оплачивает заказчик" : "Оплатить вам" }), count: counts.payment },
           { key: "confirmed", label: t("filter.confirmed", { defaultValue: "Подтверждено" }), count: counts.confirmed },
           { key: "rejected", label: t("filter.rejected", { defaultValue: "Отклонено" }), count: counts.rejected },
         ].map(({ key, label, count }) => (
