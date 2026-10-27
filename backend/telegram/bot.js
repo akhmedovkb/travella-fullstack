@@ -1257,6 +1257,7 @@ const {
   parseBookingAmount,
   telegramBookingStatusLabel,
   bookingFilterStatuses,
+  bookingReviewAction,
 } = require("../utils/telegramQuickBooking");
 
 let _reqTablesReady = false;
@@ -1480,7 +1481,9 @@ async function renderTelegramBookings(ctx, role, filter = "active", offset = 0) 
     const providerId = await resolveProviderIdByTelegramChatId(actorId, { action: "list_quick_bookings" });
     if (!providerId) return safeReply(ctx, "Профиль поставщика не найден.");
     result = await pool.query(
-      `SELECT b.*,s.title AS service_title,p.name AS provider_name
+      `SELECT b.*,s.title AS service_title,p.name AS provider_name,
+              EXISTS(SELECT 1 FROM reviews r WHERE r.booking_id=b.id
+                AND r.target_type='client' AND r.author_role='provider' AND r.author_id=b.provider_id) AS has_review
          FROM bookings b LEFT JOIN services s ON s.id=b.service_id JOIN providers p ON p.id=b.provider_id
         WHERE b.provider_id=$1 AND b.status=ANY($2::text[])
         ORDER BY b.created_at DESC LIMIT $3 OFFSET $4`,
@@ -1497,7 +1500,9 @@ async function renderTelegramBookings(ctx, role, filter = "active", offset = 0) 
     const client = await getClientRowByChatId(pool, actorId);
     if (!client) return safeReply(ctx, "Профиль клиента не найден.");
     result = await pool.query(
-      `SELECT b.*,s.title AS service_title,p.name AS provider_name
+      `SELECT b.*,s.title AS service_title,p.name AS provider_name,
+              EXISTS(SELECT 1 FROM reviews r WHERE r.booking_id=b.id
+                AND r.target_type='provider' AND r.author_role='client' AND r.author_id=b.client_id) AS has_review
          FROM bookings b LEFT JOIN services s ON s.id=b.service_id JOIN providers p ON p.id=b.provider_id
         WHERE b.client_id=$1 AND b.status=ANY($2::text[])
         ORDER BY b.created_at DESC LIMIT $3 OFFSET $4`,
@@ -1527,6 +1532,13 @@ async function renderTelegramBookings(ctx, role, filter = "active", offset = 0) 
   }
   for (const booking of rows) {
     const buttons = [[{ text: "Открыть", callback_data: `tgbook:open:${booking.id}` }]];
+    const reviewAction = bookingReviewAction(role, booking);
+    if (reviewAction) {
+      buttons.unshift([1, 2, 3, 4, 5].map((rating) => ({
+        text: `${rating} ⭐`,
+        callback_data: `tgbook:${reviewAction}:${booking.id}:${rating}`,
+      })));
+    }
     if (role === "client" && ["pending", "quoted"].includes(String(booking.status))) {
       buttons.unshift([
         { text: "✅ Подтвердить", callback_data: `tgbook:confirm:${booking.id}` },

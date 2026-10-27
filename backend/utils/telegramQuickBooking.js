@@ -56,6 +56,15 @@ function bookingFilterStatuses(filter) {
   return BOOKING_FILTERS[String(filter || "active").toLowerCase()] || BOOKING_FILTERS.active;
 }
 
+function bookingReviewAction(role, booking) {
+  if (String(booking?.status || "").toLowerCase() !== "completed") return null;
+  if (booking?.has_review === true || String(booking?.has_review) === "true") return null;
+  if (booking?.requester_provider_id || !booking?.client_id || !booking?.provider_id) return null;
+  if (role === "client") return "rate";
+  if (role === "provider") return "rate_client";
+  return null;
+}
+
 module.exports = {
   parseBookingDate,
   parseGuestCount,
@@ -63,4 +72,5 @@ module.exports = {
   telegramBookingStatusLabel,
   isActiveBookingStatus,
   bookingFilterStatuses,
+  bookingReviewAction,
 };
