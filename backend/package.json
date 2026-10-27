@@ -6,6 +6,7 @@
     "debug": "4.3.4"
   },
   "scripts": {
+    "test:telegram-support-e2e": "node scripts/smoke-telegram-support-e2e.js",
     "prestart": "node scripts/ensure-provider-service-identity.js && node scripts/ensure-telegram-learning.js && node scripts/ensure-telegram-broadcasts.js && node scripts/ensure-staging-tour-builder-e2e.js --if-enabled",
     "start": "node index.js",
     "test:unit": "node scripts/run-unit-tests.js",

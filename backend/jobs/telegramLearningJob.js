@@ -6,6 +6,7 @@ const {
   lessonKeyboard,
   completeCurrentLesson,
 } = require("../services/telegramLearningService");
+const { isNotificationEnabled } = require("../services/telegramOperationsService");
 
 const CLIENT_TOKEN = String(process.env.TELEGRAM_CLIENT_BOT_TOKEN || "").trim();
 
@@ -90,6 +91,10 @@ async function runTelegramLearningJob({ force = false, db = pool } = {}) {
 
   for (const lesson of lessons) {
     try {
+      if (!(await isNotificationEnabled(lesson.chat_id, "learning_updates", db))) {
+        await completeCurrentLesson(lesson.enrollment_id, lesson.lesson_id, "preference_skipped", db);
+        continue;
+      }
       const ok = await tgSend(
         lesson.chat_id,
         formatLesson(lesson),

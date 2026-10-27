@@ -10,10 +10,29 @@ CREATE TABLE IF NOT EXISTS telegram_support_tickets (
   status VARCHAR(20) NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'in_progress', 'resolved', 'closed')),
   priority VARCHAR(12) NOT NULL DEFAULT 'normal' CHECK (priority IN ('normal', 'high', 'critical')),
   admin_note TEXT,
+  assigned_to BIGINT,
+  first_response_at TIMESTAMPTZ,
+  due_at TIMESTAMPTZ NOT NULL DEFAULT (NOW() + INTERVAL '24 hours'),
   resolved_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+ALTER TABLE telegram_support_tickets ADD COLUMN IF NOT EXISTS assigned_to BIGINT;
+ALTER TABLE telegram_support_tickets ADD COLUMN IF NOT EXISTS first_response_at TIMESTAMPTZ;
+ALTER TABLE telegram_support_tickets ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ;
+UPDATE telegram_support_tickets SET due_at=created_at + CASE WHEN priority='critical' THEN INTERVAL '1 hour' WHEN priority='high' THEN INTERVAL '4 hours' ELSE INTERVAL '24 hours' END WHERE due_at IS NULL;
+
+CREATE TABLE IF NOT EXISTS telegram_support_messages (
+  id BIGSERIAL PRIMARY KEY,
+  ticket_id BIGINT NOT NULL REFERENCES telegram_support_tickets(id) ON DELETE CASCADE,
+  sender_role VARCHAR(16) NOT NULL,
+  sender_id BIGINT,
+  message TEXT,
+  attachments JSONB NOT NULL DEFAULT '[]'::jsonb,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_telegram_support_messages_ticket ON telegram_support_messages(ticket_id, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_telegram_support_tickets_actor
   ON telegram_support_tickets(actor_role, actor_id, created_at DESC);

@@ -3,6 +3,7 @@
 /* eslint-disable no-useless-escape */
 const pool = require("../db");
 const axios = require("axios");
+const { isNotificationEnabled } = require("../services/telegramOperationsService");
 
 // старый (основной) бот — ВСЕ callback/edit/getChat по нему ДЛЯ СТАРЫХ СЦЕНАРИЕВ
 const BOT_TOKEN = (process.env.TELEGRAM_BOT_TOKEN || "").trim();
@@ -642,7 +643,7 @@ async function getRequestActors(requestId) {
 async function notifyNewRequest({ booking }) {
   try {
     const a = await getBookingActors(booking);
-    if (!a?.provider?.chatId) return;
+    if (!a?.provider?.chatId || !(await isNotificationEnabled(a.provider.chatId, "request_updates"))) return;
 
     const lines = [
       `<b>🆕 Новая заявка №${a.id}</b>`,
@@ -669,7 +670,7 @@ async function notifyQuote({ booking, price, currency, note }) {
     const dest = a.agent?.chatId
       ? { chatId: a.agent.chatId, isProv: true }
       : { chatId: a.client?.chatId, isProv: false };
-    if (!dest.chatId) return;
+    if (!dest.chatId || !(await isNotificationEnabled(dest.chatId, "booking_updates"))) return;
 
     const lines = [`<b>💬 Предложение по брони №${a.id}</b>`, ...bookingSummaryLines(a)];
     lines.push(`💵 Предложенная цена: <b>${Number(price || 0).toLocaleString("ru-RU")} ${esc(currency || "USD")}</b>`);
@@ -921,7 +922,7 @@ async function notifyBookingPaymentReminder({ booking, minutesLeft }) {
     const a = await getBookingActors(booking);
     if (!a) return;
     const requesterChat = a.agent?.chatId || a.client?.chatId;
-    if (!requesterChat) return;
+    if (!requesterChat || !(await isNotificationEnabled(requesterChat, "booking_updates"))) return;
     const minutes = Math.max(1, Number(minutesLeft || 10));
     const url = a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings");
     await tgSend(requesterChat, [
@@ -942,13 +943,13 @@ async function notifyBookingServiceReminder({ booking }) {
     if (!a) return;
     const base = [`<b>📅 Напоминание: услуга по брони №${a.id} уже завтра</b>`, ...bookingSummaryLines(a)];
     const requesterChat = a.agent?.chatId || a.client?.chatId;
-    if (requesterChat) await tgSend(requesterChat, [
+    if (requesterChat && await isNotificationEnabled(requesterChat, "booking_updates")) await tgSend(requesterChat, [
       ...base,
       lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
       "",
       `🔗 Открыть бронь: ${a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings")}`,
     ].join("\n"), {}, _tokenForRefusedActors(a.serviceCategory));
-    if (a.provider?.chatId) await tgSend(a.provider.chatId, [
+    if (a.provider?.chatId && await isNotificationEnabled(a.provider.chatId, "booking_updates")) await tgSend(a.provider.chatId, [
       ...base,
       ...applicantLines(a),
       "",
@@ -1008,7 +1009,7 @@ async function notifyBookingReviewReminder({ booking, audience }) {
     if (!a || a.agent?.id || !a.client?.id) return;
     const isProvider = audience === "provider";
     const chatId = isProvider ? a.provider?.chatId : a.client?.chatId;
-    if (!chatId) return;
+    if (!chatId || !(await isNotificationEnabled(chatId, "review_updates"))) return;
     const callback = isProvider ? "rate_client" : "rate";
     const recipient = isProvider ? "заказчика" : "поставщика";
     const extra = { reply_markup: { inline_keyboard: [[1, 2, 3, 4, 5].map((rating) => ({

@@ -12,11 +12,22 @@ async function ensureTelegramOperationsSchema(db = pool) {
       chat_id TEXT NOT NULL, category VARCHAR(32) NOT NULL, booking_id BIGINT REFERENCES bookings(id) ON DELETE SET NULL,
       review_id BIGINT REFERENCES reviews(id) ON DELETE SET NULL, message TEXT NOT NULL,
       status VARCHAR(20) NOT NULL DEFAULT 'open', priority VARCHAR(12) NOT NULL DEFAULT 'normal',
-      admin_note TEXT, resolved_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      admin_note TEXT, assigned_to BIGINT, first_response_at TIMESTAMPTZ,
+      due_at TIMESTAMPTZ NOT NULL DEFAULT (NOW()+INTERVAL '24 hours'), resolved_at TIMESTAMPTZ, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
     CREATE INDEX IF NOT EXISTS idx_telegram_support_tickets_actor ON telegram_support_tickets(actor_role, actor_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_telegram_support_tickets_queue ON telegram_support_tickets(status, priority, created_at);
+    ALTER TABLE telegram_support_tickets ADD COLUMN IF NOT EXISTS assigned_to BIGINT;
+    ALTER TABLE telegram_support_tickets ADD COLUMN IF NOT EXISTS first_response_at TIMESTAMPTZ;
+    ALTER TABLE telegram_support_tickets ADD COLUMN IF NOT EXISTS due_at TIMESTAMPTZ;
+    UPDATE telegram_support_tickets SET due_at=created_at+CASE WHEN priority='critical' THEN INTERVAL '1 hour' WHEN priority='high' THEN INTERVAL '4 hours' ELSE INTERVAL '24 hours' END WHERE due_at IS NULL;
+    CREATE TABLE IF NOT EXISTS telegram_support_messages (
+      id BIGSERIAL PRIMARY KEY, ticket_id BIGINT NOT NULL REFERENCES telegram_support_tickets(id) ON DELETE CASCADE,
+      sender_role VARCHAR(16) NOT NULL, sender_id BIGINT, message TEXT,
+      attachments JSONB NOT NULL DEFAULT '[]'::jsonb, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+    CREATE INDEX IF NOT EXISTS idx_telegram_support_messages_ticket ON telegram_support_messages(ticket_id,created_at);
     CREATE TABLE IF NOT EXISTS telegram_notification_preferences (
       actor_role VARCHAR(16) NOT NULL, actor_id BIGINT NOT NULL, chat_id TEXT NOT NULL,
       booking_updates BOOLEAN NOT NULL DEFAULT TRUE, request_updates BOOLEAN NOT NULL DEFAULT TRUE,
@@ -70,11 +81,13 @@ async function createTicket({ role, telegramId, category, message, bookingId = n
   }
   const priority = category === "payment" ? "high" : "normal";
   const result = await db.query(
-    `INSERT INTO telegram_support_tickets(actor_role,actor_id,chat_id,category,booking_id,review_id,message,priority)
-     VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
+    `INSERT INTO telegram_support_tickets(actor_role,actor_id,chat_id,category,booking_id,review_id,message,priority,due_at)
+     VALUES($1,$2,$3,$4,$5,$6,$7,$8,NOW()+CASE WHEN $8='critical' THEN INTERVAL '1 hour' WHEN $8='high' THEN INTERVAL '4 hours' ELSE INTERVAL '24 hours' END) RETURNING *`,
     [role, actor.id, String(telegramId), category, safeBookingId, safeReviewId, clean.slice(0, 4000), priority]
   );
-  return { ...result.rows[0], actor_name: actor.name };
+  const ticket = result.rows[0];
+  await db.query(`INSERT INTO telegram_support_messages(ticket_id,sender_role,sender_id,message) VALUES($1,$2,$3,$4)`, [ticket.id, role, actor.id, clean.slice(0, 4000)]);
+  return { ...ticket, actor_name: actor.name };
 }
 
 async function listTickets(role, telegramId, db = pool) {
@@ -103,6 +116,13 @@ async function togglePreference(role, telegramId, key, db = pool) {
   if (!current) throw new Error("actor_not_found");
   const result = await db.query(`UPDATE telegram_notification_preferences SET ${key}=NOT ${key},updated_at=NOW() WHERE actor_role=$1 AND actor_id=$2 RETURNING *`, [role, current.actor_id]);
   return result.rows[0];
+}
+
+async function isNotificationEnabled(chatId, key, db = pool) {
+  if (!TOGGLES.has(key)) return true;
+  await ensureTelegramOperationsSchema(db);
+  const result = await db.query(`SELECT ${key} enabled FROM telegram_notification_preferences WHERE chat_id=$1 ORDER BY updated_at DESC LIMIT 1`, [String(chatId)]);
+  return result.rows[0]?.enabled !== false;
 }
 
 async function logEvent({ role = null, actorId = null, chatId = null, type, metadata = {} }, db = pool) {
@@ -134,4 +154,57 @@ async function updateTicketStatus(ticketId, status, adminNote = null, db = pool)
   return result.rows[0] || null;
 }
 
-module.exports = { CATEGORIES, TOGGLES, ensureTelegramOperationsSchema, resolveActor, createTicket, listTickets, getPreferences, togglePreference, logEvent, getAdminSummary, updateTicketStatus };
+async function addTicketMessage({ ticketId, senderRole, senderId = null, message = "", attachments = [] }, db = pool) {
+  await ensureTelegramOperationsSchema(db);
+  const text = String(message || "").trim().slice(0, 4000);
+  if (!text && !attachments.length) throw new Error("empty_message");
+  const result = await db.query(
+    `INSERT INTO telegram_support_messages(ticket_id,sender_role,sender_id,message,attachments) VALUES($1,$2,$3,$4,$5::jsonb) RETURNING *`,
+    [Number(ticketId), senderRole, senderId, text || null, JSON.stringify(attachments.slice(0, 10))]
+  );
+  if (senderRole === "admin") await db.query(`UPDATE telegram_support_tickets SET status=CASE WHEN status='open' THEN 'in_progress' ELSE status END,first_response_at=COALESCE(first_response_at,NOW()),updated_at=NOW() WHERE id=$1`, [Number(ticketId)]);
+  else await db.query(`UPDATE telegram_support_tickets SET updated_at=NOW() WHERE id=$1`, [Number(ticketId)]);
+  return result.rows[0];
+}
+
+async function getTicket(ticketId, db = pool) {
+  await ensureTelegramOperationsSchema(db);
+  const [ticket, messages] = await Promise.all([
+    db.query(`SELECT t.*,CASE WHEN t.actor_role='provider' THEN p.name ELSE COALESCE(NULLIF(to_jsonb(c)->>'full_name',''),NULLIF(to_jsonb(c)->>'name',''),'Клиент') END actor_name FROM telegram_support_tickets t LEFT JOIN providers p ON t.actor_role='provider' AND p.id=t.actor_id LEFT JOIN clients c ON t.actor_role='client' AND c.id=t.actor_id WHERE t.id=$1`, [Number(ticketId)]),
+    db.query(`SELECT * FROM telegram_support_messages WHERE ticket_id=$1 ORDER BY created_at,id`, [Number(ticketId)]),
+  ]);
+  return ticket.rows[0] ? { ...ticket.rows[0], messages: messages.rows } : null;
+}
+
+async function listAdminTickets({ status = "active", category = "", assignedTo = "", limit = 100 } = {}, db = pool) {
+  await ensureTelegramOperationsSchema(db);
+  const result = await db.query(
+    `SELECT t.*,CASE WHEN t.actor_role='provider' THEN p.name ELSE COALESCE(NULLIF(to_jsonb(c)->>'full_name',''),NULLIF(to_jsonb(c)->>'name',''),'Клиент') END actor_name,
+      (SELECT COUNT(*)::int FROM telegram_support_messages m WHERE m.ticket_id=t.id) message_count,
+      (t.status IN ('open','in_progress') AND t.due_at<NOW()) overdue
+     FROM telegram_support_tickets t LEFT JOIN providers p ON t.actor_role='provider' AND p.id=t.actor_id LEFT JOIN clients c ON t.actor_role='client' AND c.id=t.actor_id
+     WHERE ($1='' OR t.category=$1) AND ($2='' OR t.assigned_to=$2::bigint)
+       AND ($3='all' OR $3='active' AND t.status IN ('open','in_progress') OR $3=t.status)
+     ORDER BY (t.status IN ('open','in_progress') AND t.due_at<NOW()) DESC,CASE t.priority WHEN 'critical' THEN 0 WHEN 'high' THEN 1 ELSE 2 END,t.created_at LIMIT $4`,
+    [category, String(assignedTo || ""), status, Math.min(250, Math.max(1, Number(limit) || 100))]
+  );
+  return result.rows;
+}
+
+async function assignTicket(ticketId, adminId, db = pool) {
+  await ensureTelegramOperationsSchema(db);
+  const result = await db.query(`UPDATE telegram_support_tickets SET assigned_to=$2,status=CASE WHEN status='open' THEN 'in_progress' ELSE status END,first_response_at=COALESCE(first_response_at,NOW()),updated_at=NOW() WHERE id=$1 RETURNING *`, [Number(ticketId), Number(adminId)]);
+  return result.rows[0] || null;
+}
+
+async function getLearningAnalytics(db = pool) {
+  await ensureTelegramOperationsSchema(db);
+  const [enrollments, searches, events] = await Promise.all([
+    db.query(`SELECT user_role,status,COUNT(*)::int count,ROUND(AVG(CASE WHEN lesson_count.total>0 THEN LEAST(100,(next_lesson_position-1)*100.0/lesson_count.total) ELSE 0 END))::int avg_progress FROM telegram_learning_enrollments e JOIN LATERAL(SELECT COUNT(*) total FROM telegram_learning_lessons l WHERE l.campaign_id=e.campaign_id) lesson_count ON TRUE GROUP BY user_role,status ORDER BY user_role,status`),
+    db.query(`SELECT metadata->>'query' query,COUNT(*)::int searches,SUM(CASE WHEN COALESCE((metadata->>'result_count')::int,0)=0 THEN 1 ELSE 0 END)::int no_result FROM telegram_bot_events WHERE event_type='help_search' AND created_at>=NOW()-INTERVAL '30 days' GROUP BY metadata->>'query' ORDER BY searches DESC LIMIT 25`),
+    db.query(`SELECT event_type,COUNT(*)::int count FROM telegram_bot_events WHERE created_at>=NOW()-INTERVAL '30 days' GROUP BY event_type ORDER BY count DESC`),
+  ]);
+  return { enrollments: enrollments.rows, searches: searches.rows, events: events.rows };
+}
+
+module.exports = { CATEGORIES, TOGGLES, ensureTelegramOperationsSchema, resolveActor, createTicket, listTickets, getPreferences, togglePreference, isNotificationEnabled, logEvent, getAdminSummary, updateTicketStatus, addTicketMessage, getTicket, listAdminTickets, assignTicket, getLearningAnalytics };

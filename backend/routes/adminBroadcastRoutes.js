@@ -8,6 +8,7 @@ const pool = require("../db");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
 const { tgSend } = require("../utils/telegram");
+const { isNotificationEnabled } = require("../services/telegramOperationsService");
 
 const CLIENT_TOKEN = process.env.TELEGRAM_CLIENT_BOT_TOKEN || "";
 
@@ -59,7 +60,7 @@ async function ensureClientBotEnabled() {
   }
 }
 
-async function createRecipients(broadcastId, audience, segment = {}) {
+async function createRecipients(broadcastId, audience, segment = {}, kind = "education") {
   // только реально привязанные к отказному боту:
   // providers.telegram_refused_chat_id
   // clients.telegram_chat_id
@@ -68,7 +69,9 @@ async function createRecipients(broadcastId, audience, segment = {}) {
   const params = [];
   let p = 1;
 
-  const pushRow = (role, chatId) => {
+  const preferenceKey = kind === "education" || kind === "qualification" ? "learning_updates" : kind === "news" ? "marketing_updates" : null;
+  const pushRow = async (role, chatId) => {
+    if (preferenceKey && !(await isNotificationEnabled(chatId, preferenceKey))) return;
     inserts.push(`($${p++}, $${p++}, $${p++}, 'pending')`);
     params.push(broadcastId, role, String(chatId));
   };
@@ -84,7 +87,7 @@ async function createRecipients(broadcastId, audience, segment = {}) {
       providerType ? [providerType] : []
     );
     for (const r of q.rows) {
-      if (r.chat_id) pushRow("provider", r.chat_id);
+      if (r.chat_id) await pushRow("provider", r.chat_id);
     }
   }
 
@@ -96,7 +99,7 @@ async function createRecipients(broadcastId, audience, segment = {}) {
           AND TRIM(telegram_chat_id::text) <> ''`
     );
     for (const r of q.rows) {
-      if (r.chat_id) pushRow("client", r.chat_id);
+      if (r.chat_id) await pushRow("client", r.chat_id);
     }
   }
 
@@ -402,7 +405,7 @@ router.post("/create", authenticateToken, requireAdmin, async (req, res) => {
     );
     const broadcast = ins.rows[0];
 
-    const total = await createRecipients(broadcast.id, audience, segment);
+    const total = await createRecipients(broadcast.id, audience, segment, kind);
     await pool.query(
       `UPDATE broadcasts SET total=$2, updated_at = NOW() WHERE id=$1`,
       [broadcast.id, total]

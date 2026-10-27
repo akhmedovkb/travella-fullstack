@@ -975,6 +975,8 @@ app.use("/api/admin/entry-fees", entryFeesAdminRoutes);
 // ✅ Массовая рассылка (админ) через Bot Otkaznyx Turov
 const adminBroadcastRoutes = require("./routes/adminBroadcastRoutes");
 app.use("/api/admin/broadcast", adminBroadcastRoutes);
+const adminTelegramSupportRoutes = require("./routes/adminTelegramSupportRoutes");
+app.use("/api/admin/telegram-support", adminTelegramSupportRoutes);
 
 const hotelOffersRouter = require("./routes/hotelOffers");
 app.use("/api/hotels/:id/offers", hotelOffersRouter);

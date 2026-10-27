@@ -9,6 +9,7 @@ const { runRefusedFixFollowupJob } = require("./refusedFixFollowupJob");
 const { runExpireHotelBookingHoldsJob } = require("./expireHotelBookingHoldsJob");
 const { runBookingLifecycleReminderJob } = require("./bookingLifecycleReminderJob");
 const { runTelegramLearningJob } = require("./telegramLearningJob");
+const { runTelegramSupportSlaJob } = require("./telegramSupportSlaJob");
 const { runDueBroadcasts } = require("../routes/adminBroadcastRoutes");
 
 const TZ = "Asia/Tashkent";
@@ -228,6 +229,11 @@ function startJobsScheduler() {
     },
     { timezone: TZ }
   );
+
+  cron.schedule("*/15 * * * *", async () => {
+    try { await runTelegramSupportSlaJob(); }
+    catch (err) { console.error("[scheduler] telegramSupportSlaJob failed", err); }
+  }, { timezone: TZ });
 
   // Scheduled admin broadcasts survive restarts because their state lives in PostgreSQL.
   cron.schedule(

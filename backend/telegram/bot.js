@@ -65,6 +65,8 @@ const {
   logEvent: logTelegramOperationEvent,
   getAdminSummary,
   updateTicketStatus,
+  addTicketMessage,
+  getTicket: getTelegramSupportTicket,
   resolveActor: resolveTelegramOperationActor,
 } = require("../services/telegramOperationsService");
 
@@ -9426,6 +9428,47 @@ bot.action("support:list", async (ctx) => {
   const statuses = { open: "Открыто", in_progress: "В работе", resolved: "Решено", closed: "Закрыто" };
   await safeReply(ctx, rows.map((item) => `#${item.id} · ${SUPPORT_CATEGORY_LABELS[item.category] || item.category}\n${statuses[item.status] || item.status} · ${new Date(item.created_at).toLocaleDateString("ru-RU", { timeZone: "Asia/Tashkent" })}\n${escapeHtml(String(item.message).slice(0, 180))}`).join("\n\n"), { parse_mode: "HTML", reply_markup: supportHomeKeyboard() });
 });
+bot.action(/^support:reply:(\d+)$/, async (ctx) => {
+  const role = await getOperationsRole(ctx);
+  const ticket = await getTelegramSupportTicket(Number(ctx.match[1]));
+  const actor = await resolveTelegramOperationActor(role, ctx.from?.id);
+  if (!ticket || ticket.actor_role !== role || Number(ticket.actor_id) !== Number(actor?.id)) return ctx.answerCbQuery("⛔ Обращение недоступно", { show_alert: true });
+  ctx.session.state = "support_thread_reply";
+  ctx.session.supportReplyTicketId = ticket.id;
+  await ctx.answerCbQuery().catch(() => {});
+  await safeReply(ctx, `💬 Ответ по обращению #${ticket.id}\n\nОтправьте текст, фотографию, документ или чек.`);
+});
+
+bot.on(["photo", "document"], async (ctx, next) => {
+  if (!["support_message", "support_thread_reply"].includes(ctx.session?.state)) return next();
+  const role = await getOperationsRole(ctx);
+  const actor = await resolveTelegramOperationActor(role, ctx.from?.id);
+  const photo = ctx.message?.photo?.at(-1);
+  const document = ctx.message?.document;
+  const attachment = photo
+    ? { type: "photo", file_id: photo.file_id, file_unique_id: photo.file_unique_id, size: photo.file_size || null }
+    : { type: "document", file_id: document?.file_id, file_unique_id: document?.file_unique_id, name: String(document?.file_name || "document").slice(0, 180), mime_type: document?.mime_type || null, size: document?.file_size || null };
+  const caption = String(ctx.message?.caption || "").trim();
+  try {
+    if (ctx.session.state === "support_thread_reply") {
+      const ticketId = Number(ctx.session.supportReplyTicketId);
+      const ticket = await getTelegramSupportTicket(ticketId);
+      if (!ticket || ticket.actor_role !== role || Number(ticket.actor_id) !== Number(actor?.id)) throw new Error("forbidden");
+      await addTicketMessage({ ticketId, senderRole: role, senderId: actor.id, message: caption, attachments: [attachment] });
+      ctx.session.state = null; ctx.session.supportReplyTicketId = null;
+      await safeReply(ctx, `✅ Вложение добавлено в обращение #${ticketId}.`);
+      return;
+    }
+    const category = ctx.session.supportDraft?.category || "general";
+    const ticket = await createTicket({ role, telegramId: ctx.from?.id, category, message: caption || "Вложение к обращению" });
+    await addTicketMessage({ ticketId: ticket.id, senderRole: role, senderId: actor.id, attachments: [attachment] });
+    ctx.session.state = null; ctx.session.supportDraft = null;
+    await safeReply(ctx, `✅ Обращение #${ticket.id} с вложением принято.`, { reply_markup: supportHomeKeyboard() });
+  } catch (error) {
+    console.error("[tg-bot] support attachment", error?.message || error);
+    await safeReply(ctx, "⚠️ Не удалось прикрепить файл. Попробуйте ещё раз.");
+  }
+});
 
 function preferencesKeyboard(prefs) {
   const row = (key, label) => [{ text: `${prefs?.[key] ? "✅" : "◻️"} ${label}`, callback_data: `notify:toggle:${key}` }];
@@ -17438,6 +17481,20 @@ bot.on("text", async (ctx, next) => {
         console.error("[tg-bot] support ticket error", error?.message || error);
         await safeReply(ctx, error?.message === "message_too_short" ? "Опишите ситуацию подробнее, минимум пять символов." : "⚠️ Не удалось создать обращение. Попробуйте позже.");
       }
+      return;
+    }
+
+    if (state === "support_thread_reply" && ctx.session?.supportReplyTicketId) {
+      const role = await getOperationsRole(ctx);
+      const actor = await resolveTelegramOperationActor(role, ctx.from?.id);
+      const ticket = await getTelegramSupportTicket(ctx.session.supportReplyTicketId);
+      if (!ticket || ticket.actor_role !== role || Number(ticket.actor_id) !== Number(actor?.id)) {
+        ctx.session.state = null; ctx.session.supportReplyTicketId = null;
+        await safeReply(ctx, "⛔ Обращение недоступно."); return;
+      }
+      await addTicketMessage({ ticketId: ticket.id, senderRole: role, senderId: actor.id, message: rawText });
+      ctx.session.state = null; ctx.session.supportReplyTicketId = null;
+      await safeReply(ctx, `✅ Сообщение добавлено в обращение #${ticket.id}.`);
       return;
     }
 
