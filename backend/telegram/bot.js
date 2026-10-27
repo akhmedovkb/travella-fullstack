@@ -57,6 +57,16 @@ const {
   formatLesson,
   lessonKeyboard,
 } = require("../services/telegramLearningService");
+const {
+  createTicket,
+  listTickets,
+  getPreferences,
+  togglePreference,
+  logEvent: logTelegramOperationEvent,
+  getAdminSummary,
+  updateTicketStatus,
+  resolveActor: resolveTelegramOperationActor,
+} = require("../services/telegramOperationsService");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -1573,7 +1583,7 @@ async function renderTelegramReviews(ctx, role, mode = "received", offset = 0) {
     : `SELECT COUNT(*)::int AS count,0::float AS average
          FROM reviews WHERE author_role=$1 AND author_id=$2`;
   const listSql = received
-    ? `SELECT r.id,r.rating,r.text,r.created_at,r.booking_id,r.author_role,
+    ? `SELECT r.id,r.rating,r.text,r.created_at,r.booking_id,r.author_role,r.response_text,r.response_at,
               CASE WHEN r.author_role='client' THEN c.name ELSE p.name END AS person_name
          FROM reviews r
          LEFT JOIN clients c ON c.id=r.author_id AND r.author_role='client'
@@ -1624,13 +1634,19 @@ async function renderTelegramReviews(ctx, role, mode = "received", offset = 0) {
     const date = review.created_at
       ? new Date(review.created_at).toLocaleDateString("ru-RU", { timeZone: "Asia/Tashkent" })
       : "";
-    await safeReply(ctx, [
+    const lines = [
       `${"⭐".repeat(rating)}${"☆".repeat(5 - rating)} <b>${rating}/5</b>`,
       `${received ? "Автор" : "Кому"}: ${escapeHtml(review.person_name || "Пользователь Travella")}`,
       date ? `Дата: ${escapeHtml(date)}` : "",
       review.booking_id ? "✅ Подтверждённая поездка" : "",
       review.text ? `\n${escapeHtml(review.text)}` : "\nБез комментария",
-    ].filter(Boolean).join("\n"), { parse_mode: "HTML" });
+      review.response_text ? `\n<b>Ваш ответ:</b> ${escapeHtml(review.response_text)}` : "",
+    ].filter(Boolean);
+    const reviewButtons = received ? [[
+      { text: review.response_text ? "✏️ Изменить ответ" : "💬 Ответить", callback_data: `tgreview:respond:${role}:${review.id}` },
+      { text: "⚖️ Апелляция", callback_data: `tgreview:appeal:${role}:${review.id}` },
+    ]] : [];
+    await safeReply(ctx, lines.join("\n"), { parse_mode: "HTML", reply_markup: { inline_keyboard: reviewButtons } });
   }
   if (safeOffset + rows.length < Number(stats.count || 0)) {
     await safeReply(ctx, "Показать более ранние отзывы?", {
@@ -2601,6 +2617,7 @@ function getMainMenuKeyboard(role) {
       [{ text: "🧺 Корзина" }, { text: "📄 Бронирования" }],
       [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
       [{ text: "⭐ Мои отзывы" }, { text: "🎓 Обучение" }],
+      [{ text: "🆘 Поддержка" }, { text: "🔔 Настройки" }],
     ]);
   }
 
@@ -2610,6 +2627,7 @@ function getMainMenuKeyboard(role) {
     [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
     [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
     [{ text: "⭐ Мои отзывы" }, { text: "🎓 Обучение" }],
+    [{ text: "🆘 Поддержка" }, { text: "🔔 Настройки" }],
     [{ text: "🏢 Стать поставщиком" }],
   ]);
 }
@@ -9251,6 +9269,7 @@ async function showLearningCenter(ctx) {
         inline_keyboard: [
           [{ text: "Продолжить курс", callback_data: "learning:next" }],
           [{ text: "Все инструкции", callback_data: "learning:topics" }],
+          [{ text: "🔎 Найти ответ", callback_data: "learning:help_search" }],
           row?.status === "unsubscribed"
             ? [{ text: "Включить автоматические уроки", callback_data: "learning:subscribe" }]
             : [{ text: "Отключить автоматические уроки", callback_data: "learning:unsubscribe" }],
@@ -9361,6 +9380,104 @@ bot.action("learning:requests", async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
   const role = await getLearningRole(ctx);
   await safeReply(ctx, "📨 Откройте раздел «Заявки» через закреплённую кнопку внизу.", getMainMenuKeyboard(role || "client"));
+});
+
+const SUPPORT_CATEGORY_LABELS = {
+  general: "Общий вопрос",
+  booking: "Проблема с бронированием",
+  payment: "Оплата или возврат",
+  review: "Апелляция по отзыву",
+  technical: "Техническая проблема",
+};
+
+function supportHomeKeyboard() {
+  return { inline_keyboard: [
+    [{ text: "➕ Новое обращение", callback_data: "support:new" }],
+    [{ text: "📋 Мои обращения", callback_data: "support:list" }],
+  ] };
+}
+
+async function getOperationsRole(ctx) {
+  return (await ensureProviderRole(ctx)) || (await ensureClientRole(ctx)) || ctx.session?.role || null;
+}
+
+async function showSupportCenter(ctx) {
+  const role = await getOperationsRole(ctx);
+  if (!["provider", "client"].includes(role) || !ctx.session?.linked) return safeReply(ctx, "🔐 Сначала привяжите аккаунт через /start.");
+  await safeReply(ctx, "🆘 <b>Поддержка Travella</b>\n\nОпишите вопрос прямо в боте. Для брони, оплаты или отзыва мы сохраним связанный контекст и передадим обращение администратору.", { parse_mode: "HTML", reply_markup: supportHomeKeyboard() });
+}
+
+bot.hears(/🆘\s*Поддержка/i, showSupportCenter);
+bot.action("support:new", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  await safeReply(ctx, "Выберите тему обращения:", { reply_markup: { inline_keyboard: Object.entries(SUPPORT_CATEGORY_LABELS).map(([key, label]) => [{ text: label, callback_data: `support:category:${key}` }]) } });
+});
+bot.action(/^support:category:(general|booking|payment|review|technical)$/, async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  ctx.session.state = "support_message";
+  ctx.session.supportDraft = { category: String(ctx.match[1]) };
+  await safeReply(ctx, `${SUPPORT_CATEGORY_LABELS[ctx.match[1]]}\n\nОпишите ситуацию одним сообщением. Если вопрос относится к брони или отзыву, укажите его номер. Не отправляйте данные банковской карты.`);
+});
+bot.action("support:list", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  const role = await getOperationsRole(ctx);
+  const rows = await listTickets(role, ctx.from?.id);
+  if (!rows.length) return safeReply(ctx, "У вас пока нет обращений.", { reply_markup: supportHomeKeyboard() });
+  const statuses = { open: "Открыто", in_progress: "В работе", resolved: "Решено", closed: "Закрыто" };
+  await safeReply(ctx, rows.map((item) => `#${item.id} · ${SUPPORT_CATEGORY_LABELS[item.category] || item.category}\n${statuses[item.status] || item.status} · ${new Date(item.created_at).toLocaleDateString("ru-RU", { timeZone: "Asia/Tashkent" })}\n${escapeHtml(String(item.message).slice(0, 180))}`).join("\n\n"), { parse_mode: "HTML", reply_markup: supportHomeKeyboard() });
+});
+
+function preferencesKeyboard(prefs) {
+  const row = (key, label) => [{ text: `${prefs?.[key] ? "✅" : "◻️"} ${label}`, callback_data: `notify:toggle:${key}` }];
+  return { inline_keyboard: [
+    ...row("booking_updates", "Бронирования и оплата"),
+    ...row("request_updates", "Заявки и ответы"),
+    ...row("review_updates", "Отзывы и напоминания"),
+    ...row("learning_updates", "Обучающие сообщения"),
+    ...row("marketing_updates", "Подборки и новости"),
+  ] };
+}
+
+async function showNotificationSettings(ctx, edit = false) {
+  const role = await getOperationsRole(ctx);
+  if (!["provider", "client"].includes(role)) return safeReply(ctx, "🔐 Сначала привяжите аккаунт через /start.");
+  const prefs = await getPreferences(role, ctx.from?.id);
+  const text = "🔔 <b>Настройки уведомлений</b>\n\nКритические сообщения безопасности и подтверждения платежей отключить нельзя. Остальными уведомлениями можно управлять здесь.";
+  if (edit && ctx.callbackQuery?.message) {
+    try { await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup: preferencesKeyboard(prefs) }); return; } catch (error) { if (!String(error?.message).includes("message is not modified")) console.warn("[tg-bot] notification settings edit failed", error?.message); }
+  }
+  await safeReply(ctx, text, { parse_mode: "HTML", reply_markup: preferencesKeyboard(prefs) });
+}
+
+bot.hears(/🔔\s*Настройки/i, showNotificationSettings);
+bot.action(/^notify:toggle:(booking_updates|request_updates|review_updates|learning_updates|marketing_updates)$/, async (ctx) => {
+  const role = await getOperationsRole(ctx);
+  const prefs = await togglePreference(role, ctx.from?.id, String(ctx.match[1]));
+  if (ctx.match[1] === "learning_updates") await setEnrollmentStatus(role, getActorId(ctx), prefs.learning_updates ? "active" : "unsubscribed");
+  await ctx.answerCbQuery(prefs[ctx.match[1]] ? "Включено" : "Отключено").catch(() => {});
+  await showNotificationSettings(ctx, true);
+});
+
+bot.command("bot_status", async (ctx) => {
+  if (!isTelegramAdminUserId(ctx.from?.id)) return safeReply(ctx, "⛔ Команда доступна администраторам.");
+  const summary = await getAdminSummary();
+  await safeReply(ctx, `📊 <b>Состояние Telegram-бота</b>\n\nОткрытые обращения: <b>${summary.open_tickets}</b>\nСрочные: <b>${summary.urgent_tickets}</b>\nНовые за 24 часа: <b>${summary.tickets_24h}</b>\nАктивные ученики: <b>${summary.active_learners}</b>\nОшибки уроков за 24 часа: <b>${summary.failed_learning_24h}</b>`, { parse_mode: "HTML" });
+});
+
+bot.action(/^support_admin:(progress|resolved):(\d+)$/, async (ctx) => {
+  if (!isTelegramAdminUserId(ctx.from?.id)) return ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+  const status = ctx.match[1] === "resolved" ? "resolved" : "in_progress";
+  const ticket = await updateTicketStatus(Number(ctx.match[2]), status);
+  if (!ticket) return ctx.answerCbQuery("Обращение не найдено", { show_alert: true });
+  await ctx.answerCbQuery(status === "resolved" ? "Обращение решено" : "Взято в работу").catch(() => {});
+  await ctx.editMessageReplyMarkup({ inline_keyboard: status === "resolved" ? [] : [[{ text: "✅ Отметить решённым", callback_data: `support_admin:resolved:${ticket.id}` }]] }).catch(() => {});
+  await bot.telegram.sendMessage(ticket.chat_id, status === "resolved" ? `✅ Обращение #${ticket.id} решено. Если вопрос остался, создайте новое обращение и укажите номер предыдущего.` : `👩‍💻 Обращение #${ticket.id} взято в работу. Мы сообщим, когда оно будет решено.`).catch(() => {});
+});
+
+bot.action("learning:help_search", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  ctx.session.state = "learning_help_search";
+  await safeReply(ctx, "🔎 Напишите, что не получается. Например: «оплата», «черновик», «контакты», «отзыв» или «бронь».");
 });
 
 /* ===================== /start ===================== */
@@ -10102,6 +10219,24 @@ bot.action(/^tgreview:list:(provider|client):(received|given):(\d+)$/, async (ct
     console.error("[tg-bot] reviews mode error:", error?.message || error);
     try { await ctx.answerCbQuery("Не удалось загрузить отзывы", { show_alert: true }); } catch {}
   }
+});
+
+bot.action(/^tgreview:respond:(provider|client):(\d+)$/, async (ctx) => {
+  const role = await getOperationsRole(ctx);
+  if (role !== String(ctx.match[1])) return ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+  ctx.session.state = "review_response";
+  ctx.session.reviewResponse = { reviewId: Number(ctx.match[2]), role };
+  await ctx.answerCbQuery().catch(() => {});
+  await safeReply(ctx, "Напишите публичный ответ на отзыв. Он будет виден рядом с отзывом. Не публикуйте телефоны и другие персональные данные.");
+});
+
+bot.action(/^tgreview:appeal:(provider|client):(\d+)$/, async (ctx) => {
+  const role = await getOperationsRole(ctx);
+  if (role !== String(ctx.match[1])) return ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+  ctx.session.state = "support_message";
+  ctx.session.supportDraft = { category: "review", reviewId: Number(ctx.match[2]) };
+  await ctx.answerCbQuery().catch(() => {});
+  await safeReply(ctx, `⚖️ Апелляция по отзыву #${ctx.match[2]}\n\nОпишите, какое правило нарушено и что нужно проверить. Отрицательная оценка сама по себе не является основанием для удаления.`);
 });
 
 bot.action(/^tgbook:(?:list|filter):(provider|client):(active|completed|cancelled)(?::(\d+))?$/, async (ctx) => {
@@ -17263,6 +17398,59 @@ bot.on("text", async (ctx, next) => {
     // Важно: bot.on("text") стоит раньше bot.hears(/готово/), поэтому
     // сообщение «ГОТОВО» нужно обработать здесь, иначе оно уходит в wizard.
     const rawText = String(ctx.message?.text || "").trim();
+
+    if (state === "review_response" && ctx.session?.reviewResponse?.reviewId) {
+      const { reviewId, role } = ctx.session.reviewResponse;
+      const actor = await resolveTelegramOperationActor(role, ctx.from?.id);
+      const targetType = role === "provider" ? "provider" : "client";
+      const clean = rawText.replace(/\s+/g, " ").trim().slice(0, 1000);
+      if (clean.length < 3) return safeReply(ctx, "Ответ слишком короткий. Напишите хотя бы несколько слов.");
+      const result = await pool.query(`UPDATE reviews SET response_text=$1,response_at=NOW() WHERE id=$2 AND target_type=$3 AND target_id=$4 RETURNING id`, [clean, reviewId, targetType, actor?.id || 0]);
+      if (!result.rowCount) return safeReply(ctx, "⚠️ Отзыв не найден или уже недоступен.");
+      ctx.session.state = null;
+      ctx.session.reviewResponse = null;
+      await safeReply(ctx, "✅ Ответ опубликован. Его можно изменить через раздел «Мои отзывы».");
+      await logTelegramOperationEvent({ role, actorId: actor.id, chatId: ctx.from?.id, type: "review_response_saved", metadata: { review_id: reviewId } }).catch(() => {});
+      return;
+    }
+
+    if (state === "support_message" && ctx.session?.supportDraft?.category) {
+      const role = await getOperationsRole(ctx);
+      try {
+        const number = rawText.match(/(?:бронь|бронировани[ея]|отзыв|#)\s*#?(\d+)/i)?.[1];
+        const category = ctx.session.supportDraft.category;
+        const ticket = await createTicket({
+          role,
+          telegramId: ctx.from?.id,
+          category,
+          message: rawText,
+          bookingId: ["booking", "payment"].includes(category) && number ? Number(number) : null,
+          reviewId: category === "review" ? (ctx.session.supportDraft.reviewId || (number ? Number(number) : null)) : null,
+        });
+        ctx.session.state = null;
+        ctx.session.supportDraft = null;
+        const adminText = `🆘 <b>Новое обращение #${ticket.id}</b>\n${escapeHtml(ticket.actor_name || role)} · ${escapeHtml(role)}\nТема: ${escapeHtml(SUPPORT_CATEGORY_LABELS[category] || category)}${ticket.booking_id ? `\nБронь: #${ticket.booking_id}` : ""}${ticket.review_id ? `\nОтзыв: #${ticket.review_id}` : ""}\n\n${escapeHtml(ticket.message)}`;
+        const adminIds = String(process.env.TELEGRAM_ADMIN_CHAT_IDS || MANAGER_CHAT_ID || "").split(/[\s,;]+/).filter(Boolean);
+        await Promise.allSettled(adminIds.map((chatId) => bot.telegram.sendMessage(chatId, adminText, { parse_mode: "HTML", reply_markup: { inline_keyboard: [[{ text: "👩‍💻 Взять в работу", callback_data: `support_admin:progress:${ticket.id}` }, { text: "✅ Решено", callback_data: `support_admin:resolved:${ticket.id}` }]] } })));
+        await safeReply(ctx, `✅ Обращение #${ticket.id} принято. Статус можно проверить в разделе «Мои обращения».`, { reply_markup: supportHomeKeyboard() });
+        await logTelegramOperationEvent({ role, actorId: ticket.actor_id, chatId: ctx.from?.id, type: "support_ticket_created", metadata: { ticket_id: ticket.id, category } });
+      } catch (error) {
+        console.error("[tg-bot] support ticket error", error?.message || error);
+        await safeReply(ctx, error?.message === "message_too_short" ? "Опишите ситуацию подробнее, минимум пять символов." : "⚠️ Не удалось создать обращение. Попробуйте позже.");
+      }
+      return;
+    }
+
+    if (state === "learning_help_search") {
+      const role = await getLearningRole(ctx);
+      const words = rawText.toLowerCase().split(/\s+/).filter((word) => word.length > 2);
+      const matches = (LEARNING_TOPICS[role] || []).map((topic, index) => ({ topic, index, score: words.reduce((sum, word) => sum + (topic.title.toLowerCase().includes(word) ? 3 : 0) + (topic.text.toLowerCase().includes(word) ? 1 : 0), 0) })).filter((item) => item.score > 0).sort((a, b) => b.score - a.score).slice(0, 5);
+      ctx.session.state = null;
+      await safeReply(ctx, matches.length ? "Нашёл подходящие разделы:" : "Точного ответа не нашёл. Откройте оглавление или напишите в поддержку.", { reply_markup: { inline_keyboard: matches.length ? matches.map(({ topic, index }) => [{ text: topic.title, callback_data: `learning:topic:${role}:${index}` }]).concat([[{ text: "🆘 Написать в поддержку", callback_data: "support:new" }]]) : [[{ text: "Все инструкции", callback_data: "learning:topics" }], [{ text: "🆘 Написать в поддержку", callback_data: "support:new" }]] } });
+      const actor = await resolveTelegramOperationActor(role, ctx.from?.id).catch(() => null);
+      await logTelegramOperationEvent({ role, actorId: actor?.id || null, chatId: ctx.from?.id, type: "help_search", metadata: { query: rawText.slice(0, 200), result_count: matches.length } }).catch(() => {});
+      return;
+    }
 
     if (state === "booking_review_comment" && ctx.session?.bookingReview?.reviewId) {
       const { reviewId, bookingId, authorRole = "client" } = ctx.session.bookingReview;
