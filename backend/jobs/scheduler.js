@@ -7,6 +7,7 @@ const { runUnlockNudge } = require("./unlockNudgeJob");
 const { runAbandonedPaymeReminderJob } = require("./abandonedPaymeReminderJob");
 const { runRefusedFixFollowupJob } = require("./refusedFixFollowupJob");
 const { runExpireHotelBookingHoldsJob } = require("./expireHotelBookingHoldsJob");
+const { runTelegramLearningJob } = require("./telegramLearningJob");
 
 const TZ = "Asia/Tashkent";
 const ASK_HOURS = new Set([10, 14, 18]);
@@ -237,6 +238,22 @@ function startJobsScheduler() {
     "*/5 * * * *",
     async () => {
       await runExpireHotelBookingHoldsJobSafe();
+    },
+    { timezone: TZ }
+  );
+
+  // Telegram Academy: due lessons, rate-limited and silent during night hours.
+  cron.schedule(
+    "*/10 * * * *",
+    async () => {
+      try {
+        const result = await runTelegramLearningJob();
+        if (!result?.skipped && (result?.sent || result?.failed)) {
+          console.log("[scheduler] telegramLearningJob finished", result);
+        }
+      } catch (err) {
+        console.error("[scheduler] telegramLearningJob failed", err);
+      }
     },
     { timezone: TZ }
   );

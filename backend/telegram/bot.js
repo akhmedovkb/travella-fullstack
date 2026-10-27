@@ -48,6 +48,15 @@ const {
 const { verifyProviderTelegramLinkPayload } = require("../utils/providerTelegramLink");
 const { isRegistrationCallbackData } = require("../utils/telegramRegistration");
 const { respondToSupplierServiceOrder, beginSupplierServiceOrderReply, consumeSupplierServiceOrderReply, consumeSupplierServiceOrderAttachment } = require("../utils/tourServiceOrderResponse");
+const {
+  getEnrollmentWithLesson,
+  setEnrollmentStatus,
+  snoozeEnrollment,
+  restartEnrollment,
+  completeCurrentLesson,
+  formatLesson,
+  lessonKeyboard,
+} = require("../services/telegramLearningService");
 
 /* ===================== CONFIG ===================== */
 const OFFER_VERSION = process.env.OFFER_VERSION || "v1.0";
@@ -2191,6 +2200,7 @@ function getMainMenuKeyboard(role) {
       [{ text: "🔍 Найти услугу" }, { text: "🧳 Мои услуги" }],
       [{ text: "🧺 Корзина" }, { text: "📄 Бронирования" }],
       [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
+      [{ text: "🎓 Обучение" }],
     ]);
   }
 
@@ -2199,6 +2209,7 @@ function getMainMenuKeyboard(role) {
     [{ text: "🔍 Найти услугу" }, { text: "🔥 Горящие предложения" }],
     [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
     [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
+    [{ text: "🎓 Обучение" }],
     [{ text: "🏢 Стать поставщиком" }],
   ]);
 }
@@ -8647,6 +8658,178 @@ bot.hears(MAIN_MENU_TEXT_RE, async (ctx) => {
   resetServiceWizard(ctx);
 
   await showMainMenu(ctx, role);
+});
+
+async function getLearningRole(ctx) {
+  return (
+    (await ensureProviderRole(ctx)) ||
+    (await ensureClientRole(ctx)) ||
+    ctx.session?.role ||
+    null
+  );
+}
+
+function learningTopicsText(role) {
+  if (role === "provider") {
+    return (
+      "🎓 <b>Инструкции для поставщика</b>\n\n" +
+      "1. Создание отказного или срочного предложения\n" +
+      "2. Черновики и продолжение заполнения\n" +
+      "3. Цена, срок актуальности и фотографии\n" +
+      "4. Модерация и исправление карточки\n" +
+      "5. Продление, архив и удаление\n" +
+      "6. Открытия контактов и быстрые заявки\n\n" +
+      "Бот предназначен для отказных и срочных предложений. Обычные услуги Tour Builder настраиваются на сайте."
+    );
+  }
+  return (
+    "🎓 <b>Инструкции для клиента</b>\n\n" +
+    "1. Поиск отказных и срочных предложений\n" +
+    "2. Проверка карточки и срока актуальности\n" +
+    "3. Открытие контактов поставщика\n" +
+    "4. Быстрый запрос\n" +
+    "5. Избранное, заявки и профиль\n\n" +
+    "Перед оплатой уточняйте актуальность, полный состав предложения и условия возврата."
+  );
+}
+
+async function sendCurrentLearningLesson(ctx, role) {
+  const row = await getEnrollmentWithLesson(role, getActorId(ctx));
+  if (!row) {
+    await safeReply(ctx, "Не удалось найти привязанный профиль. Откройте /start и подтвердите номер телефона.");
+    return;
+  }
+  if (!row.lesson_id || row.status === "completed") {
+    await safeReply(ctx, "✅ <b>Курс завершён</b>\n\nВсе инструкции остаются доступны в этом разделе.", {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Все инструкции", callback_data: "learning:topics" }],
+          [{ text: "Пройти курс заново", callback_data: "learning:restart" }],
+        ],
+      },
+    });
+    return;
+  }
+  await safeReply(ctx, formatLesson(row), {
+    parse_mode: "HTML",
+    disable_web_page_preview: true,
+    reply_markup: lessonKeyboard(row),
+  });
+  await completeCurrentLesson(row.id, row.lesson_id, "manual");
+}
+
+async function showLearningCenter(ctx) {
+  const role = await getLearningRole(ctx);
+  if (!role || !ctx.session?.linked) {
+    await safeReply(ctx, "🔐 Сначала привяжите аккаунт через /start.");
+    return;
+  }
+  const row = await getEnrollmentWithLesson(role, getActorId(ctx));
+  const statusText = row?.status === "unsubscribed"
+    ? "Автоматические уроки отключены."
+    : row?.status === "completed"
+      ? "Курс завершён."
+      : `Следующий урок: ${row?.next_lesson_position || 1} из ${row?.lesson_count || "—"}.`;
+  await safeReply(ctx,
+    `🎓 <b>Обучение работе с ботом</b>\n\n${statusText}\nВыберите действие:`,
+    {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "Продолжить курс", callback_data: "learning:next" }],
+          [{ text: "Все инструкции", callback_data: "learning:topics" }],
+          row?.status === "unsubscribed"
+            ? [{ text: "Включить автоматические уроки", callback_data: "learning:subscribe" }]
+            : [{ text: "Отключить автоматические уроки", callback_data: "learning:unsubscribe" }],
+        ],
+      },
+    }
+  );
+}
+
+bot.command("help", showLearningCenter);
+bot.hears(/🎓\s*Обучение/i, showLearningCenter);
+
+bot.action("learning:next", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  const role = await getLearningRole(ctx);
+  if (!role) return;
+  await setEnrollmentStatus(role, getActorId(ctx), "active");
+  await sendCurrentLearningLesson(ctx, role);
+});
+
+bot.action("learning:later", async (ctx) => {
+  await ctx.answerCbQuery("Напомним завтра").catch(() => {});
+  const role = await getLearningRole(ctx);
+  if (!role) return;
+  await snoozeEnrollment(role, getActorId(ctx), 24);
+  await safeReply(ctx, "⏰ Хорошо, следующий урок придёт не раньше чем через 24 часа.");
+});
+
+bot.action("learning:unsubscribe", async (ctx) => {
+  await ctx.answerCbQuery("Обучение отключено").catch(() => {});
+  const role = await getLearningRole(ctx);
+  if (!role) return;
+  await setEnrollmentStatus(role, getActorId(ctx), "unsubscribed");
+  await safeReply(ctx, "Автоматические обучающие сообщения отключены. Операционные уведомления бота продолжат работать.", {
+    reply_markup: { inline_keyboard: [[{ text: "Включить снова", callback_data: "learning:subscribe" }]] },
+  });
+});
+
+bot.action("learning:subscribe", async (ctx) => {
+  await ctx.answerCbQuery("Обучение включено").catch(() => {});
+  const role = await getLearningRole(ctx);
+  if (!role) return;
+  await setEnrollmentStatus(role, getActorId(ctx), "active");
+  await safeReply(ctx, "✅ Автоматические уроки включены. Отправляем не чаще одного урока в сутки и только с 09:00 до 21:00.");
+});
+
+bot.action("learning:restart", async (ctx) => {
+  await ctx.answerCbQuery("Курс начат заново").catch(() => {});
+  const role = await getLearningRole(ctx);
+  if (!role) return;
+  await restartEnrollment(role, getActorId(ctx));
+  await sendCurrentLearningLesson(ctx, role);
+});
+
+bot.action("learning:topics", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  const role = await getLearningRole(ctx);
+  if (!role) return;
+  await safeReply(ctx, learningTopicsText(role), {
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: role === "provider"
+        ? [
+            [{ text: "Мои услуги", callback_data: "prov_services:list" }],
+            [{ text: "Создать предложение", callback_data: "prov_services:create" }],
+          ]
+        : [[{ text: "Открыть поиск", callback_data: "learning:search" }]],
+    },
+  });
+});
+
+bot.action("learning:search", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  await safeReply(ctx, "🔍 <b>Что вы хотите найти?</b>", {
+    parse_mode: "HTML",
+    reply_markup: {
+      inline_keyboard: [
+        [{ text: "Отказной тур", switch_inline_query_current_chat: "#tour refused_tour" }],
+        [{ text: "Авторский тур", switch_inline_query_current_chat: "#tour author_tour" }],
+        [{ text: "Отказной отель", switch_inline_query_current_chat: "#tour refused_hotel" }],
+        [{ text: "Авиабилет", switch_inline_query_current_chat: "#tour refused_flight" }],
+        [{ text: "Билет / мероприятие", switch_inline_query_current_chat: "#tour refused_event_ticket" }],
+      ],
+    },
+  });
+});
+
+bot.action("learning:requests", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  const role = await getLearningRole(ctx);
+  await safeReply(ctx, "📨 Откройте раздел «Заявки» через закреплённую кнопку внизу.", getMainMenuKeyboard(role || "client"));
 });
 
 /* ===================== /start ===================== */
