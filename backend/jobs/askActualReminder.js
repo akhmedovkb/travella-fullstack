@@ -13,6 +13,19 @@ const SLOTS_HOURS = [10, 14, 18];
 // “Окно” в минутах от начала часа для авто-планировщика
 const WINDOW_MINUTES = 25;
 
+const ACTUAL_REMINDER_CATEGORIES = Object.freeze([
+  "refused_tour",
+  "refused_hotel",
+  "refused_flight",
+  "refused_ticket",
+  "refused_event_ticket",
+  "author_tour",
+]);
+
+function supportsActualReminderCategory(category) {
+  return ACTUAL_REMINDER_CATEGORIES.includes(String(category || "").trim().toLowerCase());
+}
+
 // Сколько дней подряд можно игнорировать напоминания, прежде чем снять с актуальности
 // (считаем по дням в Ташкенте)
 const MAX_IGNORED_DAYS = Number(process.env.ACTUAL_REMINDER_MAX_IGNORED_DAYS || 2);
@@ -170,17 +183,18 @@ async function askActualReminder(options = {}) {
     SELECT
       s.id,
       s.title,
+      s.category,
       s.details,
       s.tg_last_actual_check_at,
       p.telegram_refused_chat_id AS telegram_chat_id
     FROM services s
     JOIN providers p ON p.id = s.provider_id
     WHERE
-      s.category LIKE 'refused_%'
+      s.category = ANY($1::text[])
       AND s.status IN ('approved','published')
       AND s.deleted_at IS NULL
       AND p.telegram_refused_chat_id IS NOT NULL
-  `);
+  `, [ACTUAL_REMINDER_CATEGORIES]);
 
   for (const row of res.rows) {
     stats.scanned += 1;
@@ -344,7 +358,7 @@ async function askActualReminder(options = {}) {
 
     // 5) Текст — в HTML, чтобы не падало на символах вроде "5*" в названиях
     const text =
-      `⏳ <b>Отказ ещё актуален?</b>\n\n` +
+      `⏳ <b>Предложение ещё актуально?</b>\n\n` +
       `🧾 <b>ID:</b> <code>#R${id}</code>\n` +
       `🧳 <b>Услуга:</b> <b>${escapeHtml(title || "Услуга")}</b>\n\n` +
       `Нажмите кнопку ниже 👇`;
@@ -419,4 +433,8 @@ async function askActualReminder(options = {}) {
   return stats;
 }
 
-module.exports = { askActualReminder };
+module.exports = {
+  ACTUAL_REMINDER_CATEGORIES,
+  supportsActualReminderCategory,
+  askActualReminder,
+};
