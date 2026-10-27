@@ -959,6 +959,39 @@ async function notifyBookingServiceReminder({ booking }) {
   }
 }
 
+async function notifyBookingCompleted({ booking }) {
+  try {
+    const a = await getBookingActors(booking);
+    if (!a) return;
+    const requesterChat = a.agent?.chatId || a.client?.chatId;
+    const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
+    if (requesterChat) {
+      const extra = !a.agent?.chatId && a.provider?.id
+        ? { reply_markup: { inline_keyboard: [[1, 2, 3, 4, 5].map((rating) => ({
+            text: `${rating} ⭐`, callback_data: `tgbook:rate:${a.id}:${rating}`,
+          }))] } }
+        : {};
+      await tgSend(requesterChat, [
+        `<b>✅ Бронь №${a.id} завершена</b>`,
+        ...bookingSummaryLines(a),
+        "Как прошла услуга? Поставьте оценку поставщику.",
+        "",
+        `🔗 Открыть бронь: ${a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings")}`,
+      ].join("\n"), extra, tokenOverride);
+    }
+    if (a.provider?.chatId) await tgSend(a.provider.chatId, [
+      `<b>✅ Бронь №${a.id} завершена</b>`,
+      ...bookingSummaryLines(a),
+      ...applicantLines(a),
+      "Клиенту отправлен запрос на оценку услуги.",
+      "",
+      `🔗 Открыть бронь: ${urlProvider("bookings")}`,
+    ].join("\n"));
+  } catch (e) {
+    console.error("[tg] notifyBookingCompleted failed:", e?.response?.data || e?.message || e);
+  }
+}
+
 async function notifyCancelledByRequester({ booking }) {
   try {
     const a = await getBookingActors(booking);
@@ -1533,6 +1566,7 @@ module.exports = {
   notifyHoldPlaced,
   notifyBookingPaymentReminder,
   notifyBookingServiceReminder,
+  notifyBookingCompleted,
   notifyBookingRefunded,
 
   // REQUESTS:

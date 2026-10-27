@@ -50,12 +50,23 @@ async function runBookingLifecycleReminderJob({ db = pool, notifier = telegram }
     RETURNING booking_id
   `);
 
+  const completed = await db.query(`
+    UPDATE bookings
+       SET status='completed',updated_at=NOW()
+     WHERE status IN ('confirmed','paid')
+       AND COALESCE((SELECT MAX(bd.date) FROM booking_dates bd WHERE bd.booking_id=bookings.id),date) < CURRENT_DATE
+     RETURNING id AS booking_id
+  `);
+
   const notifications = [
     ...(payment.rows || []).map((row) => Promise.resolve(
       notifier.notifyBookingPaymentReminder?.({ booking: { id: row.booking_id }, minutesLeft: row.minutes_left })
     )),
     ...(service.rows || []).map((row) => Promise.resolve(
       notifier.notifyBookingServiceReminder?.({ booking: { id: row.booking_id } })
+    )),
+    ...(completed.rows || []).map((row) => Promise.resolve(
+      notifier.notifyBookingCompleted?.({ booking: { id: row.booking_id } })
     )),
   ];
   const settled = await Promise.allSettled(notifications);
@@ -64,6 +75,7 @@ async function runBookingLifecycleReminderJob({ db = pool, notifier = telegram }
     ok: true,
     payment_reminders: payment.rowCount || 0,
     service_reminders: service.rowCount || 0,
+    completed_bookings: completed.rowCount || 0,
     notification_failures: failed,
   };
 }

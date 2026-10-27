@@ -9862,6 +9862,58 @@ bot.action(/^tgbook:(confirm|decline):(\d+)$/, async (ctx) => {
   }
 });
 
+bot.action(/^tgbook:rate:(\d+):([1-5])$/, async (ctx) => {
+  const bookingId = Number(ctx.match[1]);
+  const rating = Number(ctx.match[2]);
+  try {
+    const booking = await getTelegramBooking(bookingId);
+    if (!booking || !(await isTelegramBookingParticipant(ctx, booking, "client"))) {
+      return ctx.answerCbQuery("⛔ Бронь недоступна", { show_alert: true });
+    }
+    if (String(booking.status) !== "completed") {
+      return ctx.answerCbQuery("Оценка доступна после завершения услуги", { show_alert: true });
+    }
+    const db = await pool.connect();
+    let review;
+    try {
+      await db.query("BEGIN");
+      await db.query(`SELECT pg_advisory_xact_lock($1)`, [bookingId]);
+      const existing = await db.query(
+        `SELECT id FROM reviews
+          WHERE booking_id=$1 AND target_type='provider' AND author_role='client' AND author_id=$2
+          LIMIT 1`,
+        [bookingId, booking.client_id]
+      );
+      if (existing.rowCount) {
+        await db.query("ROLLBACK");
+        return ctx.answerCbQuery("Вы уже оценили эту бронь", { show_alert: true });
+      }
+      const inserted = await db.query(
+        `INSERT INTO reviews(target_type,target_id,author_role,author_id,booking_id,rating,text)
+         VALUES ('provider',$1,'client',$2,$3,$4,NULL)
+         RETURNING id`,
+        [booking.provider_id, booking.client_id, bookingId, rating]
+      );
+      review = inserted.rows[0];
+      await db.query("COMMIT");
+    } catch (error) {
+      await db.query("ROLLBACK");
+      throw error;
+    } finally {
+      db.release();
+    }
+    if (!ctx.session) ctx.session = {};
+    ctx.session.state = "booking_review_comment";
+    ctx.session.bookingReview = { reviewId: review.id, bookingId };
+    await ctx.answerCbQuery(`Оценка ${rating}/5 сохранена`);
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+    await safeReply(ctx, `Спасибо за оценку ${rating}/5. Напишите короткий комментарий или отправьте «Пропустить».`);
+  } catch (error) {
+    console.error("[tg-bot] booking rating error:", error?.message || error);
+    try { await ctx.answerCbQuery("Не удалось сохранить оценку", { show_alert: true }); } catch {}
+  }
+});
+
 bot.hears(/📨 (Мои заявки|Заявки)/i, async (ctx) => {
   logUpdate(ctx, "hears Заявки");
 
@@ -16852,6 +16904,44 @@ bot.on("text", async (ctx, next) => {
     // Важно: bot.on("text") стоит раньше bot.hears(/готово/), поэтому
     // сообщение «ГОТОВО» нужно обработать здесь, иначе оно уходит в wizard.
     const rawText = String(ctx.message?.text || "").trim();
+
+    if (state === "booking_review_comment" && ctx.session?.bookingReview?.reviewId) {
+      const { reviewId, bookingId } = ctx.session.bookingReview;
+      const skip = /^(пропустить|skip)$/i.test(rawText);
+      const client = await getClientRowByChatId(pool, ctx.from?.id);
+      if (!client?.id) {
+        ctx.session.state = null;
+        ctx.session.bookingReview = null;
+        await safeReply(ctx, "⚠️ Профиль клиента не найден.");
+        return;
+      }
+      if (!skip) {
+        const comment = rawText.replace(/\s+/g, " ").trim().slice(0, 1000);
+        if (!comment) {
+          await safeReply(ctx, "Напишите комментарий или отправьте «Пропустить».");
+          return;
+        }
+        await pool.query(
+          `UPDATE reviews SET text=$1
+            WHERE id=$2 AND author_role='client' AND author_id=$3`,
+          [comment, reviewId, client.id]
+        );
+      }
+      const booking = await getTelegramBooking(bookingId);
+      const reviewResult = await pool.query(`SELECT rating,text FROM reviews WHERE id=$1`, [reviewId]);
+      const review = reviewResult.rows[0];
+      ctx.session.state = null;
+      ctx.session.bookingReview = null;
+      await safeReply(ctx, skip ? "✅ Оценка сохранена без комментария." : "✅ Спасибо. Оценка и комментарий опубликованы.");
+      if (booking?.provider_chat_id && review) {
+        await bot.telegram.sendMessage(Number(booking.provider_chat_id), [
+          `⭐ Новый отзыв по брони #${bookingId}`,
+          `Оценка: ${Number(review.rating)}/5`,
+          review.text ? `Комментарий: ${review.text}` : "Без комментария",
+        ].join("\n"));
+      }
+      return;
+    }
 
     if (state === "quick_booking_date" && ctx.session?.quickBooking?.requestId) {
       const date = parseBookingDate(rawText);
