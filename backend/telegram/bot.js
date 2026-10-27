@@ -1265,8 +1265,17 @@ async function ensureReqTables() {
         client_last_name TEXT,
         source TEXT,
         status TEXT NOT NULL DEFAULT 'new',
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
       );
+    `);
+    await pool.query(`
+      ALTER TABLE telegram_service_requests
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+      CREATE INDEX IF NOT EXISTS idx_telegram_service_requests_client
+        ON telegram_service_requests(client_tg_id, updated_at DESC);
+      CREATE INDEX IF NOT EXISTS idx_telegram_service_requests_service
+        ON telegram_service_requests(service_id, updated_at DESC);
     `);
     // ✅ Таблица логов сообщений по заявкам
     await pool.query(`
@@ -1318,7 +1327,7 @@ async function updateReqStatus(requestId, status) {
     await ensureReqTables();
     if (!pool) return false;
     await pool.query(
-      `UPDATE telegram_service_requests SET status=$2 WHERE id=$1`,
+      `UPDATE telegram_service_requests SET status=$2, updated_at=NOW() WHERE id=$1`,
       [Number(requestId), String(status)]
     );
     return true;
@@ -1334,9 +1343,12 @@ async function getReqById(requestId) {
     if (!pool) return null;
 
     const r = await pool.query(
-      `SELECT id, service_id, client_tg_id, client_username, client_first_name, client_last_name, status
-       FROM telegram_service_requests
-       WHERE id = $1
+      `SELECT r.id, r.service_id, r.client_tg_id, r.client_username,
+              r.client_first_name, r.client_last_name, r.status,
+              r.created_at, r.updated_at, s.title AS service_title
+       FROM telegram_service_requests r
+       LEFT JOIN services s ON s.id = r.service_id
+       WHERE r.id = $1
        LIMIT 1`,
       [Number(requestId)]
     );
@@ -1360,6 +1372,10 @@ async function logReqMessage({ requestId, senderRole, senderTgId, text }) {
       `INSERT INTO telegram_service_request_messages (request_id, sender_role, sender_tg_id, text)
        VALUES ($1, $2, $3, $4)`,
       [Number(requestId), String(senderRole), senderTgId ? Number(senderTgId) : null, cleanText]
+    );
+    await pool.query(
+      `UPDATE telegram_service_requests SET updated_at=NOW() WHERE id=$1`,
+      [Number(requestId)]
     );
 
     return true;
@@ -1459,6 +1475,108 @@ async function isRequestOperatorChat(ctx, requestId) {
   if (!req?.service_id) return false;
 
   return await isOwnerOfService(req.service_id, ctx?.chat?.id);
+}
+
+async function isRequestClient(ctx, requestId) {
+  const req = await getReqById(requestId);
+  return Boolean(req && String(req.client_tg_id) === String(ctx?.from?.id || ctx?.chat?.id || ""));
+}
+
+async function isRequestParticipant(ctx, requestId) {
+  return (await isRequestClient(ctx, requestId)) || (await isRequestOperatorChat(ctx, requestId));
+}
+
+async function listTelegramRequests({ role, chatId, limit = 10, offset = 0 }) {
+  await ensureReqTables();
+  if (!pool) return [];
+
+  const safeLimit = Math.min(20, Math.max(1, Number(limit) || 10));
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  if (role === "provider") {
+    const providerId = await resolveProviderIdByTelegramChatId(chatId, {
+      action: "list_telegram_requests",
+    });
+    if (!providerId) return [];
+    const result = await pool.query(
+      `SELECT r.id, r.service_id, r.client_tg_id, r.client_username,
+              r.client_first_name, r.client_last_name, r.status,
+              r.created_at, r.updated_at, s.title AS service_title,
+              (SELECT m.text FROM telegram_service_request_messages m
+                WHERE m.request_id=r.id ORDER BY m.created_at DESC LIMIT 1) AS last_message,
+              (SELECT COUNT(*)::int FROM telegram_service_request_messages m
+                WHERE m.request_id=r.id) AS message_count
+         FROM telegram_service_requests r
+         JOIN services s ON s.id=r.service_id
+        WHERE s.provider_id=$1
+        ORDER BY COALESCE(r.updated_at, r.created_at) DESC
+        LIMIT $2 OFFSET $3`,
+      [providerId, safeLimit, safeOffset]
+    );
+    return result.rows || [];
+  }
+
+  const result = await pool.query(
+    `SELECT r.id, r.service_id, r.client_tg_id, r.client_username,
+            r.client_first_name, r.client_last_name, r.status,
+            r.created_at, r.updated_at, s.title AS service_title,
+            (SELECT m.text FROM telegram_service_request_messages m
+              WHERE m.request_id=r.id ORDER BY m.created_at DESC LIMIT 1) AS last_message,
+            (SELECT COUNT(*)::int FROM telegram_service_request_messages m
+              WHERE m.request_id=r.id) AS message_count
+       FROM telegram_service_requests r
+       LEFT JOIN services s ON s.id=r.service_id
+      WHERE r.client_tg_id=$1
+      ORDER BY COALESCE(r.updated_at, r.created_at) DESC
+      LIMIT $2 OFFSET $3`,
+    [Number(chatId), safeLimit, safeOffset]
+  );
+  return result.rows || [];
+}
+
+function requestListItemText(row, role) {
+  const title = escapeHtml(row.service_title || `Услуга #${row.service_id}`);
+  const last = String(row.last_message || "").replace(/\s+/g, " ").trim();
+  const preview = last.length > 90 ? `${last.slice(0, 87)}…` : last;
+  const clientName = [row.client_first_name, row.client_last_name].filter(Boolean).join(" ").trim();
+  return [
+    `<b>Заявка #${Number(row.id)}</b> · ${escapeHtml(statusLabelForManager(row.status || "new"))}`,
+    `📦 ${title}`,
+    role === "provider" && clientName ? `👤 ${escapeHtml(clientName)}` : "",
+    preview ? `💬 ${escapeHtml(preview)}` : "",
+    `🗨 Сообщений: ${Number(row.message_count || 0)}`,
+  ].filter(Boolean).join("\n");
+}
+
+async function renderTelegramRequests(ctx, role, offset = 0) {
+  const items = await listTelegramRequests({ role, chatId: ctx.from?.id, offset });
+  const heading = role === "provider" ? "📨 Входящие запросы" : "📨 Мои запросы";
+  if (!items.length) {
+    await safeReply(ctx, offset
+      ? "Больше заявок нет."
+      : `${heading}\n\nЗдесь появятся быстрые запросы по отказным предложениям.`);
+    return;
+  }
+
+  if (!offset) await safeReply(ctx, `${heading}\n\nПоследние заявки и переписка по ним:`);
+  for (const row of items) {
+    await safeReply(ctx, requestListItemText(row, role), {
+      parse_mode: "HTML",
+      reply_markup: {
+        inline_keyboard: [[
+          { text: "Открыть", callback_data: `reqopen:${row.id}` },
+          { text: "История", callback_data: `reqhist:${row.id}` },
+        ]],
+      },
+    });
+  }
+  if (items.length === 10) {
+    await safeReply(ctx, "Показать более ранние заявки?", {
+      reply_markup: { inline_keyboard: [[{
+        text: "Показать ещё",
+        callback_data: `reqlist:${role}:${Number(offset) + 10}`,
+      }]] },
+    });
+  }
 }
 
 // ===================== DEDUP HELPERS =====================
@@ -9529,8 +9647,9 @@ bot.hears(/📨 (Мои заявки|Заявки)/i, async (ctx) => {
   logUpdate(ctx, "hears Заявки");
 
   const maybeProvider = await ensureProviderRole(ctx);
+  const maybeClient = maybeProvider ? null : await ensureClientRole(ctx);
   const linked = !!ctx.session?.linked;
-  const role = maybeProvider || ctx.session?.role || null;
+  const role = maybeProvider || maybeClient || ctx.session?.role || null;
 
   if (!linked && !role) {
     await ctx.reply("📌 Чтобы показать ваши заявки, нужно привязать аккаунт по номеру телефона.");
@@ -9538,10 +9657,78 @@ bot.hears(/📨 (Мои заявки|Заявки)/i, async (ctx) => {
     return;
   }
 
-  await ctx.reply(
-    "📨 Раздел заявок в боте пока в разработке.\n\nЗаявки/отклики доступны в личном кабинете на сайте:\n" +
-      `${SITE_URL}`
-  );
+  try {
+    await renderTelegramRequests(ctx, role === "provider" ? "provider" : "client", 0);
+  } catch (e) {
+    console.error("[tg-bot] requests list error:", e?.message || e);
+    await ctx.reply("⚠️ Не удалось загрузить заявки. Попробуйте позже.");
+  }
+});
+
+bot.action(/^reqlist:(provider|client):(\d+)$/, async (ctx) => {
+  try {
+    await ctx.answerCbQuery();
+    const requestedRole = String(ctx.match[1]);
+    const actualRole = (await ensureProviderRole(ctx)) === "provider" ? "provider" : "client";
+    if (requestedRole !== actualRole) {
+      await safeReply(ctx, "⛔ Этот список заявок вам недоступен.");
+      return;
+    }
+    await renderTelegramRequests(ctx, actualRole, Number(ctx.match[2]) || 0);
+  } catch (e) {
+    console.error("[tg-bot] reqlist action error:", e?.message || e);
+    await safeReply(ctx, "⚠️ Не удалось загрузить заявки.");
+  }
+});
+
+bot.action(/^reqopen:(\d+)$/, async (ctx) => {
+  try {
+    const requestId = Number(ctx.match[1]);
+    if (!(await isRequestParticipant(ctx, requestId))) {
+      await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+      return;
+    }
+    const req = await getReqById(requestId);
+    if (!req) {
+      await ctx.answerCbQuery("Заявка не найдена", { show_alert: true });
+      return;
+    }
+    const providerSide = await isRequestOperatorChat(ctx, requestId);
+    const clientName = [req.client_first_name, req.client_last_name].filter(Boolean).join(" ").trim();
+    const lines = [
+      `📨 <b>Заявка #${requestId}</b>`,
+      `Статус: ${escapeHtml(statusLabelForManager(req.status || "new"))}`,
+      `📦 ${escapeHtml(req.service_title || `Услуга #${req.service_id}`)}`,
+      providerSide && clientName ? `👤 ${escapeHtml(clientName)}` : "",
+      `🕒 ${escapeHtml(formatTashkentTime(req.updated_at || req.created_at) || "—")}`,
+    ].filter(Boolean);
+    const keyboard = providerSide
+      ? [
+          [
+            { text: "✅ Принять", callback_data: `reqst:${requestId}:accepted` },
+            { text: "⏳ Забронировано", callback_data: `reqst:${requestId}:booked` },
+          ],
+          [{ text: "❌ Отклонить", callback_data: `reqst:${requestId}:rejected` }],
+          [
+            { text: "✍️ Ответить", callback_data: `reqreply:${requestId}` },
+            { text: "📜 История", callback_data: `reqhist:${requestId}` },
+          ],
+        ]
+      : [
+          [
+            { text: "💬 Дописать", callback_data: `reqadd:${requestId}` },
+            { text: "📜 История", callback_data: `reqhist:${requestId}` },
+          ],
+        ];
+    await ctx.answerCbQuery();
+    await safeReply(ctx, lines.join("\n"), {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: keyboard },
+    });
+  } catch (e) {
+    console.error("[tg-bot] reqopen action error:", e?.message || e);
+    try { await ctx.answerCbQuery("Ошибка", { show_alert: true }); } catch {}
+  }
 });
 
 bot.hears(/👤 Профиль/i, async (ctx) => {
@@ -11390,6 +11577,28 @@ bot.action(/^reqst:(\d+):(new|accepted|booked|rejected)$/, async (ctx) => {
     try {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     } catch (_) {}
+
+    const req = await getReqById(requestId);
+    if (req?.client_tg_id) {
+      try {
+        await bot.telegram.sendMessage(
+          Number(req.client_tg_id),
+          `📨 Статус заявки #${requestId} изменён\n\n` +
+            `📦 ${req.service_title || `Услуга #${req.service_id}`}\n` +
+            `${statusLabel}`,
+          {
+            reply_markup: {
+              inline_keyboard: [[
+                { text: "Открыть заявку", callback_data: `reqopen:${requestId}` },
+                { text: "Дописать", callback_data: `reqadd:${requestId}` },
+              ]],
+            },
+          }
+        );
+      } catch (notifyError) {
+        console.error("[tg-bot] request status client notify error:", notifyError?.message || notifyError);
+      }
+    }
   } catch (e) {
     console.error("[tg-bot] reqst action error:", e);
     try {
@@ -11439,6 +11648,11 @@ bot.action(/^reqadd:(\d+)$/, async (ctx) => {
       return;
     }
 
+    if (String(req.client_tg_id) !== String(ctx.from?.id || "")) {
+      await safeReply(ctx, "⛔ Дополнять заявку может только отправивший её клиент.");
+      return;
+    }
+
     if (!ctx.session) ctx.session = {};
     ctx.session.state = "awaiting_request_add";
     ctx.session.activeRequestId = requestId;
@@ -11458,7 +11672,7 @@ bot.action(/^reqhist:(\d+)$/, async (ctx) => {
   try {
     const requestId = Number(ctx.match[1]);
 
-    if (!(await isRequestOperatorChat(ctx, requestId))) {
+    if (!(await isRequestParticipant(ctx, requestId))) {
       await ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
       return;
     }
@@ -11484,7 +11698,7 @@ bot.action(/^reqhist:(\d+)$/, async (ctx) => {
 
     const lines = msgs.map((m) => {
       const role =
-      m.sender_role === "operator" ? "🧑‍💼 Оператор" :
+      m.sender_role === "operator" ? "🏢 Поставщик" :
       m.sender_role === "manager" ? "🧑‍💼 Менеджер" :
       "👤 Клиент";
       const when = formatTashkentTime(m.created_at);
