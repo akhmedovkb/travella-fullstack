@@ -979,14 +979,24 @@ async function notifyBookingCompleted({ booking }) {
         `🔗 Открыть бронь: ${a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings")}`,
       ].join("\n"), extra, tokenOverride);
     }
-    if (a.provider?.chatId) await tgSend(a.provider.chatId, [
-      `<b>✅ Бронь №${a.id} завершена</b>`,
-      ...bookingSummaryLines(a),
-      ...applicantLines(a),
-      "Клиенту отправлен запрос на оценку услуги.",
-      "",
-      `🔗 Открыть бронь: ${urlProvider("bookings")}`,
-    ].join("\n"));
+    if (a.provider?.chatId) {
+      const canRateClient = Boolean(a.client?.id && !a.agent?.id);
+      const extra = canRateClient
+        ? { reply_markup: { inline_keyboard: [[1, 2, 3, 4, 5].map((rating) => ({
+            text: `${rating} ⭐`, callback_data: `tgbook:rate_client:${a.id}:${rating}`,
+          }))] } }
+        : {};
+      await tgSend(a.provider.chatId, [
+        `<b>✅ Бронь №${a.id} завершена</b>`,
+        ...bookingSummaryLines(a),
+        ...applicantLines(a),
+        canRateClient
+          ? "Как прошла работа с заказчиком? Поставьте оценку клиенту."
+          : "Клиенту отправлен запрос на оценку услуги.",
+        "",
+        `🔗 Открыть бронь: ${urlProvider("bookings")}`,
+      ].join("\n"), extra);
+    }
   } catch (e) {
     console.error("[tg] notifyBookingCompleted failed:", e?.response?.data || e?.message || e);
   }

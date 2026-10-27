@@ -16,3 +16,9 @@ test("rejects unfinished, mismatched and unrelated booking reviews", () => {
   assert.equal(validateReviewBooking({ booking, targetType: "provider", targetId: 21, authorRole: "client", authorId: 10 }).code, "review_booking_forbidden");
   assert.equal(validateReviewBooking({ booking, targetType: "client", targetId: 10, authorRole: "provider", authorId: 99 }).code, "review_booking_forbidden");
 });
+
+test("keeps provider-to-client reviews scoped to the service provider", () => {
+  assert.equal(validateReviewBooking({ booking, targetType: "client", targetId: 10, authorRole: "provider", authorId: 20 }).ok, true);
+  assert.equal(validateReviewBooking({ booking, targetType: "client", targetId: 11, authorRole: "provider", authorId: 20 }).code, "review_booking_forbidden");
+  assert.equal(validateReviewBooking({ booking, targetType: "client", targetId: 10, authorRole: "client", authorId: 10 }).code, "review_booking_forbidden");
+});
