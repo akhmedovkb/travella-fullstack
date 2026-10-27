@@ -8,6 +8,7 @@ const { runAbandonedPaymeReminderJob } = require("./abandonedPaymeReminderJob");
 const { runRefusedFixFollowupJob } = require("./refusedFixFollowupJob");
 const { runExpireHotelBookingHoldsJob } = require("./expireHotelBookingHoldsJob");
 const { runTelegramLearningJob } = require("./telegramLearningJob");
+const { runDueBroadcasts } = require("../routes/adminBroadcastRoutes");
 
 const TZ = "Asia/Tashkent";
 const ASK_HOURS = new Set([10, 14, 18]);
@@ -211,6 +212,20 @@ function startJobsScheduler() {
     "*/10 * * * *",
     async () => {
       await runUnlockNudge();
+    },
+    { timezone: TZ }
+  );
+
+  // Scheduled admin broadcasts survive restarts because their state lives in PostgreSQL.
+  cron.schedule(
+    "*/1 * * * *",
+    async () => {
+      try {
+        const result = await runDueBroadcasts();
+        if (result?.started) console.log("[scheduler] scheduled broadcasts started", result);
+      } catch (err) {
+        console.error("[scheduler] scheduled broadcasts failed", err);
+      }
     },
     { timezone: TZ }
   );

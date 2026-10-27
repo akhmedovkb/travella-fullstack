@@ -39,6 +39,18 @@ function normalizeAudience(a) {
   return "all";
 }
 
+function normalizeKind(value) {
+  const kind = String(value || "").trim().toLowerCase();
+  return ["education", "news", "qualification", "service"].includes(kind)
+    ? kind
+    : "education";
+}
+
+function normalizeProviderType(value) {
+  const type = String(value || "").trim().toLowerCase();
+  return ["agent", "guide", "transport", "hotel"].includes(type) ? type : "";
+}
+
 async function ensureClientBotEnabled() {
   if (!CLIENT_TOKEN) {
     const err = new Error("TELEGRAM_CLIENT_BOT_TOKEN is missing");
@@ -47,7 +59,7 @@ async function ensureClientBotEnabled() {
   }
 }
 
-async function createRecipients(broadcastId, audience) {
+async function createRecipients(broadcastId, audience, segment = {}) {
   // только реально привязанные к отказному боту:
   // providers.telegram_refused_chat_id
   // clients.telegram_chat_id
@@ -62,11 +74,14 @@ async function createRecipients(broadcastId, audience) {
   };
 
   if (audience === "providers" || audience === "all") {
+    const providerType = normalizeProviderType(segment?.providerType);
     const q = await pool.query(
       `SELECT telegram_refused_chat_id AS chat_id
          FROM providers
         WHERE telegram_refused_chat_id IS NOT NULL
           AND TRIM(telegram_refused_chat_id::text) <> ''`
+        + (providerType ? ` AND LOWER(COALESCE(type, '')) = $1` : ""),
+      providerType ? [providerType] : []
     );
     for (const r of q.rows) {
       if (r.chat_id) pushRow("provider", r.chat_id);
@@ -87,13 +102,14 @@ async function createRecipients(broadcastId, audience) {
 
   if (!inserts.length) return 0;
 
-  await pool.query(
+  const inserted = await pool.query(
     `INSERT INTO broadcast_recipients (broadcast_id, role, chat_id, status)
-     VALUES ${inserts.join(",")}`,
+     VALUES ${inserts.join(",")}
+     ON CONFLICT (broadcast_id, role, chat_id) DO NOTHING`,
     params
   );
 
-  return inserts.length;
+  return inserted.rowCount;
 }
 
 async function getBroadcast(broadcastId) {
@@ -371,17 +387,22 @@ router.post("/create", authenticateToken, requireAdmin, async (req, res) => {
     if (!text) return res.status(400).json({ message: "Text is required" });
 
     const audience = normalizeAudience(req.body?.audience);
+    const title = toSafeText(req.body?.title).slice(0, 160);
+    const kind = normalizeKind(req.body?.kind);
+    const segment = {
+      providerType: normalizeProviderType(req.body?.segment?.providerType),
+    };
     const adminId = req.user?.id || null;
 
     const ins = await pool.query(
-      `INSERT INTO broadcasts (created_by, audience, text, status, created_at, updated_at)
-       VALUES ($1, $2, $3, 'draft', NOW(), NOW())
+      `INSERT INTO broadcasts (created_by, title, kind, audience, segment, text, status, created_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5::jsonb, $6, 'draft', NOW(), NOW())
        RETURNING id, status, audience, created_at`,
-      [adminId, audience, text]
+      [adminId, title || null, kind, audience, JSON.stringify(segment), text]
     );
     const broadcast = ins.rows[0];
 
-    const total = await createRecipients(broadcast.id, audience);
+    const total = await createRecipients(broadcast.id, audience, segment);
     await pool.query(
       `UPDATE broadcasts SET total=$2, updated_at = NOW() WHERE id=$1`,
       [broadcast.id, total]
@@ -390,6 +411,45 @@ router.post("/create", authenticateToken, requireAdmin, async (req, res) => {
     res.json({ ok: true, broadcastId: broadcast.id, total });
   } catch (e) {
     res.status(500).json({ message: e?.message || "Failed to create broadcast" });
+  }
+});
+
+router.get("/list", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query?.limit) || 30));
+    const result = await pool.query(
+      `SELECT id, title, kind, audience, segment, status, scheduled_at,
+              total, sent, failed, started_at, finished_at, created_at, updated_at
+         FROM broadcasts
+        ORDER BY created_at DESC
+        LIMIT $1`,
+      [limit]
+    );
+    res.json({ ok: true, items: result.rows });
+  } catch (e) {
+    res.status(500).json({ message: e?.message || "Failed to list broadcasts" });
+  }
+});
+
+router.post("/:id(\\d+)/schedule", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    const scheduledAt = new Date(req.body?.scheduledAt || "");
+    if (!isIntId(id)) return res.status(400).json({ message: "Bad id" });
+    if (!Number.isFinite(scheduledAt.getTime()) || scheduledAt.getTime() <= Date.now()) {
+      return res.status(400).json({ message: "Choose a future date and time" });
+    }
+    const result = await pool.query(
+      `UPDATE broadcasts
+          SET status = 'scheduled', scheduled_at = $2, updated_at = NOW()
+        WHERE id = $1 AND status IN ('draft', 'paused', 'failed')
+        RETURNING id, status, scheduled_at`,
+      [id, scheduledAt.toISOString()]
+    );
+    if (!result.rowCount) return res.status(409).json({ message: "Broadcast cannot be scheduled" });
+    res.json({ ok: true, broadcast: result.rows[0] });
+  } catch (e) {
+    res.status(500).json({ message: e?.message || "Failed to schedule broadcast" });
   }
 });
 
@@ -465,7 +525,11 @@ router.get("/:id(\\d+)/status", authenticateToken, requireAdmin, async (req, res
         id: b.id,
         status: b.status,
         audience: b.audience,
+        title: b.title,
+        kind: b.kind,
+        segment: b.segment,
         text: b.text,
+        scheduled_at: b.scheduled_at,
         created_at: b.created_at,
         started_at: b.started_at,
         finished_at: b.finished_at,
@@ -515,3 +579,25 @@ router.post("/test", authenticateToken, requireAdmin, async (req, res) => {
 });
 
 module.exports = router;
+module.exports.runBroadcast = runBroadcast;
+module.exports.runDueBroadcasts = async function runDueBroadcasts() {
+  await pool.query(
+    `UPDATE broadcast_recipients
+        SET status = 'pending', updated_at = NOW()
+      WHERE status = 'sending' AND updated_at <= NOW() - INTERVAL '10 minutes'`
+  );
+  const due = await pool.query(
+    `UPDATE broadcasts
+        SET status = 'running', started_at = COALESCE(started_at, NOW()), updated_at = NOW()
+      WHERE id IN (
+        SELECT id FROM broadcasts
+         WHERE (status = 'scheduled' AND scheduled_at <= NOW())
+            OR (status = 'running' AND updated_at <= NOW() - INTERVAL '2 minutes')
+         ORDER BY COALESCE(scheduled_at, updated_at) ASC LIMIT 5
+         FOR UPDATE SKIP LOCKED
+      )
+      RETURNING id`
+  );
+  for (const row of due.rows) await runBroadcast(Number(row.id));
+  return { started: due.rowCount };
+};
