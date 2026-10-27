@@ -1,7 +1,14 @@
 require("dotenv").config();
 const axios = require("axios");
 const pool = require("../db");
-const { ensureTelegramOperationsSchema, getAdminSummary } = require("../services/telegramOperationsService");
+const {
+  ensureTelegramOperationsSchema,
+  createTicket,
+  addTicketMessage,
+  updateTicketStatus,
+  getTicket,
+  getAdminSummary,
+} = require("../services/telegramOperationsService");
 
 async function probeChat(api, role, chatId) {
   if (!chatId) throw new Error(`Missing TELEGRAM_E2E_${role.toUpperCase()}_CHAT_ID`);
@@ -11,6 +18,32 @@ async function probeChat(api, role, chatId) {
   if (!sent.data?.ok) throw new Error(`${role}: sendMessage failed`);
   await axios.post(`${api}/deleteMessage`, { chat_id: chatId, message_id: sent.data.result.message_id }, { timeout: 10000 }).catch(() => {});
   return { role, chat_id: String(chatId), username: chat.data.result?.username || null };
+}
+
+async function probeSupportLifecycle(role, chatId) {
+  const ticket = await createTicket({
+    role,
+    telegramId: String(chatId),
+    category: "technical",
+    message: `Automated E2E ticket for ${role}`,
+  });
+
+  try {
+    await addTicketMessage({
+      ticketId: ticket.id,
+      senderRole: "admin",
+      senderId: "telegram-e2e",
+      message: "Automated support reply",
+    });
+    await updateTicketStatus(ticket.id, "resolved", "Resolved by automated E2E");
+    const completed = await getTicket(ticket.id);
+    if (completed?.status !== "resolved" || completed.messages.length < 2) {
+      throw new Error(`${role}: support lifecycle was not persisted`);
+    }
+    return { role, ticket_id: ticket.id, status: completed.status, messages: completed.messages.length };
+  } finally {
+    await pool.query("DELETE FROM telegram_support_tickets WHERE id = $1", [ticket.id]);
+  }
 }
 
 async function main() {
@@ -23,8 +56,11 @@ async function main() {
   const chats = [];
   chats.push(await probeChat(api, "client", process.env.TELEGRAM_E2E_CLIENT_CHAT_ID));
   chats.push(await probeChat(api, "provider", process.env.TELEGRAM_E2E_PROVIDER_CHAT_ID));
+  const lifecycles = [];
+  lifecycles.push(await probeSupportLifecycle("client", process.env.TELEGRAM_E2E_CLIENT_CHAT_ID));
+  lifecycles.push(await probeSupportLifecycle("provider", process.env.TELEGRAM_E2E_PROVIDER_CHAT_ID));
   const summary = await getAdminSummary();
-  console.log(JSON.stringify({ ok: true, bot: me.data.result.username, chats, summary }, null, 2));
+  console.log(JSON.stringify({ ok: true, bot: me.data.result.username, chats, lifecycles, summary }, null, 2));
 }
 
 main().catch((error) => { console.error("[telegram-support-e2e]", error.response?.data || error.message || error); process.exitCode = 1; }).finally(() => pool.end());
