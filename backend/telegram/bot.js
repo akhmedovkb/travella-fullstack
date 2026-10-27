@@ -9116,6 +9116,16 @@ const LEARNING_TOPICS = {
       text: "<b>6. Открытие контактов, запросы и бронирования</b>\n\nКлиент может открыть ваши контакты или отправить быстрый запрос из карточки. Новый запрос появится в разделе «Заявки», а бот пришлёт уведомление.\n\n<b>Ваш порядок действий</b>\n1) Откройте запрос и проверьте услугу.\n2) Ответьте клиенту без задержки.\n3) Если договорились, создайте бронь: дата → туристы → итоговая цена.\n4) Дождитесь подтверждения и оплаты клиента.\n5) После оказания услуги бронь завершится, обе стороны смогут оставить отзыв.\n\nНе просите оплату по неподтверждённой или устаревшей карточке.",
       action: { text: "📨 Открыть заявки", callback_data: "reqlist:provider:0" },
     },
+    {
+      title: "Статусы и оплата",
+      text: "<b>7. Статусы брони, оплата и отзывы</b>\n\n<b>Основные статусы</b>\n• «Ожидает подтверждения клиента» — клиент ещё не принял ваши условия.\n• «Ожидает оплаты клиентом» — бронь принята, запущен таймер оплаты.\n• «Подтверждена» или «Оплачена» — услугу нужно поставить в календарь и подготовить.\n• «Завершена» — дата услуги прошла, доступна взаимная оценка.\n• «Отменена» — обязательства прекращены; проверьте причину и возврат, если была оплата.\n\nПосле завершения оценивайте только прямого заказчика по фактическому взаимодействию. Отзыв, связанный с бронью, отмечается как подтверждённый.",
+      action: { text: "📄 Открыть бронирования", callback_data: "tgbook:filter:provider:active" },
+    },
+    {
+      title: "Если что-то не работает",
+      text: "<b>8. Типичные проблемы</b>\n\n<b>Пропали кнопки</b>\nОтправьте /menu или слово «меню».\n\n<b>Бот не видит профиль</b>\nОткройте /start и повторно подтвердите номер, который указан в кабинете.\n\n<b>Не приходит заявка</b>\nПроверьте, что карточка опубликована, актуальна и не находится в архиве.\n\n<b>Нельзя продолжить черновик</b>\nОткройте «Мои услуги» и выберите существующую карточку. Не создавайте дубль.\n\n<b>Неверная цена или дата</b>\nСразу архивируйте карточку либо исправьте и повторно отправьте на модерацию. Не подтверждайте бронь с неверными условиями.",
+      action: { text: "🏠 Открыть главное меню", callback_data: "learning:menu" },
+    },
   ],
   client: [
     {
@@ -9143,6 +9153,16 @@ const LEARNING_TOPICS = {
       text: "<b>5. Завершение и отзывы</b>\n\nПеред услугой бот пришлёт напоминание. После даты поездки бронь перейдёт в завершённые, и вы сможете оценить поставщика.\n\nОставляйте оценку по фактически оказанной услуге. Коротко укажите, что соответствовало карточке, а что отличалось. Отзыв по завершённой брони получает отметку «Подтверждённая поездка».\n\nСвои полученные и оставленные оценки можно посмотреть в разделе «Мои отзывы».",
       action: { text: "⭐ Открыть мои отзывы", callback_data: "tgreview:list:client:received:0" },
     },
+    {
+      title: "Безопасная оплата",
+      text: "<b>6. Безопасная оплата и таймер</b>\n\nОплачивайте только бронь, которую вы проверили и подтвердили. На шаге оплаты бот показывает итоговую сумму и оставшееся время. По истечении таймера неоплаченная бронь отменяется автоматически.\n\n<b>Перед оплатой</b>\n• сверьте название услуги, дату и число туристов;\n• проверьте итоговую сумму и валюту;\n• убедитесь, что поставщик и условия совпадают с договорённостью.\n\nНе переводите деньги по реквизитам из неизвестных сообщений. Статус успешной оплаты должен появиться в самой брони.",
+      action: { text: "📄 Открыть бронирования", callback_data: "tgbook:filter:client:active" },
+    },
+    {
+      title: "Если что-то не работает",
+      text: "<b>7. Типичные проблемы</b>\n\n<b>Пропали кнопки</b>\nОтправьте /menu или слово «меню».\n\n<b>Бот не видит профиль</b>\nОткройте /start и подтвердите номер телефона повторно.\n\n<b>Не открываются контакты</b>\nПроверьте баланс и статус операции. Повторная покупка уже открытого контакта не требуется.\n\n<b>Поставщик не отвечает</b>\nНе оплачивайте услугу, пока условия не подтверждены. Проверьте статус запроса в разделе «Заявки».\n\n<b>Бронь исчезла из активных</b>\nОткройте фильтры «Завершённые» и «Отменённые»: возможно, истёк таймер оплаты или прошла дата услуги.",
+      action: { text: "🏠 Открыть главное меню", callback_data: "learning:menu" },
+    },
   ],
 };
 
@@ -9164,9 +9184,25 @@ function learningTopicKeyboard(role, index) {
   const navigation = [];
   if (index > 0) navigation.push({ text: "⬅️ Назад", callback_data: `learning:topic:${role}:${index - 1}` });
   navigation.push({ text: "☰ Оглавление", callback_data: "learning:topics" });
-  if (index < topics.length - 1) navigation.push({ text: "Дальше ➡️", callback_data: `learning:topic:${role}:${index + 1}` });
   rows.push(navigation);
+  rows.push([{ text: index < topics.length - 1 ? "✅ Понятно, дальше" : "✅ Завершить инструкцию", callback_data: index < topics.length - 1
+    ? `learning:topic:${role}:${index + 1}`
+    : "learning:topics" }]);
   return { inline_keyboard: rows };
+}
+
+async function showLearningPanel(ctx, text, options = {}) {
+  const payload = { parse_mode: "HTML", disable_web_page_preview: true, ...options };
+  if (ctx.callbackQuery?.message) {
+    try {
+      await ctx.editMessageText(text, payload);
+      return;
+    } catch (error) {
+      if (String(error?.description || error?.message || "").includes("message is not modified")) return;
+      console.warn("[tg-bot] learning panel edit failed:", error?.message || error);
+    }
+  }
+  await safeReply(ctx, text, payload);
 }
 
 async function sendCurrentLearningLesson(ctx, role) {
@@ -9273,8 +9309,7 @@ bot.action("learning:topics", async (ctx) => {
   await ctx.answerCbQuery().catch(() => {});
   const role = await getLearningRole(ctx);
   if (!role) return;
-  await safeReply(ctx, learningTopicsText(role), {
-    parse_mode: "HTML",
+  await showLearningPanel(ctx, learningTopicsText(role), {
     reply_markup: learningTopicsKeyboard(role),
   });
 });
@@ -9288,15 +9323,22 @@ bot.action(/^learning:topic:(provider|client):(\d+)$/, async (ctx) => {
     const topic = LEARNING_TOPICS[role]?.[index];
     if (!topic) return ctx.answerCbQuery("Урок не найден", { show_alert: true });
     await ctx.answerCbQuery().catch(() => {});
-    await safeReply(ctx, `🎓 ${topic.text}`, {
-      parse_mode: "HTML",
-      disable_web_page_preview: true,
+    const total = LEARNING_TOPICS[role].length;
+    const progress = `${"●".repeat(index + 1)}${"○".repeat(total - index - 1)}`;
+    await showLearningPanel(ctx, `<b>Урок ${index + 1} из ${total}</b>  ${progress}\n\n🎓 ${topic.text}`, {
       reply_markup: learningTopicKeyboard(role, index),
     });
   } catch (error) {
     console.error("[tg-bot] learning topic error:", error?.message || error);
     try { await ctx.answerCbQuery("Не удалось открыть урок", { show_alert: true }); } catch {}
   }
+});
+
+bot.action("learning:menu", async (ctx) => {
+  await ctx.answerCbQuery().catch(() => {});
+  const role = await getLearningRole(ctx);
+  if (!role) return;
+  await showMainMenu(ctx, role, { text: "🏠 Главное меню Travella" });
 });
 
 bot.action("learning:search", async (ctx) => {
