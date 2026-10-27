@@ -9843,6 +9843,7 @@ bot.action(/^tgbook:(confirm|decline):(\d+)$/, async (ctx) => {
     if (!updated.rowCount) return ctx.answerCbQuery("Статус брони уже изменился", { show_alert: true });
     const fresh = await getTelegramBooking(bookingId);
     await ctx.answerCbQuery(action === "confirm" ? "Бронь подтверждена" : "Бронь отклонена");
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
     await safeReply(ctx, telegramBookingText(fresh), {
       parse_mode: "HTML",
       reply_markup: action === "confirm" ? { inline_keyboard: [[{

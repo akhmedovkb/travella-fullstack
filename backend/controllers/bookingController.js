@@ -1270,7 +1270,7 @@ const cancelBooking = async (req, res) => {
         ...bQ.rows[0],
         dates: dQ.rows.map(r => (r.d instanceof Date ? r.d.toISOString().slice(0,10) : String(r.d)))
       };
-      tg.notifyCancelled({ booking }).catch(e => {
+      tg.notifyCancelled({ booking, by: "client" }).catch(e => {
         console.error("tg.notifyCancelled failed:", e?.response?.data || e?.message || e);
       });
     } catch (e) {

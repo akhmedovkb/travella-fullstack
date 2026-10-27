@@ -532,7 +532,7 @@ function bookingSummaryLines(a) {
   const title = a.serviceTitle || kindLabels[kind] || "Услуга";
   const adults = Number(details.pax_adult || 0);
   const children = Number(details.pax_child || 0);
-  const guests = adults + children;
+  const guests = adults + children || Number(details.guests || 0);
   const from = String(details.from_city || "").trim();
   const to = String(details.to_city || "").trim();
   const residency = String(details.resident_type || "").toLowerCase();
@@ -691,7 +691,14 @@ async function notifyQuote({ booking, price, currency, note }) {
     );
 
     const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
-    await tgSend(dest.chatId, lines.join("\n"), {}, tokenOverride);
+    const quickRequestId = Number(a.details?.telegram_request_id || 0);
+    const extra = quickRequestId && !a.agent?.chatId
+      ? { reply_markup: { inline_keyboard: [[
+          { text: "✅ Подтвердить", callback_data: `tgbook:confirm:${a.id}` },
+          { text: "❌ Отклонить", callback_data: `tgbook:decline:${a.id}` },
+        ]] } }
+      : {};
+    await tgSend(dest.chatId, lines.join("\n"), extra, tokenOverride);
   } catch (e) {
     console.error("[tg] notifyQuote failed:", e?.response?.data || e?.message || e);
   }
@@ -836,28 +843,76 @@ async function notifyRejected({ booking, reason }) {
   }
 }
 
-async function notifyCancelled({ booking }) {
+async function notifyCancelled({ booking, by = "provider", reason = null }) {
   try {
     const a = await getBookingActors(booking);
     if (!a) return;
-
-    const dest = a.agent?.chatId
-      ? { chatId: a.agent.chatId, isProv: true }
-      : { chatId: a.client?.chatId, isProv: false };
-    if (!dest.chatId) return;
-
-    const text = [
-      `<b>⚠️ Поставщик отменил бронь №${a.id}</b>`,
-      ...bookingSummaryLines(a),
-      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
-      "",
-      `🔗 Открыть: ${dest.isProv ? urlProvider("bookings") : urlClient("bookings")}`,
-    ].join("\n");
-
+    const cancelledByRequester = by === "client" || by === "requester";
+    const title = cancelledByRequester
+      ? `<b>⚠️ Заказчик отменил бронь №${a.id}</b>`
+      : `<b>⚠️ Поставщик отменил бронь №${a.id}</b>`;
+    const common = [title, ...bookingSummaryLines(a)];
+    if (reason) common.push(`📝 Причина: ${esc(reason)}`);
     const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
-    await tgSend(dest.chatId, text, {}, tokenOverride);
+    const requesterChat = a.agent?.chatId || a.client?.chatId;
+    if (!cancelledByRequester && requesterChat) {
+      await tgSend(requesterChat, [
+        ...common,
+        lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
+        "",
+        `🔗 Открыть: ${a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings")}`,
+      ].join("\n"), {}, tokenOverride);
+    }
+    if (cancelledByRequester && a.provider?.chatId) {
+      await tgSend(a.provider.chatId, [
+        ...common,
+        ...applicantLines(a),
+        "",
+        `🔗 Открыть: ${urlProvider("bookings")}`,
+      ].join("\n"));
+    }
   } catch (e) {
     console.error("[tg] notifyCancelled failed:", e?.response?.data || e?.message || e);
+  }
+}
+
+async function notifyBookingAutoCancelled(booking) {
+  try {
+    const a = await getBookingActors(booking);
+    if (!a) return;
+    const lines = [
+      `<b>⌛ Бронь №${a.id} отменена автоматически</b>`,
+      ...bookingSummaryLines(a),
+      "Причина: истекло время оплаты.",
+    ];
+    const tokenOverride = _tokenForRefusedActors(a.serviceCategory);
+    const requesterChat = a.agent?.chatId || a.client?.chatId;
+    if (requesterChat) await tgSend(requesterChat, [
+      ...lines, "", `🔗 Открыть: ${a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings")}`,
+    ].join("\n"), {}, tokenOverride);
+    if (a.provider?.chatId) await tgSend(a.provider.chatId, [
+      ...lines, "Дата снова доступна для бронирования.", "", `🔗 Открыть: ${urlProvider("bookings")}`,
+    ].join("\n"));
+  } catch (e) {
+    console.error("[tg] notifyBookingAutoCancelled failed:", e?.response?.data || e?.message || e);
+  }
+}
+
+async function notifyHoldPlaced({ booking, hours }) {
+  try {
+    const a = await getBookingActors(booking);
+    if (!a) return;
+    const text = [
+      `<b>⏳ Поставщик удерживает бронь №${a.id}</b>`,
+      ...bookingSummaryLines(a),
+      `Срок удержания: <b>${esc(hours)} ч.</b>`,
+      "",
+      `🔗 Открыть: ${a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings")}`,
+    ].join("\n");
+    const requesterChat = a.agent?.chatId || a.client?.chatId;
+    if (requesterChat) await tgSend(requesterChat, text, {}, _tokenForRefusedActors(a.serviceCategory));
+  } catch (e) {
+    console.error("[tg] notifyHoldPlaced failed:", e?.response?.data || e?.message || e);
   }
 }
 
@@ -1431,6 +1486,8 @@ module.exports = {
   notifyRejected,
   notifyCancelled,
   notifyCancelledByRequester,
+  notifyBookingAutoCancelled,
+  notifyHoldPlaced,
   notifyBookingRefunded,
 
   // REQUESTS:

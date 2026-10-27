@@ -1217,7 +1217,7 @@ async function PerformTransaction(req, res, id, params) {
     await client.query("COMMIT");
 
     if (!wasCompleted && isHotelBookingOrder(order) && order.booking_id) {
-      telegram.notifyConfirmed({ booking: { id: order.booking_id } }).catch(() => {});
+      (telegram.notifyBookingPaidConfirmed || telegram.notifyConfirmed)({ booking: { id: order.booking_id } }).catch(() => {});
     }
 
     return res.json(
@@ -1308,10 +1308,7 @@ async function CancelTransaction(req, res, id, params) {
     if (!wasCanceled && isHotelBookingOrder(order) && order.booking_id) {
       const notification = Number(tx.state) === PAYME_STATE.COMPLETED
         ? telegram.notifyBookingRefunded?.({ booking: { id: order.booking_id } })
-        : Promise.allSettled([
-            telegram.notifyCancelled({ booking: { id: order.booking_id } }),
-            telegram.notifyCancelledByRequester({ booking: { id: order.booking_id } }),
-          ]);
+        : telegram.notifyBookingAutoCancelled?.({ id: order.booking_id });
       Promise.resolve(notification).catch(() => {});
     }
 
