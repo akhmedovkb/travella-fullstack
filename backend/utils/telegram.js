@@ -916,6 +916,49 @@ async function notifyHoldPlaced({ booking, hours }) {
   }
 }
 
+async function notifyBookingPaymentReminder({ booking, minutesLeft }) {
+  try {
+    const a = await getBookingActors(booking);
+    if (!a) return;
+    const requesterChat = a.agent?.chatId || a.client?.chatId;
+    if (!requesterChat) return;
+    const minutes = Math.max(1, Number(minutesLeft || 10));
+    const url = a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings");
+    await tgSend(requesterChat, [
+      `<b>⏰ До отмены брони №${a.id} осталось около ${minutes} мин.</b>`,
+      ...bookingSummaryLines(a),
+      "Если оплата не поступит вовремя, бронь отменится автоматически.",
+      "",
+      `🔗 Перейти к оплате: ${url}`,
+    ].join("\n"), {}, _tokenForRefusedActors(a.serviceCategory));
+  } catch (e) {
+    console.error("[tg] notifyBookingPaymentReminder failed:", e?.response?.data || e?.message || e);
+  }
+}
+
+async function notifyBookingServiceReminder({ booking }) {
+  try {
+    const a = await getBookingActors(booking);
+    if (!a) return;
+    const base = [`<b>📅 Напоминание: услуга по брони №${a.id} уже завтра</b>`, ...bookingSummaryLines(a)];
+    const requesterChat = a.agent?.chatId || a.client?.chatId;
+    if (requesterChat) await tgSend(requesterChat, [
+      ...base,
+      lineContact("🏢", "Поставщик", a.provider?.name, a.provider?.phone, a.provider?.username),
+      "",
+      `🔗 Открыть бронь: ${a.agent?.chatId ? urlProvider("bookings") : urlClient("bookings")}`,
+    ].join("\n"), {}, _tokenForRefusedActors(a.serviceCategory));
+    if (a.provider?.chatId) await tgSend(a.provider.chatId, [
+      ...base,
+      ...applicantLines(a),
+      "",
+      `🔗 Открыть бронь: ${urlProvider("bookings")}`,
+    ].join("\n"));
+  } catch (e) {
+    console.error("[tg] notifyBookingServiceReminder failed:", e?.response?.data || e?.message || e);
+  }
+}
+
 async function notifyCancelledByRequester({ booking }) {
   try {
     const a = await getBookingActors(booking);
@@ -1488,6 +1531,8 @@ module.exports = {
   notifyCancelledByRequester,
   notifyBookingAutoCancelled,
   notifyHoldPlaced,
+  notifyBookingPaymentReminder,
+  notifyBookingServiceReminder,
   notifyBookingRefunded,
 
   // REQUESTS:

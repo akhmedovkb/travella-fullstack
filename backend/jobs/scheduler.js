@@ -7,6 +7,7 @@ const { runUnlockNudge } = require("./unlockNudgeJob");
 const { runAbandonedPaymeReminderJob } = require("./abandonedPaymeReminderJob");
 const { runRefusedFixFollowupJob } = require("./refusedFixFollowupJob");
 const { runExpireHotelBookingHoldsJob } = require("./expireHotelBookingHoldsJob");
+const { runBookingLifecycleReminderJob } = require("./bookingLifecycleReminderJob");
 const { runTelegramLearningJob } = require("./telegramLearningJob");
 const { runDueBroadcasts } = require("../routes/adminBroadcastRoutes");
 
@@ -167,6 +168,17 @@ async function runExpireHotelBookingHoldsJobSafe() {
   }
 }
 
+async function runBookingLifecycleReminderJobSafe() {
+  try {
+    const result = await runBookingLifecycleReminderJob();
+    if (result.payment_reminders || result.service_reminders || result.notification_failures) {
+      console.log("[scheduler] bookingLifecycleReminderJob finished", result);
+    }
+  } catch (err) {
+    console.error("[scheduler] bookingLifecycleReminderJob failed", err);
+  }
+}
+
 function startJobsScheduler() {
   if (
     String(process.env.DISABLE_REMINDER_SCHEDULER || "").trim() === "1" ||
@@ -252,6 +264,7 @@ function startJobsScheduler() {
   cron.schedule(
     "*/5 * * * *",
     async () => {
+      await runBookingLifecycleReminderJobSafe();
       await runExpireHotelBookingHoldsJobSafe();
     },
     { timezone: TZ }
