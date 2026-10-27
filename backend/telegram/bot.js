@@ -1251,6 +1251,13 @@ try {
   console.warn("[tg-bot] DB pool not available (requests MVP disabled):", e?.message || e);
 }
 
+const {
+  parseBookingDate,
+  parseGuestCount,
+  parseBookingAmount,
+  telegramBookingStatusLabel,
+} = require("../utils/telegramQuickBooking");
+
 let _reqTablesReady = false;
 async function ensureReqTables() {
   if (!pool || _reqTablesReady) return;
@@ -1271,12 +1278,14 @@ async function ensureReqTables() {
     `);
     await pool.query(`
       ALTER TABLE telegram_service_requests
-        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+        ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+        ADD COLUMN IF NOT EXISTS booking_id BIGINT REFERENCES bookings(id) ON DELETE SET NULL;
       CREATE INDEX IF NOT EXISTS idx_telegram_service_requests_client
         ON telegram_service_requests(client_tg_id, updated_at DESC);
       CREATE INDEX IF NOT EXISTS idx_telegram_service_requests_service
         ON telegram_service_requests(service_id, updated_at DESC);
     `);
+    await pool.query(`ALTER TABLE bookings ADD COLUMN IF NOT EXISTS hold_until TIMESTAMPTZ`);
     // ✅ Таблица логов сообщений по заявкам
     await pool.query(`
       CREATE TABLE IF NOT EXISTS telegram_service_request_messages (
@@ -1345,7 +1354,7 @@ async function getReqById(requestId) {
     const r = await pool.query(
       `SELECT r.id, r.service_id, r.client_tg_id, r.client_username,
               r.client_first_name, r.client_last_name, r.status,
-              r.created_at, r.updated_at, s.title AS service_title
+              r.created_at, r.updated_at, r.booking_id, s.title AS service_title
        FROM telegram_service_requests r
        LEFT JOIN services s ON s.id = r.service_id
        WHERE r.id = $1
@@ -1358,6 +1367,149 @@ async function getReqById(requestId) {
     console.error("[tg-bot] getReqById error:", e?.message || e);
     return null;
   }
+}
+
+async function createBookingFromTelegramRequest({ requestId, providerChatId, date, guests, amount }) {
+  await ensureReqTables();
+  const db = await pool.connect();
+  try {
+    await db.query("BEGIN");
+    const requestResult = await db.query(
+      `SELECT r.id,r.status,r.booking_id,r.client_tg_id,r.service_id,
+              s.provider_id,s.title AS service_title
+         FROM telegram_service_requests r
+         JOIN services s ON s.id=r.service_id
+        WHERE r.id=$1 FOR UPDATE`,
+      [requestId]
+    );
+    const request = requestResult.rows[0];
+    if (!request) throw Object.assign(new Error("request_not_found"), { code: "request_not_found" });
+    const providerId = await resolveProviderIdByTelegramChatId(providerChatId, { action: "create_quick_booking" });
+    if (!providerId || Number(request.provider_id) !== Number(providerId)) {
+      throw Object.assign(new Error("forbidden"), { code: "forbidden" });
+    }
+    if (request.booking_id) throw Object.assign(new Error("booking_exists"), { code: "booking_exists", bookingId: request.booking_id });
+    if (String(request.status) !== "accepted") throw Object.assign(new Error("request_not_accepted"), { code: "request_not_accepted" });
+    const client = await getClientRowByChatId(pool, request.client_tg_id);
+    if (!client?.id) throw Object.assign(new Error("client_not_linked"), { code: "client_not_linked" });
+
+    const conflict = await db.query(
+      `SELECT 1 FROM bookings b
+        WHERE b.provider_id=$1 AND b.date=$2::date
+          AND b.status IN ('pending','quoted','awaiting_payment','confirmed','active','accepted')
+        LIMIT 1`,
+      [providerId, date]
+    );
+    if (conflict.rowCount) throw Object.assign(new Error("date_busy"), { code: "date_busy" });
+
+    const attachments = {
+      telegram_request_id: Number(requestId),
+      guests: Number(guests),
+      source: "telegram_quick_request",
+    };
+    const inserted = await db.query(
+      `INSERT INTO bookings
+        (service_id,provider_id,client_id,date,status,client_message,attachments,provider_price,currency,provider_note)
+       VALUES ($1,$2,$3,$4::date,'quoted',$5,$6::jsonb,$7,'UZS',$8)
+       RETURNING id,status,provider_id,client_id,date,provider_price,currency`,
+      [request.service_id, providerId, client.id, date,
+       `Бронь создана из быстрого запроса #${requestId}`, JSON.stringify(attachments), amount,
+       `Согласовано поставщиком в Telegram по заявке #${requestId}`]
+    );
+    const booking = inserted.rows[0];
+    await db.query(`INSERT INTO booking_dates (booking_id,date) VALUES ($1,$2::date)`, [booking.id, date]);
+    await db.query(
+      `UPDATE telegram_service_requests SET booking_id=$2,status='booked',updated_at=NOW() WHERE id=$1`,
+      [requestId, booking.id]
+    );
+    await db.query("COMMIT");
+    return { ...booking, request, guests: Number(guests), service_title: request.service_title };
+  } catch (error) {
+    await db.query("ROLLBACK");
+    throw error;
+  } finally {
+    db.release();
+  }
+}
+
+async function getTelegramBooking(bookingId) {
+  const result = await pool.query(
+    `SELECT b.id,b.service_id,b.provider_id,b.client_id,b.date,b.status,b.provider_price,b.currency,
+            b.attachments,s.title AS service_title,p.name AS provider_name,
+            c.name AS client_name,c.telegram_chat_id AS client_chat_id,
+            COALESCE(p.telegram_refused_chat_id,p.telegram_chat_id,p.tg_chat_id) AS provider_chat_id
+       FROM bookings b
+       LEFT JOIN services s ON s.id=b.service_id
+       JOIN providers p ON p.id=b.provider_id
+       LEFT JOIN clients c ON c.id=b.client_id
+      WHERE b.id=$1 LIMIT 1`,
+    [bookingId]
+  );
+  return result.rows[0] || null;
+}
+
+function telegramBookingText(booking) {
+  const guests = Number(booking?.attachments?.guests || 0);
+  return [
+    `📄 <b>Бронь #${Number(booking.id)}</b>`,
+    `📦 ${escapeHtml(booking.service_title || `Услуга #${booking.service_id}`)}`,
+    `🏢 ${escapeHtml(booking.provider_name || "Поставщик")}`,
+    `📅 ${escapeHtml(String(booking.date || "").slice(0, 10))}`,
+    guests ? `👥 Туристов: ${guests}` : "",
+    `💳 ${Number(booking.provider_price || 0).toLocaleString("ru-RU")} ${escapeHtml(booking.currency || "UZS")}`,
+    `Статус: <b>${escapeHtml(telegramBookingStatusLabel(booking.status))}</b>`,
+  ].filter(Boolean).join("\n");
+}
+
+async function isTelegramBookingParticipant(ctx, booking, side) {
+  const actor = String(ctx.from?.id || ctx.chat?.id || "");
+  if (side === "client") return actor === String(booking?.client_chat_id || "");
+  if (side === "provider") return actor === String(booking?.provider_chat_id || "");
+  return actor === String(booking?.client_chat_id || "") || actor === String(booking?.provider_chat_id || "");
+}
+
+async function renderTelegramBookings(ctx, role, offset = 0) {
+  const actorId = Number(ctx.from?.id || 0);
+  const limit = 8;
+  let result;
+  if (role === "provider") {
+    const providerId = await resolveProviderIdByTelegramChatId(actorId, { action: "list_quick_bookings" });
+    if (!providerId) return safeReply(ctx, "Профиль поставщика не найден.");
+    result = await pool.query(
+      `SELECT b.*,s.title AS service_title,p.name AS provider_name
+         FROM bookings b LEFT JOIN services s ON s.id=b.service_id JOIN providers p ON p.id=b.provider_id
+        WHERE b.provider_id=$1 ORDER BY b.created_at DESC LIMIT $2 OFFSET $3`,
+      [providerId, limit, offset]
+    );
+  } else {
+    const client = await getClientRowByChatId(pool, actorId);
+    if (!client) return safeReply(ctx, "Профиль клиента не найден.");
+    result = await pool.query(
+      `SELECT b.*,s.title AS service_title,p.name AS provider_name
+         FROM bookings b LEFT JOIN services s ON s.id=b.service_id JOIN providers p ON p.id=b.provider_id
+        WHERE b.client_id=$1 ORDER BY b.created_at DESC LIMIT $2 OFFSET $3`,
+      [client.id, limit, offset]
+    );
+  }
+  const rows = result.rows || [];
+  if (!rows.length) return safeReply(ctx, "📄 Бронирований пока нет.");
+  if (!offset) await safeReply(ctx, role === "provider" ? "📄 Брони ваших услуг" : "📄 Мои бронирования");
+  for (const booking of rows) {
+    const buttons = [[{ text: "Открыть", callback_data: `tgbook:open:${booking.id}` }]];
+    if (role === "client" && ["pending", "quoted"].includes(String(booking.status))) {
+      buttons.unshift([
+        { text: "✅ Подтвердить", callback_data: `tgbook:confirm:${booking.id}` },
+        { text: "❌ Отклонить", callback_data: `tgbook:decline:${booking.id}` },
+      ]);
+    }
+    if (role === "client" && booking.status === "awaiting_payment") {
+      buttons.unshift([{ text: "💳 Перейти к оплате", url: `${SITE_URL}/client/dashboard?tab=bookings&payment_booking=${booking.id}` }]);
+    }
+    await safeReply(ctx, telegramBookingText(booking), { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
+  }
+  if (rows.length === limit) await safeReply(ctx, "Показать более ранние брони?", {
+    reply_markup: { inline_keyboard: [[{ text: "Показать ещё", callback_data: `tgbook:list:${role}:${offset + limit}` }]] },
+  });
 }
 
 async function logReqMessage({ requestId, senderRole, senderTgId, text }) {
@@ -9637,10 +9789,76 @@ bot.hears(/📄 (Мои брони|Бронирования)/i, async (ctx) => {
     return;
   }
 
-  await ctx.reply(
-    "📄 Раздел бронирований в боте пока в разработке.\n\nВсе бронирования доступны в личном кабинете на сайте:\n" +
-      `${SITE_URL}`
-  );
+  try {
+    await renderTelegramBookings(ctx, role === "provider" ? "provider" : "client", 0);
+  } catch (error) {
+    console.error("[tg-bot] bookings list error:", error?.message || error);
+    await ctx.reply("⚠️ Не удалось загрузить бронирования. Попробуйте позже.");
+  }
+});
+
+bot.action(/^tgbook:list:(provider|client):(\d+)$/, async (ctx) => {
+  try {
+    const role = String(ctx.match[1]);
+    const actualRole = (await ensureProviderRole(ctx)) === "provider" ? "provider" : "client";
+    if (role !== actualRole) return ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+    await ctx.answerCbQuery();
+    await renderTelegramBookings(ctx, role, Number(ctx.match[2]) || 0);
+  } catch (error) {
+    console.error("[tg-bot] booking pagination error:", error?.message || error);
+  }
+});
+
+bot.action(/^tgbook:open:(\d+)$/, async (ctx) => {
+  try {
+    const booking = await getTelegramBooking(Number(ctx.match[1]));
+    if (!booking || !(await isTelegramBookingParticipant(ctx, booking))) {
+      return ctx.answerCbQuery("⛔ Бронь недоступна", { show_alert: true });
+    }
+    await ctx.answerCbQuery();
+    await safeReply(ctx, telegramBookingText(booking), { parse_mode: "HTML" });
+  } catch (error) {
+    console.error("[tg-bot] booking open error:", error?.message || error);
+  }
+});
+
+bot.action(/^tgbook:(confirm|decline):(\d+)$/, async (ctx) => {
+  const action = String(ctx.match[1]);
+  const bookingId = Number(ctx.match[2]);
+  try {
+    const booking = await getTelegramBooking(bookingId);
+    if (!booking || !(await isTelegramBookingParticipant(ctx, booking, "client"))) {
+      return ctx.answerCbQuery("⛔ Бронь недоступна", { show_alert: true });
+    }
+    if (!["pending", "quoted"].includes(String(booking.status))) {
+      return ctx.answerCbQuery("Статус брони уже изменился", { show_alert: true });
+    }
+    const nextStatus = action === "confirm" ? "awaiting_payment" : "cancelled";
+    const updated = await pool.query(
+      `UPDATE bookings SET status=$2,updated_at=NOW(),
+              hold_until=CASE WHEN $2='awaiting_payment' THEN NOW() + INTERVAL '30 minutes' ELSE hold_until END
+        WHERE id=$1 AND client_id=$3 AND status IN ('pending','quoted') RETURNING id`,
+      [bookingId, nextStatus, booking.client_id]
+    );
+    if (!updated.rowCount) return ctx.answerCbQuery("Статус брони уже изменился", { show_alert: true });
+    const fresh = await getTelegramBooking(bookingId);
+    await ctx.answerCbQuery(action === "confirm" ? "Бронь подтверждена" : "Бронь отклонена");
+    await safeReply(ctx, telegramBookingText(fresh), {
+      parse_mode: "HTML",
+      reply_markup: action === "confirm" ? { inline_keyboard: [[{
+        text: "💳 Перейти к оплате",
+        url: `${SITE_URL}/client/dashboard?tab=bookings&payment_booking=${bookingId}`,
+      }]] } : undefined,
+    });
+    if (fresh?.provider_chat_id) {
+      await bot.telegram.sendMessage(Number(fresh.provider_chat_id),
+        `${action === "confirm" ? "✅ Клиент подтвердил" : "❌ Клиент отклонил"} бронь #${bookingId}\n\n${telegramBookingText(fresh)}`,
+        { parse_mode: "HTML" });
+    }
+  } catch (error) {
+    console.error("[tg-bot] booking decision error:", error?.message || error);
+    try { await ctx.answerCbQuery("Не удалось изменить бронь", { show_alert: true }); } catch {}
+  }
 });
 
 bot.hears(/📨 (Мои заявки|Заявки)/i, async (ctx) => {
@@ -9706,7 +9924,9 @@ bot.action(/^reqopen:(\d+)$/, async (ctx) => {
       ? [
           [
             { text: "✅ Принять", callback_data: `reqst:${requestId}:accepted` },
-            { text: "⏳ Забронировано", callback_data: `reqst:${requestId}:booked` },
+            ...(String(req.status) === "accepted" && !req.booking_id
+              ? [{ text: "📄 Создать бронь", callback_data: `reqbook:${requestId}` }]
+              : []),
           ],
           [{ text: "❌ Отклонить", callback_data: `reqst:${requestId}:rejected` }],
           [
@@ -11546,6 +11766,29 @@ bot.action(/^op:(\d+):([1-3])$/, async (ctx) => {
 });
 
 /* ===================== REQUEST STATUS (manager buttons) ===================== */
+bot.action(/^reqbook:(\d+)$/, async (ctx) => {
+  try {
+    const requestId = Number(ctx.match[1]);
+    if (!(await isRequestOperatorChat(ctx, requestId))) {
+      return ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+    }
+    const request = await getReqById(requestId);
+    if (!request || String(request.status) !== "accepted" || request.booking_id) {
+      return ctx.answerCbQuery(request?.booking_id ? "Бронь уже создана" : "Сначала примите заявку", { show_alert: true });
+    }
+    if (!ctx.session) ctx.session = {};
+    ctx.session.state = "quick_booking_date";
+    ctx.session.quickBooking = { requestId };
+    await ctx.answerCbQuery();
+    await safeReply(ctx,
+      `📄 <b>Новая бронь по заявке #${requestId}</b>\n\nШаг 1 из 3. Укажите дату услуги: <code>ДД.ММ.ГГГГ</code>.`,
+      { parse_mode: "HTML" });
+  } catch (error) {
+    console.error("[tg-bot] quick booking start error:", error?.message || error);
+    try { await ctx.answerCbQuery("Не удалось начать создание брони", { show_alert: true }); } catch {}
+  }
+});
+
 bot.action(/^reqst:(\d+):(new|accepted|booked|rejected)$/, async (ctx) => {
   try {
     const requestId = Number(ctx.match[1]);
@@ -11598,6 +11841,15 @@ bot.action(/^reqst:(\d+):(new|accepted|booked|rejected)$/, async (ctx) => {
       } catch (notifyError) {
         console.error("[tg-bot] request status client notify error:", notifyError?.message || notifyError);
       }
+    }
+
+    if (status === "accepted") {
+      await safeReply(ctx, `Заявка #${requestId} принята. Теперь можно оформить реальную бронь.`, {
+        reply_markup: { inline_keyboard: [[{
+          text: "📄 Создать бронь",
+          callback_data: `reqbook:${requestId}`,
+        }]] },
+      });
     }
   } catch (e) {
     console.error("[tg-bot] reqst action error:", e);
@@ -16600,6 +16852,78 @@ bot.on("text", async (ctx, next) => {
     // сообщение «ГОТОВО» нужно обработать здесь, иначе оно уходит в wizard.
     const rawText = String(ctx.message?.text || "").trim();
 
+    if (state === "quick_booking_date" && ctx.session?.quickBooking?.requestId) {
+      const date = parseBookingDate(rawText);
+      if (!date) {
+        await safeReply(ctx, "Укажите корректную дату в формате ДД.ММ.ГГГГ, например 09.11.2026.");
+        return;
+      }
+      ctx.session.quickBooking.date = date;
+      ctx.session.state = "quick_booking_guests";
+      await safeReply(ctx, "Шаг 2 из 3. Сколько туристов будет в брони? Введите число от 1 до 100.");
+      return;
+    }
+
+    if (state === "quick_booking_guests" && ctx.session?.quickBooking?.requestId) {
+      const guests = parseGuestCount(rawText);
+      if (!guests) {
+        await safeReply(ctx, "Введите количество туристов целым числом от 1 до 100.");
+        return;
+      }
+      ctx.session.quickBooking.guests = guests;
+      ctx.session.state = "quick_booking_amount";
+      await safeReply(ctx, "Шаг 3 из 3. Укажите итоговую стоимость в UZS, например 1 200 000.");
+      return;
+    }
+
+    if (state === "quick_booking_amount" && ctx.session?.quickBooking?.requestId) {
+      const amount = parseBookingAmount(rawText);
+      if (!amount) {
+        await safeReply(ctx, "Введите положительную итоговую сумму в UZS, например 1 200 000.");
+        return;
+      }
+      const draft = { ...ctx.session.quickBooking, amount };
+      try {
+        const booking = await createBookingFromTelegramRequest({
+          ...draft,
+          providerChatId: ctx.from?.id,
+        });
+        ctx.session.state = null;
+        ctx.session.quickBooking = null;
+        await safeReply(ctx, `✅ Бронь создана и отправлена клиенту.\n\n${telegramBookingText(booking)}`, {
+          parse_mode: "HTML",
+        });
+        await bot.telegram.sendMessage(Number(booking.request.client_tg_id),
+          `📄 <b>Поставщик оформил бронь</b>\n\n${telegramBookingText({ ...booking, provider_name: "Поставщик" })}\n\nПроверьте данные и подтвердите или отклоните бронь.`,
+          {
+            parse_mode: "HTML",
+            reply_markup: { inline_keyboard: [[
+              { text: "✅ Подтвердить", callback_data: `tgbook:confirm:${booking.id}` },
+              { text: "❌ Отклонить", callback_data: `tgbook:decline:${booking.id}` },
+            ]] },
+          });
+      } catch (error) {
+        const messages = {
+          booking_exists: "По этой заявке бронь уже создана.",
+          request_not_accepted: "Сначала примите заявку.",
+          client_not_linked: "Клиенту нужно привязать аккаунт к Telegram перед созданием брони.",
+          date_busy: "На эту дату у поставщика уже есть активная бронь. Укажите другую дату.",
+          forbidden: "Недостаточно прав для создания этой брони.",
+        };
+        if (error?.code === "date_busy") {
+          ctx.session.state = "quick_booking_date";
+          delete ctx.session.quickBooking.date;
+          delete ctx.session.quickBooking.guests;
+        } else {
+          ctx.session.state = null;
+          ctx.session.quickBooking = null;
+        }
+        console.error("[tg-bot] quick booking create error:", error?.message || error);
+        await safeReply(ctx, `⚠️ ${messages[error?.code] || "Не удалось создать бронь. Попробуйте позже."}`);
+      }
+      return;
+    }
+
     const supplierReply = await consumeSupplierServiceOrderReply({ actorTelegramId: ctx.from?.id, text: rawText });
     if (supplierReply.ok) {
       await safeReply(ctx, "✅ Ответ отправлен DMC и сохранён в истории заказа.");
@@ -16951,7 +17275,6 @@ bot.on("text", async (ctx, next) => {
       if (requestId) {
         inline_keyboard.push([
           { text: "✅ Принято", callback_data: `reqst:${requestId}:accepted` },
-          { text: "⏳ Забронировано", callback_data: `reqst:${requestId}:booked` },
           { text: "❌ Отклонено", callback_data: `reqst:${requestId}:rejected` },
         ]);
     
