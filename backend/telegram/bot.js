@@ -1555,45 +1555,68 @@ async function renderTelegramBookings(ctx, role, filter = "active", offset = 0) 
   });
 }
 
-async function renderTelegramReviews(ctx, role, offset = 0) {
+async function renderTelegramReviews(ctx, role, mode = "received", offset = 0) {
   const actorId = Number(ctx.from?.id || 0);
   const limit = 5;
-  const targetId = role === "provider"
+  const profileId = role === "provider"
     ? await resolveProviderIdByTelegramChatId(actorId, { action: "list_reviews" })
     : (await getClientRowByChatId(pool, actorId))?.id;
-  if (!targetId) return safeReply(ctx, role === "provider" ? "Профиль поставщика не найден." : "Профиль клиента не найден.");
+  if (!profileId) return safeReply(ctx, role === "provider" ? "Профиль поставщика не найден." : "Профиль клиента не найден.");
 
+  const normalizedMode = mode === "given" ? "given" : "received";
   const targetType = role === "provider" ? "provider" : "client";
   const safeOffset = Math.max(0, Number(offset) || 0);
-  const [statsResult, listResult] = await Promise.all([
-    pool.query(
-      `SELECT COUNT(*)::int AS count,COALESCE(AVG(rating),0)::float AS average
-         FROM reviews WHERE target_type=$1 AND target_id=$2`,
-      [targetType, targetId]
-    ),
-    pool.query(
-      `SELECT r.id,r.rating,r.text,r.created_at,r.booking_id,r.author_role,
-              CASE WHEN r.author_role='client' THEN c.name ELSE p.name END AS author_name
+  const received = normalizedMode === "received";
+  const statsSql = received
+    ? `SELECT COUNT(*)::int AS count,COALESCE(AVG(rating),0)::float AS average
+         FROM reviews WHERE target_type=$1 AND target_id=$2`
+    : `SELECT COUNT(*)::int AS count,0::float AS average
+         FROM reviews WHERE author_role=$1 AND author_id=$2`;
+  const listSql = received
+    ? `SELECT r.id,r.rating,r.text,r.created_at,r.booking_id,r.author_role,
+              CASE WHEN r.author_role='client' THEN c.name ELSE p.name END AS person_name
          FROM reviews r
          LEFT JOIN clients c ON c.id=r.author_id AND r.author_role='client'
          LEFT JOIN providers p ON p.id=r.author_id AND r.author_role='provider'
         WHERE r.target_type=$1 AND r.target_id=$2
-        ORDER BY r.created_at DESC,r.id DESC LIMIT $3 OFFSET $4`,
-      [targetType, targetId, limit, safeOffset]
-    ),
+        ORDER BY r.created_at DESC,r.id DESC LIMIT $3 OFFSET $4`
+    : `SELECT r.id,r.rating,r.text,r.created_at,r.booking_id,r.target_type,
+              CASE r.target_type
+                WHEN 'client' THEN tc.name
+                WHEN 'provider' THEN tp.name
+                WHEN 'service' THEN ts.title
+                ELSE NULL
+              END AS person_name
+         FROM reviews r
+         LEFT JOIN clients tc ON tc.id=r.target_id AND r.target_type='client'
+         LEFT JOIN providers tp ON tp.id=r.target_id AND r.target_type='provider'
+         LEFT JOIN services ts ON ts.id=r.target_id AND r.target_type='service'
+        WHERE r.author_role=$1 AND r.author_id=$2
+        ORDER BY r.created_at DESC,r.id DESC LIMIT $3 OFFSET $4`;
+  const [statsResult, listResult] = await Promise.all([
+    pool.query(statsSql, [received ? targetType : role, profileId]),
+    pool.query(listSql, [received ? targetType : role, profileId, limit, safeOffset]),
   ]);
   const stats = statsResult.rows?.[0] || { count: 0, average: 0 };
   const rows = listResult.rows || [];
   if (!safeOffset) {
     const average = Number(stats.average || 0);
     await safeReply(ctx, [
-      "<b>⭐ Мои отзывы</b>",
-      `Средняя оценка: <b>${average ? average.toFixed(1) : "—"} / 5</b>`,
-      `Всего отзывов: <b>${Number(stats.count || 0)}</b>`,
-    ].join("\n"), { parse_mode: "HTML" });
+      received ? "<b>⭐ Отзывы обо мне</b>" : "<b>✍️ Мои оценки</b>",
+      received ? `Средняя оценка: <b>${average ? average.toFixed(1) : "—"} / 5</b>` : "",
+      `Всего: <b>${Number(stats.count || 0)}</b>`,
+    ].filter(Boolean).join("\n"), {
+      parse_mode: "HTML",
+      reply_markup: { inline_keyboard: [[
+        { text: received ? "• Обо мне" : "Обо мне", callback_data: `tgreview:list:${role}:received:0` },
+        { text: received ? "Мои оценки" : "• Мои оценки", callback_data: `tgreview:list:${role}:given:0` },
+      ]] },
+    });
   }
   if (!rows.length) {
-    if (!safeOffset) await safeReply(ctx, "Пока отзывов нет. Они появятся после завершённых бронирований.");
+    if (!safeOffset) await safeReply(ctx, received
+      ? "Пока отзывов о вас нет. Они появятся после завершённых бронирований."
+      : "Вы пока не оставляли оценок.");
     return;
   }
   for (const review of rows) {
@@ -1603,7 +1626,7 @@ async function renderTelegramReviews(ctx, role, offset = 0) {
       : "";
     await safeReply(ctx, [
       `${"⭐".repeat(rating)}${"☆".repeat(5 - rating)} <b>${rating}/5</b>`,
-      `Автор: ${escapeHtml(review.author_name || "Пользователь Travella")}`,
+      `${received ? "Автор" : "Кому"}: ${escapeHtml(review.person_name || "Пользователь Travella")}`,
       date ? `Дата: ${escapeHtml(date)}` : "",
       review.booking_id ? "✅ Подтверждённая поездка" : "",
       review.text ? `\n${escapeHtml(review.text)}` : "\nБез комментария",
@@ -1613,7 +1636,7 @@ async function renderTelegramReviews(ctx, role, offset = 0) {
     await safeReply(ctx, "Показать более ранние отзывы?", {
       reply_markup: { inline_keyboard: [[{
         text: "Показать ещё",
-        callback_data: `tgreview:list:${role}:${safeOffset + limit}`,
+        callback_data: `tgreview:list:${role}:${normalizedMode}:${safeOffset + limit}`,
       }]] },
     });
   }
@@ -9915,7 +9938,7 @@ bot.hears(/⭐ Мои отзывы/i, async (ctx) => {
     return;
   }
   try {
-    await renderTelegramReviews(ctx, role, 0);
+    await renderTelegramReviews(ctx, role, "received", 0);
   } catch (error) {
     console.error("[tg-bot] reviews list error:", error?.message || error);
     await safeReply(ctx, "⚠️ Не удалось загрузить отзывы. Попробуйте позже.");
@@ -9929,9 +9952,23 @@ bot.action(/^tgreview:list:(provider|client):(\d+)$/, async (ctx) => {
     const actualRole = maybeProvider || await ensureClientRole(ctx);
     if (requestedRole !== actualRole) return ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
     await ctx.answerCbQuery();
-    await renderTelegramReviews(ctx, actualRole, Number(ctx.match[2]) || 0);
+    await renderTelegramReviews(ctx, actualRole, "received", Number(ctx.match[2]) || 0);
   } catch (error) {
     console.error("[tg-bot] reviews pagination error:", error?.message || error);
+    try { await ctx.answerCbQuery("Не удалось загрузить отзывы", { show_alert: true }); } catch {}
+  }
+});
+
+bot.action(/^tgreview:list:(provider|client):(received|given):(\d+)$/, async (ctx) => {
+  try {
+    const requestedRole = String(ctx.match[1]);
+    const maybeProvider = await ensureProviderRole(ctx);
+    const actualRole = maybeProvider || await ensureClientRole(ctx);
+    if (requestedRole !== actualRole) return ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+    await ctx.answerCbQuery();
+    await renderTelegramReviews(ctx, actualRole, String(ctx.match[2]), Number(ctx.match[3]) || 0);
+  } catch (error) {
+    console.error("[tg-bot] reviews mode error:", error?.message || error);
     try { await ctx.answerCbQuery("Не удалось загрузить отзывы", { show_alert: true }); } catch {}
   }
 });
