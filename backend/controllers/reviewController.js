@@ -1,5 +1,6 @@
 // backend/controllers/reviewController.js
 const db = require("../db");
+const { validateReviewBooking } = require("../utils/reviewAccess");
 
 /* ───────── helpers ───────── */
 function toInt(v) { const n = Number(v); return Number.isFinite(n) ? n : null; }
@@ -14,6 +15,7 @@ function rowsToPublic(list) {
     rating: r.rating,
     text: r.text,
     created_at: r.created_at,
+    verified_booking: Boolean(r.booking_id),
     author: {
       id: r.author_id,
       role: r.author_role,
@@ -21,6 +23,24 @@ function rowsToPublic(list) {
       avatar_url: r.author_avatar || null,
     },
   }));
+}
+
+async function verifyBookingReview({ bookingId, targetType, targetId, authorRole, authorId }) {
+  if (!bookingId) return { ok: true };
+  const result = await db.query(
+    `SELECT id,status,service_id,provider_id,client_id,
+            NULLIF(to_jsonb(bookings)->>'requester_provider_id','')::bigint AS requester_provider_id
+       FROM bookings WHERE id=$1`,
+    [bookingId]
+  );
+  return validateReviewBooking({ booking: result.rows[0], targetType, targetId, authorRole, authorId });
+}
+
+function reviewAccessError(res, access) {
+  if (access.ok) return false;
+  const status = access.code === "booking_not_found" ? 404 : access.code === "booking_not_completed" ? 409 : 403;
+  res.status(status).json({ error: access.code });
+  return true;
 }
 
 /* ───────── CREATE ───────── */
@@ -36,12 +56,15 @@ exports.addServiceReview = async (req, res) => {
 
     const authorId = req.user?.id;
     if (!authorId) return res.status(401).json({ error: "unauthorized" });
+    const bookingId = toInt(booking_id);
+    const access = await verifyBookingReview({ bookingId, targetType: "service", targetId: serviceId, authorRole: "client", authorId });
+    if (reviewAccessError(res, access)) return;
 
     const q = await db.query(
       `INSERT INTO reviews (target_type, target_id, author_role, author_id, booking_id, rating, text)
        VALUES ('service', $1, 'client', $2, $3, $4, $5)
        RETURNING id, target_id, rating, text, created_at`,
-      [serviceId, authorId, toInt(booking_id), r, text || null]
+      [serviceId, authorId, bookingId, r, text || null]
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
@@ -63,12 +86,15 @@ exports.addClientReview = async (req, res) => {
 
     const authorId = req.user?.id;
     if (!authorId) return res.status(401).json({ error: "unauthorized" });
+    const bookingId = toInt(booking_id);
+    const access = await verifyBookingReview({ bookingId, targetType: "client", targetId: clientId, authorRole: "provider", authorId });
+    if (reviewAccessError(res, access)) return;
 
     const q = await db.query(
       `INSERT INTO reviews (target_type, target_id, author_role, author_id, booking_id, rating, text)
        VALUES ('client', $1, 'provider', $2, $3, $4, $5)
        RETURNING id, target_id, rating, text, created_at`,
-      [clientId, authorId, toInt(booking_id), r, text || null]
+      [clientId, authorId, bookingId, r, text || null]
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
@@ -97,12 +123,15 @@ exports.addProviderReview = async (req, res) => {
     if (authorRole === "provider" && Number(authorId) === providerId) {
       return res.status(400).json({ error: "self_review_forbidden" });
     }
+    const bookingId = toInt(booking_id);
+    const access = await verifyBookingReview({ bookingId, targetType: "provider", targetId: providerId, authorRole, authorId });
+    if (reviewAccessError(res, access)) return;
 
     const q = await db.query(
       `INSERT INTO reviews (target_type, target_id, author_role, author_id, booking_id, rating, text)
        VALUES ('provider', $1, $2, $3, $4, $5, $6)
        RETURNING id, target_id, rating, text, created_at`,
-      [providerId, authorRole, authorId, toInt(booking_id), r, text || null]
+      [providerId, authorRole, authorId, bookingId, r, text || null]
     );
     res.status(201).json(q.rows[0]);
   } catch (e) {
@@ -129,7 +158,7 @@ async function listWithAgg(targetType, targetId, req, res) {
     // clients:   avatar_url
     // providers: photo
     const list = await db.query(
-      `SELECT r.id, r.rating, r.text, r.created_at, r.author_role, r.author_id,
+      `SELECT r.id, r.rating, r.text, r.created_at, r.booking_id, r.author_role, r.author_id,
               CASE r.author_role
                 WHEN 'client'   THEN c.name
                 WHEN 'provider' THEN p.name

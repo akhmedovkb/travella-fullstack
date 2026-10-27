@@ -330,6 +330,11 @@ export default function ClientProfile() {
                         <div className="text-xs text-gray-400">
                           {rv.created_at ? new Date(rv.created_at).toLocaleString() : ""}
                         </div>
+                        {rv.verified_booking ? (
+                          <div className="mt-1 inline-flex items-center gap-1 rounded-full border border-emerald-200 bg-emerald-50 px-2 py-0.5 text-[11px] font-semibold text-emerald-700">
+                            ✓ {t("reviews.verified_booking", { defaultValue: "Подтверждённая поездка" })}
+                          </div>
+                        ) : null}
                       </div>
                     </div>
                     <RatingStars value={rv.rating || 0} size={16} />

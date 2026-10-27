@@ -1460,6 +1460,7 @@
     "leave_client": "Leave a review about the client",
     "leave_service": "Leave a review about the service",
     "list": "Reviews",
+    "verified_booking": "Verified trip",
     "placeholder": "Briefly describe your experience",
     "rating": "Rating",
     "save_error": "Failed to save review",
