@@ -1002,6 +1002,28 @@ async function notifyBookingCompleted({ booking }) {
   }
 }
 
+async function notifyBookingReviewReminder({ booking, audience }) {
+  try {
+    const a = await getBookingActors(booking);
+    if (!a || a.agent?.id || !a.client?.id) return;
+    const isProvider = audience === "provider";
+    const chatId = isProvider ? a.provider?.chatId : a.client?.chatId;
+    if (!chatId) return;
+    const callback = isProvider ? "rate_client" : "rate";
+    const recipient = isProvider ? "заказчика" : "поставщика";
+    const extra = { reply_markup: { inline_keyboard: [[1, 2, 3, 4, 5].map((rating) => ({
+      text: `${rating} ⭐`, callback_data: `tgbook:${callback}:${a.id}:${rating}`,
+    }))] } };
+    await tgSend(chatId, [
+      `<b>⭐ Оцените завершённую бронь №${a.id}</b>`,
+      ...bookingSummaryLines(a),
+      `Ваш отзыв о ${recipient} поможет другим участникам Travella принимать решения.`,
+    ].join("\n"), extra, isProvider ? undefined : _tokenForRefusedActors(a.serviceCategory));
+  } catch (e) {
+    console.error("[tg] notifyBookingReviewReminder failed:", e?.response?.data || e?.message || e);
+  }
+}
+
 async function notifyCancelledByRequester({ booking }) {
   try {
     const a = await getBookingActors(booking);
@@ -1577,6 +1599,7 @@ module.exports = {
   notifyBookingPaymentReminder,
   notifyBookingServiceReminder,
   notifyBookingCompleted,
+  notifyBookingReviewReminder,
   notifyBookingRefunded,
 
   // REQUESTS:

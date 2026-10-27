@@ -171,7 +171,8 @@ async function runExpireHotelBookingHoldsJobSafe() {
 async function runBookingLifecycleReminderJobSafe() {
   try {
     const result = await runBookingLifecycleReminderJob();
-    if (result.payment_reminders || result.service_reminders || result.completed_bookings || result.notification_failures) {
+    if (result.payment_reminders || result.service_reminders || result.completed_bookings
+      || result.client_review_reminders || result.provider_review_reminders || result.notification_failures) {
       console.log("[scheduler] bookingLifecycleReminderJob finished", result);
     }
   } catch (err) {

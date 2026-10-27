@@ -58,6 +58,54 @@ async function runBookingLifecycleReminderJob({ db = pool, notifier = telegram }
      RETURNING id AS booking_id
   `);
 
+  const clientReviews = await db.query(`
+    WITH due AS (
+      SELECT b.id AS booking_id
+        FROM bookings b
+       WHERE b.status='completed'
+         AND b.client_id IS NOT NULL
+         AND b.requester_provider_id IS NULL
+         AND COALESCE(b.updated_at,b.created_at) <= NOW() - INTERVAL '24 hours'
+         AND NOT EXISTS (
+           SELECT 1 FROM reviews r
+            WHERE r.booking_id=b.id
+              AND r.target_type='provider'
+              AND r.author_role='client'
+              AND r.author_id=b.client_id
+         )
+       ORDER BY COALESCE(b.updated_at,b.created_at)
+       LIMIT 200
+    )
+    INSERT INTO booking_telegram_reminders(booking_id,reminder_kind)
+    SELECT booking_id,'client_review_24h' FROM due
+    ON CONFLICT DO NOTHING
+    RETURNING booking_id
+  `);
+
+  const providerReviews = await db.query(`
+    WITH due AS (
+      SELECT b.id AS booking_id
+        FROM bookings b
+       WHERE b.status='completed'
+         AND b.client_id IS NOT NULL
+         AND b.requester_provider_id IS NULL
+         AND COALESCE(b.updated_at,b.created_at) <= NOW() - INTERVAL '24 hours'
+         AND NOT EXISTS (
+           SELECT 1 FROM reviews r
+            WHERE r.booking_id=b.id
+              AND r.target_type='client'
+              AND r.author_role='provider'
+              AND r.author_id=b.provider_id
+         )
+       ORDER BY COALESCE(b.updated_at,b.created_at)
+       LIMIT 200
+    )
+    INSERT INTO booking_telegram_reminders(booking_id,reminder_kind)
+    SELECT booking_id,'provider_review_24h' FROM due
+    ON CONFLICT DO NOTHING
+    RETURNING booking_id
+  `);
+
   const notifications = [
     ...(payment.rows || []).map((row) => Promise.resolve(
       notifier.notifyBookingPaymentReminder?.({ booking: { id: row.booking_id }, minutesLeft: row.minutes_left })
@@ -68,6 +116,12 @@ async function runBookingLifecycleReminderJob({ db = pool, notifier = telegram }
     ...(completed.rows || []).map((row) => Promise.resolve(
       notifier.notifyBookingCompleted?.({ booking: { id: row.booking_id } })
     )),
+    ...(clientReviews.rows || []).map((row) => Promise.resolve(
+      notifier.notifyBookingReviewReminder?.({ booking: { id: row.booking_id }, audience: "client" })
+    )),
+    ...(providerReviews.rows || []).map((row) => Promise.resolve(
+      notifier.notifyBookingReviewReminder?.({ booking: { id: row.booking_id }, audience: "provider" })
+    )),
   ];
   const settled = await Promise.allSettled(notifications);
   const failed = settled.filter((item) => item.status === "rejected").length;
@@ -76,6 +130,8 @@ async function runBookingLifecycleReminderJob({ db = pool, notifier = telegram }
     payment_reminders: payment.rowCount || 0,
     service_reminders: service.rowCount || 0,
     completed_bookings: completed.rowCount || 0,
+    client_review_reminders: clientReviews.rowCount || 0,
+    provider_review_reminders: providerReviews.rowCount || 0,
     notification_failures: failed,
   };
 }
