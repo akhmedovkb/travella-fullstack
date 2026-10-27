@@ -6,12 +6,19 @@ const {
   parseBookingAmount,
   telegramBookingStatusLabel,
   isActiveBookingStatus,
+  bookingFilterStatuses,
 } = require("../utils/telegramQuickBooking");
 
 test("parses ISO and local booking dates", () => {
   assert.equal(parseBookingDate("2026-11-09"), "2026-11-09");
   assert.equal(parseBookingDate("09.11.2026"), "2026-11-09");
   assert.equal(parseBookingDate("31.02.2026"), null);
+});
+
+test("groups booking statuses into stable Telegram filters", () => {
+  assert.deepEqual(bookingFilterStatuses("completed"), ["completed"]);
+  assert.equal(bookingFilterStatuses("cancelled").includes("cancelled_unpaid"), true);
+  assert.equal(bookingFilterStatuses("unknown").includes("awaiting_payment"), true);
 });
 
 test("validates guests and amount", () => {

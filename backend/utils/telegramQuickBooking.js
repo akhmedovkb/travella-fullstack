@@ -46,10 +46,21 @@ function isActiveBookingStatus(status) {
   return ACTIVE_BOOKING_STATUSES.has(String(status || "").toLowerCase());
 }
 
+const BOOKING_FILTERS = {
+  active: ["pending", "quoted", "awaiting_payment", "confirmed", "paid", "active", "accepted"],
+  completed: ["completed"],
+  cancelled: ["rejected", "cancelled", "cancelled_unpaid", "expired"],
+};
+
+function bookingFilterStatuses(filter) {
+  return BOOKING_FILTERS[String(filter || "active").toLowerCase()] || BOOKING_FILTERS.active;
+}
+
 module.exports = {
   parseBookingDate,
   parseGuestCount,
   parseBookingAmount,
   telegramBookingStatusLabel,
   isActiveBookingStatus,
+  bookingFilterStatuses,
 };

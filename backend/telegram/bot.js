@@ -1256,6 +1256,7 @@ const {
   parseGuestCount,
   parseBookingAmount,
   telegramBookingStatusLabel,
+  bookingFilterStatuses,
 } = require("../utils/telegramQuickBooking");
 
 let _reqTablesReady = false;
@@ -1468,18 +1469,29 @@ async function isTelegramBookingParticipant(ctx, booking, side) {
   return actor === String(booking?.client_chat_id || "") || actor === String(booking?.provider_chat_id || "");
 }
 
-async function renderTelegramBookings(ctx, role, offset = 0) {
+async function renderTelegramBookings(ctx, role, filter = "active", offset = 0) {
   const actorId = Number(ctx.from?.id || 0);
   const limit = 8;
+  const statuses = bookingFilterStatuses(filter);
+  const normalizedFilter = ["active", "completed", "cancelled"].includes(filter) ? filter : "active";
   let result;
+  let counts;
   if (role === "provider") {
     const providerId = await resolveProviderIdByTelegramChatId(actorId, { action: "list_quick_bookings" });
     if (!providerId) return safeReply(ctx, "Профиль поставщика не найден.");
     result = await pool.query(
       `SELECT b.*,s.title AS service_title,p.name AS provider_name
          FROM bookings b LEFT JOIN services s ON s.id=b.service_id JOIN providers p ON p.id=b.provider_id
-        WHERE b.provider_id=$1 ORDER BY b.created_at DESC LIMIT $2 OFFSET $3`,
-      [providerId, limit, offset]
+        WHERE b.provider_id=$1 AND b.status=ANY($2::text[])
+        ORDER BY b.created_at DESC LIMIT $3 OFFSET $4`,
+      [providerId, statuses, limit, offset]
+    );
+    counts = await pool.query(
+      `SELECT COUNT(*) FILTER (WHERE status=ANY($2::text[]))::int AS active,
+              COUNT(*) FILTER (WHERE status='completed')::int AS completed,
+              COUNT(*) FILTER (WHERE status=ANY($3::text[]))::int AS cancelled
+         FROM bookings WHERE provider_id=$1`,
+      [providerId, bookingFilterStatuses("active"), bookingFilterStatuses("cancelled")]
     );
   } else {
     const client = await getClientRowByChatId(pool, actorId);
@@ -1487,13 +1499,32 @@ async function renderTelegramBookings(ctx, role, offset = 0) {
     result = await pool.query(
       `SELECT b.*,s.title AS service_title,p.name AS provider_name
          FROM bookings b LEFT JOIN services s ON s.id=b.service_id JOIN providers p ON p.id=b.provider_id
-        WHERE b.client_id=$1 ORDER BY b.created_at DESC LIMIT $2 OFFSET $3`,
-      [client.id, limit, offset]
+        WHERE b.client_id=$1 AND b.status=ANY($2::text[])
+        ORDER BY b.created_at DESC LIMIT $3 OFFSET $4`,
+      [client.id, statuses, limit, offset]
+    );
+    counts = await pool.query(
+      `SELECT COUNT(*) FILTER (WHERE status=ANY($2::text[]))::int AS active,
+              COUNT(*) FILTER (WHERE status='completed')::int AS completed,
+              COUNT(*) FILTER (WHERE status=ANY($3::text[]))::int AS cancelled
+         FROM bookings WHERE client_id=$1`,
+      [client.id, bookingFilterStatuses("active"), bookingFilterStatuses("cancelled")]
     );
   }
   const rows = result.rows || [];
-  if (!rows.length) return safeReply(ctx, "📄 Бронирований пока нет.");
-  if (!offset) await safeReply(ctx, role === "provider" ? "📄 Брони ваших услуг" : "📄 Мои бронирования");
+  const totals = counts?.rows?.[0] || {};
+  if (!offset) await safeReply(ctx, role === "provider" ? "📄 Брони ваших услуг" : "📄 Мои бронирования", {
+    reply_markup: { inline_keyboard: [[
+      { text: `Активные ${Number(totals.active || 0)}`, callback_data: `tgbook:filter:${role}:active` },
+      { text: `Завершённые ${Number(totals.completed || 0)}`, callback_data: `tgbook:filter:${role}:completed` },
+      { text: `Отменённые ${Number(totals.cancelled || 0)}`, callback_data: `tgbook:filter:${role}:cancelled` },
+    ]] },
+  });
+  if (!rows.length) {
+    const empty = { active: "Активных броней нет.", completed: "Завершённых броней пока нет.", cancelled: "Отменённых броней нет." };
+    await safeReply(ctx, `📭 ${empty[normalizedFilter]}`);
+    return;
+  }
   for (const booking of rows) {
     const buttons = [[{ text: "Открыть", callback_data: `tgbook:open:${booking.id}` }]];
     if (role === "client" && ["pending", "quoted"].includes(String(booking.status))) {
@@ -1508,7 +1539,7 @@ async function renderTelegramBookings(ctx, role, offset = 0) {
     await safeReply(ctx, telegramBookingText(booking), { parse_mode: "HTML", reply_markup: { inline_keyboard: buttons } });
   }
   if (rows.length === limit) await safeReply(ctx, "Показать более ранние брони?", {
-    reply_markup: { inline_keyboard: [[{ text: "Показать ещё", callback_data: `tgbook:list:${role}:${offset + limit}` }]] },
+    reply_markup: { inline_keyboard: [[{ text: "Показать ещё", callback_data: `tgbook:list:${role}:${normalizedFilter}:${offset + limit}` }]] },
   });
 }
 
@@ -9790,20 +9821,20 @@ bot.hears(/📄 (Мои брони|Бронирования)/i, async (ctx) => {
   }
 
   try {
-    await renderTelegramBookings(ctx, role === "provider" ? "provider" : "client", 0);
+    await renderTelegramBookings(ctx, role === "provider" ? "provider" : "client", "active", 0);
   } catch (error) {
     console.error("[tg-bot] bookings list error:", error?.message || error);
     await ctx.reply("⚠️ Не удалось загрузить бронирования. Попробуйте позже.");
   }
 });
 
-bot.action(/^tgbook:list:(provider|client):(\d+)$/, async (ctx) => {
+bot.action(/^tgbook:(?:list|filter):(provider|client):(active|completed|cancelled)(?::(\d+))?$/, async (ctx) => {
   try {
     const role = String(ctx.match[1]);
     const actualRole = (await ensureProviderRole(ctx)) === "provider" ? "provider" : "client";
     if (role !== actualRole) return ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
     await ctx.answerCbQuery();
-    await renderTelegramBookings(ctx, role, Number(ctx.match[2]) || 0);
+    await renderTelegramBookings(ctx, role, String(ctx.match[2]), Number(ctx.match[3]) || 0);
   } catch (error) {
     console.error("[tg-bot] booking pagination error:", error?.message || error);
   }
