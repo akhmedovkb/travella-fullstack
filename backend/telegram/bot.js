@@ -1543,6 +1543,70 @@ async function renderTelegramBookings(ctx, role, filter = "active", offset = 0) 
   });
 }
 
+async function renderTelegramReviews(ctx, role, offset = 0) {
+  const actorId = Number(ctx.from?.id || 0);
+  const limit = 5;
+  const targetId = role === "provider"
+    ? await resolveProviderIdByTelegramChatId(actorId, { action: "list_reviews" })
+    : (await getClientRowByChatId(pool, actorId))?.id;
+  if (!targetId) return safeReply(ctx, role === "provider" ? "Профиль поставщика не найден." : "Профиль клиента не найден.");
+
+  const targetType = role === "provider" ? "provider" : "client";
+  const safeOffset = Math.max(0, Number(offset) || 0);
+  const [statsResult, listResult] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*)::int AS count,COALESCE(AVG(rating),0)::float AS average
+         FROM reviews WHERE target_type=$1 AND target_id=$2`,
+      [targetType, targetId]
+    ),
+    pool.query(
+      `SELECT r.id,r.rating,r.text,r.created_at,r.booking_id,r.author_role,
+              CASE WHEN r.author_role='client' THEN c.name ELSE p.name END AS author_name
+         FROM reviews r
+         LEFT JOIN clients c ON c.id=r.author_id AND r.author_role='client'
+         LEFT JOIN providers p ON p.id=r.author_id AND r.author_role='provider'
+        WHERE r.target_type=$1 AND r.target_id=$2
+        ORDER BY r.created_at DESC,r.id DESC LIMIT $3 OFFSET $4`,
+      [targetType, targetId, limit, safeOffset]
+    ),
+  ]);
+  const stats = statsResult.rows?.[0] || { count: 0, average: 0 };
+  const rows = listResult.rows || [];
+  if (!safeOffset) {
+    const average = Number(stats.average || 0);
+    await safeReply(ctx, [
+      "<b>⭐ Мои отзывы</b>",
+      `Средняя оценка: <b>${average ? average.toFixed(1) : "—"} / 5</b>`,
+      `Всего отзывов: <b>${Number(stats.count || 0)}</b>`,
+    ].join("\n"), { parse_mode: "HTML" });
+  }
+  if (!rows.length) {
+    if (!safeOffset) await safeReply(ctx, "Пока отзывов нет. Они появятся после завершённых бронирований.");
+    return;
+  }
+  for (const review of rows) {
+    const rating = Math.max(1, Math.min(5, Number(review.rating || 0)));
+    const date = review.created_at
+      ? new Date(review.created_at).toLocaleDateString("ru-RU", { timeZone: "Asia/Tashkent" })
+      : "";
+    await safeReply(ctx, [
+      `${"⭐".repeat(rating)}${"☆".repeat(5 - rating)} <b>${rating}/5</b>`,
+      `Автор: ${escapeHtml(review.author_name || "Пользователь Travella")}`,
+      date ? `Дата: ${escapeHtml(date)}` : "",
+      review.booking_id ? "✅ Подтверждённая поездка" : "",
+      review.text ? `\n${escapeHtml(review.text)}` : "\nБез комментария",
+    ].filter(Boolean).join("\n"), { parse_mode: "HTML" });
+  }
+  if (safeOffset + rows.length < Number(stats.count || 0)) {
+    await safeReply(ctx, "Показать более ранние отзывы?", {
+      reply_markup: { inline_keyboard: [[{
+        text: "Показать ещё",
+        callback_data: `tgreview:list:${role}:${safeOffset + limit}`,
+      }]] },
+    });
+  }
+}
+
 async function logReqMessage({ requestId, senderRole, senderTgId, text }) {
   try {
     await ensureReqTables();
@@ -2501,7 +2565,7 @@ function getMainMenuKeyboard(role) {
       [{ text: "🔍 Найти услугу" }, { text: "🧳 Мои услуги" }],
       [{ text: "🧺 Корзина" }, { text: "📄 Бронирования" }],
       [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
-      [{ text: "🎓 Обучение" }],
+      [{ text: "⭐ Мои отзывы" }, { text: "🎓 Обучение" }],
     ]);
   }
 
@@ -2510,7 +2574,7 @@ function getMainMenuKeyboard(role) {
     [{ text: "🔍 Найти услугу" }, { text: "🔥 Горящие предложения" }],
     [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
     [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
-    [{ text: "🎓 Обучение" }],
+    [{ text: "⭐ Мои отзывы" }, { text: "🎓 Обучение" }],
     [{ text: "🏢 Стать поставщиком" }],
   ]);
 }
@@ -9825,6 +9889,38 @@ bot.hears(/📄 (Мои брони|Бронирования)/i, async (ctx) => {
   } catch (error) {
     console.error("[tg-bot] bookings list error:", error?.message || error);
     await ctx.reply("⚠️ Не удалось загрузить бронирования. Попробуйте позже.");
+  }
+});
+
+bot.hears(/⭐ Мои отзывы/i, async (ctx) => {
+  logUpdate(ctx, "hears Мои отзывы");
+  const maybeProvider = await ensureProviderRole(ctx);
+  const maybeClient = maybeProvider ? null : await ensureClientRole(ctx);
+  const role = maybeProvider || maybeClient || ctx.session?.role || null;
+  if (!ctx.session?.linked || !["provider", "client"].includes(role)) {
+    await ctx.reply("📌 Чтобы показать отзывы, нужно привязать аккаунт по номеру телефона.");
+    await askRole(ctx);
+    return;
+  }
+  try {
+    await renderTelegramReviews(ctx, role, 0);
+  } catch (error) {
+    console.error("[tg-bot] reviews list error:", error?.message || error);
+    await safeReply(ctx, "⚠️ Не удалось загрузить отзывы. Попробуйте позже.");
+  }
+});
+
+bot.action(/^tgreview:list:(provider|client):(\d+)$/, async (ctx) => {
+  try {
+    const requestedRole = String(ctx.match[1]);
+    const maybeProvider = await ensureProviderRole(ctx);
+    const actualRole = maybeProvider || await ensureClientRole(ctx);
+    if (requestedRole !== actualRole) return ctx.answerCbQuery("⛔ Недостаточно прав", { show_alert: true });
+    await ctx.answerCbQuery();
+    await renderTelegramReviews(ctx, actualRole, Number(ctx.match[2]) || 0);
+  } catch (error) {
+    console.error("[tg-bot] reviews pagination error:", error?.message || error);
+    try { await ctx.answerCbQuery("Не удалось загрузить отзывы", { show_alert: true }); } catch {}
   }
 });
 
