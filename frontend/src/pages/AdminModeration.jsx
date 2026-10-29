@@ -128,16 +128,62 @@ function normalizeDetails(details) {
 
 function normalizeImages(images) {
   if (!images) return [];
-  if (Array.isArray(images)) return images.filter(Boolean);
+  const normalizeOne = (item) => {
+    if (typeof item === "string") return item.trim();
+    if (item && typeof item === "object") return String(item.url || item.src || item.imageUrl || "").trim();
+    return "";
+  };
+  if (Array.isArray(images)) return images.map(normalizeOne).filter(Boolean);
 
   if (typeof images === "string") {
     const parsed = parseJsonSafe(images, null);
-    if (Array.isArray(parsed)) return parsed.filter(Boolean);
-    if (parsed && typeof parsed === "string") return [parsed];
+    if (Array.isArray(parsed)) return parsed.map(normalizeOne).filter(Boolean);
+    if (parsed && typeof parsed === "string") return [parsed.trim()].filter(Boolean);
     return images.trim() ? [images.trim()] : [];
   }
 
   return [];
+}
+
+const INTERNAL_DETAIL_KEYS = new Set([
+  "meta", "proofReviewedAt", "proofReviewedBy", "proofReviewStatus",
+  "moderation_rejected_at", "moderation_rejection_code", "createdAt", "updatedAt",
+  "created_at", "updated_at", "submittedAt", "submitted_at",
+]);
+
+const QUICK_DETAIL_KEYS = new Set([
+  "directionCountry", "location", "directionFrom", "directionTo", "direction",
+  "startDate", "departureDate", "departureFlightDate", "endDate", "returnFlightDate",
+  "nights", "hotel", "eventName", "roomCategory", "accommodation", "netPrice", "net_price",
+  "grossPrice", "gross_price", "price", "pricePerPerson", "priceFor", "food",
+  "flightDetails", "flight_details", "flight_info", "flightIncluded", "airTickets",
+  "aviaTickets", "transferIncluded", "hasTransfer", "transfer", "insurance",
+  "insuranceIncluded", "visa", "visaIncluded",
+]);
+
+const DETAIL_LABELS = {
+  adt: "Взрослых", adults: "Взрослых", chd: "Детей", children: "Детей",
+  inf: "Младенцев", infants: "Младенцев", guests: "Гостей", persons: "Туристов",
+  peopleCount: "Количество туристов", pax: "Количество мест", maxPax: "Максимум гостей",
+  duration: "Продолжительность", durationDays: "Дней", durationHours: "Часов",
+  airline: "Авиакомпания", flightNumber: "Номер рейса", flightType: "Тип перелёта",
+  tripType: "Тип маршрута", oneWay: "В одну сторону", baggage: "Багаж",
+  meal: "Питание", halal: "Халяль", roomType: "Тип номера",
+  accommodationCategory: "Категория размещения", category: "Категория номера",
+  eventDate: "Дата события", eventTime: "Время события", ticketTitle: "Название билета",
+  city: "Город", country: "Страна", toCity: "Город назначения", fromCity: "Город отправления",
+  currency: "Валюта", urgency: "Срочность", changeable: "Можно изменить",
+  isActive: "Актуально", expiration: "Действует до", expiration_at: "Действует до",
+  expiration_ts: "Действует до", included: "Что включено", excluded: "Что не включено",
+  notes: "Примечание", comment: "Комментарий", description: "Описание",
+};
+
+function detailLabel(key) {
+  if (DETAIL_LABELS[key]) return DETAIL_LABELS[key];
+  return String(key || "")
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .replace(/^./, (letter) => letter.toUpperCase());
 }
 
 function getPublicServiceImages(images, detailsInput) {
@@ -936,28 +982,31 @@ function Card({
             </div>
           )}
 
-          {Object.keys(d).some((k) => !prettyKeys.has(k)) && (
+          {Object.keys(d).some((k) => !prettyKeys.has(k) && !INTERNAL_DETAIL_KEYS.has(k)) && (
             <div className="mt-2 border-t border-gray-200 pt-1">
               <div className="text-[11px] font-semibold text-gray-500 mb-1">
                 {t("moderation.other_fields", {
-                  defaultValue: "Прочие поля",
+                  defaultValue: "Дополнительные параметры",
                 })}
               </div>
-              <div className="space-y-0.5 text-[11px]">
+              <div className="grid grid-cols-1 gap-1 text-[11px]">
                 {Object.entries(d)
-                  .filter(([key]) => !prettyKeys.has(key))
+                  .filter(([key]) => !prettyKeys.has(key) && !INTERNAL_DETAIL_KEYS.has(key))
+                  .slice(0, 10)
                   .map(([key, value]) => (
-                    <div key={key} className="flex gap-1">
-                      <div className="text-gray-500 min-w-[90px] break-all">
-                        {key}:
+                    <div key={key} className="flex items-start justify-between gap-3 rounded-md bg-white px-2 py-1">
+                      <div className="text-gray-500">
+                        {detailLabel(key)}
                       </div>
-                      <div className="break-all">
+                      <div className="max-w-[60%] break-words text-right font-medium">
                         {typeof value === "boolean"
                           ? value
                             ? yesLabel
                             : noLabel
                           : Array.isArray(value)
                           ? value.join(", ")
+                          : typeof value === "object"
+                          ? "Структурированные данные"
                           : String(value)}
                       </div>
                     </div>
@@ -2368,6 +2417,13 @@ export default function AdminModeration({ embedded = false }) {
     description: "",
     category: "",
     price: "",
+    currency: "USD",
+    net_price: "",
+    gross_price: "",
+    country: "",
+    city: "",
+    location: "",
+    expiration_at: "",
     vehicle_model: "",
     telegram_refused_chat_id: "",
     telegram_web_chat_id: "",
@@ -2676,7 +2732,7 @@ export default function AdminModeration({ embedded = false }) {
         ? s.availability
         : parseJsonSafe(s.availability, []) || [];
       setEditDetailsRows(detailsToRows(details));
-      setEditImages(images);
+      setEditImages(getPublicServiceImages(images, details));
       setNewImageUrl("");
       setImageAddError("");
 
@@ -2686,6 +2742,13 @@ export default function AdminModeration({ embedded = false }) {
         description: s.description || "",
         category: s.category || "",
         price: s.price ?? "",
+        currency: s.currency || "USD",
+        net_price: s.net_price ?? "",
+        gross_price: s.gross_price ?? "",
+        country: s.country || "",
+        city: s.city || "",
+        location: s.location || "",
+        expiration_at: s.expiration_at ? String(s.expiration_at).slice(0, 16) : "",
         vehicle_model: s.vehicle_model || "",
         telegram_refused_chat_id: s.telegram_refused_chat_id || "",
         telegram_web_chat_id: s.telegram_web_chat_id || "",
@@ -2848,6 +2911,13 @@ export default function AdminModeration({ embedded = false }) {
           description: editForm.description,
           category: editForm.category,
           price: editForm.price === "" ? null : editForm.price,
+          currency: editForm.currency,
+          net_price: editForm.net_price === "" ? null : editForm.net_price,
+          gross_price: editForm.gross_price === "" ? null : editForm.gross_price,
+          country: editForm.country,
+          city: editForm.city,
+          location: editForm.location,
+          expiration_at: editForm.expiration_at || null,
           vehicle_model: editForm.vehicle_model,
           telegram_refused_chat_id: editForm.telegram_refused_chat_id,
           telegram_web_chat_id: editForm.telegram_web_chat_id,
@@ -2923,6 +2993,12 @@ export default function AdminModeration({ embedded = false }) {
   }
 
   const editDetails = rowsToDetails(editDetailsRows);
+  const businessDetailRows = editDetailsRows
+    .map((row, index) => ({ ...row, index }))
+    .filter((row) => !QUICK_DETAIL_KEYS.has(row.key) && !INTERNAL_DETAIL_KEYS.has(row.key));
+  const technicalDetailRows = editDetailsRows
+    .map((row, index) => ({ ...row, index }))
+    .filter((row) => row.key && INTERNAL_DETAIL_KEYS.has(row.key));
   const detailKey = (keys, fallback) =>
     keys.find((key) => {
       const value = editDetails[key];
@@ -3299,10 +3375,11 @@ export default function AdminModeration({ embedded = false }) {
                 <ReadinessChecklist items={readinessItems} />
                 <DangerIssuesPanel issues={dangerIssues} />
 
+                <EditSection title="Основные данные">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">
-                      Title
+                      Название услуги
                     </label>
                     <input
                       type="text"
@@ -3316,7 +3393,7 @@ export default function AdminModeration({ embedded = false }) {
 
                   <div>
                     <label className="block text-sm font-medium mb-1">
-                      Category
+                      Категория
                     </label>
                     <input
                       type="text"
@@ -3330,7 +3407,7 @@ export default function AdminModeration({ embedded = false }) {
 
                   <div>
                     <label className="block text-sm font-medium mb-1">
-                      Price
+                      Базовая цена
                     </label>
                     <input
                       type="text"
@@ -3343,8 +3420,31 @@ export default function AdminModeration({ embedded = false }) {
                   </div>
 
                   <div>
+                    <label className="block text-sm font-medium mb-1">Валюта</label>
+                    <select
+                      value={editForm.currency}
+                      onChange={(e) => setEditForm((prev) => ({ ...prev, currency: e.target.value }))}
+                      className="w-full border rounded-lg px-3 py-2 bg-white"
+                    >
+                      <option value="UZS">UZS</option>
+                      <option value="USD">USD</option>
+                      <option value="EUR">EUR</option>
+                    </select>
+                  </div>
+
+                  <TextField label="Netto" value={editForm.net_price} onChange={(value) => setEditForm((prev) => ({ ...prev, net_price: value }))} />
+                  <TextField label="Gross" value={editForm.gross_price} onChange={(value) => setEditForm((prev) => ({ ...prev, gross_price: value }))} />
+                  <TextField label="Страна" value={editForm.country} onChange={(value) => setEditForm((prev) => ({ ...prev, country: value }))} />
+                  <TextField label="Город" value={editForm.city} onChange={(value) => setEditForm((prev) => ({ ...prev, city: value }))} />
+                  <TextField label="Локация / маршрут" value={editForm.location} onChange={(value) => setEditForm((prev) => ({ ...prev, location: value }))} />
+                  <label className="block">
+                    <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Действует до</span>
+                    <input type="datetime-local" value={editForm.expiration_at} onChange={(e) => setEditForm((prev) => ({ ...prev, expiration_at: e.target.value }))} className="w-full border rounded-lg px-3 py-2 bg-white" />
+                  </label>
+
+                  <div>
                     <label className="block text-sm font-medium mb-1">
-                      Vehicle model
+                      Модель транспорта
                     </label>
                     <input
                       type="text"
@@ -3416,7 +3516,7 @@ export default function AdminModeration({ embedded = false }) {
 
                 <div>
                   <label className="block text-sm font-medium mb-1">
-                    Description
+                    Описание для клиента
                   </label>
                   <textarea
                     value={editForm.description}
@@ -3430,6 +3530,7 @@ export default function AdminModeration({ embedded = false }) {
                     className="w-full border rounded-lg px-3 py-2"
                   />
                 </div>
+                </EditSection>
 
                 <EditSection title="Быстрая правка карточки">
                   <div className="flex flex-wrap gap-2">
@@ -3576,13 +3677,13 @@ export default function AdminModeration({ embedded = false }) {
                     <div>
                       <div className="text-sm font-semibold">
                         {t("moderation.all_detail_fields", {
-                          defaultValue: "Все поля карточки",
+                          defaultValue: "Дополнительные параметры",
                         })}
                       </div>
                       <div className="text-xs text-gray-500">
                         {t("moderation.all_detail_fields_hint", {
                           defaultValue:
-                            "Меняйте ключ и значение. Для списков/объектов можно вставить JSON.",
+                            "Поля из анкеты поставщика, которые не вошли в основные разделы.",
                         })}
                       </div>
                     </div>
@@ -3596,31 +3697,26 @@ export default function AdminModeration({ embedded = false }) {
                   </div>
 
                   <div className="space-y-2">
-                    {editDetailsRows.length === 0 ? (
+                    {businessDetailRows.length === 0 ? (
                       <div className="rounded-xl border border-dashed border-gray-300 p-4 text-sm text-gray-500">
                         {t("moderation.no_detail_fields", {
                           defaultValue: "Дополнительных полей пока нет.",
                         })}
                       </div>
                     ) : (
-                      editDetailsRows.map((row, idx) => (
+                      businessDetailRows.map((row) => (
                         <div
-                          key={`detail-${idx}`}
-                          className="grid grid-cols-1 md:grid-cols-[180px_1fr_auto] gap-2 rounded-xl border border-gray-200 bg-gray-50 p-2"
+                          key={`detail-${row.index}`}
+                          className="grid grid-cols-1 md:grid-cols-[220px_1fr_auto] gap-2 rounded-xl border border-gray-200 bg-gray-50 p-3"
                         >
-                          <input
-                            type="text"
-                            value={row.key}
-                            onChange={(e) =>
-                              updateDetailRow(idx, { key: e.target.value })
-                            }
-                            className="w-full border rounded-lg px-3 py-2 text-sm bg-white"
-                            placeholder="fieldName"
-                          />
+                          <div className="self-center">
+                            <div className="text-sm font-semibold text-slate-800">{row.key ? detailLabel(row.key) : "Новое поле"}</div>
+                            <input type="text" value={row.key} onChange={(e) => updateDetailRow(row.index, { key: e.target.value })} className="mt-1 w-full border-0 bg-transparent p-0 text-[10px] text-slate-400 focus:ring-0" placeholder="technicalKey" />
+                          </div>
                           <textarea
                             value={row.value}
                             onChange={(e) =>
-                              updateDetailRow(idx, { value: e.target.value })
+                              updateDetailRow(row.index, { value: e.target.value })
                             }
                             rows={String(row.value || "").length > 90 ? 3 : 1}
                             className="w-full border rounded-lg px-3 py-2 text-sm bg-white font-mono"
@@ -3628,7 +3724,7 @@ export default function AdminModeration({ embedded = false }) {
                           />
                           <button
                             type="button"
-                            onClick={() => removeDetailRow(idx)}
+                            onClick={() => removeDetailRow(row.index)}
                             className="px-3 py-2 rounded-lg bg-rose-50 text-rose-700 text-sm font-semibold hover:bg-rose-100"
                           >
                             {t("common.delete", { defaultValue: "Удалить" })}
@@ -3637,6 +3733,17 @@ export default function AdminModeration({ embedded = false }) {
                       ))
                     )}
                   </div>
+
+                  {technicalDetailRows.length > 0 && (
+                    <details className="mt-3 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                      <summary className="cursor-pointer text-sm font-semibold text-slate-600">
+                        Служебные данные ({technicalDetailRows.length})
+                      </summary>
+                      <div className="mt-2 text-xs text-slate-500">
+                        Эти значения сохраняются автоматически и не показываются в публичной карточке.
+                      </div>
+                    </details>
+                  )}
                 </div>
 
                 <div>

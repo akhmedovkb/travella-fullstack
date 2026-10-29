@@ -367,6 +367,13 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
     };
 
     const nextPrice = normalizePrice(body.price, row.price);
+    const nextNetPrice = normalizePrice(body.net_price, row.net_price);
+    const nextGrossPrice = normalizePrice(body.gross_price, row.gross_price);
+    const nextCurrency = typeof body.currency === "undefined" ? row.currency : String(body.currency || "USD").trim().toUpperCase().slice(0, 8);
+    const nextCountry = typeof body.country === "undefined" ? row.country : String(body.country || "").trim() || null;
+    const nextCity = typeof body.city === "undefined" ? row.city : String(body.city || "").trim() || null;
+    const nextLocation = typeof body.location === "undefined" ? row.location : String(body.location || "").trim() || null;
+    const nextExpirationAt = typeof body.expiration_at === "undefined" ? row.expiration_at : (body.expiration_at || null);
     const nextVehicleModel =
       typeof body.vehicle_model === "undefined"
         ? row.vehicle_model
@@ -425,6 +432,13 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
               availability = $7::jsonb,
               details = $8::jsonb,
               vehicle_model = $9,
+              currency = $10,
+              net_price = $11,
+              gross_price = $12,
+              country = $13,
+              city = $14,
+              location = $15,
+              expiration_at = $16,
               updated_at = NOW()
         WHERE id = $1
         RETURNING *`,
@@ -442,6 +456,13 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
             : {}
         ),
         nextVehicleModel,
+        nextCurrency,
+        nextNetPrice,
+        nextGrossPrice,
+        nextCountry,
+        nextCity,
+        nextLocation,
+        nextExpirationAt,
       ]
     );
     await pool.query(
