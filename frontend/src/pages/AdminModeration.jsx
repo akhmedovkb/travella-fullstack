@@ -1230,7 +1230,7 @@ function Card({
 
 function EditSection({ title, children }) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="mb-3 text-sm font-semibold text-gray-900">{title}</div>
       <div className="space-y-3">{children}</div>
     </div>
@@ -1246,7 +1246,7 @@ function TextField({ label, value, onChange, placeholder = "", textarea = false,
   };
 
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">
         {label}
       </span>
@@ -2868,14 +2868,35 @@ export default function AdminModeration({ embedded = false }) {
     });
   };
 
-  const setProofImages = (images) => {
-    setDetailValue("proofImages", JSON.stringify(normalizeImages(images)));
+  const setProofImages = (imagesOrUpdater) => {
+    setEditDetailsRows((prev) => {
+      const details = rowsToDetails(prev);
+      const current = normalizeImages(details.proofImages);
+      const images = normalizeImages(typeof imagesOrUpdater === "function" ? imagesOrUpdater(current) : imagesOrUpdater);
+      return detailsToRows({
+        ...details,
+        proofImages: images,
+        proofReviewStatus: images.length ? "pending" : "",
+        proofReviewNote: "",
+        proofReviewedAt: "",
+        proofReviewedBy: null,
+      });
+    });
   };
 
   const uploadProofImages = async (event) => {
     const input = event.currentTarget;
     const files = Array.from(input.files || []);
-    if (!files.length || !editItemId) return;
+    if (!files.length || !editItemId || proofUploadBusy || editSaving) return;
+    const remaining = Math.max(0, 20 - normalizeImages(rowsToDetails(editDetailsRows).proofImages).length);
+    const invalid = files.find((file) => !String(file.type || "").startsWith("image/") || file.size > 8 * 1024 * 1024);
+    if (files.length > remaining || invalid) {
+      tError(files.length > remaining
+        ? `Можно добавить ещё только ${remaining} подтверждений.`
+        : `Файл «${invalid.name}» должен быть изображением размером до 8 МБ.`);
+      input.value = "";
+      return;
+    }
     setProofUploadBusy(true);
     try {
       const data = new FormData();
@@ -2886,10 +2907,11 @@ export default function AdminModeration({ embedded = false }) {
         { headers: { ...cfg.headers, "Content-Type": "multipart/form-data" } }
       );
       const urls = (response?.data?.images || []).map((image) => image?.url).filter(Boolean);
-      setProofImages([...normalizeImages(editDetails.proofImages), ...urls]);
+      if (!urls.length) throw new Error("Сервер не вернул ссылки на подтверждения.");
+      setProofImages((current) => [...current, ...urls]);
       tSuccess(urls.length === 1 ? "Подтверждение добавлено" : `Добавлено подтверждений: ${urls.length}`);
     } catch (error) {
-      tError(error?.response?.data?.message || "Не удалось загрузить подтверждение");
+      tError(error?.response?.data?.message || error?.message || "Не удалось загрузить подтверждение");
     } finally {
       setProofUploadBusy(false);
       input.value = "";
@@ -2905,6 +2927,7 @@ export default function AdminModeration({ embedded = false }) {
   };
   
   const saveEdit = async ({ approveAfter = false, forceApprove = false, warnings = [] } = {}) => {
+    if (editSaving || editLoading || imageUploadBusy || proofUploadBusy) return;
     const details = rowsToDetails(editDetailsRows);
     const images = Array.isArray(editImages)
       ? editImages.filter((x) => String(x || "").trim())
@@ -3380,7 +3403,8 @@ export default function AdminModeration({ embedded = false }) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => setEditOpen(false)}
+                  onClick={() => { if (!editSaving && !imageUploadBusy && !proofUploadBusy) setEditOpen(false); }}
+                  disabled={editSaving || imageUploadBusy || proofUploadBusy}
                   className="text-2xl leading-none text-gray-500 hover:text-black"
                 >
                   ×
@@ -3426,9 +3450,9 @@ export default function AdminModeration({ embedded = false }) {
                       {editProofImages.map((image, index) => (
                         <div key={`${image}-${index}`} className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-white bg-white shadow-sm">
                           <button type="button" onClick={() => setProofViewer(image)} className="h-full w-full">
-                            <img src={image} alt="Подтверждение" className="h-full w-full object-cover" />
+                            <img src={image} alt={`Подтверждение ${index + 1}`} className="h-full w-full object-contain" />
                           </button>
-                          <button type="button" onClick={() => setProofImages(editProofImages.filter((_, itemIndex) => itemIndex !== index))} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-slate-950/80 text-white opacity-0 transition group-hover:opacity-100" aria-label="Удалить подтверждение">×</button>
+                          <button type="button" disabled={proofUploadBusy || editSaving} onClick={() => setProofImages((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-slate-950/80 text-white transition hover:bg-black disabled:opacity-50" aria-label={`Удалить подтверждение ${index + 1}`}>×</button>
                         </div>
                       ))}
                     </div>
@@ -3437,14 +3461,17 @@ export default function AdminModeration({ embedded = false }) {
                   )}
 
                   <div className="mt-4 flex flex-wrap items-center gap-2">
-                    <label className={`cursor-pointer rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-black ${proofUploadBusy ? "pointer-events-none opacity-60" : ""}`}>
-                      <input type="file" accept="image/*" multiple className="sr-only" disabled={proofUploadBusy} onChange={uploadProofImages} />
+                    <label className={`cursor-pointer rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-black ${proofUploadBusy || editSaving || editProofImages.length >= 20 ? "pointer-events-none opacity-60" : ""}`}>
+                      <input type="file" accept="image/*" multiple className="sr-only" disabled={proofUploadBusy || editSaving || editProofImages.length >= 20} onChange={uploadProofImages} />
                       {proofUploadBusy ? "Загрузка..." : "Добавить подтверждение"}
                     </label>
-                    <button type="button" onClick={() => setDetailValue("proofReviewStatus", "approved")} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${editProofStatus === "approved" ? "border-emerald-600 bg-emerald-600 text-white" : "border-emerald-200 bg-white text-emerald-700"}`}>Подтвердить</button>
-                    <button type="button" onClick={() => setDetailValue("proofReviewStatus", "rejected")} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${editProofStatus === "rejected" ? "border-rose-600 bg-rose-600 text-white" : "border-rose-200 bg-white text-rose-700"}`}>Отклонить</button>
-                    {editProofStatus !== "pending" && <button type="button" onClick={() => setDetailValue("proofReviewStatus", "pending")} className="px-3 py-2 text-sm font-semibold text-slate-500">Сбросить</button>}
+                    <button type="button" disabled={proofUploadBusy || editSaving || !editProofImages.length} onClick={() => setDetailValue("proofReviewStatus", "approved")} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${editProofStatus === "approved" ? "border-emerald-600 bg-emerald-600 text-white" : "border-emerald-200 bg-white text-emerald-700"}`}>Подтвердить</button>
+                    <button type="button" disabled={proofUploadBusy || editSaving || !editProofImages.length} onClick={() => setDetailValue("proofReviewStatus", "rejected")} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${editProofStatus === "rejected" ? "border-rose-600 bg-rose-600 text-white" : "border-rose-200 bg-white text-rose-700"}`}>Отклонить</button>
+                    {editProofStatus !== "pending" && <button type="button" disabled={proofUploadBusy || editSaving} onClick={() => setDetailValue("proofReviewStatus", "pending")} className="px-3 py-2 text-sm font-semibold text-slate-500">Сбросить</button>}
                   </div>
+                  <p className="mt-3 text-xs text-slate-600" role="status">
+                    {proofUploadBusy ? "Дождитесь завершения загрузки перед сохранением." : `${editProofImages.length} из 20 · Изображения до 8 МБ. Добавление и удаление применяются после сохранения.`}
+                  </p>
                 </section>
 
                 <EditSection title="Основные данные">
@@ -3459,7 +3486,7 @@ export default function AdminModeration({ embedded = false }) {
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, title: e.target.value }))
                       }
-                      className="w-full border rounded-lg px-3 py-2"
+                      className="min-w-0 w-full border rounded-lg px-3 py-2"
                     />
                   </div>
 
@@ -3473,7 +3500,7 @@ export default function AdminModeration({ embedded = false }) {
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, category: e.target.value }))
                       }
-                      className="w-full border rounded-lg px-3 py-2"
+                      className="min-w-0 w-full border rounded-lg px-3 py-2"
                     />
                   </div>
 
@@ -3487,7 +3514,7 @@ export default function AdminModeration({ embedded = false }) {
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, price: e.target.value }))
                       }
-                      className="w-full border rounded-lg px-3 py-2"
+                      className="min-w-0 w-full border rounded-lg px-3 py-2"
                     />
                   </div>
 
@@ -3496,7 +3523,7 @@ export default function AdminModeration({ embedded = false }) {
                     <select
                       value={editForm.currency}
                       onChange={(e) => setEditForm((prev) => ({ ...prev, currency: e.target.value }))}
-                      className="w-full border rounded-lg px-3 py-2 bg-white"
+                      className="min-w-0 w-full border rounded-lg px-3 py-2 bg-white"
                     >
                       <option value="UZS">UZS</option>
                       <option value="USD">USD</option>
@@ -3509,9 +3536,9 @@ export default function AdminModeration({ embedded = false }) {
                   <TextField label="Страна" value={editForm.country} onChange={(value) => setEditForm((prev) => ({ ...prev, country: value }))} />
                   <TextField label="Город" value={editForm.city} onChange={(value) => setEditForm((prev) => ({ ...prev, city: value }))} />
                   <TextField label="Локация / маршрут" value={editForm.location} onChange={(value) => setEditForm((prev) => ({ ...prev, location: value }))} />
-                  <label className="block">
+                  <label className="block min-w-0">
                     <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Действует до</span>
-                    <input type="datetime-local" value={editForm.expiration_at} onChange={(e) => setEditForm((prev) => ({ ...prev, expiration_at: e.target.value }))} className="w-full border rounded-lg px-3 py-2 bg-white" />
+                    <input type="datetime-local" value={editForm.expiration_at} onChange={(e) => setEditForm((prev) => ({ ...prev, expiration_at: e.target.value }))} className="min-w-0 w-full border rounded-lg px-3 py-2 bg-white" />
                   </label>
 
                   <div>
@@ -3527,7 +3554,7 @@ export default function AdminModeration({ embedded = false }) {
                           vehicle_model: e.target.value,
                         }))
                       }
-                      className="w-full border rounded-lg px-3 py-2"
+                      className="min-w-0 w-full border rounded-lg px-3 py-2"
                     />
                   </div>
 
@@ -3547,7 +3574,7 @@ export default function AdminModeration({ embedded = false }) {
                           telegram_refused_chat_id: e.target.value,
                         }))
                       }
-                      className="w-full border rounded-lg px-3 py-2"
+                      className="min-w-0 w-full border rounded-lg px-3 py-2"
                       placeholder="-100..."
                     />
                   </div>
@@ -3565,7 +3592,7 @@ export default function AdminModeration({ embedded = false }) {
                           telegram_web_chat_id: e.target.value,
                         }))
                       }
-                      className="w-full border rounded-lg px-3 py-2"
+                      className="min-w-0 w-full border rounded-lg px-3 py-2"
                       placeholder="70659475"
                     />
                   </div>
@@ -3583,7 +3610,7 @@ export default function AdminModeration({ embedded = false }) {
                           telegram_chat_id: e.target.value,
                         }))
                       }
-                      className="w-full border rounded-lg px-3 py-2"
+                      className="min-w-0 w-full border rounded-lg px-3 py-2"
                       placeholder="70659475"
                     />
                   </div>
@@ -3604,7 +3631,7 @@ export default function AdminModeration({ embedded = false }) {
                       }))
                     }
                     rows={4}
-                    className="w-full border rounded-lg px-3 py-2"
+                    className="min-w-0 w-full border rounded-lg px-3 py-2"
                   />
                 </div>
                 </EditSection>
@@ -3796,7 +3823,7 @@ export default function AdminModeration({ embedded = false }) {
                               updateDetailRow(row.index, { value: e.target.value })
                             }
                             rows={String(row.value || "").length > 90 ? 3 : 1}
-                            className="w-full border rounded-lg px-3 py-2 text-sm bg-white font-mono"
+                            className="min-w-0 w-full border rounded-lg px-3 py-2 text-sm bg-white font-mono"
                             placeholder="Значение"
                           />
                           <button
@@ -3887,7 +3914,7 @@ export default function AdminModeration({ embedded = false }) {
                       }}
                       placeholder="https://... (можно несколько ссылок, каждая с новой строки)"
                       rows={3}
-                      className="w-full border rounded-lg px-3 py-2"
+                      className="min-w-0 w-full border rounded-lg px-3 py-2"
                     />
                     <button
                       type="button"
@@ -3917,7 +3944,7 @@ export default function AdminModeration({ embedded = false }) {
                       }))
                     }
                     rows={5}
-                    className="w-full border rounded-lg px-3 py-2 font-mono text-xs"
+                    className="min-w-0 w-full border rounded-lg px-3 py-2 font-mono text-xs"
                   />
                 </div>
                 </div>
@@ -3933,7 +3960,8 @@ export default function AdminModeration({ embedded = false }) {
               <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-6 py-4">
                 <button
                   type="button"
-                  onClick={() => setEditOpen(false)}
+                  onClick={() => { if (!editSaving && !imageUploadBusy && !proofUploadBusy) setEditOpen(false); }}
+                  disabled={editSaving || imageUploadBusy || proofUploadBusy}
                   className="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 hover:bg-gray-200"
                 >
                   {t("common.cancel", { defaultValue: "Отмена" })}
@@ -3941,7 +3969,7 @@ export default function AdminModeration({ embedded = false }) {
                 <button
                   type="button"
                   onClick={saveEdit}
-                  disabled={editSaving || editLoading}
+                  disabled={editSaving || editLoading || imageUploadBusy || proofUploadBusy}
                   className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60"
                 >
                   {editSaving
@@ -3958,7 +3986,7 @@ export default function AdminModeration({ embedded = false }) {
                 <button
                   type="button"
                   onClick={openCorrectionFromEdit}
-                  disabled={editSaving || editLoading || actionBusy === editItemId}
+                  disabled={editSaving || editLoading || imageUploadBusy || proofUploadBusy || actionBusy === editItemId}
                   className="px-4 py-2 rounded-lg bg-rose-600 text-white hover:bg-rose-700 disabled:opacity-60"
                 >
                   Запросить исправление
@@ -3966,7 +3994,7 @@ export default function AdminModeration({ embedded = false }) {
                 <button
                   type="button"
                   onClick={requestPublishFromEdit}
-                  disabled={editSaving || editLoading}
+                  disabled={editSaving || editLoading || imageUploadBusy || proofUploadBusy}
                   className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
                   title={!publishReady ? "Есть предупреждения: перед публикацией будет подтверждение" : ""}
                 >
