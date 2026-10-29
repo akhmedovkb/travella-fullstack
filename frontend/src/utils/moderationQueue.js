@@ -45,3 +45,11 @@ export function createQueueRunner({ request, onData, onError, onLoading }) {
     cancel() { generation += 1; controller?.abort(); },
   };
 }
+
+// Prefer the next visible survivor; when the page fills after removal, use its new row.
+export function nextModerationService(previous, decidedId, current) {
+  const available = current.filter(item=>String(item.id)!==String(decidedId));
+  const index=previous.findIndex(item=>String(item.id)===String(decidedId));
+  const next=previous.slice(index+1).find(item=>available.some(row=>String(row.id)===String(item.id)));
+  return next?.id ?? available.find(item=>!previous.some(row=>String(row.id)===String(item.id)))?.id ?? available[0]?.id ?? null;
+}

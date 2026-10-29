@@ -12,7 +12,7 @@ import { getServiceUrgency } from "../utils/serviceUrgency";
 
 import { validateModerationEditor, changedProviderContacts } from "../utils/moderationEditor";
 
-import { readQueueLocation, writeQueueLocation, queueRequestKey, fetchModerationQueue, createQueueRunner } from "../utils/moderationQueue";
+import { nextModerationService, readQueueLocation, writeQueueLocation, queueRequestKey, fetchModerationQueue, createQueueRunner } from "../utils/moderationQueue";
 
 const fmt = (n) => new Intl.NumberFormat().format(Number(n || 0));
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
@@ -2384,7 +2384,7 @@ function PublishConfirmModal({
   );
 }
 
-function PublishResultModal({ result, saving = false, onClose, onRetry }) {
+function PublishResultModal({ result, saving = false, onClose, onRetry, nextServiceId }) {
   if (!result) return null;
   const broadcast = result.broadcast || {};
   const ok = Boolean(broadcast.ok);
@@ -2445,7 +2445,7 @@ function PublishResultModal({ result, saving = false, onClose, onRetry }) {
             disabled={saving}
             className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-200 disabled:opacity-60"
           >
-            Закрыть
+            {nextServiceId ? "Следующая услуга" : "Закрыть"}
           </button>
           {!ok && (
             <button
@@ -2481,6 +2481,8 @@ export default function AdminModeration({ embedded = false }) {
   const [queueError, setQueueError] = useState("");
   const [queueMeta, setQueueMeta] = useState(null);
   const [countsLoaded, setCountsLoaded] = useState(false);
+  const [autoNext, setAutoNext] = useState(true);
+  const [nextAfterPublish, setNextAfterPublish] = useState(null);
   const [returnNotice, setReturnNotice] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -2677,6 +2679,8 @@ export default function AdminModeration({ embedded = false }) {
   }, [queueKey]);
 
   const approve = async (id, options = {}) => {
+    const decisionKey=queueKey;
+    setNextAfterPublish(null);
     const warnings = Array.isArray(options.warnings) ? options.warnings : [];
     setActionBusy(id);
     try {
@@ -2695,7 +2699,9 @@ export default function AdminModeration({ embedded = false }) {
         service: items.find((x) => x.id === id) || { id },
         broadcast: res.data?.broadcast || null,
       });
-      await load();
+      pendingLocateRef.current=null;
+      const refreshed=await load();
+      if (autoNext && tab === "pending" && refreshed && decisionKey===queueRequestKey(queueLocationRef.current)) setNextAfterPublish({id:nextModerationService(items,id,refreshed.items),key:decisionKey});
     } catch {
       tError(
         t("moderation.approve_error", { defaultValue: "Ошибка approve" })
@@ -2807,6 +2813,7 @@ export default function AdminModeration({ embedded = false }) {
       );
     }
 
+    const decisionKey=queueKey;
     setActionBusy(id);
     try {
       const response = await axios.post(
@@ -2821,7 +2828,12 @@ export default function AdminModeration({ embedded = false }) {
       setTelegramPreviewOpen(false);
       setEditItemId(null);
       setModerationEvents([]);
-      await load();
+      pendingLocateRef.current=null;
+      const refreshed=await load();
+      if (autoNext && tab === "pending" && refreshed && decisionKey===queueRequestKey(queueLocationRef.current)) {
+        const nextId=nextModerationService(items,id,refreshed.items);
+        if(nextId) await openEdit(nextId);
+      }
     } catch (error) {
       throw new Error(error.response?.data?.message || "Не удалось запросить исправление. Повторите попытку.");
     } finally {
@@ -3181,7 +3193,9 @@ export default function AdminModeration({ embedded = false }) {
       }
       setEditItemId(null);
       setModerationEvents([]);
-      await load(tab);
+      if(approveAfter) pendingLocateRef.current=null;
+      const refreshed=await load(tab);
+      if (approveAfter && autoNext && tab === "pending" && refreshed && queueKey===queueRequestKey(queueLocationRef.current)) setNextAfterPublish({id:nextModerationService(items,editItemId,refreshed.items),key:queueKey});
       await refreshCounts();
     } catch (error) {
       if (error?.response?.status === 409) {
@@ -3395,6 +3409,7 @@ export default function AdminModeration({ embedded = false }) {
           />
         )}
 
+        {tab === "pending" && <label className="mb-3 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={autoNext} onChange={e=>setAutoNext(e.target.checked)}/>Открывать следующую услугу после решения</label>}
         {!loading && !queueError && tab === "published" && loadedQueueKey === queueKey && (
           <div className="mb-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -3504,6 +3519,7 @@ export default function AdminModeration({ embedded = false }) {
                 </button>
               </div>
 
+              {!editLoading && tab === "pending" && <label className="flex shrink-0 items-center gap-2 border-b bg-white px-4 py-2 text-xs text-slate-600"><input type="checkbox" checked={autoNext} onChange={e=>setAutoNext(e.target.checked)}/>Открывать следующую после решения</label>}
               {!editLoading && <nav aria-label="Разделы редактора" className="flex shrink-0 flex-wrap gap-1 border-b border-slate-200 bg-white px-4 py-2">
                 {[["main", "Данные"], ["proof", "Proof"], ["photos", "Фото"], ["details", "Параметры"], ["history", "История"]].map(([key, label]) => <button key={key} type="button" aria-current={editorSection === key ? "location" : undefined} onClick={() => navigateEditor(key)} className={`rounded-lg px-3 py-2 text-xs font-bold ${editorSection === key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{label}</button>)}
                 <button type="button" aria-pressed={proofComparison} onClick={toggleProofComparison} className={`rounded-lg px-3 py-2 text-xs font-bold ${proofComparison ? "bg-violet-700 text-white" : "bg-violet-50 text-violet-800 hover:bg-violet-100"}`}>Сверка proof</button>
@@ -4166,8 +4182,9 @@ export default function AdminModeration({ embedded = false }) {
 
       <PublishResultModal
         result={publishResult}
-        saving={rebroadcastBusy}
-        onClose={() => setPublishResult(null)}
+        saving={rebroadcastBusy || editSaving || Boolean(actionBusy)}
+        nextServiceId={autoNext && tab==="pending" && nextAfterPublish?.key===queueKey ? nextAfterPublish.id : null}
+        onClose={() => { setPublishResult(null); const next=nextAfterPublish;setNextAfterPublish(null);if(next?.id && next.key===queueKey && autoNext && tab==="pending") openEdit(next.id); }}
         onRetry={retryBroadcast}
       />
 

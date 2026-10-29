@@ -92,3 +92,13 @@ test("a hash-prefixed ID is exact and oversized IDs safely return no matches",()
   const exact=queueCandidateQuery({status:"published",q:"#1207"});assert.ok(exact.sql.includes("s.id = $1::bigint"));assert.deepEqual(exact.params,["1207"]);assert.ok(!exact.sql.includes("ILIKE"));
   const oversized=queueCandidateQuery({q:"#999999999999999999999999999999"});assert.ok(oversized.sql.includes("AND FALSE"));assert.deepEqual(oversized.params,[]);
 });
+
+test("next decision follows surviving queue order and crosses a filled page",async()=>{
+ const {nextModerationService}=await frontend();
+ const rows=ids=>ids.map(id=>({id}));
+ assert.equal(nextModerationService(rows([1,2,3]),2,rows([1,3,4])),3);
+ assert.equal(nextModerationService(rows([1,2,3]),3,rows([1,2,4])),4);
+ assert.equal(nextModerationService(rows([1]),1,[]),null);
+ assert.equal(nextModerationService(rows([1,2]),2,rows([2])),null);
+ assert.equal(nextModerationService(rows([1,2]),1,rows([7,8])),7);
+});
