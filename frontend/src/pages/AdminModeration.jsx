@@ -1,6 +1,6 @@
 // frontend/src/pages/AdminModeration.jsx
 import React, { useEffect, useRef, useState, useId } from "react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import axios from "axios";
 import { BadgeCheck } from "lucide-react";
@@ -10,8 +10,10 @@ import { getServiceUrgency } from "../utils/serviceUrgency";
 
 import { validateModerationEditor, changedProviderContacts } from "../utils/moderationEditor";
 
+import { readQueueLocation, writeQueueLocation, queueRequestKey, fetchModerationQueue, createQueueRunner } from "../utils/moderationQueue";
+
 const fmt = (n) => new Intl.NumberFormat().format(Number(n || 0));
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 
 const REJECT_REASON_OPTIONS = [
   { code: "NO_PROOF", label: "Нет proof/подтверждения", text: "Загрузите фото или документ, подтверждающий отказную услугу." },
@@ -401,6 +403,7 @@ function Card({
   onOpenProof,
   editorLoading,
   openingServiceId,
+  focused,
 }) {
   const s = item || {};
   const d = normalizeDetails(s.details);
@@ -611,7 +614,7 @@ function Card({
   const siteUrl = `https://travella.uz?service=${encodeURIComponent(s.id)}`;
 
   return (
-    <div className="border rounded-lg p-4 bg-white shadow-sm flex flex-col relative">
+    <div id={`moderation-service-${s.id}`} role="article" aria-label={`Услуга #${s.id}`} tabIndex={-1} className={`border rounded-lg p-4 bg-white shadow-sm flex flex-col relative outline-none ${focused ? "ring-2 ring-violet-400" : "focus:ring-2 focus:ring-violet-400"}`}>
       <div className="absolute top-3 right-3 z-10">
         {hasProof ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold px-2.5 py-1 shadow">
@@ -1583,8 +1586,8 @@ function matchesQueueFilter(svc, filter) {
   return analysis.dangerIssues.some((issue) => issue.key === filter);
 }
 
-function QueuePanel({ items, filter, onFilterChange }) {
-  const metrics = getQueueMetrics(items);
+function QueuePanel({ items, filter, onFilterChange, metricsOverride, query, onQueryChange, sort, onSortChange }) {
+  const metrics = metricsOverride || getQueueMetrics(items);
   const filters = [
     { key: "all", label: "Все", count: metrics.total, tone: "slate" },
     { key: "ready", label: "Готовы", count: metrics.ready, tone: "emerald" },
@@ -1624,6 +1627,7 @@ function QueuePanel({ items, filter, onFilterChange }) {
         </div>
       </div>
 
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_200px]"><input type="search" aria-label="Поиск услуг" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Поиск: #ID, отель, поставщик…" className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" /><select aria-label="Сортировка услуг" value={sort} onChange={(event) => onSortChange(event.target.value)} className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="priority">Сначала проблемные</option><option value="newest">Сначала новые</option></select></div>
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
         {filters.map((item) => (
           <button
@@ -1717,6 +1721,7 @@ function comparePublishedItems(a, b, sort) {
 
 function PublishedControls({
   items,
+  metricsOverride,
   query,
   onQueryChange,
   filter,
@@ -1724,7 +1729,7 @@ function PublishedControls({
   sort,
   onSortChange,
 }) {
-  const metrics = getPublishedMetrics(items);
+  const metrics = metricsOverride || getPublishedMetrics(items);
   const filters = [
     { key: "all", label: "Все", count: metrics.total },
     { key: "telegramFailed", label: "Telegram ошибка", count: metrics.telegramFailed },
@@ -1752,12 +1757,14 @@ function PublishedControls({
       <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_220px]">
         <input
           type="search"
+          aria-label="Поиск услуг"
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm"
           placeholder="Поиск: #ID, направление, отель, поставщик..."
         />
         <select
+          aria-label="Сортировка услуг"
           value={sort}
           onChange={(e) => onSortChange(e.target.value)}
           className="w-full rounded-xl border border-slate-200 px-4 py-2 text-sm"
@@ -2430,7 +2437,21 @@ function PublishResultModal({ result, saving = false, onClose, onRetry }) {
 export default function AdminModeration({ embedded = false }) {
   const { t } = useTranslation();
 
-  const [tab, setTab] = useState("pending");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const queueLocation = readQueueLocation(searchParams);
+  const tab = queueLocation.status;
+  const queueKey = queueRequestKey(queueLocation);
+  const queueLocationRef = useRef(queueLocation);
+  queueLocationRef.current = queueLocation;
+  const pendingLocateRef = useRef(queueLocation.focus);
+  const [loadedQueueKey, setLoadedQueueKey] = useState("");
+  const loadedKeyRef = useRef("");
+  const queueRunnerRef = useRef(null);
+  const queueFetchRef = useRef(null);
+  const [queueError, setQueueError] = useState("");
+  const [queueMeta, setQueueMeta] = useState(null);
+  const [countsLoaded, setCountsLoaded] = useState(false);
+  const [returnNotice, setReturnNotice] = useState("");
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [counts, setCounts] = useState({ pending: 0, rejected: 0, published: 0 });
@@ -2483,14 +2504,37 @@ export default function AdminModeration({ embedded = false }) {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
   }, [editOpen]);
-  const listRequestId = useRef(0);
+
   const [moderationEvents, setModerationEvents] = useState([]);
   const [actionBusy, setActionBusy] = useState(null);
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
-  const [queueFilter, setQueueFilter] = useState("all");
-  const [publishedQuery, setPublishedQuery] = useState("");
-  const [publishedFilter, setPublishedFilter] = useState("all");
-  const [publishedSort, setPublishedSort] = useState("newest");
+  const [publishedQuery, setPublishedQuery] = useState(queueLocation.q);
+  const queueFilter = tab === "published" ? "all" : queueLocation.filter;
+  const publishedFilter = tab === "published" ? queueLocation.filter : "all";
+  const publishedSort = queueLocation.sort;
+  const updateQueueLocation = (patch, replace = false) => {
+    if (Object.hasOwn(patch,"focus") && patch.focus === null) pendingLocateRef.current = null;
+    setSearchParams(writeQueueLocation(new URLSearchParams(window.location.search),patch), { replace });
+  };
+  const setTab = (status) => updateQueueLocation({ status, filter: "all", sort: status === "published" ? "newest" : "priority", page: 1, focus: null });
+  const setQueueFilter = (filter) => updateQueueLocation({ filter, page: 1, focus: null });
+  const setPublishedFilter = setQueueFilter;
+  const setPublishedSort = (sort) => updateQueueLocation({ sort, page: 1, focus: null });
+  useEffect(() => setPublishedQuery(queueLocation.q), [queueLocation.q]);
+  useEffect(() => {
+    if (publishedQuery.trim() === queueLocation.q) return;
+    const timer = setTimeout(() => updateQueueLocation({ q: publishedQuery, page: 1, focus: null }, true), 350);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [publishedQuery,queueLocation.q]);
+  useEffect(() => {
+    if (editOpen || loading || queueKey !== loadedQueueKey || !queueLocation.focus) return;
+    const frame = requestAnimationFrame(() => {
+      const card = document.getElementById(`moderation-service-${queueLocation.focus}`);
+      if (card) { card.scrollIntoView({ block: "center" }); card.focus({ preventScroll: true }); }
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [editOpen,loading,loadedQueueKey,queueKey,queueLocation.focus]);
   const [publishConfirm, setPublishConfirm] = useState(null);
   const [publishResult, setPublishResult] = useState(null);
   const [rebroadcastBusy, setRebroadcastBusy] = useState(false);
@@ -2520,6 +2564,7 @@ export default function AdminModeration({ embedded = false }) {
 
   const discardEditor = () => {
     editRequestId.current += 1;
+    pendingLocateRef.current = null;
     setEditLoading(false);
     setDiscardConfirmOpen(false);
     setEditOpen(false);
@@ -2561,57 +2606,32 @@ export default function AdminModeration({ embedded = false }) {
     }
   })();
 
-  async function fetchList(which) {
-    const url =
-      which === "pending"
-        ? `${API_BASE}/api/admin/services/pending`
-        : which === "published"
-        ? `${API_BASE}/api/admin/services/published`
-        : `${API_BASE}/api/admin/services/rejected`;
-    const res = await axios.get(url, cfg);
-    return Array.isArray(res.data) ? res.data : res.data?.items || [];
-  }
-
-  const load = async (which = tab) => {
-    const requestId = ++listRequestId.current;
-    setLoading(true);
-    try {
-      const data = await fetchList(which);
-      if (requestId !== listRequestId.current) return;
-      setItems(data);
-    } catch (e) {
-      if (requestId !== listRequestId.current) return;
-      tError(
-        t("moderation.load_error", {
-          defaultValue: "Не удалось загрузить список",
-        })
-      );
-      setItems([]);
-    } finally {
-      if (requestId === listRequestId.current) setLoading(false);
-    }
-  };
-
+  queueFetchRef.current = (state, signal) => fetchModerationQueue(axios, { apiBase: API_BASE, state, signal, config: cfg });
+  if (!queueRunnerRef.current) queueRunnerRef.current = createQueueRunner({
+    request: (state, signal) => queueFetchRef.current(state,signal),
+    onLoading: (value) => { setLoading(value); if (value) setQueueError(""); },
+    onError: (error,state) => { if (queueRequestKey(state) === queueRequestKey(queueLocationRef.current)) setQueueError("Не удалось загрузить очередь. Данные не потеряны — повторите запрос."); },
+    onData: (data,state) => {
+      if (queueRequestKey(state) !== queueRequestKey(queueLocationRef.current)) return;
+      setItems(data.items); setQueueMeta(data); setCounts(data.counts); setCountsLoaded(true); setQueueError("");
+      const key = queueRequestKey({ ...state, page: data.pagination.page });
+      loadedKeyRef.current = key; setLoadedQueueKey(key);
+      if (state.focusId && pendingLocateRef.current === state.focusId) {
+        pendingLocateRef.current = null;
+        setReturnNotice(data.focusFound ? "" : `Услуга #${state.focusId} больше не входит в выбранный фильтр. Настройки очереди сохранены.`);
+      }
+      if (data.pagination.page !== state.page) updateQueueLocation({ page: data.pagination.page },true);
+    },
+  });
+  const load = async () => queueRunnerRef.current.run({ ...queueLocationRef.current, focusId: pendingLocateRef.current });
   const refreshCounts = async () => {
-    try {
-      const response = await axios.get(`${API_BASE}/api/admin/services/counts`, cfg);
-      if (response.data?.ok) setCounts(response.data.counts);
-    } catch { /* Keep the last known counts if the summary endpoint is unavailable. */ }
+    try { const response = await axios.get(`${API_BASE}/api/admin/services/counts`,cfg); if (response.data?.ok) { setCounts(response.data.counts); setCountsLoaded(true); } } catch { /* Preserve the last known counts. */ }
   };
-
+  useEffect(() => () => queueRunnerRef.current?.cancel(), []);
   useEffect(() => {
-    refreshCounts();
-    return () => { listRequestId.current += 1; };
+    if (loadedKeyRef.current !== queueKey) load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    load(tab);
-    setQueueFilter("all");
-    setPublishedFilter("all");
-    setPublishedQuery("");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tab]);
+  }, [queueKey]);
 
   const approve = async (id, options = {}) => {
     const warnings = Array.isArray(options.warnings) ? options.warnings : [];
@@ -2632,11 +2652,7 @@ export default function AdminModeration({ embedded = false }) {
         service: items.find((x) => x.id === id) || { id },
         broadcast: res.data?.broadcast || null,
       });
-      setItems((prev) => prev.filter((x) => x.id !== id));
-      setCounts((c) => ({
-        ...c,
-        [tab]: Math.max(0, (c[tab] || 0) - 1),
-      }));
+      await load();
     } catch {
       tError(
         t("moderation.approve_error", { defaultValue: "Ошибка approve" })
@@ -2761,12 +2777,7 @@ export default function AdminModeration({ embedded = false }) {
       setTelegramPreviewOpen(false);
       setEditItemId(null);
       setModerationEvents([]);
-      setItems((prev) => prev.filter((x) => x.id !== id));
-      setCounts((c) => ({
-        ...c,
-        pending: Math.max(0, (c.pending || 0) - 1),
-        rejected: (c.rejected || 0) + 1,
-      }));
+      await load();
     } catch {
       tError(t("moderation.reject_error", { defaultValue: "Ошибка reject" }));
     } finally {
@@ -2787,7 +2798,7 @@ export default function AdminModeration({ embedded = false }) {
           defaultValue: "Снято с публикации",
         })
       );
-      setItems((prev) => prev.filter((x) => x.id !== id));
+      await load();
     } catch {
       tError(
         t("moderation.unpublish_error", {
@@ -2802,6 +2813,9 @@ export default function AdminModeration({ embedded = false }) {
   const openEdit = async (id) => {
     if (editLoading) return;
     const requestId = ++editRequestId.current;
+    pendingLocateRef.current = Number(id);
+    setReturnNotice("");
+    updateQueueLocation({ focus: id },true);
     setEditItemId(id);
     setEditBaseline("");
     setDiscardConfirmOpen(false);
@@ -3236,26 +3250,10 @@ export default function AdminModeration({ embedded = false }) {
       );
     openReject(svc, reason, reasonCode);
   };
-  const displayedItems = tab === "published"
-    ? items
-        .filter((it) => matchesPublishedFilter(it, publishedFilter))
-        .filter((it) => {
-          const q = String(publishedQuery || "").trim().toLowerCase();
-          if (!q) return true;
-          const normalized = q.replace(/^#/, "");
-          return publishedSearchText(it).includes(q) || String(it.id) === normalized;
-        })
-        .sort((a, b) => comparePublishedItems(a, b, publishedSort))
-    : items
-        .filter((it) => matchesQueueFilter(it, queueFilter))
-        .sort((a, b) => {
-          const aa = analyzeModerationService(a);
-          const bb = analyzeModerationService(b);
-          if (bb.priority !== aa.priority) return bb.priority - aa.priority;
-          const at = new Date(a.created_at || a.submitted_at || a.updated_at || 0).getTime();
-          const bt = new Date(b.created_at || b.submitted_at || b.updated_at || 0).getTime();
-          return bt - at;
-        });
+  const displayedItems = loadedQueueKey === queueKey ? items : [];
+  const activeQueueMeta = loadedQueueKey === queueKey ? queueMeta : null;
+  const publishedMetrics = tab === "published" && activeQueueMeta ? activeQueueMeta.metrics : getPublishedMetrics([]);
+  const pagination = queueMeta?.pagination;
 
   return (
     <>
@@ -3288,7 +3286,7 @@ export default function AdminModeration({ embedded = false }) {
           >
             {t("moderation.tabs.pending", { defaultValue: "Ожидают" })}
             <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
-              {counts.pending || 0}
+              {countsLoaded ? counts.pending || 0 : "…"}
             </span>
           </button>
 
@@ -3302,7 +3300,7 @@ export default function AdminModeration({ embedded = false }) {
           >
             {t("moderation.tabs.rejected", { defaultValue: "Отклонённые" })}
             <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
-              {counts.rejected || 0}
+              {countsLoaded ? counts.rejected || 0 : "…"}
             </span>
           </button>
 
@@ -3316,22 +3314,28 @@ export default function AdminModeration({ embedded = false }) {
           >
             Опубликованные
             <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
-              {counts.published || 0}
+              {countsLoaded ? counts.published || 0 : "…"}
             </span>
           </button>
         </div>
 
-        {!loading && items.length > 0 && tab !== "published" && (
+        {tab !== "published" && (
           <QueuePanel
             items={items}
             filter={queueFilter}
             onFilterChange={setQueueFilter}
+            query={publishedQuery}
+            onQueryChange={setPublishedQuery}
+            sort={publishedSort}
+            onSortChange={setPublishedSort}
+            metricsOverride={activeQueueMeta?.metrics || getQueueMetrics([])}
           />
         )}
 
-        {!loading && items.length > 0 && tab === "published" && (
+        {tab === "published" && (
           <PublishedControls
             items={items}
+            metricsOverride={publishedMetrics}
             query={publishedQuery}
             onQueryChange={setPublishedQuery}
             filter={publishedFilter}
@@ -3341,38 +3345,46 @@ export default function AdminModeration({ embedded = false }) {
           />
         )}
 
-        {!loading && tab === "published" && items.length > 0 && (
+        {!loading && !queueError && tab === "published" && loadedQueueKey === queueKey && (
           <div className="mb-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
-              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">На сайте</div>
-              <div className="mt-1 text-2xl font-bold text-slate-950">{items.length}</div>
+              <div className="text-xs font-bold uppercase tracking-wide text-slate-500">{queueLocation.q ? "В поиске" : "На сайте"}</div>
+              <div className="mt-1 text-2xl font-bold text-slate-950">{publishedMetrics.total}</div>
             </div>
             <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
               <div className="text-xs font-bold uppercase tracking-wide text-emerald-700">Открытий контактов</div>
               <div className="mt-1 text-2xl font-bold text-emerald-900">
-                {items.reduce((sum, it) => sum + Number(it.contact_unlocks_count || 0), 0)}
+                {publishedMetrics.unlocks}
               </div>
             </div>
             <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4">
               <div className="text-xs font-bold uppercase tracking-wide text-blue-700">Telegram-заявок</div>
               <div className="mt-1 text-2xl font-bold text-blue-900">
-                {items.reduce((sum, it) => sum + Number(it.quick_requests_count || 0), 0)}
+                {publishedMetrics.requests}
               </div>
             </div>
             <div className="rounded-2xl border border-rose-200 bg-rose-50 p-4">
               <div className="text-xs font-bold uppercase tracking-wide text-rose-700">Telegram ошибки</div>
               <div className="mt-1 text-2xl font-bold text-rose-900">
-                {items.filter((it) => String(it.last_moderation_action || "").toLowerCase() === "telegram_failed").length}
+                {publishedMetrics.telegramFailed}
               </div>
             </div>
           </div>
         )}
 
+        {returnNotice && <div role="status" className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">{returnNotice}</div>}
+        <nav aria-label="Страницы услуг" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 bg-white p-3">
+          <div className="text-sm text-slate-600" role="status">{loading ? "Обновляем очередь…" : pagination && loadedQueueKey === queueKey ? `Найдено: ${pagination.total}. Страница ${pagination.page} из ${pagination.pages}` : "Очередь не загружена"}</div>
+          <label className="flex items-center gap-2 text-xs text-slate-600">На странице<select aria-label="Услуг на странице" value={queueLocation.pageSize} onChange={(event) => updateQueueLocation({ pageSize: Number(event.target.value),page:1,focus:null })} className="rounded-lg border border-slate-200 px-2 py-2">{[12,24,48].map((size)=><option key={size} value={size}>{size}</option>)}</select></label>
+          <div className="flex gap-2"><button type="button" disabled={loading || queueLocation.page <= 1} onClick={() => updateQueueLocation({ page:queueLocation.page-1,focus:null })} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40">Назад</button><button type="button" disabled={loading || !pagination || queueLocation.page >= pagination.pages} onClick={() => updateQueueLocation({ page:queueLocation.page+1,focus:null })} className="rounded-lg border px-3 py-2 text-sm disabled:opacity-40">Далее</button></div>
+        </nav>
         {loading ? (
-          <div className="text-gray-600">
+          <div role="status" className="text-gray-600">
             {t("common.loading", { defaultValue: "Загрузка…" })}
           </div>
-        ) : items.length === 0 ? (
+        ) : queueError ? (
+          <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-4 text-sm text-rose-800"><p>{queueError}</p><button type="button" onClick={() => load()} className="mt-3 rounded-lg bg-slate-900 px-4 py-2 font-bold text-white">Повторить загрузку</button></div>
+        ) : displayedItems.length === 0 && !queueLocation.q && queueLocation.filter === "all" ? (
           <div className="flex min-h-44 items-center justify-center rounded-xl border border-dashed border-slate-300 bg-white px-6 text-center">
             <div>
               <BadgeCheck className="mx-auto mb-3 text-emerald-600" size={28} strokeWidth={1.8} />
@@ -3401,6 +3413,7 @@ export default function AdminModeration({ embedded = false }) {
                 onEdit={openEdit}
                 editorLoading={editLoading}
                 openingServiceId={editItemId}
+                focused={queueLocation.focus === Number(it.id)}
                 onApprove={() => requestPublish(it, analysis)}
                 onReject={reject}
                 onRejectClick={openReject}

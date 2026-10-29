@@ -3,6 +3,7 @@ const express = require("express");
 const multer = require("multer");
 const router = express.Router();
 const pool = require("../db");
+const { readModerationQueue } = require("../utils/adminModerationQueue");
 const { writeServiceEditHistory } = require("../utils/serviceEditHistory");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
@@ -39,6 +40,17 @@ const adminImageUpload = multer({
 });
 
 /* ---------- СПИСКИ (идут первыми) ---------- */
+
+router.get("/services/queue", authenticateToken, requireAdmin, async (req, res) => {
+  res.set("Cache-Control", "private, no-store");
+  try {
+    await ensureServiceModerationEvents(pool);
+    res.json(await readModerationQueue(pool, req.query));
+  } catch (error) {
+    console.error("[admin service queue]", error.message);
+    res.status(500).json({ ok: false, message: "Не удалось загрузить очередь. Повторите запрос." });
+  }
+});
 
 router.get("/services/counts", authenticateToken, requireAdmin, async (req, res) => {
   try {
