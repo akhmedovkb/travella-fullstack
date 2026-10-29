@@ -7265,6 +7265,9 @@ async function getProofImagesForService(serviceId) {
 }
 
 async function assertTelegramActorOwnsService(ctx, serviceId, action) {
+  if(String(action || "").startsWith("proof") && (ctx.chat?.type!=="private" || String(ctx.chat?.id)!==String(ctx.from?.id))){
+    const error=new Error("Подтверждения доступны только в личном чате с ботом.");error.status=403;throw error;
+  }
   const actorTelegramId = ctx?.from?.id;
   const resolved = await resolveProviderByTelegramActorId(pool, actorTelegramId, {
     action,

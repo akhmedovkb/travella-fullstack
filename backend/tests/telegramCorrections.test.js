@@ -95,3 +95,10 @@ test('category choices use allowed provider categories and stale file buttons ca
  const f=fixture(),{flow}=flowFor(f),session={};let s=await getCorrection(f.pool,5,42);let ctx=context(session,`corr:field:42:category:${s.token}`);await flow(ctx,()=>{});const buttons=ctx.replies.at(-1).opts.reply_markup.inline_keyboard.flat();assert.ok(buttons.some(b=>b.text==='refused hotel'));assert.ok(buttons.every(b=>Buffer.byteLength(b.callback_data)<=64));
  await mutateCorrection(f.pool,{providerId:5,serviceId:42,expectedToken:s.token,action:'add',field:'proof',value:image,updateId:100});await flow(context(session,`corr:del:42:proof:0:${s.token}`,101),()=>{});assert.equal(f.state.service.details.proofImages.length,2);
 });
+
+test('old proof buttons cannot expose private confirmations in a group even to their owner',async()=>{
+ const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');const source=fs.readFileSync(path.join(__dirname,'../telegram/bot.js'),'utf8');const a=source.indexOf('async function assertTelegramActorOwnsService('),b=source.indexOf('async function replyProofUploadPrompt(',a);let resolutions=0;
+ const context={resolveProviderByTelegramActorId:async()=>{resolutions++;return {id:5};},pool:{query:async()=>({rowCount:1,rows:[{id:42,provider_id:5}]})}};vm.createContext(context);vm.runInContext(source.slice(a,b),context);
+ await assert.rejects(()=>context.assertTelegramActorOwnsService({from:{id:55},chat:{id:-100,type:'group'}},42,'proof_view'),/личном/);assert.equal(resolutions,0);
+ assert.equal(await context.assertTelegramActorOwnsService({from:{id:55},chat:{id:55,type:'private'}},42,'proof_view'),5);
+});
