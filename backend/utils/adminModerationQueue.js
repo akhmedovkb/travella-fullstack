@@ -42,7 +42,7 @@ function selectQueuePage(candidates, input) {
   const ids = filtered.slice((page - 1) * options.limit, page * options.limit).map((item) => item.id);
   return { ids, metrics, pagination: { page, limit: options.limit, total, pages }, focusFound: focusIndex >= 0 };
 }
-const LAST_EVENT = `LEFT JOIN LATERAL (SELECT action, reason_code, reason, created_at, actor_id FROM service_moderation_events WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted') ORDER BY created_at DESC, id DESC LIMIT 1) ev ON TRUE`;
+const LAST_EVENT = `LEFT JOIN LATERAL (SELECT action, reason_code, reason, created_at, actor_id FROM service_moderation_events WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','provider_correction_edited') ORDER BY created_at DESC, id DESC LIMIT 1) ev ON TRUE`;
 const STATS = `LEFT JOIN (SELECT service_id, COUNT(*)::int AS views_count FROM service_views GROUP BY service_id) v ON v.service_id = s.id
  LEFT JOIN (SELECT service_id, COUNT(*)::int AS contact_unlocks_count FROM client_service_contact_unlocks GROUP BY service_id) u ON u.service_id = s.id
  LEFT JOIN (SELECT service_id, COUNT(*)::int AS quick_requests_count FROM telegram_quick_requests GROUP BY service_id) qr ON qr.service_id = s.id

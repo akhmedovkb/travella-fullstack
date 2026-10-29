@@ -2204,6 +2204,7 @@ bot.use(async (ctx, next) => {
     if (!ctx.session) ctx.session = {};
 
     const data = String(ctx.callbackQuery?.data || "");
+    if(ctx.session.correctionFlow || data.startsWith("corr:") || /^\/corrections/.test(ctx.message?.text || "") || /^\/start.* correction_/.test(ctx.message?.text || "")) return next();
     if (data === "tg_draft:continue" || data === "tg_draft:delete") {
       return next();
     }
@@ -2356,6 +2357,9 @@ bot.use(async (ctx, next) => {
   }
 });
 
+
+// Corrections use the real Telegram actor and run before legacy text/photo wizards.
+bot.use(require("./handlers/correctionFlow").createCorrectionFlow({pool,loadImage:tgFileIdToDataUrlForProof,notifyModerationNew:require("../utils/telegram").notifyModerationNew}));
 
 /* ===================== TG FILE LINK CACHE ===================== */
 // file_id -> { url, ts }
@@ -7306,6 +7310,7 @@ async function replyProofUploadPrompt(ctx, { serviceId, category, isEditMode = f
 }
 
 async function sendProofPreview(ctx, serviceId) {
+  await assertTelegramActorOwnsService(ctx,serviceId,"proof_view");
   const images = await getProofImagesForService(serviceId);
   if (!images.length) {
     await safeReply(ctx, "📎 Доказательства пока не загружены. Отправьте фото/скриншот сюда в чат.", buildProofKeyboard(serviceId, 0));
@@ -7334,6 +7339,7 @@ async function sendProofPreview(ctx, serviceId) {
 
 
 async function sendProofCardPreview(ctx, serviceId) {
+  await assertTelegramActorOwnsService(ctx,serviceId,"proof_card_view");
   if (!pool || !serviceId) return;
   const r = await pool.query(`SELECT * FROM services WHERE id = $1 LIMIT 1`, [Number(serviceId)]);
   const svc = r.rows?.[0] || null;
@@ -7377,7 +7383,8 @@ async function deleteLastProofImage(ctx) {
   if (!serviceId) return;
   await assertTelegramActorOwnsService(ctx, serviceId, "proof_delete");
 
-  const r = await pool.query(`SELECT details FROM services WHERE id = $1 LIMIT 1`, [serviceId]);
+  const r = await pool.query(`SELECT details,status,moderation_status FROM services WHERE id = $1 LIMIT 1`, [serviceId]);
+  if(r.rows[0]?.status==="pending" || r.rows[0]?.moderation_status==="pending"){await safeReply(ctx,"Услуга уже на модерации. Менять proof сейчас нельзя.");return;}
   const currentDetails = r.rows?.[0]?.details && typeof r.rows[0].details === "object" ? r.rows[0].details : {};
   const proofImages = Array.isArray(currentDetails.proofImages) ? currentDetails.proofImages.filter(Boolean) : [];
   if (!proofImages.length) {
@@ -7386,10 +7393,11 @@ async function deleteLastProofImage(ctx) {
   }
 
   proofImages.pop();
-  await pool.query(
-    `UPDATE services SET details = $1::jsonb, updated_at = NOW() WHERE id = $2`,
+  const proofUpdate=await pool.query(
+    `UPDATE services SET details = $1::jsonb, updated_at = NOW() WHERE id = $2 AND status IS DISTINCT FROM 'pending' AND moderation_status IS DISTINCT FROM 'pending'`,
     [JSON.stringify({ ...currentDetails, proofImages }), serviceId]
   );
+  if(!proofUpdate.rowCount){await safeReply(ctx,"Статус услуги изменился. Обновите карточку.");return;}
   await safeReply(ctx, `🗑 Последнее доказательство удалено. Осталось: ${proofImages.length}.`, buildProofKeyboard(serviceId, proofImages.length));
 }
 
@@ -10611,6 +10619,7 @@ await ctx.reply("🧳 Выберите действие:", {
     inline_keyboard: [
       [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
       [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
+      [{ text: "↩️ Нужны исправления", callback_data: "corr:list:0" }],
       [
         { text: pendingButtonLabel(counters.pending), callback_data: "pending:open" },
         { text: draftButtonLabel(counters.draft), callback_data: "drafts:open" },
@@ -10823,6 +10832,7 @@ bot.action("prov_services:list", async (ctx) => {
         inline_keyboard: [
           [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
           [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
+      [{ text: "↩️ Нужны исправления", callback_data: "corr:list:0" }],
           [
             { text: pendingButtonLabel(counters.pending), callback_data: "pending:open" },
             { text: draftButtonLabel(counters.draft), callback_data: "drafts:open" },
@@ -19282,7 +19292,7 @@ bot.on("photo", async (ctx, next) => {
 
       const svcRes = await pool.query(
         `
-          SELECT id, details
+          SELECT id, details, status, moderation_status
             FROM services
            WHERE id = $1
            LIMIT 1
@@ -19304,6 +19314,7 @@ bot.on("photo", async (ctx, next) => {
         ? currentDetails.proofImages.filter(Boolean)
         : [];
 
+      if(svcRes.rows[0]?.status==="pending" || svcRes.rows[0]?.moderation_status==="pending"){await safeReply(ctx,"Услуга уже на модерации. Изменять proof сейчас нельзя.");return;}
       proofImages.push(proofDataUrl);
 
       const nextDetails = {
@@ -19311,16 +19322,17 @@ bot.on("photo", async (ctx, next) => {
         proofImages,
       };
 
-      await pool.query(
+      const proofUpdate=await pool.query(
         `
           UPDATE services
              SET details = $1::jsonb,
                  updated_at = NOW()
-           WHERE id = $2
+           WHERE id = $2 AND status IS DISTINCT FROM 'pending' AND moderation_status IS DISTINCT FROM 'pending'
         `,
         [JSON.stringify(nextDetails), proofServiceId]
       );
 
+      if(!proofUpdate.rowCount){await safeReply(ctx,"Статус услуги изменился. Обновите карточку.");return;}
       await trackProviderFunnelFromBot(ctx, "proof_uploaded", {
         serviceId: proofServiceId,
         status: "proof_uploaded",
@@ -19484,6 +19496,10 @@ async function finishProofSubmissionFromBot(ctx) {
       );
       return;
     }
+
+    await require("../utils/serviceModerationEvents").ensureServiceModerationEvents(pool);
+    const activeCorrection=await require("../utils/providerCorrections").readProviderCorrection(pool,svcRes.rows[0]);
+    if(activeCorrection){await safeReply(ctx,"↩️ Перед повторной отправкой проверьте замечания и отметьте чеклист.",{reply_markup:{inline_keyboard:[[{text:"Открыть замечания",callback_data:`corr:open:${serviceId}`}]]}});return;}
 
     const chatId = getActorId(ctx);
     if (!chatId) {

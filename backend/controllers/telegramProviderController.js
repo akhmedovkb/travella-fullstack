@@ -3,6 +3,7 @@ const pool = require("../db");
 const axiosBase = require("axios");
 const { tgSend, notifyModerationNew } = require("../utils/telegram");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
+const { submitProviderService } = require("../utils/providerCorrections");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 const { buildRefusedQuality } = require("../utils/refusedQuality");
@@ -1424,6 +1425,7 @@ async function purgeServiceFromBot(req, res) {
  * body: { title?, price?, details?, images? }
  */
 async function updateServiceFromBot(req, res) {
+  let db,transactionOpen=false;
   try {
     const { chatId, serviceId } = req.params;
     const svcId = Number(serviceId);
@@ -1439,11 +1441,12 @@ async function updateServiceFromBot(req, res) {
         .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
 
-    const svcRes = await pool.query(
+    db=await pool.connect();await db.query("BEGIN");transactionOpen=true;
+    const svcRes = await db.query(
       `SELECT id, provider_id, category, title, price, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
          FROM services
         WHERE id = $1 AND provider_id = $2
-        LIMIT 1`,
+        FOR UPDATE`,
       [svcId, providerId]
     );
 
@@ -1454,6 +1457,7 @@ async function updateServiceFromBot(req, res) {
     }
 
     const existing = svcRes.rows[0];
+    if(existing.status==="pending" || existing.moderation_status==="pending")return res.status(409).json({success:false,error:"SERVICE_PENDING",message:"Услуга уже на модерации."});
     const prevPrices = extractPrices(existing);
 
     if (existing.deleted_at) {
@@ -1557,7 +1561,7 @@ async function updateServiceFromBot(req, res) {
       }
     }
 
-    const updRes = await pool.query(
+    const updRes = await db.query(
       `
       UPDATE services
          SET
@@ -1571,8 +1575,8 @@ async function updateServiceFromBot(req, res) {
            submitted_at = NULL,
            published_at = NULL,
            approved_at = NULL,
-           rejected_at = NULL,
-           rejected_reason = NULL,
+           rejected_at = rejected_at,
+           rejected_reason = rejected_reason,
            updated_at = NOW()
        WHERE id = $1 AND provider_id = $2
        RETURNING id, provider_id, title, price, category, status, moderation_status, details, images, expiration_at, deleted_at, created_at, updated_at
@@ -1588,12 +1592,13 @@ async function updateServiceFromBot(req, res) {
       ]
     );
 
+    await db.query("COMMIT");transactionOpen=false;
     try {
       const nextSvcRow = updRes.rows[0];
       const nextPrices = extractPrices(nextSvcRow);
       const drop = isPriceDrop(prevPrices, nextPrices);
 
-      if (drop.any) {
+      if (drop.any && ["published","approved","active"].includes(nextSvcRow.status)) {
         await broadcastPriceDropCard(nextSvcRow.id, "🔥 <b>ЦЕНА СНИЖЕНА!</b>");
       }
     } catch (e) {
@@ -1620,7 +1625,7 @@ async function updateServiceFromBot(req, res) {
       error: "SERVER_ERROR",
       message: err?.message || "Unknown error",
     });
-  }
+  } finally {if(transactionOpen)await db.query("ROLLBACK");db?.release();}
 }
 
 async function submitServiceFromBot(req, res) {
@@ -1636,10 +1641,10 @@ async function submitServiceFromBot(req, res) {
     if (!providerId) {
       return res.status(404).json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
-    const applied = await applyServiceLifecycleAction(pool, {
+    const applied = await submitProviderService(pool, {
       providerId,
       serviceId: svcId,
-      action: "submit",
+      correction:req.body?.correction,
     });
 
     await logBotServiceAudit({
@@ -1664,7 +1669,7 @@ async function submitServiceFromBot(req, res) {
     });
 
     try {
-      await notifyModerationNew({ service: svcId });
+      await notifyModerationNew({ service: svcId,resubmitted:applied.resubmitted });
     } catch (e) {
       console.error("[telegram] notifyModerationNew failed:", e);
     }
@@ -1681,7 +1686,7 @@ async function submitServiceFromBot(req, res) {
         ? `Перед отправкой на модерацию исправьте: ${labels.join("; ")}`
         : err?.code === "PROOF_IMAGES_REQUIRED"
           ? "Proof images are required"
-          : undefined,
+          : err?.message,
       blockers: err?.blockers || undefined,
       blockerDetails: err?.blockerDetails || undefined,
     });

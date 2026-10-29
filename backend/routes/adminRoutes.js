@@ -91,7 +91,7 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted')
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','provider_correction_edited')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -125,7 +125,7 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted')
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','provider_correction_edited')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -164,7 +164,7 @@ router.get("/services/published", authenticateToken, requireAdmin, async (req, r
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted')
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','provider_correction_edited')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -870,7 +870,7 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
 
     if (chatId) {
       notificationAvailable=true;
-      for (const part of correctionNotificationParts(row.title,reason)) await tgSend(chatId,part,{parse_mode:undefined},tokenOverride || "",true);
+      for (const part of correctionNotificationParts(row.title,reason)) await tgSend(chatId,part,{parse_mode:undefined,...(refusedChatId?{reply_markup:{inline_keyboard:[[{text:"↩️ Исправить в боте",callback_data:`corr:open:${rows[0].id}`}]]}}:{})},tokenOverride || "",true);
       notificationSent=true;
     }
   } catch (e) {
