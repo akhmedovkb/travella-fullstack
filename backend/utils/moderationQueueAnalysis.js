@@ -254,7 +254,7 @@ function analyzeModerationService(svc = {}) {
   const ready = missingRequired.length === 0 && blockingIssues.length === 0;
   const hasCorrectionHistory =
     ["rejected","correction_requested"].includes(String(svc.last_moderation_action || "").toLowerCase()) &&
-    String(svc.status || svc.moderation_status || "").toLowerCase() !== "rejected";
+    (String(svc.status || "").toLowerCase() === "pending" || String(svc.moderation_status || "").toLowerCase() === "pending");
   const priority =
     (blockingIssues.length ? 100 : 0) +
     missingRequired.length * 12 +

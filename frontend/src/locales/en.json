@@ -3749,6 +3749,10 @@
     "hotel_details": "Hotel details"
   },
   "provider_corrections": {
+  "waiting_time": "Waiting for your corrections: {{days}} days",
+  "review_time": "Waiting for review: {{days}} days",
+  "unknown_time": "Waiting time is unknown",
+
   "remove_image": "Remove image {{number}}",
   "save_changes": "Save corrections",
   "proof_hint": "Private proof for the moderator. Customers will not see it.",

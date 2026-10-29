@@ -1,3 +1,4 @@
+const {waitingInfo,correctionHistory}=require('../../utils/correctionTracking');
 const {resolveProviderByTelegramActorId}=require('../../utils/providerTelegramResolver');
 const {ensureServiceModerationEvents}=require('../../utils/serviceModerationEvents');
 const {getCorrection,listCorrections,mutateCorrection}=require('../../utils/telegramCorrectionService');
@@ -15,6 +16,7 @@ function keyboard(state){const id=state.service.id,t=state.token;return {inline_
  [button('✏️ Другие поля',`corr:fields:${id}`)],
  ...state.correction.reasonCodes.map(code=>[button(`${state.checkedCodes.includes(code)?'✅':'⬜'} ${LABELS[code]||code}`,`corr:check:${id}:${code}:${state.checkedCodes.includes(code)?0:1}:${t}`)]),
  [button('📤 Отправить на повторную проверку',`corr:submit:${id}:${t}`)],
+ [button('История возвратов',`corr:history:${id}`)],
  [button('🔄 Обновить',`corr:open:${id}`),button('⬅️ К списку','corr:list:0')],
  [button('Закрыть исправления','corr:exit')]
  ]};}
@@ -24,10 +26,10 @@ function createCorrectionFlow({pool,loadImage,notifyModerationNew,resolve=resolv
  const serial=(id,work)=>{const previous=running.get(id)||Promise.resolve();const next=previous.catch(()=>{}).then(work);running.set(id,next);return next.finally(()=>{if(running.get(id)===next)running.delete(id);});};
  const reply=async(ctx,text,kb)=>{const parts=chunks(text);for(let i=0;i<parts.length;i++)await ctx.reply(parts[i],{parse_mode:undefined,...(i===parts.length-1&&kb?{reply_markup:kb}:{})});};
  async function owned(ctx){if(ctx.chat?.type!=='private'||String(ctx.chat.id)!==String(ctx.from?.id))throw new Error('Откройте исправления в личном чате с ботом.');const p=await resolve(pool,ctx.from.id,{action:'telegram_corrections',ctxFromId:ctx.from.id,ctxChatId:ctx.chat.id,includeWebChatId:true});if(!p?.id)throw new Error('Привяжите Telegram к кабинету поставщика.');return p.id;}
- async function show(ctx,pid,id){const s=await getCorrection(pool,pid,id);ctx.session.correctionFlow={serviceId:id,mode:'none'};const d=s.service.details||{};
-  const summary=`↩️ Исправления услуги #${id}\n${String(s.service.title||'').slice(0,200)}\n\nNetto: ${d.netPrice??s.service.net_price??'—'} · Gross: ${d.grossPrice??s.service.price??'—'}\nДаты: ${d.startDate||d.eventDate||'—'} → ${d.endDate||'—'}\nОтель: ${d.hotel||'—'}\nProof: ${(d.proofImages||[]).length} · Фото: ${(s.service.images||[]).length}\n\nЗамечания модератора:\n${s.correction.reason}\n\n${s.correction.pending?'Услуга уже на модерации. Дождитесь решения.':`Исправляйте поля кнопками ниже. Каждая правка сразу сохраняется в эту услугу и сбрасывает отметки чеклиста.\nОтмечено: ${s.checkedCodes.length} из ${s.correction.reasonCodes.length}.`}`;
-  await reply(ctx,summary,s.correction.pending?{inline_keyboard:[[button('К списку','corr:list:0')]]}:keyboard(s));return s;}
- async function list(ctx,pid,page){ctx.session.correctionFlow=null;const result=await listCorrections(pool,pid,page);const rows=result.items.map(s=>[button(`#${s.id} · ${String(s.title||s.category).slice(0,55)}`,`corr:open:${s.id}`)]);if(page>0||result.more){const nav=[];if(page>0)nav.push(button('← Назад',`corr:list:${page-1}`));if(result.more)nav.push(button('Далее →',`corr:list:${page+1}`));rows.push(nav);}rows.push([button('⬅️ Мои услуги','prov_services:list')]);await reply(ctx,result.items.length?'↩️ Нужны исправления. Выберите услугу:':'Нет услуг, ожидающих ваших исправлений.',{inline_keyboard:rows});}
+ async function show(ctx,pid,id){const s=await getCorrection(pool,pid,id);ctx.session.correctionFlow={serviceId:id,mode:'none'};const d=s.service.details||{};const wait=waitingInfo({...s.service,correction_requested_at:s.correction.requestedAt});
+  const summary=`↩️ Исправления услуги #${id}\n${String(s.service.title||'').slice(0,200)}\n\nNetto: ${d.netPrice??s.service.net_price??'—'} · Gross: ${d.grossPrice??s.service.price??'—'}\nДаты: ${d.startDate||d.eventDate||'—'} → ${d.endDate||'—'}\nОтель: ${d.hotel||'—'}\nProof: ${(d.proofImages||[]).length} · Фото: ${(s.service.images||[]).length}\n\n${wait.phase==='returned'?'Ждёт повторной проверки':'Ждём ваших исправлений'}: ${wait.days===null?'срок неизвестен':`${wait.days} дн.`}\n\nЗамечания модератора:\n${s.correction.reason}\n\n${s.correction.pending?'Услуга уже на модерации. Дождитесь решения.':`Исправляйте поля кнопками ниже. Каждая правка сразу сохраняется в эту услугу и сбрасывает отметки чеклиста.\nОтмечено: ${s.checkedCodes.length} из ${s.correction.reasonCodes.length}.`}`;
+  await reply(ctx,summary,s.correction.pending?{inline_keyboard:[[button('История возвратов',`corr:history:${id}`)],[button('Вернулись на проверку','corr:returned:0')],[button('Ждём исправлений','corr:list:0')]]}:keyboard(s));return s;}
+ async function list(ctx,pid,page,lane='waiting'){ctx.session.correctionFlow=null;const result=await listCorrections(pool,pid,page,lane);const prefix=lane==='returned'?'corr:returned':'corr:list';const rows=result.items.map(s=>{const wait=waitingInfo(s);return [button(`#${s.id} · ${String(s.title||s.category).slice(0,35)} · ${wait.days===null?'?':wait.days} дн.`,`corr:open:${s.id}`)];});if(page>0||result.more){const nav=[];if(page>0)nav.push(button('← Назад',`${prefix}:${page-1}`));if(result.more)nav.push(button('Далее →',`${prefix}:${page+1}`));rows.push(nav);}rows.push([button('Ждём исправлений','corr:list:0'),button('Вернулись на проверку','corr:returned:0')]);rows.push([button('⬅️ Мои услуги','prov_services:list')]);await reply(ctx,result.items.length?(lane==='returned'?'📨 Отправлены на повторную проверку:':'↩️ Ждём ваших исправлений:'):'В этом разделе услуг пока нет.',{inline_keyboard:rows});}
  async function handle(ctx){const pid=await owned(ctx);await ensureServiceModerationEvents(pool);const data=String(ctx.callbackQuery?.data||'');const start=String(ctx.message?.text||'').match(/^\/start(?:@\w+)? correction_(\d+)$/);
   if(start)return show(ctx,pid,Number(start[1]));
   if(!data){const flow=ctx.session.correctionFlow;if(!flow)return list(ctx,pid,0);
@@ -43,9 +45,13 @@ function createCorrectionFlow({pool,loadImage,notifyModerationNew,resolve=resolv
   }
   const parts=data.split(':'),action=parts[1],id=Number(parts[2]);
   if(action==='exit'){ctx.session.correctionFlow=null;return reply(ctx,'Исправления закрыты. Сохранённые правки остаются в услуге.',{inline_keyboard:[[button('Мои услуги','prov_services:list')]]});}
-  if(action==='list')return list(ctx,pid,Math.max(0,Number(parts[2])||0));
+  if(action==='list'||action==='returned')return list(ctx,pid,Math.max(0,Number(parts[2])||0),action==='returned'?'returned':'waiting');
   if(!Number.isSafeInteger(id)||id<=0)throw new Error('Некорректная услуга.');
   if(action==='open')return show(ctx,pid,id);
+  if(action==='history'){
+   const ownedService=await pool.query(`SELECT * FROM services WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL`,[id,pid]);if(!ownedService.rows[0])throw new Error('Услуга не найдена.');const history=await correctionHistory(pool,ownedService.rows[0],parts[3],3);const labels={correction_resubmitted:'Отправлено повторно',correction_reviewed:'Проверено модератором',correction_reminded:'Напоминание отправлено',correction_reminder_requested:'Запрошено напоминание',correction_reminder_failed:'Доставка напоминания не подтверждена'};
+   const text=history.items.map(item=>`Возврат от ${item.requestedAt?new Date(item.requestedAt).toLocaleString('ru-RU'):'дата неизвестна'}\n${String(item.reason||'').slice(0,500)}\n${item.events.map(e=>`${labels[e.action]||e.action}: ${new Date(e.at).toLocaleString('ru-RU')}`).join('\n')}${item.approvedAt?`\nОпубликовано: ${new Date(item.approvedAt).toLocaleString('ru-RU')}`:''}`).join('\n\n');const rows=[];if(history.nextCursor)rows.push([button('Более ранние возвраты',`corr:history:${id}:${history.nextCursor}`)]);rows.push([button('К списку','corr:list:0')]);return reply(ctx,text||'История возвратов пока пуста.',{inline_keyboard:rows});
+  }
   const state=await getCorrection(pool,pid,id);
   if(state.correction.pending)throw new Error('Услуга уже отправлена на модерацию.');
   if(action==='fields'){const rows=Object.entries(FIELDS).map(([key,label])=>[button(label,`corr:field:${id}:${key}:${state.token}`)]);rows.push([button('К замечаниям',`corr:open:${id}`)]);return reply(ctx,'Какое поле исправить?',{inline_keyboard:rows});}

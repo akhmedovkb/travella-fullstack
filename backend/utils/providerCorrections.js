@@ -8,7 +8,7 @@ async function readProviderCorrection(db,service) {
   if(!review) return null;
   const approved=await db.query(`SELECT id FROM service_moderation_events WHERE service_id=$1 AND action IN ('approved','approved_clean','approved_with_warnings') AND created_at>$2 LIMIT 1`,[service.id,review.requestedAt]);
   if(approved.rows.length) return null;
-  return {requestId:review.requestId,requestedAt:review.requestedAt,reason:review.reason,reasonCodes:review.reasonCodes,reasonItems:review.reasonItems,editVersion:service.edit_version,fingerprint:review.fingerprint,pending:service.status==='pending' || service.moderation_status==='pending',providerSubmission:review.providerSubmission};
+  return {requestId:review.requestId,requestedAt:review.requestedAt,reason:review.reason,reasonCodes:review.reasonCodes,reasonItems:review.reasonItems,editVersion:service.edit_version,fingerprint:review.fingerprint,submittedAt:service.submitted_at||null,pending:service.status==='pending' || service.moderation_status==='pending',providerSubmission:review.providerSubmission};
 }
 function assertCorrectionAcknowledged(current,input) {
   if(!current) return;

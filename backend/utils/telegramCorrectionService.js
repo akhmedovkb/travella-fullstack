@@ -1,3 +1,4 @@
+const {WAITING_SQL,RETURNED_SQL,TRACKING_FIELDS}=require('./correctionTracking');
 const {createHash}=require('node:crypto');
 const {isDeepStrictEqual}=require('node:util');
 const {ensureServiceModerationEvents}=require('./serviceModerationEvents');
@@ -20,9 +21,9 @@ async function getCorrection(db,providerId,serviceId,lock=false){
  const saved=progress.rows[0]?.meta;
  return {service,correction,token:token(correction),checkedCodes:saved?.fingerprint===correction.fingerprint?(saved.checkedCodes || []).filter(c=>correction.reasonCodes.includes(c)):[]};
 }
-async function listCorrections(pool,providerId,page=0){
+async function listCorrections(pool,providerId,page=0,lane='waiting'){
  await ensureServiceModerationEvents(pool);
- const rows=await pool.query(`SELECT s.* FROM services s WHERE provider_id=$1 AND deleted_at IS NULL AND (status IN ('draft','rejected') OR moderation_status='rejected') AND (rejected_reason IS NOT NULL OR EXISTS(SELECT 1 FROM service_moderation_events e WHERE e.service_id=s.id AND e.action IN ('rejected','correction_requested') AND NOT EXISTS(SELECT 1 FROM service_moderation_events a WHERE a.service_id=s.id AND a.action IN ('approved','approved_clean','approved_with_warnings') AND a.created_at>e.created_at))) ORDER BY updated_at DESC,id DESC LIMIT 9 OFFSET $2`,[providerId,Math.max(0,Math.min(100000,page))*8]);
+ const rows=await pool.query(`SELECT s.*,${TRACKING_FIELDS} FROM services s WHERE s.provider_id=$1 AND s.deleted_at IS NULL AND (${lane==='returned'?RETURNED_SQL:WAITING_SQL}) ORDER BY ${lane==='returned'?'s.submitted_at':"COALESCE((SELECT MAX(w.created_at) FROM service_moderation_events w WHERE w.service_id=s.id AND w.action IN ('rejected','correction_requested')),s.rejected_at)"} ASC NULLS LAST,s.id DESC LIMIT 9 OFFSET $2`,[providerId,Math.floor(Math.max(0,Math.min(100000,Number(page)||0)))*8]);
  return {items:rows.rows.slice(0,8),more:rows.rows.length>8};
 }
 function validateField(field,input,service,providerType){

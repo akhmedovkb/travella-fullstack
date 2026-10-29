@@ -1,3 +1,4 @@
+const {WAITING_SQL,RETURNED_SQL,readTracking,correctionHistory,remindCorrection}=require("../utils/correctionTracking");
 // backend/routes/adminRoutes.js
 const express = require("express");
 const multer = require("multer");
@@ -55,10 +56,11 @@ router.get("/services/queue", authenticateToken, requireAdmin, async (req, res) 
 
 router.get("/services/counts", authenticateToken, requireAdmin, async (req, res) => {
   try {
+    await ensureServiceModerationEvents(pool);
     const result = await pool.query(`SELECT
       COUNT(*) FILTER (WHERE COALESCE(s.moderation_status, s.status) = 'pending')::int AS pending,
       COUNT(*) FILTER (WHERE COALESCE(s.moderation_status, s.status) = 'rejected')::int AS rejected,
-      COUNT(*) FILTER (WHERE LOWER(COALESCE(s.status, '')) IN ('published','approved','active') AND COALESCE(LOWER(s.moderation_status), 'approved') IN ('approved','published','active'))::int AS published
+      COUNT(*) FILTER (WHERE LOWER(COALESCE(s.status, '')) IN ('published','approved','active') AND COALESCE(LOWER(s.moderation_status), 'approved') IN ('approved','published','active'))::int AS published, COUNT(*) FILTER(WHERE ${WAITING_SQL})::int AS waiting, COUNT(*) FILTER(WHERE ${RETURNED_SQL})::int AS returned
       FROM services s JOIN providers p ON p.id = s.provider_id WHERE s.deleted_at IS NULL`);
     res.json({ ok: true, counts: result.rows[0] });
   } catch (error) {
@@ -91,7 +93,7 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','provider_correction_edited')
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','correction_reminder_requested','correction_reminded','correction_reminder_failed','provider_correction_edited')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -125,7 +127,7 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','provider_correction_edited')
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','correction_reminder_requested','correction_reminded','correction_reminder_failed','provider_correction_edited')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -164,7 +166,7 @@ router.get("/services/published", authenticateToken, requireAdmin, async (req, r
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','provider_correction_edited')
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted','provider_correction_prepared','correction_reminder_requested','correction_reminded','correction_reminder_failed','provider_correction_edited')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -327,6 +329,24 @@ router.post("/services/:id(\\d+)/correction-review", authenticateToken, requireA
     res.json({ok:true});
   } catch(error) { if(db) await db.query("ROLLBACK"); res.status(error.status || 500).json({message:error.status ? error.message : "Не удалось сохранить проверку"}); }
   finally { db?.release(); }
+});
+
+router.get("/services/:id(\\d+)/correction-tracking",authenticateToken,requireAdmin,async(req,res)=>{
+  try {const current=await pool.query(`SELECT * FROM services WHERE id=$1 AND deleted_at IS NULL`,[req.params.id]);if(!current.rows[0])return res.status(404).json({message:"Услуга не найдена"});res.set("Cache-Control","private, no-store");res.json({ok:true,tracking:await readTracking(pool,current.rows[0])});}catch(error){res.status(500).json({message:"Не удалось загрузить ожидание исправлений"});}
+});
+router.get("/services/:id(\\d+)/correction-history",authenticateToken,requireAdmin,async(req,res)=>{
+  try {const current=await pool.query(`SELECT * FROM services WHERE id=$1 AND deleted_at IS NULL`,[req.params.id]);if(!current.rows[0])return res.status(404).json({message:"Услуга не найдена"});res.set("Cache-Control","private, no-store");res.json({ok:true,...await correctionHistory(pool,current.rows[0],req.query.before)});}catch{res.status(500).json({message:"Не удалось загрузить историю возвратов"});}
+});
+router.post("/services/:id(\\d+)/correction-reminder",authenticateToken,requireAdmin,async(req,res)=>{
+  try {const result=await remindCorrection(pool,{serviceId:Number(req.params.id),adminId:req.user.id},async({service,correction,chatId})=>{
+    // Check again before delivery: a supplier may have submitted while the reservation committed.
+    const latest=await pool.query(`SELECT * FROM services WHERE id=$1 AND deleted_at IS NULL`,[service.id]);if(!latest.rows[0]||["pending","approved","published","active"].includes(latest.rows[0].moderation_status||latest.rows[0].status))return false;
+    const active=await require("../utils/providerCorrections").readProviderCorrection(pool,latest.rows[0]);if(!active||String(active.requestId)!==String(correction.requestId))return false;
+    const token=service.telegram_refused_chat_id?((process.env.TELEGRAM_CLIENT_BOT_TOKEN||process.env.TELEGRAM_BOT_TOKEN||"").trim()):"";
+    const parts=correctionNotificationParts(`#${service.id} · ${String(service.title||"").slice(0,150)}`,`⏳ Напоминаем об исправлениях.\n\n${correction.reason}`);
+    for(const part of parts)await tgSend(chatId,part,{parse_mode:undefined,...(service.telegram_refused_chat_id?{reply_markup:{inline_keyboard:[[{text:"Открыть замечания",callback_data:`corr:open:${service.id}`}]]}}:{})},token,true);
+    return true;
+  });res.json({ok:true,...result});}catch(error){res.status(error.status||500).json({message:error.status?error.message:"Не удалось отправить напоминание",nextReminderAt:error.nextReminderAt});}
 });
 
 // полное редактирование услуги админом без ломания модерации

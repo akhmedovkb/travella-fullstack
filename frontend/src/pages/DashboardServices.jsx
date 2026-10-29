@@ -6,6 +6,7 @@ import ISO6391 from "iso-639-1";
 import Select from "react-select";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import { useTranslation } from "react-i18next";
+import {CorrectionTimeline} from "../components/CorrectionTracking";
 import { ProviderCorrectionContext, ProviderCorrectionNote, ProviderCorrectionPanel, useProviderCorrections } from "../components/ProviderServiceCorrections";
 import ConfirmModal from "../components/ConfirmModal";
 import { tSuccess, tError, tWarn } from "../shared/toast";
@@ -2852,6 +2853,8 @@ export default function DashboardServices({ viewMode = "create" }) {
 
             <div className="mx-auto max-w-[1180px] space-y-5">
             {selectedService && <ProviderCorrectionPanel state={providerCorrection} dirty={providerCorrectionDirty} saving={saving} onSave={saveService} onNavigate={navigateCorrectionFields} onSubmit={correction=>submitForModeration(selectedService,null,correction)}/>}
+            {selectedService && <CorrectionTimeline key={selectedService.id} api={api} url={`/api/providers/services/${selectedService.id}/correction-history`}/>}
+
 
             {selectedService && (
               <div className="mb-5 overflow-hidden rounded-[1.75rem] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-slate-50 shadow-sm">

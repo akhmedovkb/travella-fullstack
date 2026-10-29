@@ -3745,6 +3745,10 @@
     "hotel_details": "Mehmonxona tafsilotlari"
   },
   "provider_corrections": {
+  "waiting_time": "Tuzatishlaringiz kutilmoqda: {{days}} kun",
+  "review_time": "Qayta tekshiruv kutilmoqda: {{days}} kun",
+  "unknown_time": "Kutish muddati noma’lum",
+
   "remove_image": "{{number}}-rasmni o‘chirish",
   "save_changes": "Tuzatishlarni saqlash",
   "proof_hint": "Moderator uchun ichki tasdiq. Mijozlar uni ko‘rmaydi.",

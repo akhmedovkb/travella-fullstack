@@ -580,6 +580,9 @@ router.post("/finance/leads/note", authenticateToken, requireProvider, async (re
 });
 
 
+router.get("/services/:id/correction-history",authenticateToken,requireProvider,async(req,res)=>{
+  try{const owned=await pool.query(`SELECT * FROM services WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL`,[req.params.id,req.user.id]);if(!owned.rows[0])return res.status(404).json({message:"Услуга не найдена"});res.set("Cache-Control","private, no-store");res.json({ok:true,...await require("../utils/correctionTracking").correctionHistory(pool,owned.rows[0],req.query.before)});}catch{res.status(500).json({message:"Не удалось загрузить историю возвратов"});}
+});
 router.get("/services/:id/corrections",authenticateToken,requireProvider,async(req,res)=>{
   try {
     const result=await pool.query(`SELECT s.*,to_char(s.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version FROM services s WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL`,[req.params.id,req.user.id]);

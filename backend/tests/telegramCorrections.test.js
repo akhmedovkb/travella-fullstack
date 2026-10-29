@@ -8,6 +8,7 @@ function fixture({failAudit=false}={}){
  const db={release(){state.calls.push('release');},async query(sql,args=[]){state.calls.push(sql);
   if(sql==='BEGIN')snapshot=structuredClone({service:state.service,events:state.events});
   if(sql==='ROLLBACK'){state.service=snapshot.service;state.events=snapshot.events;}
+  if(sql.startsWith('SELECT')&&sql.includes('FROM services')&&sql.includes('s.provider_id=$1')){const returned=sql.includes("(s.status='pending' OR s.moderation_status='pending')");return {rows:args[0]===5&&((state.service.status==='pending')===returned)?[structuredClone(state.service)]:[]};}
   if(sql.startsWith('SELECT')&&sql.includes('FROM services')){const owned=String(args[0])===String(state.service.id)&&(args.length<2||String(args[1])===String(state.service.provider_id));return {rows:owned?[structuredClone(state.service)]:[],rowCount:owned?1:0};}
   if(sql.startsWith('SELECT type'))return {rows:[{type:'agent'}]};
   if(sql.startsWith('SELECT')&&sql.includes('service_moderation_events')){
@@ -101,4 +102,11 @@ test('old proof buttons cannot expose private confirmations in a group even to t
  const context={resolveProviderByTelegramActorId:async()=>{resolutions++;return {id:5};},pool:{query:async()=>({rowCount:1,rows:[{id:42,provider_id:5}]})}};vm.createContext(context);vm.runInContext(source.slice(a,b),context);
  await assert.rejects(()=>context.assertTelegramActorOwnsService({from:{id:55},chat:{id:-100,type:'group'}},42,'proof_view'),/личном/);assert.equal(resolutions,0);
  assert.equal(await context.assertTelegramActorOwnsService({from:{id:55},chat:{id:55,type:'private'}},42,'proof_view'),5);
+});
+
+test('Telegram separates waiting and returned services and history remains private',async()=>{
+ const f=fixture(),{flow}=flowFor(f);let ctx=context({},'corr:list:0');await flow(ctx,()=>{});assert.ok(ctx.replies.at(-1).opts.reply_markup.inline_keyboard.flat().some(b=>b.callback_data==='corr:open:42'));
+ f.state.service.status='pending';f.state.service.moderation_status='pending';f.state.service.submitted_at='2026-10-29T00:00:00Z';ctx=context({},'corr:returned:0');await flow(ctx,()=>{});assert.match(ctx.replies.at(-1).text,/повторную проверку/);assert.ok(ctx.replies.at(-1).opts.reply_markup.inline_keyboard.flat().some(b=>b.callback_data==='corr:open:42'));
+ ctx=context({},'corr:history:42');await flow(ctx,()=>{});assert.ok(ctx.replies.some(r=>r.text.includes('Уточните цену и proof')));
+ ctx=context({},'corr:history:42',1,77);await flow(ctx,()=>{});assert.ok(!JSON.stringify(ctx.replies).includes('Уточните цену и proof'));
 });

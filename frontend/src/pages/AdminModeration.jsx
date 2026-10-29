@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import axios from "axios";
 import { CorrectionRequestDialog, CorrectionReview } from "../components/ServiceCorrections";
+import {CorrectionTrackingPanel} from "../components/CorrectionTracking";
 import ServiceProofComparison from "../components/ServiceProofComparison";
 import { BadgeCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -12,7 +13,7 @@ import { getServiceUrgency } from "../utils/serviceUrgency";
 
 import { validateModerationEditor, changedProviderContacts } from "../utils/moderationEditor";
 
-import { nextModerationService, readQueueLocation, writeQueueLocation, queueRequestKey, fetchModerationQueue, createQueueRunner } from "../utils/moderationQueue";
+import { correctionWaitLabel, nextModerationService, readQueueLocation, writeQueueLocation, queueRequestKey, fetchModerationQueue, createQueueRunner } from "../utils/moderationQueue";
 
 const fmt = (n) => new Intl.NumberFormat().format(Number(n || 0));
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
@@ -1048,7 +1049,7 @@ function Card({
         </div>
       )}
 
-      {s.rejected_reason && tab === "rejected" && (
+      {s.rejected_reason && ["rejected","waiting"].includes(tab) && (
         <div className="mt-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded p-2">
           {t("moderation.rejected_reason", { defaultValue: "Причина" })}:{" "}
           {s.rejected_reason}
@@ -1149,7 +1150,7 @@ function Card({
         )}
       </div>
 
-      {tab === "pending" && quickFixes.length > 0 && (
+      {["pending","returned"].includes(tab) && quickFixes.length > 0 && (
         <div className="mt-3 rounded-xl border border-rose-100 bg-white p-2">
           <div className="mb-2 text-xs font-bold uppercase tracking-wide text-slate-500">
             Быстро запросить
@@ -1176,6 +1177,7 @@ function Card({
         </div>
       )}
 
+      {["waiting","returned"].includes(tab) && <p className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm font-semibold text-amber-900">{correctionWaitLabel(s)}</p>}
       <div className="mt-4 flex flex-wrap gap-2">
         <button
           type="button"
@@ -1187,7 +1189,7 @@ function Card({
           {editorLoading && openingServiceId === s.id ? "Открываем…" : cardAnalysis.hasCorrectionHistory ? "Проверить повторно" : t("common.edit", { defaultValue: "Редактировать" })}
         </button>
 
-        {!isPublishedTab && (
+        {!isPublishedTab && tab!=="waiting" && (
           <button
             type="button"
             onClick={() => onApprove(s.id)}
@@ -1229,7 +1231,7 @@ function Card({
           </>
         )}
 
-        {tab === "pending" && (
+        {["pending","returned"].includes(tab) && (
           <button
             type="button"
             onClick={() =>
@@ -1473,7 +1475,7 @@ function analyzeModerationService(svc = {}) {
   const ready = missingRequired.length === 0 && blockingIssues.length === 0;
   const hasCorrectionHistory =
     ["rejected","correction_requested"].includes(String(svc.last_moderation_action || "").toLowerCase()) &&
-    String(svc.status || svc.moderation_status || "").toLowerCase() !== "rejected";
+    (String(svc.status || "").toLowerCase() === "pending" || String(svc.moderation_status || "").toLowerCase() === "pending");
   const priority =
     (blockingIssues.length ? 100 : 0) +
     missingRequired.length * 12 +
@@ -1646,7 +1648,7 @@ function QueuePanel({ items, filter, onFilterChange, metricsOverride, query, onQ
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_200px]"><input type="search" aria-label="Поиск услуг" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Поиск: #ID, отель, поставщик…" className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" /><select aria-label="Сортировка услуг" value={sort} onChange={(event) => onSortChange(event.target.value)} className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="priority">Сначала проблемные</option><option value="newest">Сначала новые</option></select></div>
+      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_200px]"><input type="search" aria-label="Поиск услуг" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Поиск: #ID, отель, поставщик…" className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" /><select aria-label="Сортировка услуг" value={sort} onChange={(event) => onSortChange(event.target.value)} className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="oldest">Дольше всех ожидают</option><option value="priority">Сначала проблемные</option><option value="newest">Сначала новые</option></select></div>
       <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
         {filters.map((item) => (
           <button
@@ -2553,7 +2555,7 @@ export default function AdminModeration({ embedded = false }) {
     if(Object.hasOwn(patch,"focus")){next.delete("m_open");next.delete("m_section");}
     setSearchParams(next, { replace });
   };
-  const setTab = (status) => updateQueueLocation({ status, filter: "all", sort: status === "published" ? "newest" : "priority", page: 1, focus: null });
+  const setTab = (status) => updateQueueLocation({ status, filter: "all", sort: status === "published" ? "newest" : ["waiting","returned"].includes(status)?"oldest":"priority", page: 1, focus: null });
   const setQueueFilter = (filter) => updateQueueLocation({ filter, page: 1, focus: null });
   const setPublishedFilter = setQueueFilter;
   const setPublishedSort = (sort) => updateQueueLocation({ sort, page: 1, focus: null });
@@ -2703,7 +2705,7 @@ export default function AdminModeration({ embedded = false }) {
       });
       pendingLocateRef.current=null;
       const refreshed=await load();
-      if (autoNext && tab === "pending" && refreshed && decisionKey===queueRequestKey(queueLocationRef.current)) setNextAfterPublish({id:nextModerationService(items,id,refreshed.items),key:decisionKey});
+      if (autoNext && ["pending","returned"].includes(tab) && refreshed && decisionKey===queueRequestKey(queueLocationRef.current)) setNextAfterPublish({id:nextModerationService(items,id,refreshed.items),key:decisionKey});
     } catch {
       tError(
         t("moderation.approve_error", { defaultValue: "Ошибка approve" })
@@ -2832,7 +2834,7 @@ export default function AdminModeration({ embedded = false }) {
       setModerationEvents([]);
       pendingLocateRef.current=null;
       const refreshed=await load();
-      if (autoNext && tab === "pending" && refreshed && decisionKey===queueRequestKey(queueLocationRef.current)) {
+      if (autoNext && ["pending","returned"].includes(tab) && refreshed && decisionKey===queueRequestKey(queueLocationRef.current)) {
         const nextId=nextModerationService(items,id,refreshed.items);
         if(nextId) await openEdit(nextId);
       }
@@ -3197,7 +3199,7 @@ export default function AdminModeration({ embedded = false }) {
       setModerationEvents([]);
       if(approveAfter) pendingLocateRef.current=null;
       const refreshed=await load(tab);
-      if (approveAfter && autoNext && tab === "pending" && refreshed && queueKey===queueRequestKey(queueLocationRef.current)) setNextAfterPublish({id:nextModerationService(items,editItemId,refreshed.items),key:queueKey});
+      if (approveAfter && autoNext && ["pending","returned"].includes(tab) && refreshed && queueKey===queueRequestKey(queueLocationRef.current)) setNextAfterPublish({id:nextModerationService(items,editItemId,refreshed.items),key:queueKey});
       await refreshCounts();
     } catch (error) {
       if (error?.response?.status === 409) {
@@ -3392,7 +3394,8 @@ export default function AdminModeration({ embedded = false }) {
             <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
               {countsLoaded ? counts.published || 0 : "…"}
             </span>
-          </button>
+          </button>          {[['waiting','Ждём исправлений'],['returned','Вернулась на проверку']].map(([status,label])=><button key={status} type="button" onClick={()=>setTab(status)} className={`px-4 py-2 text-sm font-semibold ${tab===status?'bg-violet-700 text-white':'bg-white text-slate-700'}`}>{label} <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-800">{countsLoaded?counts[status]||0:'…'}</span></button>)}
+
         </div>
 
         {tab !== "published" && (
@@ -3421,7 +3424,7 @@ export default function AdminModeration({ embedded = false }) {
           />
         )}
 
-        {tab === "pending" && <label className="mb-3 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={autoNext} onChange={e=>setAutoNext(e.target.checked)}/>Открывать следующую услугу после решения</label>}
+        {["pending","returned"].includes(tab) && <label className="mb-3 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={autoNext} onChange={e=>setAutoNext(e.target.checked)}/>Открывать следующую услугу после решения</label>}
         {!loading && !queueError && tab === "published" && loadedQueueKey === queueKey && (
           <div className="mb-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -3531,7 +3534,7 @@ export default function AdminModeration({ embedded = false }) {
                 </button>
               </div>
 
-              {!editLoading && tab === "pending" && <label className="flex shrink-0 items-center gap-2 border-b bg-white px-4 py-2 text-xs text-slate-600"><input type="checkbox" checked={autoNext} onChange={e=>setAutoNext(e.target.checked)}/>Открывать следующую после решения</label>}
+              {!editLoading && ["pending","returned"].includes(tab) && <label className="flex shrink-0 items-center gap-2 border-b bg-white px-4 py-2 text-xs text-slate-600"><input type="checkbox" checked={autoNext} onChange={e=>setAutoNext(e.target.checked)}/>Открывать следующую после решения</label>}
               {!editLoading && <nav aria-label="Разделы редактора" className="flex shrink-0 flex-wrap gap-1 border-b border-slate-200 bg-white px-4 py-2">
                 {[["main", "Данные"], ["proof", "Proof"], ["photos", "Фото"], ["details", "Параметры"], ["history", "История"]].map(([key, label]) => <button key={key} type="button" aria-current={editorSection === key ? "location" : undefined} onClick={() => navigateEditor(key)} className={`rounded-lg px-3 py-2 text-xs font-bold ${editorSection === key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{label}</button>)}
                 <button type="button" aria-pressed={proofComparison} onClick={toggleProofComparison} className={`rounded-lg px-3 py-2 text-xs font-bold ${proofComparison ? "bg-violet-700 text-white" : "bg-violet-50 text-violet-800 hover:bg-violet-100"}`}>Сверка proof</button>
@@ -3540,6 +3543,7 @@ export default function AdminModeration({ embedded = false }) {
               <div aria-busy={editLoading} className={`min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${editLoading ? "hidden" : ""}`}>
               <div className={proofComparison ? "flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]" : "grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]"}>
                 <div className="space-y-4 min-w-0">
+                  <CorrectionTrackingPanel key={editItemId} api={axios} config={cfg} base={API_BASE} serviceId={editItemId} dirty={hasUnsavedChanges}/>
                   {correctionReview && <CorrectionReview key={`${editItemId}:${correctionReview.requestId}:${correctionReview.fingerprint}`} correction={correctionReview} options={REJECT_REASON_OPTIONS} disabled={hasUnsavedChanges || editSaving || editLoading || proofUploadBusy || imageUploadBusy || correctionReview.editVersion !== editVersion} onNavigate={navigateEditor} onSave={async (checkedCodes)=>{
                     try {
                       await axios.post(`${API_BASE}/api/admin/services/${editItemId}/correction-review`,{requestId:correctionReview.requestId,expected_edit_version:correctionReview.editVersion,checkedCodes},cfg);
@@ -3554,7 +3558,7 @@ export default function AdminModeration({ embedded = false }) {
                       {moderationEvents.length > 0 && <p className="text-xs text-slate-500">Последние {moderationEvents.length} событий. История новых правок ведётся с этого обновления.</p>}
                       {!moderationEvents.length && <p className="text-xs text-slate-500">Записей пока нет. Новые сохранённые изменения появятся здесь.</p>}
                       {moderationEvents.map((event) => <article key={event.id} className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-                        <div className="flex flex-wrap gap-x-2 gap-y-1 font-semibold text-slate-700"><span>{({ service_edited: "Изменение услуги", telegram_sent: "Отправлено в Telegram", telegram_failed: "Ошибка отправки в Telegram", approved_clean: "Опубликовано", approved_with_warnings: "Опубликовано с предупреждениями", rejected: "Отклонено", correction_requested: "Запрошено исправление", correction_reviewed: "Повторная проверка исправлений", correction_resubmitted: "Поставщик отправил исправления", provider_correction_prepared: "Поставщик проверил чеклист", provider_correction_edited: "Исправление поставщика в Telegram", unpublished: "Снято с публикации" })[event.action] || event.action}</span><span>{event.actor_id ? `${event.actor_role === "provider" ? "Поставщик" : "Администратор"} #${event.actor_id}` : "Система"}</span><span>{formatDt(event.created_at)}</span></div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 font-semibold text-slate-700"><span>{({ service_edited: "Изменение услуги", telegram_sent: "Отправлено в Telegram", telegram_failed: "Ошибка отправки в Telegram", approved_clean: "Опубликовано", approved_with_warnings: "Опубликовано с предупреждениями", rejected: "Отклонено", correction_requested: "Запрошено исправление", correction_reviewed: "Повторная проверка исправлений", correction_resubmitted: "Поставщик отправил исправления", correction_reminder_requested:"Запрошено напоминание", correction_reminded:"Отправлено напоминание", correction_reminder_failed:"Доставка напоминания не подтверждена", provider_correction_prepared: "Поставщик проверил чеклист", provider_correction_edited: "Исправление поставщика в Telegram", unpublished: "Снято с публикации" })[event.action] || event.action}</span><span>{event.actor_id ? `${event.actor_role === "provider" ? "Поставщик" : "Администратор"} #${event.actor_id}` : "Система"}</span><span>{formatDt(event.created_at)}</span></div>
                         {event.reason && <p className="mt-1 break-words text-slate-600">{event.reason}</p>}
                         {Array.isArray(event.meta?.changes) && <dl className="mt-2 space-y-2">{event.meta.changes.map((change) => <div key={change.field} className="min-w-0"><dt className="font-semibold text-slate-700">{detailLabel(change.field.replace(/^(details|provider)\./, ""))}</dt><dd className="mt-1 grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2"><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-rose-50 p-2 text-rose-800">Было: {change.before ?? "—"}</span><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-emerald-50 p-2 text-emerald-800">Стало: {change.after ?? "—"}</span></dd></div>)}</dl>}
                       </article>)}
@@ -4195,8 +4199,8 @@ export default function AdminModeration({ embedded = false }) {
       <PublishResultModal
         result={publishResult}
         saving={rebroadcastBusy || editSaving || Boolean(actionBusy)}
-        nextServiceId={autoNext && tab==="pending" && nextAfterPublish?.key===queueKey ? nextAfterPublish.id : null}
-        onClose={() => { setPublishResult(null); const next=nextAfterPublish;setNextAfterPublish(null);if(next?.id && next.key===queueKey && autoNext && tab==="pending") openEdit(next.id); }}
+        nextServiceId={autoNext && ["pending","returned"].includes(tab) && nextAfterPublish?.key===queueKey ? nextAfterPublish.id : null}
+        onClose={() => { setPublishResult(null); const next=nextAfterPublish;setNextAfterPublish(null);if(next?.id && next.key===queueKey && autoNext && ["pending","returned"].includes(tab)) openEdit(next.id); }}
         onRetry={retryBroadcast}
       />
 
