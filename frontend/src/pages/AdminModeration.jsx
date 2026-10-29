@@ -1,5 +1,5 @@
 // frontend/src/pages/AdminModeration.jsx
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { createPortal } from "react-dom";
 import axios from "axios";
@@ -2443,6 +2443,7 @@ export default function AdminModeration({ embedded = false }) {
     document.body.style.overflow = "hidden";
     return () => { document.body.style.overflow = previousOverflow; };
   }, [editOpen]);
+  const listRequestId = useRef(0);
   const [moderationEvents, setModerationEvents] = useState([]);
   const [actionBusy, setActionBusy] = useState(null);
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
@@ -2491,11 +2492,14 @@ export default function AdminModeration({ embedded = false }) {
   }
 
   const load = async (which = tab) => {
+    const requestId = ++listRequestId.current;
     setLoading(true);
     try {
       const data = await fetchList(which);
+      if (requestId !== listRequestId.current) return;
       setItems(data);
     } catch (e) {
+      if (requestId !== listRequestId.current) return;
       tError(
         t("moderation.load_error", {
           defaultValue: "Не удалось загрузить список",
@@ -2503,7 +2507,7 @@ export default function AdminModeration({ embedded = false }) {
       );
       setItems([]);
     } finally {
-      setLoading(false);
+      if (requestId === listRequestId.current) setLoading(false);
     }
   };
 
@@ -2525,8 +2529,8 @@ export default function AdminModeration({ embedded = false }) {
   };
 
   useEffect(() => {
-    load("pending");
     refreshCounts();
+    return () => { listRequestId.current += 1; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -4001,7 +4005,8 @@ export default function AdminModeration({ embedded = false }) {
                   onClick={() => setTelegramPreviewOpen(true)}
                   className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-black"
                 >
-                  Предпросмотр Telegram
+                  <span className="sm:hidden">Telegram</span>
+                  <span className="hidden sm:inline">Предпросмотр Telegram</span>
                 </button>
                 <button
                   type="button"
