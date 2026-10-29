@@ -155,7 +155,7 @@ const INTERNAL_DETAIL_KEYS = new Set([
 
 const QUICK_DETAIL_KEYS = new Set([
   "directionCountry", "country", "city", "location", "title", "directionFrom", "directionTo", "direction",
-  "startDate", "departureDate", "departureFlightDate", "endDate", "returnFlightDate",
+  "startDate", "departureDate", "departureFlightDate", "endDate", "returnFlightDate", "returnDate",
   "nights", "hotel", "eventName", "roomCategory", "accommodationCategory", "accommodation", "netPrice", "net_price",
   "grossPrice", "gross_price", "price", "pricePerPerson", "priceFor", "food",
   "flightDetails", "flight_details", "flight_info", "flightIncluded", "airTickets",
@@ -164,6 +164,11 @@ const QUICK_DETAIL_KEYS = new Set([
 ]);
 
 const DETAIL_LABELS = {
+  title: "Название", price: "Базовая цена",
+  netPrice: "Netto", net_price: "Netto", grossPrice: "Gross", gross_price: "Gross",
+  images: "Фото карточки", proofImages: "Proof", proofReviewStatus: "Результат проверки proof", proofReviewNote: "Комментарий проверки",
+  telegram_chat_id: "Контакт Telegram", telegram_refused_chat_id: "Контакт отказных услуг", telegram_web_chat_id: "Контакт Web bot",
+  availability: "Доступность", vehicle_model: "Модель транспорта",
   adt: "Взрослых", adults: "Взрослых", chd: "Детей", children: "Детей",
   inf: "Младенцев", infants: "Младенцев", guests: "Гостей", persons: "Туристов",
   peopleCount: "Количество туристов", pax: "Количество мест", maxPax: "Максимум гостей",
@@ -1256,6 +1261,7 @@ function TextField({ label, value, onChange, placeholder = "", textarea = false,
   const fieldId = useId();
   const commonProps = {
     id: fieldId,
+    "aria-label": label,
     "aria-invalid": Boolean(error),
     "aria-describedby": error ? `${fieldId}-error` : undefined,
     value,
@@ -3526,11 +3532,12 @@ export default function AdminModeration({ embedded = false }) {
                   <details id="moderation-editor-history" open={historyExpanded} onToggle={(event) => setHistoryExpanded(event.currentTarget.open)} className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-3">
                     <summary className="cursor-pointer text-sm font-bold text-slate-800">История правок и модерации · {moderationEvents.length}</summary>
                     <div className="mt-3 space-y-3">
+                      {moderationEvents.length > 0 && <p className="text-xs text-slate-500">Последние {moderationEvents.length} событий. История новых правок ведётся с этого обновления.</p>}
                       {!moderationEvents.length && <p className="text-xs text-slate-500">Записей пока нет. Новые сохранённые изменения появятся здесь.</p>}
                       {moderationEvents.map((event) => <article key={event.id} className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-                        <div className="flex flex-wrap gap-x-2 gap-y-1 font-semibold text-slate-700"><span>{event.action === "service_edited" ? "Изменение услуги" : event.action}</span><span>{event.actor_id ? `Администратор #${event.actor_id}` : "Система"}</span><span>{formatDt(event.created_at)}</span></div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 font-semibold text-slate-700"><span>{({ service_edited: "Изменение услуги", telegram_sent: "Отправлено в Telegram", telegram_failed: "Ошибка отправки в Telegram", approved_clean: "Опубликовано", approved_with_warnings: "Опубликовано с предупреждениями", rejected: "Отклонено", correction_requested: "Запрошено исправление", unpublished: "Снято с публикации" })[event.action] || event.action}</span><span>{event.actor_id ? `Администратор #${event.actor_id}` : "Система"}</span><span>{formatDt(event.created_at)}</span></div>
                         {event.reason && <p className="mt-1 break-words text-slate-600">{event.reason}</p>}
-                        {Array.isArray(event.meta?.changes) && <dl className="mt-2 space-y-2">{event.meta.changes.map((change) => <div key={change.field} className="min-w-0"><dt className="font-semibold text-slate-700">{detailLabel(change.field.replace(/^details\./, ""))}</dt><dd className="mt-1 grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2"><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-rose-50 p-2 text-rose-800">Было: {change.before ?? "—"}</span><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-emerald-50 p-2 text-emerald-800">Стало: {change.after ?? "—"}</span></dd></div>)}</dl>}
+                        {Array.isArray(event.meta?.changes) && <dl className="mt-2 space-y-2">{event.meta.changes.map((change) => <div key={change.field} className="min-w-0"><dt className="font-semibold text-slate-700">{detailLabel(change.field.replace(/^(details|provider)\./, ""))}</dt><dd className="mt-1 grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2"><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-rose-50 p-2 text-rose-800">Было: {change.before ?? "—"}</span><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-emerald-50 p-2 text-emerald-800">Стало: {change.after ?? "—"}</span></dd></div>)}</dl>}
                       </article>)}
                     </div>
                   </details>
@@ -3800,8 +3807,8 @@ export default function AdminModeration({ embedded = false }) {
                     <TextField
                       label="Дата окончания"
                       error={editErrors.endDate}
-                      value={formatDetailValue(editDetails.endDate || editDetails.returnFlightDate)}
-                      onChange={(value) => setDetailValue(detailKey(["endDate", "returnFlightDate"], "endDate"), value)}
+                      value={formatDetailValue(editDetails.endDate || editDetails.returnFlightDate || editDetails.returnDate)}
+                      onChange={(value) => setDetailValue(detailKey(["endDate", "returnFlightDate", "returnDate"], "endDate"), value)}
                       placeholder="2026-09-30"
                     />
                     <TextField
