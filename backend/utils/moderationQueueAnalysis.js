@@ -253,7 +253,7 @@ function analyzeModerationService(svc = {}) {
   const warningIssues = dangerIssues.filter((issue) => !issue.blocking);
   const ready = missingRequired.length === 0 && blockingIssues.length === 0;
   const hasCorrectionHistory =
-    String(svc.last_moderation_action || "").toLowerCase() === "rejected" &&
+    ["rejected","correction_requested"].includes(String(svc.last_moderation_action || "").toLowerCase()) &&
     String(svc.status || svc.moderation_status || "").toLowerCase() !== "rejected";
   const priority =
     (blockingIssues.length ? 100 : 0) +

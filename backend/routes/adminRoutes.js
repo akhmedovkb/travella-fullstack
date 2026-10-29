@@ -4,6 +4,7 @@ const multer = require("multer");
 const router = express.Router();
 const pool = require("../db");
 const { readModerationQueue } = require("../utils/adminModerationQueue");
+const { correctionNotificationParts, correctionSnapshot, normalizeReasonCodes, readCorrectionReview } = require("../utils/serviceCorrections");
 const { writeServiceEditHistory } = require("../utils/serviceEditHistory");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
@@ -90,7 +91,7 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action <> 'service_edited'
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -124,7 +125,7 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action <> 'service_edited'
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -163,7 +164,7 @@ router.get("/services/published", authenticateToken, requireAdmin, async (req, r
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action <> 'service_edited'
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -298,11 +299,34 @@ router.post(
 router.get("/services/:id(\\d+)/moderation-events", authenticateToken, requireAdmin, async (req, res) => {
   try {
     const events = await listServiceModerationEvents(pool, req.params.id, req.query?.limit || 30);
-    res.json({ ok: true, items: events });
+    const current = await pool.query(`SELECT s.*, to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version FROM services s WHERE id=$1 AND deleted_at IS NULL`,[req.params.id]);
+    if (!current.rows[0]) return res.status(404).json({message:"Услуга не найдена"});
+    res.set("Cache-Control", "private, no-store");
+    res.json({ ok: true, items: events, correction: await readCorrectionReview(pool,current.rows[0]) });
   } catch (e) {
     console.error("[admin moderation-events] error:", e?.message || e);
     res.status(500).json({ ok: false, message: "moderation events error" });
   }
+});
+
+router.post("/services/:id(\\d+)/correction-review", authenticateToken, requireAdmin, async (req,res) => {
+  let db;
+  try {
+    await ensureServiceModerationEvents(pool);
+    db = await pool.connect();
+    await db.query("BEGIN");
+    const result = await db.query(`SELECT s.*, to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version FROM services s WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`,[req.params.id]);
+    const service = result.rows[0];
+    if (!service) throw Object.assign(new Error("Услуга не найдена"),{status:404});
+    const correction = await readCorrectionReview(db,service);
+    if (!correction || String(correction.requestId)!==String(req.body?.requestId) || service.edit_version!==req.body?.expected_edit_version) throw Object.assign(new Error("Данные изменились. Откройте услугу повторно перед проверкой."),{status:409});
+    const codes = req.body?.checkedCodes;
+    if (!Array.isArray(codes) || codes.length>10 || codes.some(c=>!correction.reasonCodes.includes(c))) throw Object.assign(new Error("Некорректный список проверок"),{status:400});
+    await db.query(`INSERT INTO service_moderation_events (service_id,actor_id,actor_role,action,meta) VALUES ($1,$2,'admin','correction_reviewed',$3::jsonb)`,[service.id,req.user.id,JSON.stringify({requestId:correction.requestId,checkedCodes:[...new Set(codes)],fingerprint:correction.fingerprint})]);
+    await db.query("COMMIT");
+    res.json({ok:true});
+  } catch(error) { if(db) await db.query("ROLLBACK"); res.status(error.status || 500).json({message:error.status ? error.message : "Не удалось сохранить проверку"}); }
+  finally { db?.release(); }
 });
 
 // полное редактирование услуги админом без ломания модерации
@@ -793,44 +817,32 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
     return res.status(400).json({ message: "Reason is required", code: "REJECT_REASON_REQUIRED" });
   }
 
-  const beforeRes = await pool.query(`SELECT id, status, moderation_status, details FROM services WHERE id = $1`, [req.params.id]);
-  const before = beforeRes.rows[0] || null;
-
-  const { rows } = await pool.query(
-    `UPDATE services
-        SET moderation_status = 'rejected',
-            status            = 'rejected',
-            rejected_at       = NOW(),
-            rejected_by       = $2,
-            rejected_reason   = $3,
-            details           = jsonb_set(
-                                  jsonb_set(COALESCE(details, '{}'::jsonb), '{meta,moderation_rejection_code}', to_jsonb($4::text), true),
-                                  '{meta,moderation_rejected_at}', to_jsonb(NOW()), true
-                                ),
-            updated_at        = NOW()
-      WHERE id = $1
-        AND COALESCE(moderation_status, status) = 'pending'
-        AND deleted_at IS NULL
-      RETURNING id, status, moderation_status, rejected_at, rejected_reason, details`,
-    [req.params.id, adminId, reason, reasonCode]
-  );
-
-  if (!rows.length) {
-    return res.status(400).json({ message: "Service is not pending", code: "SERVICE_NOT_PENDING" });
-  }
-
-  await logServiceModerationEvent(pool, {
-    serviceId: rows[0].id,
-    actorId: adminId,
-    actorRole: "admin",
-    action: "rejected",
-    reasonCode,
-    reason,
-    before,
-    after: rows[0],
-  });
+  let rows;
+  let db;
+  try {
+    const reasonCodes = normalizeReasonCodes(body.reasonCodes,reasonCode);
+    if (reason.length>4000) return res.status(400).json({message:"Сообщение должно быть не длиннее 4000 символов"});
+    await ensureServiceModerationEvents(pool);
+    db = await pool.connect();
+    await db.query("BEGIN");
+    const beforeRes = await db.query(`SELECT s.*, to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version FROM services s WHERE id=$1 AND deleted_at IS NULL FOR UPDATE`,[req.params.id]);
+    const before = beforeRes.rows[0];
+    if (!before || (before.moderation_status || before.status)!=='pending') throw Object.assign(new Error("Исправления можно запросить только для услуги на модерации"),{status:409});
+    if (body.expected_edit_version && body.expected_edit_version!==before.edit_version) throw Object.assign(new Error("Услуга изменилась. Откройте её повторно."),{status:409});
+    const updated = await db.query(`UPDATE services SET moderation_status='rejected',status='rejected',rejected_at=NOW(),rejected_by=$2,rejected_reason=$3,
+      details=COALESCE(details,'{}'::jsonb) || jsonb_build_object('meta',COALESCE(details->'meta','{}'::jsonb) || jsonb_build_object('moderation_rejection_code',$4::text,'moderation_rejection_codes',$5::jsonb,'moderation_rejected_at',NOW())),updated_at=NOW() WHERE id=$1 RETURNING *`,[req.params.id,adminId,reason,reasonCodes[0],JSON.stringify(reasonCodes)]);
+    rows = updated.rows;
+    await db.query(`INSERT INTO service_moderation_events (service_id,actor_id,actor_role,action,reason_code,reason,from_status,to_status,from_moderation_status,to_moderation_status,meta)
+      VALUES ($1,$2,'admin','correction_requested',$3,$4,$5,'rejected',$6,'rejected',$7::jsonb)`,[before.id,adminId,reasonCodes[0],reason,before.status,before.moderation_status,JSON.stringify({correction:{reasonCodes,snapshot:correctionSnapshot(before)}})]);
+    await db.query("COMMIT");
+  } catch(error) {
+    if (db) await db.query("ROLLBACK");
+    return res.status(error.status || 500).json({message:error.status ? error.message : "Не удалось запросить исправление"});
+  } finally { db?.release(); }
 
   // TG → поставщику (выбор правильного чата + правильного бота)
+  let notificationSent=false;
+  let notificationAvailable=false;
   try {
     const info = await pool.query(
       `SELECT 
@@ -856,14 +868,15 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
       : null;
 
     if (chatId) {
-      const text = `❌ Ваша услуга отклонена\n\n📌 ${row.title || ""}\n\nПричина:\n${reason || "Не указана"}\n\nИсправьте замечания в разделе «Мои услуги» и отправьте услугу на модерацию повторно.`;
-      tokenOverride ? await tgSend(chatId, text, {}, tokenOverride) : await tgSend(chatId, text, {});
+      notificationAvailable=true;
+      for (const part of correctionNotificationParts(row.title,reason)) await tgSend(chatId,part,{parse_mode:undefined},tokenOverride || "",true);
+      notificationSent=true;
     }
   } catch (e) {
     console.error("[admin reject] tg notify failed:", e?.message || e);
   }
 
-  res.json({ ok: true, service: rows[0] });
+  res.json({ ok: true, service: rows[0], notification:{sent:notificationSent,available:notificationAvailable} });
 });
 
 // снять с публикации

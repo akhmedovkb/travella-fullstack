@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState, useId } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import axios from "axios";
+import { CorrectionRequestDialog, CorrectionReview } from "../components/ServiceCorrections";
 import ServiceProofComparison from "../components/ServiceProofComparison";
 import { BadgeCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
@@ -21,6 +22,8 @@ const REJECT_REASON_OPTIONS = [
   { code: "BAD_PROOF", label: "Proof нечитаемый", text: "Proof нечитаемый или не подтверждает данные услуги. Загрузите более понятное подтверждение." },
   { code: "NO_DATES", label: "Не хватает дат", text: "Укажите корректные даты услуги: вылет/заезд/дату мероприятия." },
   { code: "BAD_PRICE", label: "Нужно уточнить цену", text: "Проверьте цену и укажите, за одного человека/билет или за весь пакет." },
+  { code: "HOTEL_DETAILS", label: "Отель и размещение", text: "Уточните название отеля, категорию номера и размещение гостей." },
+  { code: "NO_PHOTO", label: "Фото карточки", text: "Добавьте публичное фото для карточки услуги. Подтверждение брони и личные документы загружайте только в proof." },
   { code: "MISSING_DETAILS", label: "Не хватает деталей", text: "Добавьте недостающие детали услуги, чтобы клиент мог принять решение." },
   { code: "WRONG_CATEGORY", label: "Неверная категория", text: "Услуга выбрана не в той категории. Исправьте категорию и отправьте повторно." },
   { code: "DUPLICATE", label: "Похоже на дубль", text: "Похожая услуга уже есть. Обновите существующую карточку или уточните отличие." },
@@ -1057,7 +1060,7 @@ function Card({
           className={`mt-3 rounded-xl border p-2 text-xs ${
             cardAnalysis.hasCorrectionHistory
               ? "border-cyan-200 bg-cyan-50 text-cyan-800"
-              : String(s.last_moderation_action).toLowerCase() === "rejected"
+              : ["rejected","correction_requested"].includes(String(s.last_moderation_action).toLowerCase())
               ? "border-rose-200 bg-rose-50 text-rose-800"
               : "border-slate-200 bg-slate-50 text-slate-700"
           }`}
@@ -1469,7 +1472,7 @@ function analyzeModerationService(svc = {}) {
   const warningIssues = dangerIssues.filter((issue) => !issue.blocking);
   const ready = missingRequired.length === 0 && blockingIssues.length === 0;
   const hasCorrectionHistory =
-    String(svc.last_moderation_action || "").toLowerCase() === "rejected" &&
+    ["rejected","correction_requested"].includes(String(svc.last_moderation_action || "").toLowerCase()) &&
     String(svc.status || svc.moderation_status || "").toLowerCase() !== "rejected";
   const priority =
     (blockingIssues.length ? 100 : 0) +
@@ -1500,7 +1503,7 @@ function moderationActionLabel(action) {
   if (normalized === "telegram_sent") return "Telegram отправлен";
   if (normalized === "telegram_failed") return "Telegram не отправлен";
   if (normalized === "approved") return "Одобрено";
-  if (normalized === "rejected") return "Запрошено исправление";
+  if (["rejected","correction_requested"].includes(normalized)) return "Запрошено исправление";
   if (normalized === "unpublished") return "Снято";
   return action || "";
 }
@@ -1881,6 +1884,17 @@ function buildCorrectionReason(readinessItems, dangerIssues) {
   }
 
   return Array.from(new Set(lines)).join("\n");
+}
+
+function selectedCorrectionCodes(readinessItems, dangerIssues) {
+  const codes = [];
+  const keys = new Set(dangerIssues.map(i=>i.key));
+  if(keys.has("no-proof")) codes.push("NO_PROOF");
+  if(keys.has("gross-below-net")) codes.push("BAD_PRICE");
+  if(keys.has("past-date") || readinessItems.some(i=>i.key==="date" && !i.ok)) codes.push("NO_DATES");
+  if(keys.has("no-photo")) codes.push("NO_PHOTO");
+  if(keys.has("no-contact") || readinessItems.some(i=>i.required && !i.ok && !["date","photo","price"].includes(i.key))) codes.push("MISSING_DETAILS");
+  return [...new Set(codes.length?codes:["OTHER"])];
 }
 
 function correctionReasonCode(readinessItems, dangerIssues) {
@@ -2523,6 +2537,8 @@ export default function AdminModeration({ embedded = false }) {
   }, [editOpen]);
 
   const [moderationEvents, setModerationEvents] = useState([]);
+  const [correctionReview, setCorrectionReview] = useState(null);
+  const [editServiceStatus, setEditServiceStatus] = useState("");
   const [actionBusy, setActionBusy] = useState(null);
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
   const [publishedQuery, setPublishedQuery] = useState(queueLocation.q);
@@ -2769,20 +2785,20 @@ export default function AdminModeration({ embedded = false }) {
     }
   };
 
-  const openReject = (svc, reason = "", reasonCode = "") => {
+  const openReject = async (svc, reason = "", reasonCode = "", reasonCodes = null) => {
+    if (editOpen && hasUnsavedChanges) return tInfo("Сначала сохраните изменения услуги перед запросом исправлений.");
+    setActionBusy(`correction:${svc.id}`);
+    try {
+    const latest = await axios.get(`${API_BASE}/api/admin/services/${svc.id}`,cfg);
     const first =
       REJECT_REASON_OPTIONS.find((x) => x.code === reasonCode) ||
       REJECT_REASON_OPTIONS[0];
-    setRejectTarget(svc);
-    setRejectForm({ reasonCode: first.code, reason: reason || first.text });
+    setRejectTarget({...svc,canRequest:(latest.data.moderation_status || latest.data.status)==="pending",expectedVersion:editOpen && editItemId===svc.id ? editVersion : latest.data.edit_version});
+    setRejectForm({ reasonCode: first.code, reason: reason || first.text, reasonCodes: reasonCodes?.length ? reasonCodes : [first.code] });
+    } catch { tError("Не удалось открыть запрос исправлений"); } finally { setActionBusy(null); }
   };
 
-  const changeRejectReasonCode = (code) => {
-    const opt = REJECT_REASON_OPTIONS.find((x) => x.code === code) || REJECT_REASON_OPTIONS[REJECT_REASON_OPTIONS.length - 1];
-    setRejectForm({ reasonCode: opt.code, reason: opt.text });
-  };
-
-  const reject = async (id, reason, reasonCode = "OTHER") => {
+  const reject = async (id, reason, reasonCode = "OTHER", reasonCodes = [reasonCode]) => {
     if (!reason || !reason.trim()) {
       return tInfo(
         t("moderation.enter_reason_short", {
@@ -2793,20 +2809,21 @@ export default function AdminModeration({ embedded = false }) {
 
     setActionBusy(id);
     try {
-      await axios.post(
+      const response = await axios.post(
         `${API_BASE}/api/admin/services/${id}/reject`,
-        { reason, reasonCode },
+        { reason, reasonCode, reasonCodes, ...(rejectTarget?.id === id ? { expected_edit_version: rejectTarget.expectedVersion } : {}) },
         cfg
       );
-      tSuccess(t("moderation.rejected", { defaultValue: "Отклонено" }));
+      tSuccess("Услуга возвращена на исправление");
+      if (!response.data?.notification?.sent) tInfo(response.data?.notification?.available ? "Замечания сохранены в личном кабинете, но Telegram-уведомление не доставлено." : "Замечания сохранены в личном кабинете. Telegram поставщика не подключён.");
       setRejectTarget(null);
       setEditOpen(false);
       setTelegramPreviewOpen(false);
       setEditItemId(null);
       setModerationEvents([]);
       await load();
-    } catch {
-      tError(t("moderation.reject_error", { defaultValue: "Ошибка reject" }));
+    } catch (error) {
+      throw new Error(error.response?.data?.message || "Не удалось запросить исправление. Повторите попытку.");
     } finally {
       setActionBusy(null);
     }
@@ -2845,6 +2862,7 @@ export default function AdminModeration({ embedded = false }) {
     updateQueueLocation({ focus: id },true);
     setEditItemId(id);
     setEditBaseline("");
+    setCorrectionReview(null);
     setDiscardConfirmOpen(false);
     setEditConflict("");
     setConfirmConflictReload(false);
@@ -2861,6 +2879,8 @@ export default function AdminModeration({ embedded = false }) {
       if (requestId !== editRequestId.current) return;
       const s = res.data || {};
       setEditVersion(s.edit_version);
+      setEditServiceStatus(s.moderation_status || s.status);
+      setCorrectionReview(eventsRes?.data?.correction || null);
       setProviderEditVersion(s.provider_edit_version);
       setModerationEvents(Array.isArray(eventsRes?.data?.items) ? eventsRes.data.items : []);
       const details = normalizeDetails(s.details);
@@ -3257,9 +3277,11 @@ export default function AdminModeration({ embedded = false }) {
         id: editItemId,
         title: pickFirst(editForm.title, editDetails.title, editDetails.hotel, editDetails.eventName),
         category: editForm.category,
+        canRequest: editServiceStatus === "pending",
       },
       reason,
-      reasonCode
+      reasonCode,
+      selectedCorrectionCodes(readinessItems,dangerIssues)
     );
   };
   const openCorrectionFromCard = (svc, analysis, template = null) => {
@@ -3276,7 +3298,7 @@ export default function AdminModeration({ embedded = false }) {
         currentAnalysis.readinessItems,
         currentAnalysis.dangerIssues
       );
-    openReject(svc, reason, reasonCode);
+    openReject(svc, reason, reasonCode, template ? [reasonCode] : selectedCorrectionCodes(currentAnalysis.readinessItems,currentAnalysis.dangerIssues));
   };
   const displayedItems = loadedQueueKey === queueKey ? items : [];
   const activeQueueMeta = loadedQueueKey === queueKey ? queueMeta : null;
@@ -3443,7 +3465,7 @@ export default function AdminModeration({ embedded = false }) {
                 openingServiceId={editItemId}
                 focused={queueLocation.focus === Number(it.id)}
                 onApprove={() => requestPublish(it, analysis)}
-                onReject={reject}
+                onReject={(...args) => reject(...args).catch(error => tError(error.message))}
                 onRejectClick={openReject}
                 onCorrectionClick={openCorrectionFromCard}
                 onUnpublish={unpublish}
@@ -3457,88 +3479,7 @@ export default function AdminModeration({ embedded = false }) {
           </div>
         )}
       </div>
-      {rejectTarget &&
-        createPortal(
-          <div className="fixed inset-0 z-[5200] bg-black/60 flex items-center justify-center p-4">
-            <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between px-5 py-4 border-b">
-                <div>
-                  <div className="text-lg font-semibold">
-                    {t("moderation.reject_modal_title", { defaultValue: "Отклонить / запросить исправление" })}
-                  </div>
-                  <div className="mt-1 text-sm text-gray-500">
-                    #{rejectTarget.id} · {rejectTarget.title || rejectTarget.category || "service"}
-                  </div>
-                </div>
-                <button type="button" onClick={() => setRejectTarget(null)} className="text-2xl leading-none text-gray-500 hover:text-black">×</button>
-              </div>
-
-              <div className="p-5 space-y-4">
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    {t("moderation.reject_reason_type", { defaultValue: "Тип причины" })}
-                  </label>
-                  <div className="mb-2 flex flex-wrap gap-2">
-                    {REJECT_REASON_OPTIONS.slice(0, 6).map((opt) => (
-                      <button
-                        key={`quick-${opt.code}`}
-                        type="button"
-                        onClick={() => changeRejectReasonCode(opt.code)}
-                        className={`rounded-full border px-3 py-1.5 text-xs font-semibold ${
-                          rejectForm.reasonCode === opt.code
-                            ? "border-rose-300 bg-rose-50 text-rose-700"
-                            : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                        }`}
-                      >
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  <select
-                    value={rejectForm.reasonCode}
-                    onChange={(e) => changeRejectReasonCode(e.target.value)}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                  >
-                    {REJECT_REASON_OPTIONS.map((opt) => (
-                      <option key={opt.code} value={opt.code}>{opt.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-1">
-                    {t("moderation.reject_reason_message", { defaultValue: "Сообщение поставщику" })}
-                  </label>
-                  <textarea
-                    value={rejectForm.reason}
-                    onChange={(e) => setRejectForm((prev) => ({ ...prev, reason: e.target.value }))}
-                    rows={5}
-                    className="w-full rounded-lg border px-3 py-2 text-sm"
-                    placeholder="Что нужно исправить?"
-                  />
-                </div>
-
-                <div className="rounded-xl bg-amber-50 p-3 text-sm text-amber-800 border border-amber-200">
-                  {t("moderation.reject_modal_hint", { defaultValue: "После отклонения поставщик увидит причину и сможет исправить карточку, затем отправить её на модерацию повторно." })}
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 px-5 py-4 border-t">
-                <button type="button" onClick={() => setRejectTarget(null)} className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 text-sm font-semibold">
-                  {t("common.cancel", { defaultValue: "Отмена" })}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => reject(rejectTarget.id, rejectForm.reason, rejectForm.reasonCode)}
-                  className="px-4 py-2 rounded-lg bg-rose-600 text-white text-sm font-semibold hover:bg-rose-700"
-                >
-                  {t("moderation.reject_and_notify", { defaultValue: "Отклонить и уведомить" })}
-                </button>
-              </div>
-            </div>
-          </div>,
-          document.body
-        )}
+      {rejectTarget && createPortal(<CorrectionRequestDialog key={rejectTarget.id} target={rejectTarget} initial={rejectForm} options={REJECT_REASON_OPTIONS} busy={actionBusy === rejectTarget.id} onClose={()=>setRejectTarget(null)} onSubmit={reject} />,document.body)}
 
       {editOpen &&
         createPortal(
@@ -3571,13 +3512,21 @@ export default function AdminModeration({ embedded = false }) {
               <div aria-busy={editLoading} className={`min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${editLoading ? "hidden" : ""}`}>
               <div className={proofComparison ? "flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]" : "grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]"}>
                 <div className="space-y-4 min-w-0">
+                  {correctionReview && <CorrectionReview key={`${editItemId}:${correctionReview.requestId}:${correctionReview.fingerprint}`} correction={correctionReview} options={REJECT_REASON_OPTIONS} disabled={hasUnsavedChanges || editSaving || editLoading || proofUploadBusy || imageUploadBusy || correctionReview.editVersion !== editVersion} onNavigate={navigateEditor} onSave={async (checkedCodes)=>{
+                    try {
+                      await axios.post(`${API_BASE}/api/admin/services/${editItemId}/correction-review`,{requestId:correctionReview.requestId,expected_edit_version:correctionReview.editVersion,checkedCodes},cfg);
+                      const refreshed=await axios.get(`${API_BASE}/api/admin/services/${editItemId}/moderation-events`,cfg);
+                      setModerationEvents(refreshed.data.items || []);
+                      // Keep this mounted to preserve the explicit success notice.
+                    } catch(error) { throw new Error(error.response?.data?.message || "Не удалось сохранить проверку"); }
+                  }} />}
                   <details id="moderation-editor-history" open={historyExpanded} onToggle={(event) => setHistoryExpanded(event.currentTarget.open)} className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-3">
                     <summary className="cursor-pointer text-sm font-bold text-slate-800">История правок и модерации · {moderationEvents.length}</summary>
                     <div className="mt-3 space-y-3">
                       {moderationEvents.length > 0 && <p className="text-xs text-slate-500">Последние {moderationEvents.length} событий. История новых правок ведётся с этого обновления.</p>}
                       {!moderationEvents.length && <p className="text-xs text-slate-500">Записей пока нет. Новые сохранённые изменения появятся здесь.</p>}
                       {moderationEvents.map((event) => <article key={event.id} className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-                        <div className="flex flex-wrap gap-x-2 gap-y-1 font-semibold text-slate-700"><span>{({ service_edited: "Изменение услуги", telegram_sent: "Отправлено в Telegram", telegram_failed: "Ошибка отправки в Telegram", approved_clean: "Опубликовано", approved_with_warnings: "Опубликовано с предупреждениями", rejected: "Отклонено", correction_requested: "Запрошено исправление", unpublished: "Снято с публикации" })[event.action] || event.action}</span><span>{event.actor_id ? `Администратор #${event.actor_id}` : "Система"}</span><span>{formatDt(event.created_at)}</span></div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 font-semibold text-slate-700"><span>{({ service_edited: "Изменение услуги", telegram_sent: "Отправлено в Telegram", telegram_failed: "Ошибка отправки в Telegram", approved_clean: "Опубликовано", approved_with_warnings: "Опубликовано с предупреждениями", rejected: "Отклонено", correction_requested: "Запрошено исправление", correction_reviewed: "Повторная проверка исправлений", unpublished: "Снято с публикации" })[event.action] || event.action}</span><span>{event.actor_id ? `Администратор #${event.actor_id}` : "Система"}</span><span>{formatDt(event.created_at)}</span></div>
                         {event.reason && <p className="mt-1 break-words text-slate-600">{event.reason}</p>}
                         {Array.isArray(event.meta?.changes) && <dl className="mt-2 space-y-2">{event.meta.changes.map((change) => <div key={change.field} className="min-w-0"><dt className="font-semibold text-slate-700">{detailLabel(change.field.replace(/^(details|provider)\./, ""))}</dt><dd className="mt-1 grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2"><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-rose-50 p-2 text-rose-800">Было: {change.before ?? "—"}</span><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-emerald-50 p-2 text-emerald-800">Стало: {change.after ?? "—"}</span></dd></div>)}</dl>}
                       </article>)}
