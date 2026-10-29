@@ -146,7 +146,7 @@ function normalizeImages(images) {
 }
 
 const INTERNAL_DETAIL_KEYS = new Set([
-  "meta", "proofReviewedAt", "proofReviewedBy", "proofReviewStatus",
+  "meta", "proofReviewedAt", "proofReviewedBy", "proofReviewStatus", "proofReviewNote",
   "moderation_rejected_at", "moderation_rejection_code", "createdAt", "updatedAt",
   "created_at", "updated_at", "submittedAt", "submitted_at",
 ]);
@@ -154,7 +154,7 @@ const INTERNAL_DETAIL_KEYS = new Set([
 const QUICK_DETAIL_KEYS = new Set([
   "directionCountry", "location", "directionFrom", "directionTo", "direction",
   "startDate", "departureDate", "departureFlightDate", "endDate", "returnFlightDate",
-  "nights", "hotel", "eventName", "roomCategory", "accommodation", "netPrice", "net_price",
+  "nights", "hotel", "eventName", "roomCategory", "accommodationCategory", "accommodation", "netPrice", "net_price",
   "grossPrice", "gross_price", "price", "pricePerPerson", "priceFor", "food",
   "flightDetails", "flight_details", "flight_info", "flightIncluded", "airTickets",
   "aviaTickets", "transferIncluded", "hasTransfer", "transfer", "insurance",
@@ -1242,7 +1242,7 @@ function TextField({ label, value, onChange, placeholder = "", textarea = false,
     value,
     onChange: (e) => onChange(e.target.value),
     placeholder,
-    className: "w-full border rounded-lg px-3 py-2 text-sm bg-white",
+    className: "min-w-0 w-full border rounded-lg px-3 py-2 text-sm bg-white",
   };
 
   return (
@@ -2070,7 +2070,7 @@ function TelegramPreviewModal({ serviceId, form, details, images, onClose, onPub
             type="button"
             onClick={onPublish}
             disabled={publishDisabled || saving}
-            className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+            className="col-span-2 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
           >
             {saving ? "Сохранение..." : "Сохранить и опубликовать"}
           </button>
@@ -2437,6 +2437,12 @@ export default function AdminModeration({ embedded = false }) {
   const [imageAddError, setImageAddError] = useState("");
   const [imageUploadBusy, setImageUploadBusy] = useState(false);
   const [proofUploadBusy, setProofUploadBusy] = useState(false);
+  useEffect(() => {
+    if (!editOpen) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => { document.body.style.overflow = previousOverflow; };
+  }, [editOpen]);
   const [moderationEvents, setModerationEvents] = useState([]);
   const [actionBusy, setActionBusy] = useState(null);
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
@@ -2744,11 +2750,11 @@ export default function AdminModeration({ embedded = false }) {
         category: s.category || "",
         price: s.price ?? "",
         currency: s.currency || "USD",
-        net_price: s.net_price ?? "",
-        gross_price: s.gross_price ?? "",
-        country: s.country || "",
-        city: s.city || "",
-        location: s.location || "",
+        net_price: pickFirst(details.netPrice, details.net_price, s.net_price) ?? "",
+        gross_price: pickFirst(details.grossPrice, details.gross_price, details.price, s.gross_price, s.price) ?? "",
+        country: pickFirst(details.directionCountry, details.country, s.country) || "",
+        city: pickFirst(details.city, s.city) || "",
+        location: pickFirst(details.location, s.location) || "",
         expiration_at: s.expiration_at ? String(s.expiration_at).slice(0, 16) : "",
         vehicle_model: s.vehicle_model || "",
         telegram_refused_chat_id: s.telegram_refused_chat_id || "",
@@ -2861,6 +2867,12 @@ export default function AdminModeration({ embedded = false }) {
   };
 
   const setDetailValue = (key, value) => {
+    const rootField = {
+      netPrice: "net_price", net_price: "net_price",
+      grossPrice: "gross_price", gross_price: "gross_price", price: "gross_price",
+      directionCountry: "country", country: "country", city: "city", location: "location",
+    }[key];
+    if (rootField) setEditForm((prev) => ({ ...prev, [rootField]: value }));
     setEditDetailsRows((prev) => {
       const idx = prev.findIndex((row) => row.key === key);
       if (idx === -1) return [...prev, { key, value }];
@@ -3168,7 +3180,7 @@ export default function AdminModeration({ embedded = false }) {
           </button>
         </div>
 
-        <div className="mb-5 inline-flex rounded-full bg-white shadow-sm overflow-hidden">
+        <div className="mb-5 flex w-fit max-w-full flex-wrap overflow-hidden rounded-2xl bg-white shadow-sm">
           <button
             className={`px-4 py-1.5 text-sm font-medium ${
               tab === "pending"
@@ -3390,9 +3402,9 @@ export default function AdminModeration({ embedded = false }) {
 
       {editOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[5000] bg-slate-950/70 flex items-center justify-center p-3 md:p-6">
-            <div className="flex w-full max-w-6xl max-h-[94vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl">
-              <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+          <div role="dialog" aria-modal="true" aria-label="Редактирование услуги" className="fixed inset-0 z-[5000] bg-slate-950/70 flex items-center justify-center p-3 md:p-6">
+            <div className="flex w-full max-w-6xl max-h-[94dvh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl">
+              <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 md:px-6 md:py-4">
                 <div>
                 <div className="text-lg font-bold text-slate-950">
                   {t("moderation.edit_service", {
@@ -3531,11 +3543,11 @@ export default function AdminModeration({ embedded = false }) {
                     </select>
                   </div>
 
-                  <TextField label="Netto" value={editForm.net_price} onChange={(value) => setEditForm((prev) => ({ ...prev, net_price: value }))} />
-                  <TextField label="Gross" value={editForm.gross_price} onChange={(value) => setEditForm((prev) => ({ ...prev, gross_price: value }))} />
-                  <TextField label="Страна" value={editForm.country} onChange={(value) => setEditForm((prev) => ({ ...prev, country: value }))} />
-                  <TextField label="Город" value={editForm.city} onChange={(value) => setEditForm((prev) => ({ ...prev, city: value }))} />
-                  <TextField label="Локация / маршрут" value={editForm.location} onChange={(value) => setEditForm((prev) => ({ ...prev, location: value }))} />
+                  <TextField label="Netto" value={editForm.net_price} onChange={(value) => setDetailValue(detailKey(["netPrice", "net_price"], "netPrice"), value)} />
+                  <TextField label="Gross" value={editForm.gross_price} onChange={(value) => setDetailValue(detailKey(["grossPrice", "gross_price", "price"], "grossPrice"), value)} />
+                  <TextField label="Страна" value={editForm.country} onChange={(value) => setDetailValue(detailKey(["directionCountry", "country"], "directionCountry"), value)} />
+                  <TextField label="Город" value={editForm.city} onChange={(value) => setDetailValue("city", value)} />
+                  <TextField label="Локация / маршрут" value={editForm.location} onChange={(value) => setDetailValue("location", value)} />
                   <label className="block min-w-0">
                     <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1">Действует до</span>
                     <input type="datetime-local" value={editForm.expiration_at} onChange={(e) => setEditForm((prev) => ({ ...prev, expiration_at: e.target.value }))} className="min-w-0 w-full border rounded-lg px-3 py-2 bg-white" />
@@ -3710,9 +3722,17 @@ export default function AdminModeration({ embedded = false }) {
                       placeholder="Rixos Premium..."
                     />
                     <TextField
+                      label="Категория номера"
+                      value={formatDetailValue(editDetails.roomCategory || editDetails.accommodationCategory)}
+                      onChange={(value) => {
+                        setDetailValue("roomCategory", value);
+                        setDetailValue("accommodationCategory", value);
+                      }}
+                    />
+                    <TextField
                       label="Размещение"
-                      value={formatDetailValue(editDetails.roomCategory || editDetails.accommodation)}
-                      onChange={(value) => setDetailValue(detailKey(["roomCategory", "accommodation"], "roomCategory"), value)}
+                      value={formatDetailValue(editDetails.accommodation)}
+                      onChange={(value) => setDetailValue("accommodation", value)}
                       placeholder="DBL / 2ADT+2CHD"
                     />
                   </div>
@@ -3957,7 +3977,7 @@ export default function AdminModeration({ embedded = false }) {
               </div>
               </div>
 
-              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-6 py-4">
+              <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex sm:flex-wrap sm:items-center sm:justify-end md:px-6 md:py-4">
                 <button
                   type="button"
                   onClick={() => { if (!editSaving && !imageUploadBusy && !proofUploadBusy) setEditOpen(false); }}
@@ -3995,7 +4015,7 @@ export default function AdminModeration({ embedded = false }) {
                   type="button"
                   onClick={requestPublishFromEdit}
                   disabled={editSaving || editLoading || imageUploadBusy || proofUploadBusy}
-                  className="px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+                  className="col-span-2 px-4 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
                   title={!publishReady ? "Есть предупреждения: перед публикацией будет подтверждение" : ""}
                 >
                   {editSaving
