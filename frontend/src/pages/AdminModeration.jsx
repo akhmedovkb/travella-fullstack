@@ -152,7 +152,7 @@ const INTERNAL_DETAIL_KEYS = new Set([
 ]);
 
 const QUICK_DETAIL_KEYS = new Set([
-  "directionCountry", "location", "directionFrom", "directionTo", "direction",
+  "directionCountry", "country", "city", "location", "title", "directionFrom", "directionTo", "direction",
   "startDate", "departureDate", "departureFlightDate", "endDate", "returnFlightDate",
   "nights", "hotel", "eventName", "roomCategory", "accommodationCategory", "accommodation", "netPrice", "net_price",
   "grossPrice", "gross_price", "price", "pricePerPerson", "priceFor", "food",
@@ -392,6 +392,8 @@ function Card({
   actionBusy,
   t,
   onOpenProof,
+  editorLoading,
+  openingServiceId,
 }) {
   const s = item || {};
   const d = normalizeDetails(s.details);
@@ -1149,9 +1151,11 @@ function Card({
         <button
           type="button"
           onClick={() => onEdit(s.id)}
+          disabled={editorLoading}
+          aria-busy={editorLoading && openingServiceId === s.id}
           className="px-3 py-1.5 rounded bg-blue-600 text-white text-sm hover:bg-blue-700"
         >
-          {cardAnalysis.hasCorrectionHistory ? "Проверить повторно" : t("common.edit", { defaultValue: "Редактировать" })}
+          {editorLoading && openingServiceId === s.id ? "Открываем…" : cardAnalysis.hasCorrectionHistory ? "Проверить повторно" : t("common.edit", { defaultValue: "Редактировать" })}
         </button>
 
         {!isPublishedTab && (
@@ -1226,6 +1230,15 @@ function Card({
       </div>
     </div>
   );
+}
+
+function collectEditorImages(images, draft) {
+  const urls = String(draft || "").split(/\r?\n|,/).map((url) => url.trim()).filter(Boolean);
+  const invalid = urls.find((url) => !/^https?:\/\/\S+$/i.test(url));
+  if (invalid) throw new Error(`Некорректная ссылка: ${invalid}`);
+  const result = [...new Set([...(Array.isArray(images) ? images : []), ...urls])];
+  if (result.length > 20) throw new Error("Для одной услуги можно добавить не более 20 изображений.");
+  return result;
 }
 
 function EditSection({ title, children }) {
@@ -1764,7 +1777,7 @@ function PublishedControls({
   );
 }
 
-function DangerIssuesPanel({ issues }) {
+function DangerIssuesPanel({ issues, onAddPublicPhoto }) {
   if (!issues.length) {
     return (
       <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4 text-sm text-emerald-800">
@@ -1793,6 +1806,9 @@ function DangerIssuesPanel({ issues }) {
               {issue.blocking ? "!" : "?"} {issue.title}
             </div>
             <div className="mt-0.5 text-xs opacity-80">{issue.text}</div>
+            {issue.key === "no-photo" && onAddPublicPhoto && (
+              <button type="button" onClick={onAddPublicPhoto} className="mt-2 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white hover:bg-black">Добавить фото карточки</button>
+            )}
           </div>
         ))}
       </div>
@@ -2410,6 +2426,11 @@ export default function AdminModeration({ embedded = false }) {
   const [rejectForm, setRejectForm] = useState({ reasonCode: "NO_PROOF", reason: REJECT_REASON_OPTIONS[0].text });
   const [editOpen, setEditOpen] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
+  const [editBaseline, setEditBaseline] = useState("");
+  const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
+  const editRequestId = useRef(0);
+  const publicPhotosRef = useRef(null);
+  const publicPhotoInputRef = useRef(null);
   const [editSaving, setEditSaving] = useState(false);
   const [editItemId, setEditItemId] = useState(null);
   const [editForm, setEditForm] = useState({
@@ -2454,6 +2475,38 @@ export default function AdminModeration({ embedded = false }) {
   const [publishConfirm, setPublishConfirm] = useState(null);
   const [publishResult, setPublishResult] = useState(null);
   const [rebroadcastBusy, setRebroadcastBusy] = useState(false);
+
+  const currentEditSnapshot = JSON.stringify({ form: editForm, rows: editDetailsRows, images: editImages });
+  const hasUnsavedChanges = Boolean(editOpen && !editLoading && editBaseline && (
+    currentEditSnapshot !== editBaseline || newImageUrl.trim()
+  ));
+  useEffect(() => {
+    if (!hasUnsavedChanges) return;
+    const warnBeforeUnload = (event) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", warnBeforeUnload);
+    return () => window.removeEventListener("beforeunload", warnBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const discardEditor = () => {
+    editRequestId.current += 1;
+    setEditLoading(false);
+    setDiscardConfirmOpen(false);
+    setEditOpen(false);
+    setEditBaseline("");
+    setNewImageUrl("");
+  };
+  const requestCloseEditor = () => {
+    if (editSaving || imageUploadBusy || proofUploadBusy) return;
+    if (hasUnsavedChanges) setDiscardConfirmOpen(true);
+    else discardEditor();
+  };
+  const addPublicPhoto = () => {
+    publicPhotosRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    publicPhotoInputRef.current?.click();
+  };
 
   const token = localStorage.getItem("token");
   const cfg = { headers: { Authorization: `Bearer ${token}` } };
@@ -2729,12 +2782,19 @@ export default function AdminModeration({ embedded = false }) {
   };
 
   const openEdit = async (id) => {
+    if (editLoading) return;
+    const requestId = ++editRequestId.current;
+    setEditItemId(id);
+    setEditBaseline("");
+    setDiscardConfirmOpen(false);
+    setEditOpen(true);
     setEditLoading(true);
     try {
       const [res, eventsRes] = await Promise.all([
         axios.get(`${API_BASE}/api/admin/services/${id}`, cfg),
         axios.get(`${API_BASE}/api/admin/services/${id}/moderation-events`, cfg).catch(() => ({ data: { items: [] } })),
       ]);
+      if (requestId !== editRequestId.current) return;
       const s = res.data || {};
       setModerationEvents(Array.isArray(eventsRes?.data?.items) ? eventsRes.data.items : []);
       const details = normalizeDetails(s.details);
@@ -2748,7 +2808,7 @@ export default function AdminModeration({ embedded = false }) {
       setImageAddError("");
 
       setEditItemId(id);
-      setEditForm({
+      const nextForm = {
         title: s.title || "",
         description: s.description || "",
         category: s.category || "",
@@ -2766,16 +2826,19 @@ export default function AdminModeration({ embedded = false }) {
         telegram_chat_id: s.telegram_chat_id || "",
         imagesJson: JSON.stringify(images, null, 2),
         availabilityJson: JSON.stringify(availability, null, 2),
-      });
-      setEditOpen(true);
+      };
+      setEditForm(nextForm);
+      setEditBaseline(JSON.stringify({ form: nextForm, rows: detailsToRows(details), images: getPublicServiceImages(images, details) }));
     } catch {
+      if (requestId !== editRequestId.current) return;
+      setEditOpen(false);
       tError(
         t("moderation.load_edit_error", {
           defaultValue: "Не удалось загрузить услугу для редактирования",
         })
       );
     } finally {
-      setEditLoading(false);
+      if (requestId === editRequestId.current) setEditLoading(false);
     }
   };
 
@@ -2785,31 +2848,17 @@ export default function AdminModeration({ embedded = false }) {
   };
 
   const addEditImage = () => {
-    const list = String(newImageUrl || "")
-      .split(/\r?\n|,/)
-      .map((x) => x.trim())
-      .filter(Boolean);
-
-    if (!list.length) {
+    if (!newImageUrl.trim()) {
       setImageAddError("Вставьте хотя бы одну ссылку на изображение.");
       return;
     }
-
-    const invalid = list.find((url) => !/^https?:\/\/\S+$/i.test(url));
-    if (invalid) {
-      setImageAddError(`Некорректная ссылка: ${invalid}`);
-      return;
+    try {
+      setEditImages(collectEditorImages(editImages, newImageUrl));
+      setNewImageUrl("");
+      setImageAddError("");
+    } catch (error) {
+      setImageAddError(error.message);
     }
-
-    const next = [...new Set([...editImages, ...list])];
-    if (next.length > 20) {
-      setImageAddError("Для одной услуги можно добавить не более 20 изображений.");
-      return;
-    }
-
-    setEditImages(next);
-    setNewImageUrl("");
-    setImageAddError("");
   };
 
   const uploadEditImages = async (event) => {
@@ -2945,9 +2994,14 @@ export default function AdminModeration({ embedded = false }) {
   const saveEdit = async ({ approveAfter = false, forceApprove = false, warnings = [] } = {}) => {
     if (editSaving || editLoading || imageUploadBusy || proofUploadBusy) return;
     const details = rowsToDetails(editDetailsRows);
-    const images = Array.isArray(editImages)
-      ? editImages.filter((x) => String(x || "").trim())
-      : [];
+    let images;
+    try {
+      images = collectEditorImages(editImages, newImageUrl);
+    } catch (error) {
+      setDiscardConfirmOpen(false);
+      setImageAddError(error.message);
+      return tError(error.message);
+    }
     const availability = parseJsonSafe(editForm.availabilityJson, null);
 
     if (!details || typeof details !== "object" || Array.isArray(details)) {
@@ -3017,6 +3071,9 @@ export default function AdminModeration({ embedded = false }) {
         })
       );
       setEditOpen(false);
+      setEditBaseline("");
+      setDiscardConfirmOpen(false);
+      setNewImageUrl("");
       setTelegramPreviewOpen(false);
       setPublishConfirm(null);
       if (approveAfter) {
@@ -3306,6 +3363,8 @@ export default function AdminModeration({ embedded = false }) {
                 tab={tab}
                 analysis={analysis}
                 onEdit={openEdit}
+                editorLoading={editLoading}
+                openingServiceId={editItemId}
                 onApprove={() => requestPublish(it, analysis)}
                 onReject={reject}
                 onRejectClick={openReject}
@@ -3406,7 +3465,7 @@ export default function AdminModeration({ embedded = false }) {
 
       {editOpen &&
         createPortal(
-          <div role="dialog" aria-modal="true" aria-label="Редактирование услуги" className="fixed inset-0 z-[5000] bg-slate-950/70 flex items-center justify-center p-3 md:p-6">
+          <div role="dialog" aria-modal="true" aria-label="Редактирование услуги" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); requestCloseEditor(); } }} className="fixed inset-0 z-[5000] bg-slate-950/70 flex items-center justify-center p-3 md:p-6">
             <div className="flex w-full max-w-6xl max-h-[94dvh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl">
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 md:px-6 md:py-4">
                 <div>
@@ -3419,7 +3478,7 @@ export default function AdminModeration({ embedded = false }) {
                 </div>
                 <button
                   type="button"
-                  onClick={() => { if (!editSaving && !imageUploadBusy && !proofUploadBusy) setEditOpen(false); }}
+                  onClick={requestCloseEditor}
                   disabled={editSaving || imageUploadBusy || proofUploadBusy}
                   className="text-2xl leading-none text-gray-500 hover:text-black"
                 >
@@ -3427,7 +3486,8 @@ export default function AdminModeration({ embedded = false }) {
                 </button>
               </div>
 
-              <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+              {editLoading && <div role="status" className="flex min-h-48 items-center justify-center gap-3 p-8 text-slate-600"><span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" aria-hidden="true" />Загружаем услугу #{editItemId}…</div>}
+              <div aria-busy={editLoading} className={`min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${editLoading ? "hidden" : ""}`}>
               <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5">
                 <div className="space-y-4 min-w-0">
                   {moderationEvents.length > 0 && (
@@ -3448,7 +3508,7 @@ export default function AdminModeration({ embedded = false }) {
                   </div>
                   )}
                 <ReadinessChecklist items={readinessItems} />
-                <DangerIssuesPanel issues={dangerIssues} />
+                <DangerIssuesPanel issues={dangerIssues} onAddPublicPhoto={addPublicPhoto} />
 
                 <section className={`rounded-2xl border p-4 ${editProofStatus === "approved" ? "border-emerald-200 bg-emerald-50" : editProofStatus === "rejected" ? "border-rose-200 bg-rose-50" : "border-amber-200 bg-amber-50"}`}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
@@ -3498,6 +3558,7 @@ export default function AdminModeration({ embedded = false }) {
                     </label>
                     <input
                       type="text"
+                      aria-label="Название услуги"
                       value={editForm.title}
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, title: e.target.value }))
@@ -3512,6 +3573,7 @@ export default function AdminModeration({ embedded = false }) {
                     </label>
                     <input
                       type="text"
+                      aria-label="Категория"
                       value={editForm.category}
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, category: e.target.value }))
@@ -3526,6 +3588,7 @@ export default function AdminModeration({ embedded = false }) {
                     </label>
                     <input
                       type="text"
+                      aria-label="Базовая цена"
                       value={editForm.price}
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, price: e.target.value }))
@@ -3547,9 +3610,6 @@ export default function AdminModeration({ embedded = false }) {
                     </select>
                   </div>
 
-                  <TextField label="Netto" value={editForm.net_price} onChange={(value) => setDetailValue(detailKey(["netPrice", "net_price"], "netPrice"), value)} />
-                  <TextField label="Gross" value={editForm.gross_price} onChange={(value) => setDetailValue(detailKey(["grossPrice", "gross_price", "price"], "grossPrice"), value)} />
-                  <TextField label="Страна" value={editForm.country} onChange={(value) => setDetailValue(detailKey(["directionCountry", "country"], "directionCountry"), value)} />
                   <TextField label="Город" value={editForm.city} onChange={(value) => setDetailValue("city", value)} />
                   <TextField label="Локация / маршрут" value={editForm.location} onChange={(value) => setDetailValue("location", value)} />
                   <label className="block min-w-0">
@@ -3679,8 +3739,8 @@ export default function AdminModeration({ embedded = false }) {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <TextField
                       label="Страна / город"
-                      value={formatDetailValue(editDetails.directionCountry || editDetails.location)}
-                      onChange={(value) => setDetailValue(detailKey(["directionCountry", "location"], "directionCountry"), value)}
+                      value={formatDetailValue(pickFirst(editDetails.directionCountry, editDetails.country, editForm.country))}
+                      onChange={(value) => setDetailValue(detailKey(["directionCountry", "country"], "directionCountry"), value)}
                       placeholder="Стамбул, Турция"
                     />
                     <TextField
@@ -3744,13 +3804,13 @@ export default function AdminModeration({ embedded = false }) {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <TextField
                       label="Netto"
-                      value={formatDetailValue(editDetails.netPrice || editDetails.net_price)}
+                      value={formatDetailValue(pickFirst(editDetails.netPrice, editDetails.net_price, editForm.net_price))}
                       onChange={(value) => setDetailValue(detailKey(["netPrice", "net_price"], "netPrice"), value)}
                       placeholder="2850"
                     />
                     <TextField
                       label="Gross"
-                      value={formatDetailValue(editDetails.grossPrice || editDetails.gross_price || editDetails.price)}
+                      value={formatDetailValue(pickFirst(editDetails.grossPrice, editDetails.gross_price, editDetails.price, editForm.gross_price, editForm.price))}
                       onChange={(value) => setDetailValue(detailKey(["grossPrice", "gross_price", "price"], "grossPrice"), value)}
                       placeholder="3150"
                     />
@@ -3874,10 +3934,9 @@ export default function AdminModeration({ embedded = false }) {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-sm font-medium mb-2">
-                    {t("moderation.images", { defaultValue: "Изображения" })}
-                  </label>
+                <section ref={publicPhotosRef} aria-label="Фото карточки" className="scroll-mt-4 rounded-2xl border border-sky-200 bg-sky-50/40 p-4">
+                  <h2 className="text-sm font-bold text-slate-900">Фото карточки</h2>
+                  <p className="mb-3 mt-1 text-xs text-slate-600">Эти фото видят клиенты на сайте и в Telegram. Proof используется для внутренней проверки — не загружайте сюда брони и документы с личными данными.</p>
 
                   {editImages.length > 0 ? (
                     <div className="flex flex-wrap gap-3 mb-3">
@@ -3917,8 +3976,9 @@ export default function AdminModeration({ embedded = false }) {
                           type="file"
                           accept="image/*"
                           multiple
+                          ref={publicPhotoInputRef}
                           onChange={uploadEditImages}
-                          disabled={imageUploadBusy || editImages.length >= 20}
+                          disabled={editSaving || proofUploadBusy || imageUploadBusy || editImages.length >= 20}
                           className="sr-only"
                         />
                         {imageUploadBusy ? "Загрузка..." : "Выбрать изображения"}
@@ -3954,7 +4014,7 @@ export default function AdminModeration({ embedded = false }) {
                       </div>
                     )}
                   </div>
-                </div>
+                </section>
                 <div>
                   <label className="block text-sm font-medium mb-1">
                     availability JSON
@@ -3984,7 +4044,7 @@ export default function AdminModeration({ embedded = false }) {
               <div className="grid shrink-0 grid-cols-2 gap-2 border-t border-slate-200 bg-white px-4 py-3 sm:flex sm:flex-wrap sm:items-center sm:justify-end md:px-6 md:py-4">
                 <button
                   type="button"
-                  onClick={() => { if (!editSaving && !imageUploadBusy && !proofUploadBusy) setEditOpen(false); }}
+                  onClick={requestCloseEditor}
                   disabled={editSaving || imageUploadBusy || proofUploadBusy}
                   className="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 hover:bg-gray-200"
                 >
@@ -4003,6 +4063,7 @@ export default function AdminModeration({ embedded = false }) {
                 <button
                   type="button"
                   onClick={() => setTelegramPreviewOpen(true)}
+                  disabled={editLoading || editSaving || proofUploadBusy || imageUploadBusy}
                   className="px-4 py-2 rounded-lg bg-slate-900 text-white hover:bg-black"
                 >
                   <span className="sm:hidden">Telegram</span>
@@ -4032,6 +4093,20 @@ export default function AdminModeration({ embedded = false }) {
           </div>,
           document.body
         )}
+
+      {discardConfirmOpen && createPortal(
+        <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/60 p-4">
+          <div role="alertdialog" aria-modal="true" aria-labelledby="unsaved-title" aria-describedby="unsaved-description" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h2 id="unsaved-title" className="text-lg font-bold text-slate-900">Есть несохранённые изменения</h2>
+            <p id="unsaved-description" className="mt-2 text-sm text-slate-600">Сохраните изменения перед закрытием или вернитесь к редактированию.</p>
+            <div className="mt-5 flex flex-col gap-2">
+              <button type="button" disabled={editSaving} onClick={() => { setDiscardConfirmOpen(false); saveEdit(); }} className="rounded-xl bg-blue-600 px-4 py-2 text-sm font-bold text-white disabled:opacity-50">{editSaving ? "Сохраняем…" : "Сохранить и закрыть"}</button>
+              <button type="button" autoFocus disabled={editSaving} onClick={() => setDiscardConfirmOpen(false)} className="rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold">Продолжить редактирование</button>
+              <button type="button" disabled={editSaving} onClick={discardEditor} className="rounded-xl px-4 py-2 text-sm font-semibold text-rose-700">Закрыть без сохранения</button>
+            </div>
+          </div>
+        </div>, document.body
+      )}
 
       {telegramPreviewOpen && (
         <TelegramPreviewModal
