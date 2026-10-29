@@ -158,7 +158,7 @@ const QUICK_DETAIL_KEYS = new Set([
   "grossPrice", "gross_price", "price", "pricePerPerson", "priceFor", "food",
   "flightDetails", "flight_details", "flight_info", "flightIncluded", "airTickets",
   "aviaTickets", "transferIncluded", "hasTransfer", "transfer", "insurance",
-  "insuranceIncluded", "visa", "visaIncluded",
+  "insuranceIncluded", "visa", "visaIncluded", "proofImages", "proofUrl", "telegramProofFileId",
 ]);
 
 const DETAIL_LABELS = {
@@ -2436,6 +2436,7 @@ export default function AdminModeration({ embedded = false }) {
   const [newImageUrl, setNewImageUrl] = useState("");
   const [imageAddError, setImageAddError] = useState("");
   const [imageUploadBusy, setImageUploadBusy] = useState(false);
+  const [proofUploadBusy, setProofUploadBusy] = useState(false);
   const [moderationEvents, setModerationEvents] = useState([]);
   const [actionBusy, setActionBusy] = useState(null);
   const [telegramPreviewOpen, setTelegramPreviewOpen] = useState(false);
@@ -2867,6 +2868,34 @@ export default function AdminModeration({ embedded = false }) {
     });
   };
 
+  const setProofImages = (images) => {
+    setDetailValue("proofImages", JSON.stringify(normalizeImages(images)));
+  };
+
+  const uploadProofImages = async (event) => {
+    const input = event.currentTarget;
+    const files = Array.from(input.files || []);
+    if (!files.length || !editItemId) return;
+    setProofUploadBusy(true);
+    try {
+      const data = new FormData();
+      files.forEach((file) => data.append("files", file));
+      const response = await axios.post(
+        `${API_BASE}/api/admin/services/${editItemId}/proof-images/upload`,
+        data,
+        { headers: { ...cfg.headers, "Content-Type": "multipart/form-data" } }
+      );
+      const urls = (response?.data?.images || []).map((image) => image?.url).filter(Boolean);
+      setProofImages([...normalizeImages(editDetails.proofImages), ...urls]);
+      tSuccess(urls.length === 1 ? "Подтверждение добавлено" : `Добавлено подтверждений: ${urls.length}`);
+    } catch (error) {
+      tError(error?.response?.data?.message || "Не удалось загрузить подтверждение");
+    } finally {
+      setProofUploadBusy(false);
+      input.value = "";
+    }
+  };
+
   const removeDetailRow = (idx) => {
     setEditDetailsRows((prev) => prev.filter((_, i) => i !== idx));
   };
@@ -2993,6 +3022,8 @@ export default function AdminModeration({ embedded = false }) {
   }
 
   const editDetails = rowsToDetails(editDetailsRows);
+  const editProofImages = normalizeImages(editDetails.proofImages);
+  const editProofStatus = String(editDetails.proofReviewStatus || "pending").toLowerCase();
   const businessDetailRows = editDetailsRows
     .map((row, index) => ({ ...row, index }))
     .filter((row) => !QUICK_DETAIL_KEYS.has(row.key) && !INTERNAL_DETAIL_KEYS.has(row.key));
@@ -3336,13 +3367,16 @@ export default function AdminModeration({ embedded = false }) {
 
       {editOpen &&
         createPortal(
-          <div className="fixed inset-0 z-[5000] bg-black/60 flex items-center justify-center p-4">
-            <div className="w-full max-w-7xl max-h-[92vh] overflow-y-auto rounded-2xl bg-white shadow-2xl">
-              <div className="flex items-center justify-between px-5 py-4 border-b">
-                <div className="text-lg font-semibold">
+          <div className="fixed inset-0 z-[5000] bg-slate-950/70 flex items-center justify-center p-3 md:p-6">
+            <div className="flex w-full max-w-6xl max-h-[94vh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl">
+              <div className="flex shrink-0 items-center justify-between border-b border-slate-200 bg-white px-6 py-4">
+                <div>
+                <div className="text-lg font-bold text-slate-950">
                   {t("moderation.edit_service", {
                     defaultValue: "Редактирование услуги",
                   })}
+                </div>
+                <div className="mt-0.5 text-sm text-slate-500">#{editItemId} · Проверьте данные и подтверждение перед публикацией</div>
                 </div>
                 <button
                   type="button"
@@ -3353,8 +3387,9 @@ export default function AdminModeration({ embedded = false }) {
                 </button>
               </div>
 
-              <div className="p-5 grid grid-cols-1 xl:grid-cols-[1fr_380px] gap-5">
-                <div className="space-y-4">
+              <div className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
+              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5">
+                <div className="space-y-4 min-w-0">
                   {moderationEvents.length > 0 && (
                   <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
                     <div className="mb-2 text-sm font-semibold text-slate-700">
@@ -3374,6 +3409,43 @@ export default function AdminModeration({ embedded = false }) {
                   )}
                 <ReadinessChecklist items={readinessItems} />
                 <DangerIssuesPanel issues={dangerIssues} />
+
+                <section className={`rounded-2xl border p-4 ${editProofStatus === "approved" ? "border-emerald-200 bg-emerald-50" : editProofStatus === "rejected" ? "border-rose-200 bg-rose-50" : "border-amber-200 bg-amber-50"}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-bold text-slate-950">Подтверждение подлинности</div>
+                      <div className="mt-1 text-xs text-slate-600">Фото, документ или скриншот, подтверждающий цену и доступность услуги.</div>
+                    </div>
+                    <span className={`rounded-full px-3 py-1 text-xs font-bold ${editProofStatus === "approved" ? "bg-emerald-600 text-white" : editProofStatus === "rejected" ? "bg-rose-600 text-white" : "bg-amber-200 text-amber-900"}`}>
+                      {editProofStatus === "approved" ? "Подтверждено" : editProofStatus === "rejected" ? "Отклонено" : "Не проверено"}
+                    </span>
+                  </div>
+
+                  {editProofImages.length > 0 ? (
+                    <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+                      {editProofImages.map((image, index) => (
+                        <div key={`${image}-${index}`} className="group relative aspect-[4/3] overflow-hidden rounded-xl border border-white bg-white shadow-sm">
+                          <button type="button" onClick={() => setProofViewer(image)} className="h-full w-full">
+                            <img src={image} alt="Подтверждение" className="h-full w-full object-cover" />
+                          </button>
+                          <button type="button" onClick={() => setProofImages(editProofImages.filter((_, itemIndex) => itemIndex !== index))} className="absolute right-2 top-2 grid h-7 w-7 place-items-center rounded-full bg-slate-950/80 text-white opacity-0 transition group-hover:opacity-100" aria-label="Удалить подтверждение">×</button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="mt-4 rounded-xl border border-dashed border-amber-300 bg-white/70 px-4 py-6 text-center text-sm text-amber-900">Подтверждение ещё не загружено</div>
+                  )}
+
+                  <div className="mt-4 flex flex-wrap items-center gap-2">
+                    <label className={`cursor-pointer rounded-lg bg-slate-950 px-4 py-2 text-sm font-bold text-white hover:bg-black ${proofUploadBusy ? "pointer-events-none opacity-60" : ""}`}>
+                      <input type="file" accept="image/*" multiple className="sr-only" disabled={proofUploadBusy} onChange={uploadProofImages} />
+                      {proofUploadBusy ? "Загрузка..." : "Добавить подтверждение"}
+                    </label>
+                    <button type="button" onClick={() => setDetailValue("proofReviewStatus", "approved")} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${editProofStatus === "approved" ? "border-emerald-600 bg-emerald-600 text-white" : "border-emerald-200 bg-white text-emerald-700"}`}>Подтвердить</button>
+                    <button type="button" onClick={() => setDetailValue("proofReviewStatus", "rejected")} className={`rounded-lg border px-3 py-2 text-sm font-semibold ${editProofStatus === "rejected" ? "border-rose-600 bg-rose-600 text-white" : "border-rose-200 bg-white text-rose-700"}`}>Отклонить</button>
+                    {editProofStatus !== "pending" && <button type="button" onClick={() => setDetailValue("proofReviewStatus", "pending")} className="px-3 py-2 text-sm font-semibold text-slate-500">Сбросить</button>}
+                  </div>
+                </section>
 
                 <EditSection title="Основные данные">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3459,6 +3531,9 @@ export default function AdminModeration({ embedded = false }) {
                     />
                   </div>
 
+                  <details className="md:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <summary className="cursor-pointer text-sm font-semibold text-slate-600">Технические контакты Telegram</summary>
+                    <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div>
                     <label className="block text-sm font-medium mb-1">
                       Refused bot chat ID
@@ -3512,6 +3587,8 @@ export default function AdminModeration({ embedded = false }) {
                       placeholder="70659475"
                     />
                   </div>
+                    </div>
+                  </details>
                 </div>
 
                 <div>
@@ -3851,8 +3928,9 @@ export default function AdminModeration({ embedded = false }) {
                   images={editImages}
                 />
               </div>
+              </div>
 
-              <div className="flex items-center justify-end gap-2 px-5 py-4 border-t">
+              <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-white px-6 py-4">
                 <button
                   type="button"
                   onClick={() => setEditOpen(false)}
