@@ -55,9 +55,10 @@ function buildCorrectionReview(request, service, review) {
 }
 async function readCorrectionReview(db, service) {
   const requests = await db.query(`SELECT * FROM service_moderation_events WHERE service_id=$1 AND action IN ('rejected','correction_requested') ORDER BY created_at DESC,id DESC LIMIT 1`,[service.id]);
-  if (!requests.rows[0]) return null;
-  const reviews = await db.query(`SELECT * FROM service_moderation_events WHERE service_id=$1 AND action='correction_reviewed' AND meta->>'requestId'=$2 ORDER BY created_at DESC,id DESC LIMIT 1`,[service.id,String(requests.rows[0].id)]);
-  return buildCorrectionReview(requests.rows[0],service,reviews.rows[0]);
+  const request = requests.rows[0] || (service.rejected_reason ? {id:`legacy:${service.id}`,created_at:service.rejected_at || service.updated_at,reason:service.rejected_reason,reason_code:object(object(service.details).meta).moderation_rejection_code,meta:{}} : null);
+  if (!request) return null;
+  const reviews = await db.query(`SELECT * FROM service_moderation_events WHERE service_id=$1 AND action='correction_reviewed' AND meta->>'requestId'=$2 ORDER BY created_at DESC,id DESC LIMIT 1`,[service.id,String(request.id)]);
+  return buildCorrectionReview(request,service,reviews.rows[0]);
 }
 function correctionNotificationParts(title,reason) {
   const text=`↩️ Нужны исправления услуги\n\n📌 ${String(title || "").slice(0,200)}\n\nЗамечания:\n${reason}\n\nИсправьте замечания в разделе «Мои услуги» и отправьте услугу на модерацию повторно.`;

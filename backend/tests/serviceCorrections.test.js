@@ -99,3 +99,7 @@ test('resubmitted multiple-reason requests remain in the correction queue',()=>{
  const current=service({last_moderation_action:'correction_requested'});assert.equal(analyzeModerationService(current).hasCorrectionHistory,true);
  const {queueCandidateQuery}=require('../utils/adminModerationQueue');assert.ok(queueCandidateQuery({status:'pending'}).sql.includes("action NOT IN ('service_edited','correction_reviewed')"));
 });
+
+test('legacy rejected services without an audit event retain a manual review',async()=>{
+ const db={query:async()=>({rows:[]})};const old=service({rejected_reason:'Добавьте подтверждение',rejected_at:'2026-05-01T00:00:00Z'});const result=await readCorrectionReview(db,old);assert.equal(result.requestId,'legacy:42');assert.equal(result.hasBaseline,false);assert.equal(result.reason,old.rejected_reason);assert.equal(await readCorrectionReview(db,service()),null);
+});
