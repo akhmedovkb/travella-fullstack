@@ -3,6 +3,7 @@ import React, { useEffect, useRef, useState, useId } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import axios from "axios";
+import ServiceProofComparison from "../components/ServiceProofComparison";
 import { BadgeCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo } from "../shared/toast";
@@ -357,11 +358,25 @@ function parseDateValue(value) {
 }
 
 function ProofLightbox({ image, onClose }) {
+  const closeButtonRef = useRef(null);
+  useEffect(() => {
+    if (!image) return;
+    const previousFocus = document.activeElement;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    closeButtonRef.current?.focus();
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      if (previousFocus?.isConnected) previousFocus.focus({ preventScroll: true });
+    };
+  }, [image]);
   if (!image) return null;
 
   return createPortal(
     <div
-      className="fixed inset-0 z-[4000] bg-black/85 flex items-center justify-center p-4"
+      role="dialog" aria-modal="true" aria-label="Просмотр подтверждения"
+      onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); onClose(); } }}
+      className="fixed inset-0 z-[7000] bg-black/85 flex items-center justify-center p-4"
       onClick={onClose}
     >
       <div
@@ -372,7 +387,8 @@ function ProofLightbox({ image, onClose }) {
           type="button"
           onClick={onClose}
           className="absolute -top-3 -right-3 w-9 h-9 rounded-full bg-white text-black shadow-lg text-lg font-semibold"
-          aria-label="Close"
+          aria-label="Закрыть подтверждение"
+          ref={closeButtonRef}
         >
           ×
         </button>
@@ -2467,6 +2483,7 @@ export default function AdminModeration({ embedded = false }) {
   const [confirmConflictReload, setConfirmConflictReload] = useState(false);
   const [editorSection, setEditorSection] = useState("main");
   const [historyExpanded, setHistoryExpanded] = useState(false);
+  const [proofComparison, setProofComparison] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const editRequestId = useRef(0);
   const publicPhotosRef = useRef(null);
@@ -2540,10 +2557,20 @@ export default function AdminModeration({ embedded = false }) {
   const [rebroadcastBusy, setRebroadcastBusy] = useState(false);
 
   const editErrors = validateModerationEditor(editForm, rowsToDetails(editDetailsRows));
-  const navigateEditor = (section) => {
+  const navigateEditor = (section, pinnedProof = proofComparison) => {
     setEditorSection(section);
     if (section === "history") setHistoryExpanded(true);
-    document.getElementById(`moderation-editor-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const target = document.getElementById(`moderation-editor-${section}`);
+    if (target) {
+      const proofHeight = document.getElementById("moderation-proof-pane")?.getBoundingClientRect().height || 230;
+      target.style.scrollMarginTop = pinnedProof && window.innerWidth < 1024 ? `${proofHeight + 12}px` : "16px";
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+  const toggleProofComparison = () => {
+    const next = !proofComparison;
+    setProofComparison(next);
+    requestAnimationFrame(() => navigateEditor("details", next));
   };
   useEffect(() => {
     if (editConflict) document.getElementById("moderation-editor-conflict")?.scrollIntoView({ block: "start" });
@@ -2822,6 +2849,7 @@ export default function AdminModeration({ embedded = false }) {
     setEditConflict("");
     setConfirmConflictReload(false);
     setHistoryExpanded(false);
+    setProofComparison(false);
     setEditorSection("main");
     setEditOpen(true);
     setEditLoading(true);
@@ -3515,7 +3543,7 @@ export default function AdminModeration({ embedded = false }) {
       {editOpen &&
         createPortal(
           <div role="dialog" aria-modal="true" aria-label="Редактирование услуги" onKeyDown={(event) => { if (event.key === "Escape") { event.stopPropagation(); requestCloseEditor(); } }} className="fixed inset-0 z-[5000] bg-slate-950/70 flex items-center justify-center p-3 md:p-6">
-            <div className="flex w-full max-w-6xl max-h-[94dvh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl">
+            <div className={`flex w-full ${proofComparison ? "max-w-7xl" : "max-w-6xl"} max-h-[94dvh] flex-col overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 shadow-2xl`}>
               <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-200 bg-white px-4 py-3 md:px-6 md:py-4">
                 <div>
                 <div className="text-lg font-bold text-slate-950">
@@ -3537,10 +3565,11 @@ export default function AdminModeration({ embedded = false }) {
 
               {!editLoading && <nav aria-label="Разделы редактора" className="flex shrink-0 flex-wrap gap-1 border-b border-slate-200 bg-white px-4 py-2">
                 {[["main", "Данные"], ["proof", "Proof"], ["photos", "Фото"], ["details", "Параметры"], ["history", "История"]].map(([key, label]) => <button key={key} type="button" aria-current={editorSection === key ? "location" : undefined} onClick={() => navigateEditor(key)} className={`rounded-lg px-3 py-2 text-xs font-bold ${editorSection === key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{label}</button>)}
+                <button type="button" aria-pressed={proofComparison} onClick={toggleProofComparison} className={`rounded-lg px-3 py-2 text-xs font-bold ${proofComparison ? "bg-violet-700 text-white" : "bg-violet-50 text-violet-800 hover:bg-violet-100"}`}>Сверка proof</button>
               </nav>}
               {editLoading && <div role="status" className="flex min-h-48 items-center justify-center gap-3 p-8 text-slate-600"><span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" aria-hidden="true" />Загружаем услугу #{editItemId}…</div>}
               <div aria-busy={editLoading} className={`min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${editLoading ? "hidden" : ""}`}>
-              <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5">
+              <div className={proofComparison ? "flex flex-col gap-5 lg:grid lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.85fr)]" : "grid grid-cols-1 gap-5 xl:grid-cols-[minmax(0,1fr)_340px]"}>
                 <div className="space-y-4 min-w-0">
                   <details id="moderation-editor-history" open={historyExpanded} onToggle={(event) => setHistoryExpanded(event.currentTarget.open)} className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-3">
                     <summary className="cursor-pointer text-sm font-bold text-slate-800">История правок и модерации · {moderationEvents.length}</summary>
@@ -4088,12 +4117,10 @@ export default function AdminModeration({ embedded = false }) {
                   />
                 </div>
                 </div>
-                <ModerationPreview
-                  serviceId={editItemId}
-                  form={editForm}
-                  details={editDetails}
-                  images={editImages}
-                />
+                {proofComparison ? <aside id="moderation-proof-pane" className="sticky top-0 z-20 order-first w-full self-start lg:order-last lg:w-auto lg:max-h-[calc(94dvh-230px)] lg:overflow-y-auto">
+                  <ServiceProofComparison serviceId={editItemId} images={editProofImages} form={editForm} details={editDetails} onOpenImage={setProofViewer} onManageProof={() => { setProofComparison(false); requestAnimationFrame(() => navigateEditor("proof",false)); }} onClose={() => setProofComparison(false)} />
+                </aside> : <ModerationPreview serviceId={editItemId} form={editForm} details={editDetails} images={editImages} />}
+
               </div>
               </div>
 
