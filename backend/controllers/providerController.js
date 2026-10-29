@@ -1177,15 +1177,17 @@ const getServices = async (req, res) => {
 };
 
 const updateService = async (req, res) => {
+  let db,transactionOpen=false;
   try {
+    db=await pool.connect();await db.query("BEGIN");transactionOpen=true;
     const providerId = req.user.id;
     const serviceId = req.params.id;
 
     // 1) Узнаём текущий статус и владение
-    const cur = await pool.query(
+    const cur = await db.query(
       `SELECT *
          FROM services
-        WHERE id=$1 AND provider_id=$2`,
+        WHERE id=$1 AND provider_id=$2 FOR UPDATE`,
       [serviceId, providerId]
     );
     if (!cur.rowCount) {
@@ -1214,29 +1216,19 @@ const updateService = async (req, res) => {
     }
 
     if (currentStatus === "published" || currentStatus === "approved" || currentStatus === "active" || currentStatus === "rejected" || currentModerationStatus === "approved" || currentModerationStatus === "rejected") {
-      const resetRes = await pool.query(
+      await db.query(
         `UPDATE services
             SET status='draft',
                 moderation_status='draft',
                 submitted_at=NULL,
                 published_at=NULL,
                 approved_at=NULL,
-                rejected_at=NULL,
-                rejected_reason=NULL
+                rejected_at=CASE WHEN status='rejected' OR moderation_status='rejected' THEN rejected_at ELSE NULL END,
+                rejected_reason=CASE WHEN status='rejected' OR moderation_status='rejected' THEN rejected_reason ELSE NULL END
           WHERE id=$1 AND provider_id=$2
           RETURNING *`,
         [serviceId, providerId]
       );
-
-      await logProviderServiceAction({
-        req,
-        action: "service_status_reset_to_draft",
-        providerId,
-        serviceId,
-        oldService: prevSvcRow,
-        newService: resetRes.rows[0] || { ...prevSvcRow, status: "draft" },
-        meta: { reason: "provider_started_editing_published_or_rejected_service" },
-      });
     }
 
     // 3) Нормализуем вход
@@ -1294,7 +1286,7 @@ const updateService = async (req, res) => {
     }
 
     // 4) Обновляем основное содержимое
-    const upd = await pool.query(
+    const upd = await db.query(
       `UPDATE services
           SET title=$1,
               description=$2,
@@ -1324,6 +1316,8 @@ const updateService = async (req, res) => {
     if (!upd.rowCount) {
       return res.status(404).json({ message: "Услуга не найдена" });
     }
+
+    await db.query("COMMIT");transactionOpen=false;
 
     await logProviderServiceAction({
       req,
@@ -1358,7 +1352,7 @@ const updateService = async (req, res) => {
       const drop = isPriceDrop(prevPrices, nextPrices);
 
       // Рассылаем только для refused_* (логика внутри broadcastPriceDropCard)
-      if (drop.any) {
+      if (drop.any && ["published","approved","active"].includes(String(nextSvcRow.status || "").toLowerCase()) && ["approved","published","active"].includes(String(nextSvcRow.moderation_status || "").toLowerCase())) {
         await broadcastPriceDropCard(nextSvcRow.id, "🔥 <b>ЦЕНА СНИЖЕНА!</b>");
       }
     } catch (e) {
@@ -1384,7 +1378,7 @@ const updateService = async (req, res) => {
       });
     }
     return res.status(500).json({ message: "Ошибка сервера" });
-  }
+  } finally {if(transactionOpen) await db.query("ROLLBACK");db?.release();}
 };
 
 
@@ -1640,14 +1634,15 @@ const updateServiceImagesOnly = async (req, res) => {
               submitted_at = CASE WHEN $4::boolean THEN NULL ELSE submitted_at END,
               published_at = CASE WHEN $4::boolean THEN NULL ELSE published_at END,
               approved_at = CASE WHEN $4::boolean THEN NULL ELSE approved_at END,
-              rejected_at = CASE WHEN $4::boolean THEN NULL ELSE rejected_at END,
-              rejected_reason = CASE WHEN $4::boolean THEN NULL ELSE rejected_reason END,
+              rejected_at = CASE WHEN $4::boolean AND status<>'rejected' AND COALESCE(moderation_status,'')<>'rejected' THEN NULL ELSE rejected_at END,
+              rejected_reason = CASE WHEN $4::boolean AND status<>'rejected' AND COALESCE(moderation_status,'')<>'rejected' THEN NULL ELSE rejected_reason END,
               updated_at=NOW()
         WHERE id=$2 AND provider_id=$3 AND deleted_at IS NULL
+          AND status IS DISTINCT FROM 'pending' AND moderation_status IS DISTINCT FROM 'pending'
         RETURNING *`,
       [JSON.stringify(imagesArr), serviceId, providerId, shouldResetToDraft]
     );
-    if (!upd.rowCount) return res.status(404).json({ message: "Услуга не найдена" });
+    if (!upd.rowCount) return res.status(409).json({ message: "Статус услуги изменился. Обновите страницу перед редактированием.", code:"SERVICE_EDIT_CONFLICT" });
 
     await logProviderFunnelEvent({
       source: "web_provider_dashboard",

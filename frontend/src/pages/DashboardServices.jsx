@@ -6,6 +6,7 @@ import ISO6391 from "iso-639-1";
 import Select from "react-select";
 import AsyncCreatableSelect from "react-select/async-creatable";
 import { useTranslation } from "react-i18next";
+import { ProviderCorrectionContext, ProviderCorrectionNote, ProviderCorrectionPanel, useProviderCorrections } from "../components/ProviderServiceCorrections";
 import ConfirmModal from "../components/ConfirmModal";
 import { tSuccess, tError, tWarn } from "../shared/toast";
 import { redirectToPaymeGuide } from "../utils/paymeGuide";
@@ -1189,13 +1190,13 @@ function fileToDataUrl(file) {
   });
 }
 
-function Field({ label, children, hint }) {
+function Field({ label, children, hint, correctionGroup }) {
   return (
-    <label className="block">
+    <div className="min-w-0"><label className="block">
       <span className="mb-1.5 block text-sm font-bold text-slate-700">{label}</span>
       {children}
       {hint ? <span className="mt-1 block text-xs font-semibold text-slate-400">{hint}</span> : null}
-    </label>
+    </label>{correctionGroup && <ProviderCorrectionNote group={correctionGroup}/>}</div>
   );
 }
 
@@ -1398,7 +1399,7 @@ function ImageUploader({ title, hint, images, onChange, max = 10 }) {
   };
 
   return (
-    <div className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
+    <section aria-label={title} className="rounded-[1.5rem] border border-slate-200 bg-white p-4">
       <div className="flex items-start justify-between gap-3">
         <div>
           <div className="text-sm font-black text-slate-900">{title}</div>
@@ -1419,7 +1420,7 @@ function ImageUploader({ title, hint, images, onChange, max = 10 }) {
               <button
                 type="button"
                 onClick={() => onChange(images.filter((_, i) => i !== idx))}
-                className="absolute right-1 top-1 hidden rounded-full bg-white/90 px-2 py-1 text-xs font-black text-rose-600 shadow group-hover:block"
+                aria-label={t("provider_corrections.remove_image",{number:idx+1})} className="absolute right-1 top-1 grid h-7 w-7 place-items-center rounded-full bg-white/90 text-xs font-black text-rose-600 shadow sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
               >
                 ×
               </button>
@@ -1436,7 +1437,7 @@ function ImageUploader({ title, hint, images, onChange, max = 10 }) {
         <input type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
         {t("marketplace_form.photos_choose", { defaultValue: "Выбрать файлы" })}
       </label>
-    </div>
+    </section>
   );
 }
 
@@ -1783,6 +1784,7 @@ export default function DashboardServices({ viewMode = "create" }) {
   const [step, setStep] = useState(1);
   const [saving, setSaving] = useState(false);
   const [selectedService, setSelectedService] = useState(null);
+  const providerCorrection = useProviderCorrections(api,selectedService);
   const [serviceListFilter, setServiceListFilter] = useState("active");
   const [serviceSearch, setServiceSearch] = useState("");
   const [confirmModal, setConfirmModal] = useState(null);
@@ -2090,6 +2092,12 @@ export default function DashboardServices({ viewMode = "create" }) {
     [category, title, description, price, images, details, isExtended, t]
   );
 
+  const providerCorrectionDirty=Boolean(selectedService && editBaselineRef.current !== stableFingerprint(buildServiceSavePayload({category,title,description,price,images,details,isExtended})));
+  const navigateCorrectionFields=(group)=>{
+    if(isExtended) setStep(({dates:1,details:1,hotel:2,proof:3,photos:3,price:4})[group] || 1);
+    requestAnimationFrame(()=>document.getElementById(group==="photos"?"provider-public-photos":group==="proof"?"provider-proof-images":"provider-service-fields")?.scrollIntoView({behavior:"smooth",block:"start"}));
+  };
+
   const validate = () => {
     if (currentValidationIssues.length > 0) {
       tWarn(currentValidationIssues[0]);
@@ -2140,6 +2148,8 @@ export default function DashboardServices({ viewMode = "create" }) {
       if (shouldOfferSupport) {
         setSupportPayError("");
         setSupportPromptService(saved);
+      } else if (saved?.id && providerCorrection.correction) {
+        loadServiceToEdit(saved,{stayOnPage:true});
       } else if (saved?.id) {
         navigate("/dashboard/services/my");
       }
@@ -2308,9 +2318,14 @@ export default function DashboardServices({ viewMode = "create" }) {
     }
   };
 
-  const submitForModeration = async (service, event) => {
+  const submitForModeration = async (service, event, correction = null) => {
     event?.stopPropagation?.();
     if (!service?.id) return;
+
+    if(!correction) {
+      try {const response=await api.get(`/api/providers/services/${service.id}/corrections`);if(response.data.correction){loadServiceToEdit(service);tWarn(t("provider_corrections.open_checklist"));return;}}
+      catch(error){tError(error.response?.data?.message || t("provider_corrections.load_error"));return;}
+    }
 
     const serviceDetails = asDetails(service);
     const serviceIsExtended = profile?.type === "agent" && EXTENDED_AGENT_CATEGORIES.includes(service.category);
@@ -2334,7 +2349,7 @@ export default function DashboardServices({ viewMode = "create" }) {
     }
 
     try {
-      await api.post(`/api/providers/services/${service.id}/submit`, {});
+      await api.post(`/api/providers/services/${service.id}/submit`, correction ? {correction} : {});
       setServices((prev) => prev.map((s) => (s.id === service.id ? { ...s, status: "pending", moderation_status: "pending" } : s)));
       if (selectedService?.id === service.id) {
         setSelectedService((prev) => prev ? { ...prev, status: "pending", moderation_status: "pending" } : prev);
@@ -2343,6 +2358,7 @@ export default function DashboardServices({ viewMode = "create" }) {
     } catch (err) {
       console.error(err);
       const response = err?.response?.data;
+      if(String(response?.code || "").startsWith("CORRECTION_")){providerCorrection.reload();tError(response.message);return;}
       const blockerKeys = {
         TITLE_REQUIRED: "validation.title_required",
         DESCRIPTION_REQUIRED: "validation.description_required",
@@ -2482,7 +2498,7 @@ export default function DashboardServices({ viewMode = "create" }) {
   if (!profile?.id) return null;
 
   return (
-    <div className="space-y-6">
+    <ProviderCorrectionContext.Provider value={providerCorrection.correction}><div className="space-y-6">
       <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-200 bg-white p-4 sm:p-5">
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -2705,6 +2721,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                             </div>
                           </button>
 
+                          {service.rejected_reason && ["draft","rejected"].includes(getServiceStatus(service)) && <div className="border-t border-amber-200 bg-amber-50 p-3 text-sm"><strong>{t("provider_corrections.card_title")}</strong><p className="mt-1 line-clamp-3 whitespace-pre-wrap break-words">{service.rejected_reason}</p><button type="button" onClick={()=>loadServiceToEdit(service)} className="mt-2 font-bold text-amber-900 underline">{t("provider_corrections.card_open")}</button></div>}
                           {isDeletedService(service) && (
                             <div className="border-t border-slate-100 bg-slate-50 px-3 py-2">
                               <div className="grid grid-cols-2 gap-2">
@@ -2834,6 +2851,8 @@ export default function DashboardServices({ viewMode = "create" }) {
             </div>}
 
             <div className="mx-auto max-w-[1180px] space-y-5">
+            {selectedService && <ProviderCorrectionPanel state={providerCorrection} dirty={providerCorrectionDirty} saving={saving} onSave={saveService} onNavigate={navigateCorrectionFields} onSubmit={correction=>submitForModeration(selectedService,null,correction)}/>}
+
             {selectedService && (
               <div className="mb-5 overflow-hidden rounded-[1.75rem] border border-orange-100 bg-gradient-to-br from-orange-50 via-white to-slate-50 shadow-sm">
                 <div className="flex flex-col gap-4 p-4 md:flex-row md:items-center">
@@ -2920,8 +2939,9 @@ export default function DashboardServices({ viewMode = "create" }) {
               </div>
             )}
 
+            {category && <ProviderCorrectionNote group="details"/>}
             {category && (
-              <div className="mx-auto mt-2 grid max-w-5xl gap-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
+              <div id="provider-service-fields" className="mx-auto mt-2 grid max-w-5xl gap-5 lg:grid-cols-[220px_minmax(0,1fr)] lg:items-start">
                 <aside className="space-y-3 lg:sticky lg:top-5">
                   <div className="rounded-lg border border-slate-200 bg-white p-4">
                     <div className="text-[11px] font-black uppercase tracking-wide text-slate-400">{t("marketplace_form.service_type", { defaultValue: "Тип услуги" })}</div>
@@ -2968,7 +2988,7 @@ export default function DashboardServices({ viewMode = "create" }) {
 
                       <div className="grid gap-5 p-5 sm:grid-cols-2">
                         <div className="sm:col-span-2">
-                          <Field label={t("title", { defaultValue: "Название услуги" })} hint={t("marketplace_form.title_hint", { defaultValue: "Короткое и конкретное: например, «Обзорная экскурсия по Самарканду»" })}>
+                          <Field correctionGroup="details" label={t("title", { defaultValue: "Название услуги" })} hint={t("marketplace_form.title_hint", { defaultValue: "Короткое и конкретное: например, «Обзорная экскурсия по Самарканду»" })}>
                             <TextInput value={title} onChange={(e) => setTitle(e.target.value)} placeholder={t("marketplace_form.title_placeholder", { defaultValue: "Введите название" })} />
                           </Field>
                         </div>
@@ -3044,7 +3064,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                           </div>
                         </Field>
 
-                        <Field label={`${t("marketplace_form.price", { defaultValue: "Цена за услугу" })}${profile?.currency ? `, ${profile.currency}` : ""}`} hint={t("marketplace_form.price_hint", { defaultValue: "Итоговая стоимость, которую увидит клиент" })}>
+                        <Field correctionGroup="price" label={`${t("marketplace_form.price", { defaultValue: "Цена за услугу" })}${profile?.currency ? `, ${profile.currency}` : ""}`} hint={t("marketplace_form.price_hint", { defaultValue: "Итоговая стоимость, которую увидит клиент" })}>
                           <div className="relative">
                             <BadgeDollarSign aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                             <TextInput className="pl-9" inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0" />
@@ -3052,7 +3072,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                         </Field>
 
                         <div className="sm:col-span-2">
-                          <Field label={t("description", { defaultValue: "Описание" })} hint={t("marketplace_form.description_hint", { defaultValue: "Расскажите о маршруте, программе и важных условиях" })}>
+                          <Field correctionGroup="details" label={t("description", { defaultValue: "Описание" })} hint={t("marketplace_form.description_hint", { defaultValue: "Расскажите о маршруте, программе и важных условиях" })}>
                             <TextArea value={description} onChange={(e) => setDescription(e.target.value)} placeholder={t("marketplace_form.description_placeholder", { defaultValue: "Что входит в услугу и как она проходит" })} />
                           </Field>
                         </div>
@@ -3108,16 +3128,16 @@ export default function DashboardServices({ viewMode = "create" }) {
 
                             {category === "refused_hotel" && (
                               <>
-                                <Field label={t("direction_country", { defaultValue: "Страна" })} hint={t("service_form.hint_country_hotel", { defaultValue: "Страна, где находится отель." })}>
+                                <Field correctionGroup="details" label={t("direction_country", { defaultValue: "Страна" })} hint={t("service_form.hint_country_hotel", { defaultValue: "Страна, где находится отель." })}>
                                   <OptionTextInput listId="svc-destination-country-options" options={SERVICE_FIELD_OPTIONS.destinationCountry} value={details.directionCountry} onChange={(e) => patchDetails({ directionCountry: e.target.value })} placeholder={t("service_form.ph_country", { defaultValue: "Например: Египет" })} />
                                 </Field>
                                 <Field label={t("city", { defaultValue: "Город / курорт" })} hint={t("service_form.hint_city_hotel", { defaultValue: "Город или курорт отеля." })}>
                                   <TextInput value={details.directionTo} onChange={(e) => patchDetails({ directionTo: e.target.value })} placeholder={t("service_form.ph_city_hotel", { defaultValue: "Например: Шарм-эль-Шейх" })} />
                                 </Field>
-                                <Field label={t("check_in", { defaultValue: "Дата заезда" })}>
+                                <Field correctionGroup="dates" label={t("check_in", { defaultValue: "Дата заезда" })}>
                                   <TextInput type="date" value={details.startDate} onChange={(e) => patchDetails({ startDate: e.target.value })} />
                                 </Field>
-                                <Field label={t("check_out", { defaultValue: "Дата выезда" })}>
+                                <Field correctionGroup="dates" label={t("check_out", { defaultValue: "Дата выезда" })}>
                                   <TextInput type="date" value={details.endDate} onChange={(e) => patchDetails({ endDate: e.target.value })} />
                                 </Field>
                               </>
@@ -3131,7 +3151,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                                 <Field label={t("event_category", { defaultValue: "Тип события" })}>
                                   <TextInput value={details.eventCategory} onChange={(e) => patchDetails({ eventCategory: e.target.value })} placeholder={t("service_form.ph_event_category", { defaultValue: "Концерт / спорт / театр" })} />
                                 </Field>
-                                <Field label={t("event_date", { defaultValue: "Дата события" })}>
+                                <Field correctionGroup="dates" label={t("event_date", { defaultValue: "Дата события" })}>
                                   <TextInput type="date" value={details.startDate} onChange={(e) => patchDetails({ startDate: e.target.value })} />
                                 </Field>
                                 <Field label={t("location", { defaultValue: "Локация" })} hint={t("service_form.hint_event_location", { defaultValue: "Город, площадка или зал." })}>
@@ -3142,16 +3162,16 @@ export default function DashboardServices({ viewMode = "create" }) {
 
                             {category === "refused_flight" && (
                               <>
-                                <Field label={t("direction_from", { defaultValue: "Город вылета" })} hint={t("service_form.hint_from_flight", { defaultValue: "Откуда вылетает пассажир." })}>
+                                <Field correctionGroup="details" label={t("direction_from", { defaultValue: "Город вылета" })} hint={t("service_form.hint_from_flight", { defaultValue: "Откуда вылетает пассажир." })}>
                                   <OptionTextInput listId="svc-departure-city-options" options={SERVICE_FIELD_OPTIONS.departureCity} value={details.directionFrom} onChange={(e) => patchDetails({ directionFrom: e.target.value })} placeholder={t("service_form.ph_from", { defaultValue: "Например: Ташкент" })} />
                                 </Field>
-                                <Field label={t("direction_to", { defaultValue: "Город прибытия" })} hint={t("service_form.hint_to_flight", { defaultValue: "Куда прилетает пассажир." })}>
+                                <Field correctionGroup="details" label={t("direction_to", { defaultValue: "Город прибытия" })} hint={t("service_form.hint_to_flight", { defaultValue: "Куда прилетает пассажир." })}>
                                   <TextInput value={details.directionTo} onChange={(e) => patchDetails({ directionTo: e.target.value })} placeholder={t("service_form.ph_to", { defaultValue: "Например: Дубай" })} />
                                 </Field>
-                                <Field label={t("departure_date", { defaultValue: "Дата вылета" })}>
+                                <Field correctionGroup="dates" label={t("departure_date", { defaultValue: "Дата вылета" })}>
                                   <TextInput type="date" value={details.startDate || details.startFlightDate || ""} onChange={(e) => patchDetails({ startDate: e.target.value, startFlightDate: e.target.value })} />
                                 </Field>
-                                <Field label={t("return_date", { defaultValue: "Дата обратно" })} hint={t("service_form.hint_return_optional", { defaultValue: "Заполните только если билет туда-обратно." })}>
+                                <Field correctionGroup="dates" label={t("return_date", { defaultValue: "Дата обратно" })} hint={t("service_form.hint_return_optional", { defaultValue: "Заполните только если билет туда-обратно." })}>
                                   <TextInput type="date" value={details.returnDate || details.endDate || ""} onChange={(e) => patchDetails({ returnDate: e.target.value, endDate: e.target.value })} />
                                 </Field>
                               </>
@@ -3159,19 +3179,19 @@ export default function DashboardServices({ viewMode = "create" }) {
 
                             {category === "refused_tour" && (
                               <>
-                                <Field label={t("direction_country", { defaultValue: "Страна назначения" })} hint={t("service_form.hint_country", { defaultValue: "Страна отдыха или назначения." })}>
+                                <Field correctionGroup="details" label={t("direction_country", { defaultValue: "Страна назначения" })} hint={t("service_form.hint_country", { defaultValue: "Страна отдыха или назначения." })}>
                                   <OptionTextInput listId="svc-destination-country-options" options={SERVICE_FIELD_OPTIONS.destinationCountry} value={details.directionCountry} onChange={(e) => patchDetails({ directionCountry: e.target.value })} placeholder={t("service_form.ph_country", { defaultValue: "Например: Вьетнам" })} />
                                 </Field>
-                                <Field label={t("direction_from", { defaultValue: "Город вылета" })} hint={t("service_form.hint_from", { defaultValue: "Откуда начинается поездка." })}>
+                                <Field correctionGroup="details" label={t("direction_from", { defaultValue: "Город вылета" })} hint={t("service_form.hint_from", { defaultValue: "Откуда начинается поездка." })}>
                                   <OptionTextInput listId="svc-departure-city-options" options={SERVICE_FIELD_OPTIONS.departureCity} value={details.directionFrom} onChange={(e) => patchDetails({ directionFrom: e.target.value })} placeholder={t("service_form.ph_from", { defaultValue: "Например: Ташкент" })} />
                                 </Field>
-                                <Field label={t("direction_to", { defaultValue: "Город прибытия" })} hint={t("service_form.hint_to", { defaultValue: "Куда прилетает турист." })}>
+                                <Field correctionGroup="details" label={t("direction_to", { defaultValue: "Город прибытия" })} hint={t("service_form.hint_to", { defaultValue: "Куда прилетает турист." })}>
                                   <TextInput value={details.directionTo} onChange={(e) => patchDetails({ directionTo: e.target.value })} placeholder={t("service_form.ph_to", { defaultValue: "Например: Нячанг" })} />
                                 </Field>
-                                <Field label={t("start_date", { defaultValue: "Дата начала" })}>
+                                <Field correctionGroup="dates" label={t("start_date", { defaultValue: "Дата начала" })}>
                                   <TextInput type="date" value={details.startDate} onChange={(e) => patchDetails({ startDate: e.target.value, startFlightDate: e.target.value })} />
                                 </Field>
-                                <Field label={t("end_date", { defaultValue: "Дата окончания" })}>
+                                <Field correctionGroup="dates" label={t("end_date", { defaultValue: "Дата окончания" })}>
                                   <TextInput type="date" value={details.endDate} onChange={(e) => patchDetails({ endDate: e.target.value, endFlightDate: e.target.value })} />
                                 </Field>
                               </>
@@ -3179,19 +3199,19 @@ export default function DashboardServices({ viewMode = "create" }) {
 
                             {category === "author_tour" && (
                               <>
-                                <Field label={t("direction_country", { defaultValue: "Страна / направление" })} hint={t("service_form.hint_author_country", { defaultValue: "Куда проходит авторский тур." })}>
+                                <Field correctionGroup="details" label={t("direction_country", { defaultValue: "Страна / направление" })} hint={t("service_form.hint_author_country", { defaultValue: "Куда проходит авторский тур." })}>
                                   <TextInput value={details.directionCountry} onChange={(e) => patchDetails({ directionCountry: e.target.value })} placeholder={t("service_form.ph_country", { defaultValue: "Например: Узбекистан" })} />
                                 </Field>
-                                <Field label={t("direction_from", { defaultValue: "Город старта" })}>
+                                <Field correctionGroup="details" label={t("direction_from", { defaultValue: "Город старта" })}>
                                   <TextInput value={details.directionFrom} onChange={(e) => patchDetails({ directionFrom: e.target.value })} placeholder={t("service_form.ph_author_from", { defaultValue: "Например: Самарканд" })} />
                                 </Field>
-                                <Field label={t("direction_to", { defaultValue: "Город финиша" })}>
+                                <Field correctionGroup="details" label={t("direction_to", { defaultValue: "Город финиша" })}>
                                   <TextInput value={details.directionTo} onChange={(e) => patchDetails({ directionTo: e.target.value })} placeholder={t("service_form.ph_author_to", { defaultValue: "Например: Бухара" })} />
                                 </Field>
-                                <Field label={t("start_date", { defaultValue: "Дата начала" })}>
+                                <Field correctionGroup="dates" label={t("start_date", { defaultValue: "Дата начала" })}>
                                   <TextInput type="date" value={details.startDate} disabled={!!details.flexibleDates} onChange={(e) => patchAuthorDate("startDate", e.target.value)} />
                                 </Field>
-                                <Field label={t("end_date", { defaultValue: "Дата окончания" })}>
+                                <Field correctionGroup="dates" label={t("end_date", { defaultValue: "Дата окончания" })}>
                                   <TextInput type="date" value={details.endDate} disabled={!!details.flexibleDates} onChange={(e) => patchAuthorDate("endDate", e.target.value)} />
                                 </Field>
                                 <div className="flex items-end">
@@ -3209,7 +3229,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                                   <TextInput value={details.visaCountry} onChange={(e) => patchDetails({ visaCountry: e.target.value })} placeholder={t("service_form.ph_visa_country", { defaultValue: "Например: ОАЭ" })} />
                                 </Field>
                                 <div className="sm:col-span-2">
-                                  <Field label={t("description", { defaultValue: "Описание" })}>
+                                  <Field correctionGroup="details" label={t("description", { defaultValue: "Описание" })}>
                                     <TextArea value={details.description} onChange={(e) => patchDetails({ description: e.target.value })} />
                                   </Field>
                                 </div>
@@ -3236,13 +3256,13 @@ export default function DashboardServices({ viewMode = "create" }) {
                           <div className="grid gap-4 sm:grid-cols-2">
                             {category === "refused_tour" && (
                               <>
-                                <Field label={t("hotel", { defaultValue: "Отель" })} hint={t("service_form.hint_hotel", { defaultValue: "Название отеля так, как его увидит клиент." })}>
+                                <Field correctionGroup="hotel" label={t("hotel", { defaultValue: "Отель" })} hint={t("service_form.hint_hotel", { defaultValue: "Название отеля так, как его увидит клиент." })}>
                                   <TextInput value={details.hotel} onChange={(e) => patchDetails({ hotel: e.target.value })} placeholder={t("service_form.ph_hotel", { defaultValue: "Например: Rixos Radamis Sharm El Sheikh 5*" })} />
                                 </Field>
-                                <Field label={t("accommodation_category", { defaultValue: "Категория размещения" })} hint={t("service_form.hint_room", { defaultValue: "Категория номера или комнаты." })}>
+                                <Field correctionGroup="hotel" label={t("accommodation_category", { defaultValue: "Категория размещения" })} hint={t("service_form.hint_room", { defaultValue: "Категория номера или комнаты." })}>
                                   <OptionTextInput listId="svc-room-category-options" options={SERVICE_FIELD_OPTIONS.roomCategory} value={details.accommodationCategory} onChange={(e) => patchDetails({ accommodationCategory: e.target.value })} placeholder={t("service_form.ph_room", { defaultValue: "Например: Deluxe Sea View" })} />
                                 </Field>
-                                <Field label={t("accommodation", { defaultValue: "Размещение" })} hint={t("service_form.hint_accommodation", { defaultValue: "Состав туристов: взрослые, дети, младенцы." })}>
+                                <Field correctionGroup="hotel" label={t("accommodation", { defaultValue: "Размещение" })} hint={t("service_form.hint_accommodation", { defaultValue: "Состав туристов: взрослые, дети, младенцы." })}>
                                   <OptionTextInput listId="svc-accommodation-options" options={SERVICE_FIELD_OPTIONS.accommodation} value={details.accommodation} onChange={(e) => patchDetails({ accommodation: e.target.value })} placeholder={t("service_form.ph_accommodation", { defaultValue: "Например: DBL или 2ADL+1CHD" })} />
                                 </Field>
                                 <Field label={t("food", { defaultValue: "Питание" })} hint={t("service_form.hint_food", { defaultValue: "Выберите тип питания из ваучера или заявки." })}>
@@ -3317,13 +3337,13 @@ export default function DashboardServices({ viewMode = "create" }) {
 
                             {category === "refused_hotel" && (
                               <>
-                                <Field label={t("hotel", { defaultValue: "Отель" })} hint={t("service_form.hint_hotel", { defaultValue: "Название отеля так, как его увидит клиент." })}>
+                                <Field correctionGroup="hotel" label={t("hotel", { defaultValue: "Отель" })} hint={t("service_form.hint_hotel", { defaultValue: "Название отеля так, как его увидит клиент." })}>
                                   <TextInput value={details.hotel} onChange={(e) => patchDetails({ hotel: e.target.value })} placeholder={t("service_form.ph_hotel", { defaultValue: "Например: Rixos Radamis Sharm El Sheikh 5*" })} />
                                 </Field>
                                 <Field label={t("room_category", { defaultValue: "Категория номера" })}>
                                   <OptionTextInput listId="svc-room-category-options" options={SERVICE_FIELD_OPTIONS.roomCategory} value={details.accommodationCategory} onChange={(e) => patchDetails({ accommodationCategory: e.target.value })} placeholder={t("service_form.ph_room", { defaultValue: "Например: Deluxe Sea View" })} />
                                 </Field>
-                                <Field label={t("accommodation", { defaultValue: "Размещение" })}>
+                                <Field correctionGroup="hotel" label={t("accommodation", { defaultValue: "Размещение" })}>
                                   <OptionTextInput listId="svc-accommodation-options" options={SERVICE_FIELD_OPTIONS.accommodation} value={details.accommodation} onChange={(e) => patchDetails({ accommodation: e.target.value })} placeholder={t("service_form.ph_accommodation", { defaultValue: "Например: DBL / 2ADL" })} />
                                 </Field>
                                 <Field label={t("food", { defaultValue: "Питание" })}>
@@ -3400,7 +3420,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                             {category === "visa_support" && (
                               <>
                                 <Field label={t("visa_country", { defaultValue: "Страна визы" })}><TextInput value={details.visaCountry} onChange={(e) => patchDetails({ visaCountry: e.target.value })} /></Field>
-                                <div className="sm:col-span-2"><Field label={t("description", { defaultValue: "Описание" })}><TextArea value={details.description} onChange={(e) => patchDetails({ description: e.target.value })} /></Field></div>
+                                <div className="sm:col-span-2"><Field correctionGroup="details" label={t("description", { defaultValue: "Описание" })}><TextArea value={details.description} onChange={(e) => patchDetails({ description: e.target.value })} /></Field></div>
                               </>
                             )}
                           </div>
@@ -3425,9 +3445,10 @@ export default function DashboardServices({ viewMode = "create" }) {
                               <Toggle checked={details.changeable} onChange={(v) => patchDetails({ changeable: v })} label={t("changeable", { defaultValue: "Можно вносить изменения" })} />
                             </div>
                           </div>
+                          <div id="provider-proof-images"><ProviderCorrectionNote group="proof"/></div>
                           <ImageUploader
                             title={t("service_form.proof_trust_title", { defaultValue: "Подтверждение подлинности" })}
-                            hint={t("service_form.proof_trust_hint", { defaultValue: "Скриншоты подтверждения помогают клиенту быстрее решиться открыть контакты поставщика." })}
+                            hint={t("provider_corrections.proof_hint")}
                             images={details.proofImages || []}
                             onChange={(next) => patchDetails({ proofImages: next })}
                             max={6}
@@ -3464,8 +3485,8 @@ export default function DashboardServices({ viewMode = "create" }) {
                             <div className="text-sm font-medium text-slate-500">{t("service_form.step_price_hint", { defaultValue: "Стоимость и актуальность" })}</div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <Field label={t("net_price", { defaultValue: "Цена нетто" })} hint={t("service_form.hint_net_price", { defaultValue: "Внутренняя цена поставщика. Клиент её не видит." })}><TextInput inputMode="decimal" value={details.netPrice} onChange={(e) => patchDetails({ netPrice: e.target.value })} placeholder={t("service_form.ph_net_price", { defaultValue: "Например: 2500" })} /></Field>
-                            <Field label={t("gross_price", { defaultValue: "Цена для клиента" })} hint={t("service_form.hint_gross_price", { defaultValue: "Цена, которую клиент увидит в маркетплейсе." })}><TextInput inputMode="decimal" value={details.grossPrice} onChange={(e) => patchDetails({ grossPrice: e.target.value })} placeholder={t("service_form.ph_gross_price", { defaultValue: "Например: 2750" })} /></Field>
+                            <Field correctionGroup="price" label={t("net_price", { defaultValue: "Цена нетто" })} hint={t("service_form.hint_net_price", { defaultValue: "Внутренняя цена поставщика. Клиент её не видит." })}><TextInput inputMode="decimal" value={details.netPrice} onChange={(e) => patchDetails({ netPrice: e.target.value })} placeholder={t("service_form.ph_net_price", { defaultValue: "Например: 2500" })} /></Field>
+                            <Field correctionGroup="price" label={t("gross_price", { defaultValue: "Цена для клиента" })} hint={t("service_form.hint_gross_price", { defaultValue: "Цена, которую клиент увидит в маркетплейсе." })}><TextInput inputMode="decimal" value={details.grossPrice} onChange={(e) => patchDetails({ grossPrice: e.target.value })} placeholder={t("service_form.ph_gross_price", { defaultValue: "Например: 2750" })} /></Field>
                             <Field label={t("expiration_timer", { defaultValue: "Таймер актуальности" })} hint={t("service_form.expiration_hint", { defaultValue: "После этого времени предложение станет менее актуальным." })}>
                               <TextInput type="datetime-local" value={details.expiration} onChange={(e) => patchDetails({ expiration: e.target.value })} />
                             </Field>
@@ -3529,8 +3550,9 @@ export default function DashboardServices({ viewMode = "create" }) {
                     </>
                   )}
 
+                  {!isExtended && providerCorrection.correction?.reasonCodes.some(code=>["NO_PROOF","BAD_PROOF"].includes(code)) && <div id="provider-proof-images"><ProviderCorrectionNote group="proof"/><ImageUploader title={t("service_form.proof_label",{defaultValue:"Подтверждение"})} hint={t("provider_corrections.proof_hint")} images={details.proofImages || []} onChange={next=>patchDetails({proofImages:next})} max={6}/></div>}
                   {(!isExtended || step === 3) && (
-                    <ImageUploader title={t("service_images", { defaultValue: "Фото услуги" })} hint={t("images_hint", { defaultValue: "До 10 изображений, ≤ 3 МБ каждое" })} images={images} onChange={setImages} max={10} />
+                    <div id="provider-public-photos"><ProviderCorrectionNote group="photos"/><ImageUploader title={t("service_images", { defaultValue: "Фото услуги" })} hint={t("images_hint", { defaultValue: "До 10 изображений, ≤ 3 МБ каждое" })} images={images} onChange={setImages} max={10} /></div>
                   )}
 
                   <div className="sticky bottom-0 z-20 -mx-4 flex gap-2 border-t border-slate-100 bg-white/90 px-4 py-4 backdrop-blur sm:-mx-6 sm:px-6">
@@ -3649,6 +3671,6 @@ export default function DashboardServices({ viewMode = "create" }) {
         }}
         onConfirm={handleConfirmModalConfirm}
       />
-    </div>
+    </div></ProviderCorrectionContext.Provider>
   );
 }

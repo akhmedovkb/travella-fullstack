@@ -1328,14 +1328,14 @@ async function _sendToAdmins(text) {
   await Promise.all(ids.map((id) => tgSend(id, text)));
 }
 
-async function notifyModerationNew({ service }) {
+async function notifyModerationNew({ service, resubmitted=false }) {
   try {
     const s = await _enrichService(service);
     const lines = [
-      `<b>🆕 Новая услуга на модерации</b>`,
+      resubmitted ? `<b>↩️ Повторная проверка после исправлений</b>` : `<b>🆕 Новая услуга на модерации</b>`,
       ..._serviceLines(s),
       "",
-      `🔗 Открыть: ${urlAdmin("moderation")}`,
+      `🔗 Открыть услугу: ${esc(require("./providerCorrections").moderationServiceUrl(SITE,s.id || service,resubmitted))}`,
     ];
     await _sendToAdmins(lines.join("\n"));
   } catch (e) {

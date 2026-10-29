@@ -24,7 +24,7 @@ export function CorrectionRequestDialog({ target, initial, options, busy, onClos
         <p className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">Услуга будет возвращена поставщику. Он увидит замечания и получит уведомление. В запрос попадут сохранённые данные услуги; несохранённый черновик редактора не отправляется.</p>
         {error && <p role="alert" className="text-sm text-rose-700">{error}</p>}
       </div>
-      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t p-4"><button disabled={busy} type="button" onClick={onClose} className="rounded-xl bg-slate-100 px-4 py-2">Отмена</button><button disabled={busy || invalid || !canRequest} type="button" onClick={async()=>{setError("");try{await onSubmit(target.id,message,codes[0],codes);}catch(e){setError(e.message);}}} className="rounded-xl bg-rose-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{busy?"Отправляем…":"Вернуть и уведомить"}</button></div>
+      <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t p-4"><button disabled={busy} type="button" onClick={onClose} className="rounded-xl bg-slate-100 px-4 py-2">Отмена</button><button disabled={busy || invalid || !canRequest} type="button" onClick={async()=>{setError("");try{await onSubmit(target.id,message,codes[0],codes,selected.map(o=>({code:o.code,text:texts[o.code].trim()})));}catch(e){setError(e.message);}}} className="rounded-xl bg-rose-600 px-4 py-2 font-semibold text-white disabled:opacity-50">{busy?"Отправляем…":"Вернуть и уведомить"}</button></div>
     </div>
   </div>;
 }
@@ -34,8 +34,8 @@ export function CorrectionReview({ correction, options, disabled, onSave, onNavi
   const [checked,setChecked]=useState(correction.checkedCodes || []);
   const [busy,setBusy]=useState(false);
   const [notice,setNotice]=useState("");
-  return <section aria-label="Повторная проверка исправлений" className="min-w-0 rounded-xl border border-violet-200 bg-violet-50 p-3">
-    <h2 className="font-bold">Повторная проверка исправлений</h2><p className="mt-1 text-xs text-slate-600">Запрос от {new Date(correction.requestedAt).toLocaleString("ru-RU")}. Сравнение сохранённых данных с моментом возврата. Изменение поля само по себе не означает, что замечание исправлено.</p>
+  return <section id="moderation-editor-correction" aria-label="Повторная проверка исправлений" className="min-w-0 rounded-xl border border-violet-200 bg-violet-50 p-3">
+    <h2 className="font-bold">Повторная проверка исправлений</h2>{correction.providerSubmission && <p className="mt-2 rounded-lg bg-white p-3 text-sm font-semibold text-violet-900">Поставщик отправил исправления {new Date(correction.providerSubmission.submittedAt).toLocaleString("ru-RU")} и отметил пункты чеклиста ({correction.providerSubmission.checkedCodes.length}). Проверьте результат самостоятельно.</p>}<p className="mt-1 text-xs text-slate-600">Запрос от {new Date(correction.requestedAt).toLocaleString("ru-RU")}. Сравнение сохранённых данных с моментом возврата. Изменение поля само по себе не означает, что замечание исправлено.</p>
     <details className="mt-2 text-sm"><summary className="cursor-pointer font-semibold">Замечания поставщику</summary><p className="mt-2 whitespace-pre-wrap break-words">{correction.reason}</p></details>
     {!correction.hasBaseline && <p className="mt-2 text-sm text-amber-800">Для старого запроса исходные данные не сохранялись. Сравнение недоступно — проверьте замечания вручную.</p>}
     {correction.reviewStale && <p className="mt-2 text-sm text-amber-800">После предыдущей проверки данные изменились. Проверьте замечания повторно.</p>}

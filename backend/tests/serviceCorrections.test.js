@@ -97,7 +97,7 @@ test('notification uses plain text and reports delivery separately from saved co
 test('resubmitted multiple-reason requests remain in the correction queue',()=>{
  const {analyzeModerationService,matchesQueueFilter}=require('../utils/moderationQueueAnalysis');
  const current=service({last_moderation_action:'correction_requested'});assert.equal(analyzeModerationService(current).hasCorrectionHistory,true);
- const {queueCandidateQuery}=require('../utils/adminModerationQueue');assert.ok(queueCandidateQuery({status:'pending'}).sql.includes("action NOT IN ('service_edited','correction_reviewed')"));
+ const {queueCandidateQuery}=require('../utils/adminModerationQueue');assert.ok(queueCandidateQuery({status:'pending'}).sql.includes("action NOT IN ('service_edited','correction_reviewed','correction_resubmitted')"));
 });
 
 test('legacy rejected services without an audit event retain a manual review',async()=>{

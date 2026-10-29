@@ -3743,5 +3743,48 @@
     "no_audience": "Inspeksiyalar bo‘yicha ma’lumot hali yo‘q.",
     "no_warnings": "Muhim ogohlantirishlar yo‘q.",
     "hotel_details": "Mehmonxona tafsilotlari"
+  },
+  "provider_corrections": {
+  "remove_image": "{{number}}-rasmni o‘chirish",
+  "save_changes": "Tuzatishlarni saqlash",
+  "proof_hint": "Moderator uchun ichki tasdiq. Mijozlar uni ko‘rmaydi.",
+  "title": "Moderator izohlari",
+  "loading": "Moderator izohlari yuklanmoqda…",
+  "load_error": "Izohlarni yuklab bo‘lmadi. Qayta yuborishdan oldin yangilang.",
+  "retry": "Qayta urinish",
+  "pending": "Tuzatishlar yuborildi. Moderator tekshiruvini kuting.",
+  "intro": "Izohlar bo‘yicha ma’lumotlarni tuzating, xizmatni saqlang, so‘ng har bir bandni tasdiqlab qayta yuboring.",
+  "message": "Moderator xabari",
+  "checklist": "Tuzatishlar ro‘yxati",
+  "field_note": "Moderator izohi",
+  "go_fields": "Maydonlarga o‘tish",
+  "save_first": "Avval o‘zgarishlarni saqlang. So‘ng har bir bandni tekshirib tasdiqlang.",
+  "confirm_hint": "Faqat tekshirilgan tuzatishlarni belgilang. Tasdiqlaringiz moderatorga yuboriladi.",
+  "progress": "Tasdiqlandi: {{count}} / {{total}}",
+  "submit": "Qayta tekshiruvga yuborish",
+  "submitting": "Yuborilmoqda…",
+  "open_checklist": "Qayta yuborishdan oldin xizmatni ochib, izohlarni tekshiring.",
+  "card_title": "Tuzatishlar kerak",
+  "card_open": "Izohlarni tuzatish",
+  "groups": {
+    "proof": "Tasdiq",
+    "dates": "Sanalar",
+    "price": "Narx",
+    "hotel": "Mehmonxona va joylashuv",
+    "photos": "Xizmat rasmlari",
+    "details": "Xizmat ma’lumotlari"
+  },
+  "reasons": {
+    "NO_PROOF": "Tasdiq qo‘shildi",
+    "BAD_PROOF": "Tasdiq o‘qiladi va xizmatga mos",
+    "NO_DATES": "Sanalar tekshirildi va tuzatildi",
+    "BAD_PRICE": "Narx va to‘lov shartlari aniqlashtirildi",
+    "HOTEL_DETAILS": "Mehmonxona va joylashuv aniqlashtirildi",
+    "NO_PHOTO": "Xizmat rasmi qo‘shildi",
+    "MISSING_DETAILS": "Yetishmayotgan ma’lumotlar to‘ldirildi",
+    "WRONG_CATEGORY": "Toifa tuzatildi",
+    "DUPLICATE": "Takroriy xizmat olib tashlandi yoki farqi tushuntirildi",
+    "OTHER": "Moderator izohi bo‘yicha tuzatildi"
   }
+}
 }

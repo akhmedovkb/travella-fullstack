@@ -2549,7 +2549,9 @@ export default function AdminModeration({ embedded = false }) {
   const publishedSort = queueLocation.sort;
   const updateQueueLocation = (patch, replace = false) => {
     if (Object.hasOwn(patch,"focus") && patch.focus === null) pendingLocateRef.current = null;
-    setSearchParams(writeQueueLocation(new URLSearchParams(window.location.search),patch), { replace });
+    const next=writeQueueLocation(new URLSearchParams(window.location.search),patch);
+    if(Object.hasOwn(patch,"focus")){next.delete("m_open");next.delete("m_section");}
+    setSearchParams(next, { replace });
   };
   const setTab = (status) => updateQueueLocation({ status, filter: "all", sort: status === "published" ? "newest" : "priority", page: 1, focus: null });
   const setQueueFilter = (filter) => updateQueueLocation({ filter, page: 1, focus: null });
@@ -2804,7 +2806,7 @@ export default function AdminModeration({ embedded = false }) {
     } catch { tError("Не удалось открыть запрос исправлений"); } finally { setActionBusy(null); }
   };
 
-  const reject = async (id, reason, reasonCode = "OTHER", reasonCodes = [reasonCode]) => {
+  const reject = async (id, reason, reasonCode = "OTHER", reasonCodes = [reasonCode], reasonItems) => {
     if (!reason || !reason.trim()) {
       return tInfo(
         t("moderation.enter_reason_short", {
@@ -2818,7 +2820,7 @@ export default function AdminModeration({ embedded = false }) {
     try {
       const response = await axios.post(
         `${API_BASE}/api/admin/services/${id}/reject`,
-        { reason, reasonCode, reasonCodes, ...(rejectTarget?.id === id ? { expected_edit_version: rejectTarget.expectedVersion } : {}) },
+        { reason, reasonCode, reasonCodes, reasonItems, ...(rejectTarget?.id === id ? { expected_edit_version: rejectTarget.expectedVersion } : {}) },
         cfg
       );
       tSuccess("Услуга возвращена на исправление");
@@ -3214,6 +3216,16 @@ export default function AdminModeration({ embedded = false }) {
     }
   };
 
+  useEffect(()=>{
+    if(!isAdmin || searchParams.get("m_open")!=="1" || loading || editLoading || editOpen || loadedQueueKey!==queueKey) return;
+    const id=queueLocation.focus;
+    if(!id || !items.some(item=>Number(item.id)===id)) {
+      const next=new URLSearchParams(searchParams);next.delete("m_open");next.delete("m_section");setSearchParams(next,{replace:true});
+      setReturnNotice("Услуга больше не находится в этой очереди. Возможно, её уже обработал другой модератор.");return;
+    }
+    openEdit(id);
+  },[isAdmin,loading,loadedQueueKey,queueKey,editLoading,editOpen,queueLocation.focus,searchParams]);
+
   if (!isAdmin) {
     return (
       <div className="max-w-5xl mx-auto p-4">
@@ -3542,7 +3554,7 @@ export default function AdminModeration({ embedded = false }) {
                       {moderationEvents.length > 0 && <p className="text-xs text-slate-500">Последние {moderationEvents.length} событий. История новых правок ведётся с этого обновления.</p>}
                       {!moderationEvents.length && <p className="text-xs text-slate-500">Записей пока нет. Новые сохранённые изменения появятся здесь.</p>}
                       {moderationEvents.map((event) => <article key={event.id} className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
-                        <div className="flex flex-wrap gap-x-2 gap-y-1 font-semibold text-slate-700"><span>{({ service_edited: "Изменение услуги", telegram_sent: "Отправлено в Telegram", telegram_failed: "Ошибка отправки в Telegram", approved_clean: "Опубликовано", approved_with_warnings: "Опубликовано с предупреждениями", rejected: "Отклонено", correction_requested: "Запрошено исправление", correction_reviewed: "Повторная проверка исправлений", unpublished: "Снято с публикации" })[event.action] || event.action}</span><span>{event.actor_id ? `Администратор #${event.actor_id}` : "Система"}</span><span>{formatDt(event.created_at)}</span></div>
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 font-semibold text-slate-700"><span>{({ service_edited: "Изменение услуги", telegram_sent: "Отправлено в Telegram", telegram_failed: "Ошибка отправки в Telegram", approved_clean: "Опубликовано", approved_with_warnings: "Опубликовано с предупреждениями", rejected: "Отклонено", correction_requested: "Запрошено исправление", correction_reviewed: "Повторная проверка исправлений", correction_resubmitted: "Поставщик отправил исправления", unpublished: "Снято с публикации" })[event.action] || event.action}</span><span>{event.actor_id ? `${event.actor_role === "provider" ? "Поставщик" : "Администратор"} #${event.actor_id}` : "Система"}</span><span>{formatDt(event.created_at)}</span></div>
                         {event.reason && <p className="mt-1 break-words text-slate-600">{event.reason}</p>}
                         {Array.isArray(event.meta?.changes) && <dl className="mt-2 space-y-2">{event.meta.changes.map((change) => <div key={change.field} className="min-w-0"><dt className="font-semibold text-slate-700">{detailLabel(change.field.replace(/^(details|provider)\./, ""))}</dt><dd className="mt-1 grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2"><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-rose-50 p-2 text-rose-800">Было: {change.before ?? "—"}</span><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-emerald-50 p-2 text-emerald-800">Стало: {change.after ?? "—"}</span></dd></div>)}</dl>}
                       </article>)}

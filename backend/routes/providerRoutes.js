@@ -49,6 +49,8 @@ const {
 
 const { notifyModerationNew } = require("../utils/telegram");
 const { logProviderServiceAction } = require("../utils/serviceAuditLog");
+const { readProviderCorrection, submitProviderService } = require("../utils/providerCorrections");
+const { ensureServiceModerationEvents } = require("../utils/serviceModerationEvents");
 const { applyServiceLifecycleAction } = require("../utils/serviceLifecycle");
 const { logProviderFunnelEvent } = require("../utils/providerFunnel");
 const { buildRefusedQuality } = require("../utils/refusedQuality");
@@ -578,6 +580,16 @@ router.post("/finance/leads/note", authenticateToken, requireProvider, async (re
 });
 
 
+router.get("/services/:id/corrections",authenticateToken,requireProvider,async(req,res)=>{
+  try {
+    const result=await pool.query(`SELECT s.*,to_char(s.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version FROM services s WHERE id=$1 AND provider_id=$2 AND deleted_at IS NULL`,[req.params.id,req.user.id]);
+    if(!result.rows[0]) return res.status(404).json({message:"Услуга не найдена"});
+    await ensureServiceModerationEvents(pool);
+    res.set("Cache-Control","private, no-store");
+    res.json({ok:true,correction:await readProviderCorrection(pool,result.rows[0])});
+  } catch(error) {res.status(500).json({message:"Не удалось загрузить замечания модератора"});}
+});
+
 router.get("/services", authenticateToken, requireProvider, getServices);
 router.post("/services", authenticateToken, requireProvider, addService);
 router.put("/services/:id", authenticateToken, requireProvider, updateService);
@@ -760,10 +772,10 @@ router.post(
   async (req, res, next) => {
     try {
       const id = Number(req.params.id);
-      const applied = await applyServiceLifecycleAction(pool, {
+      const applied = await submitProviderService(pool, {
         providerId: req.user.id,
         serviceId: id,
-        action: "submit",
+        correction:req.body?.correction,
       });
 
       await logProviderServiceAction({
@@ -789,7 +801,7 @@ router.post(
       });
 
       try {
-        await notifyModerationNew({ service: id });
+        await notifyModerationNew({ service: id, resubmitted:applied.resubmitted });
       } catch {}
 
       return res.json({ ok: true, service: applied.service, quality: buildRefusedQuality(applied.service) });
@@ -813,6 +825,7 @@ router.post(
         });
       }
 
+      if(e?.status && e.status<500) return res.status(e.status).json({message:e.message,code:e.code});
       return next(e);
     }
   }

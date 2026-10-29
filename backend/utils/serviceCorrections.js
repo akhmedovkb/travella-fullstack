@@ -13,6 +13,11 @@ function normalizeReasonCodes(codes, fallback = "OTHER") {
   if (!input.length || input.length > 10 || input.some(c => !Object.hasOwn(REASON_GROUPS, c))) throw Object.assign(new Error("Выберите корректные причины исправления"), { status: 400 });
   return [...new Set(input)];
 }
+function normalizeReasonItems(items,codes) {
+  if(items===undefined) return [];
+  if(!Array.isArray(items) || items.length!==codes.length || new Set(items.map(i=>i?.code)).size!==codes.length || items.some(i=>!codes.includes(i?.code) || typeof i.text!=="string" || i.text.trim().length<5 || i.text.length>3000)) throw Object.assign(new Error("Некорректный текст замечаний"),{status:400});
+  return items.map(i=>({code:i.code,text:i.text.trim()}));
+}
 function correctionSnapshot(service) {
   const d = object(service.details);
   const result = {};
@@ -51,14 +56,17 @@ function buildCorrectionReview(request, service, review) {
   const hasBaseline = Object.keys(baseline).length > 0;
   const changes = Object.entries(current).filter(([key,v]) => baseline[key] && (baseline[key].signature || baseline[key].value) !== (v.signature || v.value)).map(([key,v]) => ({field:key,group:v.group,label:v.label,before:baseline[key].display || baseline[key].value || "—",after:v.display || v.value || "—"}));
   const validReview = String(review?.meta?.requestId) === String(request.id) && review?.meta?.fingerprint === fingerprint;
-  return { requestId:request.id, requestedAt:request.created_at, reason:request.reason, reasonCodes:codes, hasBaseline, changes, checkedCodes:validReview ? (review.meta.checkedCodes || []).filter(c=>codes.includes(c)) : [], reviewStale:!!review && !validReview, editVersion:service.edit_version, fingerprint };
+  return { requestId:request.id, requestedAt:request.created_at, reason:request.reason, reasonCodes:codes, reasonItems:Array.isArray(saved.reasonItems) ? saved.reasonItems.filter(item=>codes.includes(item.code) && typeof item.text==="string").map(item=>({code:item.code,text:item.text})) : [], hasBaseline, changes, checkedCodes:validReview ? (review.meta.checkedCodes || []).filter(c=>codes.includes(c)) : [], reviewStale:!!review && !validReview, editVersion:service.edit_version, fingerprint };
 }
 async function readCorrectionReview(db, service) {
   const requests = await db.query(`SELECT * FROM service_moderation_events WHERE service_id=$1 AND action IN ('rejected','correction_requested') ORDER BY created_at DESC,id DESC LIMIT 1`,[service.id]);
   const request = requests.rows[0] || (service.rejected_reason ? {id:`legacy:${service.id}`,created_at:service.rejected_at || service.updated_at,reason:service.rejected_reason,reason_code:object(object(service.details).meta).moderation_rejection_code,meta:{}} : null);
   if (!request) return null;
   const reviews = await db.query(`SELECT * FROM service_moderation_events WHERE service_id=$1 AND action='correction_reviewed' AND meta->>'requestId'=$2 ORDER BY created_at DESC,id DESC LIMIT 1`,[service.id,String(request.id)]);
-  return buildCorrectionReview(request,service,reviews.rows[0]);
+  const result=buildCorrectionReview(request,service,reviews.rows[0]);
+  const submitted=await db.query(`SELECT actor_id,created_at,meta FROM service_moderation_events WHERE service_id=$1 AND action='correction_resubmitted' AND meta->>'requestId'=$2 ORDER BY created_at DESC,id DESC LIMIT 1`,[service.id,String(request.id)]);
+  result.providerSubmission=submitted.rows[0] ? {submittedAt:submitted.rows[0].created_at,checkedCodes:submitted.rows[0].meta?.checkedCodes || []} : null;
+  return result;
 }
 function correctionNotificationParts(title,reason) {
   const text=`↩️ Нужны исправления услуги\n\n📌 ${String(title || "").slice(0,200)}\n\nЗамечания:\n${reason}\n\nИсправьте замечания в разделе «Мои услуги» и отправьте услугу на модерацию повторно.`;
@@ -66,4 +74,4 @@ function correctionNotificationParts(title,reason) {
   for(let offset=0;offset<text.length;){let end=Math.min(offset+3900,text.length);if(end<text.length && /[\uD800-\uDBFF]/.test(text[end-1])) end--;parts.push(text.slice(offset,end));offset=end;}
   return parts;
 }
-module.exports = { correctionNotificationParts, REASON_GROUPS, normalizeReasonCodes, correctionSnapshot, buildCorrectionReview, readCorrectionReview };
+module.exports = { normalizeReasonItems, correctionNotificationParts, REASON_GROUPS, normalizeReasonCodes, correctionSnapshot, buildCorrectionReview, readCorrectionReview };

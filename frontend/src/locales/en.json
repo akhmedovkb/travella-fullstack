@@ -3747,5 +3747,48 @@
     "no_audience": "No inspection data yet.",
     "no_warnings": "No critical warnings.",
     "hotel_details": "Hotel details"
+  },
+  "provider_corrections": {
+  "remove_image": "Remove image {{number}}",
+  "save_changes": "Save corrections",
+  "proof_hint": "Private proof for the moderator. Customers will not see it.",
+  "title": "Moderator feedback",
+  "loading": "Loading moderator feedback…",
+  "load_error": "Could not load feedback. Refresh it before resubmitting.",
+  "retry": "Retry",
+  "pending": "Corrections submitted. Please wait for the moderator to review them.",
+  "intro": "Address the feedback, save the service, then confirm each item and resubmit.",
+  "message": "Moderator message",
+  "checklist": "Correction checklist",
+  "field_note": "Moderator feedback",
+  "go_fields": "Go to fields",
+  "save_first": "Save your changes first. Then check and confirm each item.",
+  "confirm_hint": "Confirm only the corrections you have checked. Your confirmations will be sent to the moderator.",
+  "progress": "Confirmed: {{count}} of {{total}}",
+  "submit": "Submit for review again",
+  "submitting": "Submitting…",
+  "open_checklist": "Open the service and check the feedback before resubmitting.",
+  "card_title": "Corrections needed",
+  "card_open": "Address feedback",
+  "groups": {
+    "proof": "Proof",
+    "dates": "Dates",
+    "price": "Price",
+    "hotel": "Hotel and accommodation",
+    "photos": "Listing photos",
+    "details": "Service details"
+  },
+  "reasons": {
+    "NO_PROOF": "Proof added",
+    "BAD_PROOF": "Proof is readable and matches the service",
+    "NO_DATES": "Dates checked and corrected",
+    "BAD_PRICE": "Price and payment terms clarified",
+    "HOTEL_DETAILS": "Hotel and accommodation clarified",
+    "NO_PHOTO": "Listing photo added",
+    "MISSING_DETAILS": "Missing details completed",
+    "WRONG_CATEGORY": "Category corrected",
+    "DUPLICATE": "Duplicate removed or difference explained",
+    "OTHER": "Moderator feedback addressed"
   }
+}
 }

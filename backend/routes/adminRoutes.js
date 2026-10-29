@@ -4,7 +4,7 @@ const multer = require("multer");
 const router = express.Router();
 const pool = require("../db");
 const { readModerationQueue } = require("../utils/adminModerationQueue");
-const { correctionNotificationParts, correctionSnapshot, normalizeReasonCodes, readCorrectionReview } = require("../utils/serviceCorrections");
+const { normalizeReasonItems, correctionNotificationParts, correctionSnapshot, normalizeReasonCodes, readCorrectionReview } = require("../utils/serviceCorrections");
 const { writeServiceEditHistory } = require("../utils/serviceEditHistory");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
@@ -91,7 +91,7 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed')
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -125,7 +125,7 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed')
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -164,7 +164,7 @@ router.get("/services/published", authenticateToken, requireAdmin, async (req, r
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed')
+          WHERE service_id = s.id AND action NOT IN ('service_edited','correction_reviewed','correction_resubmitted')
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -821,6 +821,7 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
   let db;
   try {
     const reasonCodes = normalizeReasonCodes(body.reasonCodes,reasonCode);
+    const reasonItems=normalizeReasonItems(body.reasonItems,reasonCodes);
     if (reason.length>4000) return res.status(400).json({message:"Сообщение должно быть не длиннее 4000 символов"});
     await ensureServiceModerationEvents(pool);
     db = await pool.connect();
@@ -833,7 +834,7 @@ router.post("/services/:id(\\d+)/reject", authenticateToken, requireAdmin, async
       details=COALESCE(details,'{}'::jsonb) || jsonb_build_object('meta',COALESCE(details->'meta','{}'::jsonb) || jsonb_build_object('moderation_rejection_code',$4::text,'moderation_rejection_codes',$5::jsonb,'moderation_rejected_at',NOW())),updated_at=NOW() WHERE id=$1 RETURNING *`,[req.params.id,adminId,reason,reasonCodes[0],JSON.stringify(reasonCodes)]);
     rows = updated.rows;
     await db.query(`INSERT INTO service_moderation_events (service_id,actor_id,actor_role,action,reason_code,reason,from_status,to_status,from_moderation_status,to_moderation_status,meta)
-      VALUES ($1,$2,'admin','correction_requested',$3,$4,$5,'rejected',$6,'rejected',$7::jsonb)`,[before.id,adminId,reasonCodes[0],reason,before.status,before.moderation_status,JSON.stringify({correction:{reasonCodes,snapshot:correctionSnapshot(before)}})]);
+      VALUES ($1,$2,'admin','correction_requested',$3,$4,$5,'rejected',$6,'rejected',$7::jsonb)`,[before.id,adminId,reasonCodes[0],reason,before.status,before.moderation_status,JSON.stringify({correction:{reasonCodes,reasonItems,snapshot:correctionSnapshot(before)}})]);
     await db.query("COMMIT");
   } catch(error) {
     if (db) await db.query("ROLLBACK");
