@@ -1,5 +1,5 @@
 // frontend/src/pages/AdminModeration.jsx
-import React, { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState, useId } from "react";
 import { Link } from "react-router-dom";
 import { createPortal } from "react-dom";
 import axios from "axios";
@@ -7,6 +7,8 @@ import { BadgeCheck } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { tSuccess, tError, tInfo } from "../shared/toast";
 import { getServiceUrgency } from "../utils/serviceUrgency";
+
+import { validateModerationEditor, changedProviderContacts } from "../utils/moderationEditor";
 
 const fmt = (n) => new Intl.NumberFormat().format(Number(n || 0));
 const API_BASE = import.meta.env.VITE_API_BASE_URL;
@@ -1241,17 +1243,21 @@ function collectEditorImages(images, draft) {
   return result;
 }
 
-function EditSection({ title, children }) {
+function EditSection({ title, children, id }) {
   return (
-    <div className="min-w-0 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
+    <div id={id} className="min-w-0 scroll-mt-4 rounded-2xl border border-gray-200 bg-white p-4 shadow-sm">
       <div className="mb-3 text-sm font-semibold text-gray-900">{title}</div>
       <div className="space-y-3">{children}</div>
     </div>
   );
 }
 
-function TextField({ label, value, onChange, placeholder = "", textarea = false, rows = 2 }) {
+function TextField({ label, value, onChange, placeholder = "", textarea = false, rows = 2, error }) {
+  const fieldId = useId();
   const commonProps = {
+    id: fieldId,
+    "aria-invalid": Boolean(error),
+    "aria-describedby": error ? `${fieldId}-error` : undefined,
     value,
     onChange: (e) => onChange(e.target.value),
     placeholder,
@@ -1264,6 +1270,7 @@ function TextField({ label, value, onChange, placeholder = "", textarea = false,
         {label}
       </span>
       {textarea ? <textarea {...commonProps} rows={rows} /> : <input {...commonProps} type="text" />}
+      {error && <span id={`${fieldId}-error`} role="alert" className="mt-1 block text-xs font-medium text-rose-700">{error}</span>}
     </label>
   );
 }
@@ -2427,6 +2434,12 @@ export default function AdminModeration({ embedded = false }) {
   const [editOpen, setEditOpen] = useState(false);
   const [editLoading, setEditLoading] = useState(false);
   const [editBaseline, setEditBaseline] = useState("");
+  const [editVersion, setEditVersion] = useState(null);
+  const [providerEditVersion, setProviderEditVersion] = useState(null);
+  const [editConflict, setEditConflict] = useState("");
+  const [confirmConflictReload, setConfirmConflictReload] = useState(false);
+  const [editorSection, setEditorSection] = useState("main");
+  const [historyExpanded, setHistoryExpanded] = useState(false);
   const [discardConfirmOpen, setDiscardConfirmOpen] = useState(false);
   const editRequestId = useRef(0);
   const publicPhotosRef = useRef(null);
@@ -2476,6 +2489,15 @@ export default function AdminModeration({ embedded = false }) {
   const [publishResult, setPublishResult] = useState(null);
   const [rebroadcastBusy, setRebroadcastBusy] = useState(false);
 
+  const editErrors = validateModerationEditor(editForm, rowsToDetails(editDetailsRows));
+  const navigateEditor = (section) => {
+    setEditorSection(section);
+    if (section === "history") setHistoryExpanded(true);
+    document.getElementById(`moderation-editor-${section}`)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+  useEffect(() => {
+    if (editConflict) document.getElementById("moderation-editor-conflict")?.scrollIntoView({ block: "start" });
+  }, [editConflict]);
   const currentEditSnapshot = JSON.stringify({ form: editForm, rows: editDetailsRows, images: editImages });
   const hasUnsavedChanges = Boolean(editOpen && !editLoading && editBaseline && (
     currentEditSnapshot !== editBaseline || newImageUrl.trim()
@@ -2566,19 +2588,9 @@ export default function AdminModeration({ embedded = false }) {
 
   const refreshCounts = async () => {
     try {
-      const [p, r, pub] = await Promise.all([
-        axios.get(`${API_BASE}/api/admin/services/pending`, cfg),
-        axios.get(`${API_BASE}/api/admin/services/rejected`, cfg),
-        axios.get(`${API_BASE}/api/admin/services/published`, cfg),
-      ]);
-      const pending = (Array.isArray(p.data) ? p.data : p.data?.items || [])
-        .length;
-      const rejected = (Array.isArray(r.data) ? r.data : r.data?.items || [])
-        .length;
-      const published = (Array.isArray(pub.data) ? pub.data : pub.data?.items || [])
-        .length;
-      setCounts({ pending, rejected, published });
-    } catch {}
+      const response = await axios.get(`${API_BASE}/api/admin/services/counts`, cfg);
+      if (response.data?.ok) setCounts(response.data.counts);
+    } catch { /* Keep the last known counts if the summary endpoint is unavailable. */ }
   };
 
   useEffect(() => {
@@ -2787,6 +2799,10 @@ export default function AdminModeration({ embedded = false }) {
     setEditItemId(id);
     setEditBaseline("");
     setDiscardConfirmOpen(false);
+    setEditConflict("");
+    setConfirmConflictReload(false);
+    setHistoryExpanded(false);
+    setEditorSection("main");
     setEditOpen(true);
     setEditLoading(true);
     try {
@@ -2796,6 +2812,8 @@ export default function AdminModeration({ embedded = false }) {
       ]);
       if (requestId !== editRequestId.current) return;
       const s = res.data || {};
+      setEditVersion(s.edit_version);
+      setProviderEditVersion(s.provider_edit_version);
       setModerationEvents(Array.isArray(eventsRes?.data?.items) ? eventsRes.data.items : []);
       const details = normalizeDetails(s.details);
       const images = normalizeImages(s.images);
@@ -2993,6 +3011,12 @@ export default function AdminModeration({ embedded = false }) {
   
   const saveEdit = async ({ approveAfter = false, forceApprove = false, warnings = [] } = {}) => {
     if (editSaving || editLoading || imageUploadBusy || proofUploadBusy) return;
+    if (Object.keys(editErrors).length) {
+      setDiscardConfirmOpen(false);
+      navigateEditor(editErrors.price || editErrors.expiration_at ? "main" : "details");
+      return tError("Исправьте поля, отмеченные ошибками, перед сохранением.");
+    }
+    if (editConflict) return tError("Сначала загрузите актуальную версию услуги. Ваш черновик остаётся в форме.");
     const details = rowsToDetails(editDetailsRows);
     let images;
     try {
@@ -3029,6 +3053,8 @@ export default function AdminModeration({ embedded = false }) {
       await axios.put(
         `${API_BASE}/api/admin/services/${editItemId}`,
         {
+          expected_edit_version: editVersion,
+          expected_provider_edit_version: providerEditVersion,
           title: editForm.title,
           description: editForm.description,
           category: editForm.category,
@@ -3041,9 +3067,7 @@ export default function AdminModeration({ embedded = false }) {
           location: editForm.location,
           expiration_at: editForm.expiration_at || null,
           vehicle_model: editForm.vehicle_model,
-          telegram_refused_chat_id: editForm.telegram_refused_chat_id,
-          telegram_web_chat_id: editForm.telegram_web_chat_id,
-          telegram_chat_id: editForm.telegram_chat_id,
+          ...changedProviderContacts(editForm, JSON.parse(editBaseline || "{}").form),
           details,
           images,
           availability,
@@ -3091,7 +3115,13 @@ export default function AdminModeration({ embedded = false }) {
       setModerationEvents([]);
       await load(tab);
       await refreshCounts();
-    } catch {
+    } catch (error) {
+      if (error?.response?.status === 409) {
+        setDiscardConfirmOpen(false);
+        setEditConflict(error.response.data?.message || "Услуга изменена другим администратором. Ваш черновик остался в форме.");
+        document.getElementById("moderation-editor-conflict")?.scrollIntoView({ block: "start" });
+        return;
+      }
       tError(
         t("moderation.save_error", {
           defaultValue: "Не удалось сохранить изменения",
@@ -3486,31 +3516,30 @@ export default function AdminModeration({ embedded = false }) {
                 </button>
               </div>
 
+              {!editLoading && <nav aria-label="Разделы редактора" className="flex shrink-0 flex-wrap gap-1 border-b border-slate-200 bg-white px-4 py-2">
+                {[["main", "Данные"], ["proof", "Proof"], ["photos", "Фото"], ["details", "Параметры"], ["history", "История"]].map(([key, label]) => <button key={key} type="button" aria-current={editorSection === key ? "location" : undefined} onClick={() => navigateEditor(key)} className={`rounded-lg px-3 py-2 text-xs font-bold ${editorSection === key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>{label}</button>)}
+              </nav>}
               {editLoading && <div role="status" className="flex min-h-48 items-center justify-center gap-3 p-8 text-slate-600"><span className="h-5 w-5 animate-spin rounded-full border-2 border-slate-200 border-t-violet-600" aria-hidden="true" />Загружаем услугу #{editItemId}…</div>}
               <div aria-busy={editLoading} className={`min-h-0 flex-1 overflow-y-auto p-4 md:p-6 ${editLoading ? "hidden" : ""}`}>
               <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_340px] gap-5">
                 <div className="space-y-4 min-w-0">
-                  {moderationEvents.length > 0 && (
-                  <div className="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <div className="mb-2 text-sm font-semibold text-slate-700">
-                      {t("moderation.history", { defaultValue: "История модерации" })}
+                  <details id="moderation-editor-history" open={historyExpanded} onToggle={(event) => setHistoryExpanded(event.currentTarget.open)} className="scroll-mt-4 rounded-xl border border-slate-200 bg-white p-3">
+                    <summary className="cursor-pointer text-sm font-bold text-slate-800">История правок и модерации · {moderationEvents.length}</summary>
+                    <div className="mt-3 space-y-3">
+                      {!moderationEvents.length && <p className="text-xs text-slate-500">Записей пока нет. Новые сохранённые изменения появятся здесь.</p>}
+                      {moderationEvents.map((event) => <article key={event.id} className="min-w-0 rounded-xl border border-slate-200 bg-slate-50 p-3 text-xs">
+                        <div className="flex flex-wrap gap-x-2 gap-y-1 font-semibold text-slate-700"><span>{event.action === "service_edited" ? "Изменение услуги" : event.action}</span><span>{event.actor_id ? `Администратор #${event.actor_id}` : "Система"}</span><span>{formatDt(event.created_at)}</span></div>
+                        {event.reason && <p className="mt-1 break-words text-slate-600">{event.reason}</p>}
+                        {Array.isArray(event.meta?.changes) && <dl className="mt-2 space-y-2">{event.meta.changes.map((change) => <div key={change.field} className="min-w-0"><dt className="font-semibold text-slate-700">{detailLabel(change.field.replace(/^details\./, ""))}</dt><dd className="mt-1 grid min-w-0 grid-cols-1 gap-1 sm:grid-cols-2"><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-rose-50 p-2 text-rose-800">Было: {change.before ?? "—"}</span><span className="min-w-0 whitespace-pre-wrap break-words rounded bg-emerald-50 p-2 text-emerald-800">Стало: {change.after ?? "—"}</span></dd></div>)}</dl>}
+                      </article>)}
                     </div>
-                    <div className="space-y-1 text-xs text-slate-600">
-                      {moderationEvents.slice(0, 5).map((ev) => (
-                        <div key={ev.id} className="flex flex-wrap gap-x-2 gap-y-1">
-                          <span className="font-semibold">{ev.action}</span>
-                          {ev.reason_code ? <span>· {ev.reason_code}</span> : null}
-                          {ev.reason ? <span>· {ev.reason}</span> : null}
-                          {ev.created_at ? <span>· {formatDt(ev.created_at)}</span> : null}
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  )}
+                  </details>
+                  {editConflict && <div id="moderation-editor-conflict" role="alert" className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><p className="font-semibold">{editConflict}</p><p className="mt-1 text-xs">Скопируйте нужные значения из черновика перед обновлением формы.</p><button type="button" onClick={() => setConfirmConflictReload(true)} className="mt-3 rounded-lg bg-slate-900 px-3 py-2 text-xs font-bold text-white">Загрузить актуальную версию</button></div>}
+                  {Object.keys(editErrors).length > 0 && <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">Ошибок в полях: {Object.keys(editErrors).length}. Проверьте даты и цены перед сохранением.</div>}
                 <ReadinessChecklist items={readinessItems} />
                 <DangerIssuesPanel issues={dangerIssues} onAddPublicPhoto={addPublicPhoto} />
 
-                <section className={`rounded-2xl border p-4 ${editProofStatus === "approved" ? "border-emerald-200 bg-emerald-50" : editProofStatus === "rejected" ? "border-rose-200 bg-rose-50" : "border-amber-200 bg-amber-50"}`}>
+                <section id="moderation-editor-proof" className={`scroll-mt-4 rounded-2xl border p-4 ${editProofStatus === "approved" ? "border-emerald-200 bg-emerald-50" : editProofStatus === "rejected" ? "border-rose-200 bg-rose-50" : "border-amber-200 bg-amber-50"}`}>
                   <div className="flex flex-wrap items-start justify-between gap-3">
                     <div>
                       <div className="text-sm font-bold text-slate-950">Подтверждение подлинности</div>
@@ -3550,7 +3579,7 @@ export default function AdminModeration({ embedded = false }) {
                   </p>
                 </section>
 
-                <EditSection title="Основные данные">
+                <EditSection id="moderation-editor-main" title="Основные данные">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium mb-1">
@@ -3589,6 +3618,8 @@ export default function AdminModeration({ embedded = false }) {
                     <input
                       type="text"
                       aria-label="Базовая цена"
+                      aria-invalid={Boolean(editErrors.price)}
+                      aria-describedby={editErrors.price ? "moderation-price-error" : undefined}
                       value={editForm.price}
                       onChange={(e) =>
                         setEditForm((prev) => ({ ...prev, price: e.target.value }))
@@ -3597,6 +3628,7 @@ export default function AdminModeration({ embedded = false }) {
                     />
                   </div>
 
+                  {editErrors.price && <p id="moderation-price-error" role="alert" className="text-xs text-rose-700">{editErrors.price}</p>}
                   <div>
                     <label className="block text-sm font-medium mb-1">Валюта</label>
                     <select
@@ -3712,7 +3744,7 @@ export default function AdminModeration({ embedded = false }) {
                 </div>
                 </EditSection>
 
-                <EditSection title="Быстрая правка карточки">
+                <EditSection id="moderation-editor-details" title="Параметры карточки">
                   <div className="flex flex-wrap gap-2">
                     <ToggleChip
                       active={yesNoValue(editDetails.flightIncluded || editDetails.airTickets || editDetails.aviaTickets)}
@@ -3760,12 +3792,14 @@ export default function AdminModeration({ embedded = false }) {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <TextField
                       label="Дата начала"
+                      error={editErrors.startDate}
                       value={formatDetailValue(editDetails.startDate || editDetails.departureDate || editDetails.departureFlightDate)}
                       onChange={(value) => setDetailValue(detailKey(["startDate", "departureDate", "departureFlightDate"], "startDate"), value)}
                       placeholder="2026-09-23"
                     />
                     <TextField
                       label="Дата окончания"
+                      error={editErrors.endDate}
                       value={formatDetailValue(editDetails.endDate || editDetails.returnFlightDate)}
                       onChange={(value) => setDetailValue(detailKey(["endDate", "returnFlightDate"], "endDate"), value)}
                       placeholder="2026-09-30"
@@ -3804,12 +3838,14 @@ export default function AdminModeration({ embedded = false }) {
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                     <TextField
                       label="Netto"
+                      error={editErrors.netPrice}
                       value={formatDetailValue(pickFirst(editDetails.netPrice, editDetails.net_price, editForm.net_price))}
                       onChange={(value) => setDetailValue(detailKey(["netPrice", "net_price"], "netPrice"), value)}
                       placeholder="2850"
                     />
                     <TextField
                       label="Gross"
+                      error={editErrors.grossPrice}
                       value={formatDetailValue(pickFirst(editDetails.grossPrice, editDetails.gross_price, editDetails.price, editForm.gross_price, editForm.price))}
                       onChange={(value) => setDetailValue(detailKey(["grossPrice", "gross_price", "price"], "grossPrice"), value)}
                       placeholder="3150"
@@ -3934,7 +3970,7 @@ export default function AdminModeration({ embedded = false }) {
                   )}
                 </div>
 
-                <section ref={publicPhotosRef} aria-label="Фото карточки" className="scroll-mt-4 rounded-2xl border border-sky-200 bg-sky-50/40 p-4">
+                <section id="moderation-editor-photos" ref={publicPhotosRef} aria-label="Фото карточки" className="scroll-mt-4 rounded-2xl border border-sky-200 bg-sky-50/40 p-4">
                   <h2 className="text-sm font-bold text-slate-900">Фото карточки</h2>
                   <p className="mb-3 mt-1 text-xs text-slate-600">Эти фото видят клиенты на сайте и в Telegram. Proof используется для внутренней проверки — не загружайте сюда брони и документы с личными данными.</p>
 
@@ -4093,6 +4129,8 @@ export default function AdminModeration({ embedded = false }) {
           </div>,
           document.body
         )}
+
+      {confirmConflictReload && createPortal(<div className="fixed inset-0 z-[6100] flex items-center justify-center bg-slate-950/60 p-4"><div role="alertdialog" aria-modal="true" aria-labelledby="reload-title" className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl"><h2 id="reload-title" className="text-lg font-bold">Заменить черновик?</h2><p className="mt-2 text-sm text-slate-600">Несохранённые изменения будут заменены актуальными данными с сервера.</p><div className="mt-4 flex flex-col gap-2"><button type="button" onClick={() => openEdit(editItemId)} className="rounded-xl bg-slate-900 px-4 py-2 text-sm font-bold text-white">Загрузить и заменить черновик</button><button type="button" autoFocus onClick={() => setConfirmConflictReload(false)} className="rounded-xl border px-4 py-2 text-sm">Вернуться к черновику</button></div></div></div>, document.body)}
 
       {discardConfirmOpen && createPortal(
         <div className="fixed inset-0 z-[6000] flex items-center justify-center bg-slate-950/60 p-4">

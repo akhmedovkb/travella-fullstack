@@ -3,6 +3,7 @@ const express = require("express");
 const multer = require("multer");
 const router = express.Router();
 const pool = require("../db");
+const { writeServiceEditHistory } = require("../utils/serviceEditHistory");
 const authenticateToken = require("../middleware/authenticateToken");
 const requireAdmin = require("../middleware/requireAdmin");
 const leadController = require("../controllers/leadController");
@@ -39,6 +40,20 @@ const adminImageUpload = multer({
 
 /* ---------- СПИСКИ (идут первыми) ---------- */
 
+router.get("/services/counts", authenticateToken, requireAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`SELECT
+      COUNT(*) FILTER (WHERE COALESCE(s.moderation_status, s.status) = 'pending')::int AS pending,
+      COUNT(*) FILTER (WHERE COALESCE(s.moderation_status, s.status) = 'rejected')::int AS rejected,
+      COUNT(*) FILTER (WHERE LOWER(COALESCE(s.status, '')) IN ('published','approved','active') AND COALESCE(LOWER(s.moderation_status), 'approved') IN ('approved','published','active'))::int AS published
+      FROM services s JOIN providers p ON p.id = s.provider_id WHERE s.deleted_at IS NULL`);
+    res.json({ ok: true, counts: result.rows[0] });
+  } catch (error) {
+    console.error("[admin service counts]", error.message);
+    res.status(500).json({ ok: false, message: "Не удалось загрузить счётчики" });
+  }
+});
+
 // /api/admin/services/pending
 router.get("/services/pending", authenticateToken, requireAdmin, async (req, res) => {
   await ensureServiceModerationEvents(pool);
@@ -63,7 +78,7 @@ router.get("/services/pending", authenticateToken, requireAdmin, async (req, res
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id
+          WHERE service_id = s.id AND action <> 'service_edited'
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -97,7 +112,7 @@ router.get("/services/rejected", authenticateToken, requireAdmin, async (req, re
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id
+          WHERE service_id = s.id AND action <> 'service_edited'
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -136,7 +151,7 @@ router.get("/services/published", authenticateToken, requireAdmin, async (req, r
        LEFT JOIN LATERAL (
          SELECT action, reason_code, reason, created_at, actor_id
            FROM service_moderation_events
-          WHERE service_id = s.id
+          WHERE service_id = s.id AND action <> 'service_edited'
           ORDER BY created_at DESC
           LIMIT 1
        ) ev ON TRUE
@@ -164,6 +179,8 @@ router.get("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
   const q = await pool.query(
     `SELECT
         s.*,
+        to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version,
+        to_char(p.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS provider_edit_version,
         p.name AS provider_name,
         p.type AS provider_type,
         p.telegram_refused_chat_id,
@@ -296,14 +313,23 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
     return value;
   };
 
+  let client;
+  let transactionOpen = false;
   try {
-    const cur = await pool.query(`SELECT * FROM services WHERE id = $1`, [id]);
+    await ensureServiceModerationEvents(pool);
+    client = await pool.connect();
+    await client.query("BEGIN");
+    transactionOpen = true;
+    const cur = await client.query(`SELECT s.*, to_char(s.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version FROM services s WHERE id = $1 FOR UPDATE`, [id]);
     if (!cur.rows.length) {
       return res.status(404).json({ message: "Not found" });
     }
 
     const row = cur.rows[0];
     const body = req.body || {};
+    if (typeof body.expected_edit_version !== "undefined" && body.expected_edit_version !== row.edit_version) {
+      return res.status(409).json({ ok: false, code: "SERVICE_EDIT_CONFLICT", message: "Услуга изменена после открытия редактора. Ваш черновик сохранён в форме." });
+    }
     const normalizeChatId = (value) => {
       if (typeof value === "undefined") return undefined;
       if (value === null) return null;
@@ -359,7 +385,7 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
       if (!s) return null;
 
       const n = Number(s.replace(",", "."));
-      if (!Number.isFinite(n)) {
+      if (!Number.isFinite(n) || n < 0) {
         throw new Error("INVALID_PRICE");
       }
 
@@ -369,6 +395,9 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
     const nextPrice = normalizePrice(body.price, row.price);
     const nextNetPrice = normalizePrice(body.net_price, row.net_price);
     const nextGrossPrice = normalizePrice(body.gross_price, row.gross_price);
+    const detailNet = Number(String(nextDetails?.netPrice ?? nextDetails?.net_price ?? nextNetPrice ?? "").replace(/\s/g, "").replace(",", "."));
+    const detailGross = Number(String(nextDetails?.grossPrice ?? nextDetails?.gross_price ?? nextDetails?.price ?? nextGrossPrice ?? nextPrice ?? "").replace(/\s/g, "").replace(",", "."));
+    if (Number.isFinite(detailNet) && Number.isFinite(detailGross) && detailGross < detailNet) return res.status(400).json({ message: "Gross не должен быть ниже Netto" });
     const nextCurrency = typeof body.currency === "undefined" ? row.currency : String(body.currency || "USD").trim().toUpperCase().slice(0, 8);
     const nextCountry = typeof body.country === "undefined" ? row.country : String(body.country || "").trim() || null;
     const nextCity = typeof body.city === "undefined" ? row.city : String(body.city || "").trim() || null;
@@ -394,10 +423,10 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
       throw e;
     }
         const providerId = row.provider_id;
-    const providerCur = await pool.query(
-      `SELECT telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id
-         FROM providers
-        WHERE id = $1`,
+    const providerCur = await client.query(
+      `SELECT telegram_refused_chat_id, telegram_web_chat_id, telegram_chat_id,
+         to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS provider_edit_version
+         FROM providers WHERE id = $1 FOR UPDATE`,
       [providerId]
     );
 
@@ -406,6 +435,10 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
     }
 
     const providerRow = providerCur.rows[0];
+    const editingContacts = ["telegram_refused_chat_id", "telegram_web_chat_id", "telegram_chat_id"].some((key) => typeof body[key] !== "undefined");
+    if (editingContacts && typeof body.expected_provider_edit_version !== "undefined" && body.expected_provider_edit_version !== providerRow.provider_edit_version) {
+      return res.status(409).json({ ok: false, code: "PROVIDER_EDIT_CONFLICT", message: "Контакты поставщика изменены другим администратором. Ваш черновик сохранён в форме." });
+    }
 
     const finalTelegramRefusedChatId =
       typeof nextTelegramRefusedChatId === "undefined"
@@ -422,7 +455,7 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
         ? providerRow.telegram_chat_id
         : nextTelegramChatId;
     
-    const upd = await pool.query(
+    const upd = await client.query(
       `UPDATE services
           SET title = $2,
               description = $3,
@@ -441,7 +474,7 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
               expiration_at = $16,
               updated_at = NOW()
         WHERE id = $1
-        RETURNING *`,
+        RETURNING *, to_char(updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version`,
       [
         id,
         nextTitle,
@@ -465,13 +498,13 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
         nextExpirationAt,
       ]
     );
-    await pool.query(
+    await client.query(
       `UPDATE providers
           SET telegram_refused_chat_id = $2,
               telegram_web_chat_id = $3,
               telegram_chat_id = $4,
               updated_at = NOW()
-        WHERE id = $1`,
+        WHERE id = $1 AND (telegram_refused_chat_id IS DISTINCT FROM $2 OR telegram_web_chat_id IS DISTINCT FROM $3 OR telegram_chat_id IS DISTINCT FROM $4)`,
       [
         providerId,
         finalTelegramRefusedChatId,
@@ -480,6 +513,13 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
       ]
     );
 
+    await writeServiceEditHistory(client, {
+      before: row, after: upd.rows[0], providerBefore: providerRow,
+      providerAfter: { telegram_refused_chat_id: finalTelegramRefusedChatId, telegram_web_chat_id: finalTelegramWebChatId, telegram_chat_id: finalTelegramChatId },
+      actorId: req.user?.id,
+    });
+    await client.query("COMMIT");
+    transactionOpen = false;
     return res.json({
       ok: true,
       service: {
@@ -496,6 +536,9 @@ router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, async (req, r
 
     console.error("[admin update service] error:", e);
     return res.status(500).json({ message: "Internal error" });
+  } finally {
+    if (transactionOpen && client) await client.query("ROLLBACK").catch((error) => console.error("[admin edit rollback]", error.message));
+    if (client) client.release();
   }
 });
 
