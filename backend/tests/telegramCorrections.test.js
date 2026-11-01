@@ -110,3 +110,26 @@ test('Telegram separates waiting and returned services and history remains priva
  ctx=context({},'corr:history:42');await flow(ctx,()=>{});assert.ok(ctx.replies.some(r=>r.text.includes('Уточните цену и proof')));
  ctx=context({},'corr:history:42',1,77);await flow(ctx,()=>{});assert.ok(!JSON.stringify(ctx.replies).includes('Уточните цену и proof'));
 });
+
+test('upload shows progress before download and edits it only after committed save',async()=>{
+ const f=fixture(),session={correctionFlow:{serviceId:42,mode:'upload',field:'proof'}},ctx=context(session,null,800);
+ const sent=[],edits=[];ctx.message={photo:[{file_id:'new'}]};ctx.reply=async text=>{sent.push(text);return {message_id:11};};ctx.telegram={editMessageText:async(chat,id,inline,text,opts)=>{assert.equal(f.state.service.details.proofImages.length,2);edits.push({text,opts});}};
+ const flow=createCorrectionFlow({pool:f.pool,resolve:async()=>({id:5}),loadImage:async()=>{assert.match(sent[0],/⏳/);assert.equal(f.state.service.details.proofImages.length,1);return image;}});
+ await flow(ctx,()=>assert.fail('unexpected next'));
+ assert.equal(sent.length,1);assert.match(edits[0].text,/Подтверждение сохранено/);assert.match(edits[0].text,/2 из 20/);assert.equal(edits[0].opts.reply_markup.inline_keyboard[0][0].text,'Готово');
+});
+test('download timeout reports failure and late file arrival never writes',async()=>{
+ const f=fixture(),ctx=context({correctionFlow:{serviceId:42,mode:'upload',field:'proof'}},null,801);ctx.message={photo:[{file_id:'slow'}]};let complete;
+ const flow=createCorrectionFlow({pool:f.pool,resolve:async()=>({id:5}),uploadTimeoutMs:5,loadImage:()=>new Promise(resolve=>{complete=resolve;})});
+ await flow(ctx,()=>{});assert.match(ctx.replies[0].text,/⏳/);assert.match(ctx.replies.at(-1).text,/не успел передать/);assert.ok(!ctx.replies.some(r=>r.text.includes('✅')));complete(image);await new Promise(resolve=>setImmediate(resolve));assert.equal(f.state.service.details.proofImages.length,1);
+});
+test('failed edit falls back to a new success reply without a second file write',async()=>{
+ const f=fixture(),ctx=context({correctionFlow:{serviceId:42,mode:'upload',field:'photos'}},null,802),sent=[];ctx.message={document:{file_id:'new',mime_type:'image/png'}};ctx.reply=async text=>{sent.push(text);return {message_id:12};};ctx.telegram={editMessageText:async()=>{throw Error('edit unavailable');}};
+ const flow=createCorrectionFlow({pool:f.pool,resolve:async()=>({id:5}),loadImage:async()=>image});await flow(ctx,()=>{});
+ assert.match(sent.at(-1),/Фото карточки сохранено/);assert.equal(f.state.service.images.length,2);assert.equal(f.state.events.filter(e=>e.action==='provider_correction_edited').length,1);
+});
+test('swallowed reply failure uses direct Telegram delivery and download errors are safe',async()=>{
+ const f=fixture(),ctx=context({correctionFlow:{serviceId:42,mode:'upload',field:'proof'}},null,803),sent=[];ctx.message={photo:[{file_id:'bad'}]};ctx.reply=async()=>null;ctx.telegram={sendMessage:async(chat,text)=>{sent.push(text);return {};}};
+ const flow=createCorrectionFlow({pool:f.pool,resolve:async()=>({id:5}),loadImage:async()=>{throw Error('secret telegram download URL');}});await flow(ctx,()=>{});
+ assert.match(sent[0],/⏳/);assert.match(sent[1],/не подтверждено/);assert.ok(!sent[1].includes('secret'));assert.equal(f.state.service.details.proofImages.length,1);
+});

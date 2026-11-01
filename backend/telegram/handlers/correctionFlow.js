@@ -21,7 +21,7 @@ function keyboard(state){const id=state.service.id,t=state.token;return {inline_
  [button('Закрыть исправления','corr:exit')]
  ]};}
 function chunks(text){const result=[];for(let i=0;i<text.length;){let end=Math.min(i+3800,text.length);if(end<text.length&&/[\uD800-\uDBFF]/.test(text[end-1]))end--;result.push(text.slice(i,end));i=end;}return result;}
-function createCorrectionFlow({pool,loadImage,notifyModerationNew,resolve=resolveProviderByTelegramActorId}){
+function createCorrectionFlow({pool,loadImage,notifyModerationNew,resolve=resolveProviderByTelegramActorId,uploadTimeoutMs=20000}){
  const running=new Map();
  const serial=(id,work)=>{const previous=running.get(id)||Promise.resolve();const next=previous.catch(()=>{}).then(work);running.set(id,next);return next.finally(()=>{if(running.get(id)===next)running.delete(id);});};
  const reply=async(ctx,text,kb)=>{const parts=chunks(text);for(let i=0;i<parts.length;i++)await ctx.reply(parts[i],{parse_mode:undefined,...(i===parts.length-1&&kb?{reply_markup:kb}:{})});};
@@ -38,8 +38,25 @@ function createCorrectionFlow({pool,loadImage,notifyModerationNew,resolve=resolv
     const photo=ctx.message?.photo?.at(-1),document=ctx.message?.document,file=photo||document;
     if(!file||document&&!/^image\/(jpeg|png|webp|gif)$/.test(document.mime_type||''))throw new Error('Отправьте фото или документ PNG/JPEG/WebP/GIF до 6 МБ. PDF пока не поддерживается.');
     if(Number(file.file_size||0)>6*1024*1024)throw new Error('Изображение должно быть не больше 6 МБ.');
-    const before=await getCorrection(pool,pid,flow.serviceId);const image=await loadImage(file.file_id);if(!image)throw new Error('Не удалось обработать изображение. Попробуйте ещё раз.');
-    await mutateCorrection(pool,{providerId:pid,serviceId:flow.serviceId,expectedToken:before.token,action:'add',field:flow.field,value:image,updateId:ctx.update?.update_id});await reply(ctx,'✅ Изображение сохранено. Можно отправить ещё или нажать «Готово».',{inline_keyboard:[[button('Готово',`corr:open:${flow.serviceId}`)]]});return;
+    // The global ctx.reply wrapper can swallow delivery errors; retry status delivery directly if needed.
+    const sendStatus=async(text,kb)=>{const options={parse_mode:undefined,...(kb?{reply_markup:kb}:{})};let message;try{message=await ctx.reply(text,options);}catch{}if(!message&&ctx.telegram?.sendMessage)message=await ctx.telegram.sendMessage(ctx.chat.id,text,options);return message;};
+    const progress=await sendStatus(`⏳ Изображение получено. Загружаем и сохраняем в услугу #${flow.serviceId}…`);
+    const finish=async(text,kb)=>{if(progress?.message_id&&ctx.telegram?.editMessageText){try{await ctx.telegram.editMessageText(ctx.chat.id,progress.message_id,undefined,text,{parse_mode:undefined,reply_markup:kb});return;}catch{}}await sendStatus(text,kb);};
+    let timer,before,saved;
+    try{
+     before=await getCorrection(pool,pid,flow.serviceId);
+     // Only file download times out: its late completion cannot start a database write.
+     const image=await Promise.race([loadImage(file.file_id),new Promise((_,reject)=>{timer=setTimeout(()=>reject(Object.assign(new Error('upload_timeout'),{uploadTimeout:true})),uploadTimeoutMs);})]);
+     clearTimeout(timer);
+     if(!image)throw new Error('Не удалось обработать изображение.');
+     saved=await mutateCorrection(pool,{providerId:pid,serviceId:flow.serviceId,expectedToken:before.token,action:'add',field:flow.field,value:image,updateId:ctx.update?.update_id});
+    }catch(error){
+     clearTimeout(timer);
+     const reason=error.uploadTimeout?'Telegram не успел передать файл.':error.status&&error.status<500?error.message:'Не удалось загрузить или сохранить изображение.';
+     await finish(`⚠️ ${reason}\nУспешное сохранение не подтверждено. Проверьте список файлов перед повторной отправкой.`,{inline_keyboard:[[button('Открыть замечания и проверить файлы',`corr:open:${flow.serviceId}`)]]});return;
+    }
+    const count=flow.field==='proof'?(saved.service.details?.proofImages||[]).length:(saved.service.images||[]).length;
+    await finish(`✅ ${flow.field==='proof'?'Подтверждение сохранено':'Фото карточки сохранено'} в услуге #${flow.serviceId}.\nВсего файлов: ${count} из 20.\n\nМожно отправить ещё изображение или нажать «Готово». После всех правок отметьте замечания заново.`,{inline_keyboard:[[button('Готово',`corr:open:${flow.serviceId}`)]]});return;
    }
    return reply(ctx,'Выберите действие кнопками в карточке замечаний.',{inline_keyboard:[[button('Открыть замечания',`corr:open:${flow.serviceId}`)]]});
   }
