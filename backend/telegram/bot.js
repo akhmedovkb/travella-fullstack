@@ -9803,9 +9803,9 @@ bot.start(async (ctx) => {
         await ctx.reply("🧳 Выберите действие:", {
           reply_markup: {
             inline_keyboard: [
+              [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
               [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
               [{ text: "📋 Мои услуги", callback_data: "prov_services:list" }],
-              [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
               [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
             ],
           },
@@ -10620,6 +10620,7 @@ const counters = await fetchProviderServiceCounters(ctx);
 await ctx.reply("🧳 Выберите действие:", {
   reply_markup: {
     inline_keyboard: [
+      [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
       [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
       [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
       [{ text: "↩️ Нужны исправления", callback_data: "corr:list:0" }],
@@ -10631,7 +10632,6 @@ await ctx.reply("🧳 Выберите действие:", {
         { text: archiveButtonLabel(counters.archive), callback_data: "archive:open" },
         { text: trashButtonLabel(counters.trash), callback_data: "trash:open" },
       ],
-      [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
       [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
     ],
   },
@@ -10833,6 +10833,7 @@ bot.action("prov_services:list", async (ctx) => {
     {
       reply_markup: {
         inline_keyboard: [
+          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
           [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
           [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
       [{ text: "↩️ Нужны исправления", callback_data: "corr:list:0" }],
@@ -10844,7 +10845,6 @@ bot.action("prov_services:list", async (ctx) => {
             { text: archiveButtonLabel(counters.archive), callback_data: "archive:open" },
             { text: trashButtonLabel(counters.trash), callback_data: "trash:open" },
           ],
-          [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
           [{ text: "⬅️ Назад", callback_data: "prov_services:back" }],
         ],
       },
