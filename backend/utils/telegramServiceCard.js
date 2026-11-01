@@ -663,11 +663,11 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
 const priceKind =
   role === "provider"
     ? (d.netPrice ?? null) != null
-      ? "нетто"
+      ? "цена поставщика"
       : (d.grossPrice ?? null) != null
-        ? "брутто"
-        : "нетто"
-    : "брутто";
+        ? "цена для клиента"
+        : "цена поставщика"
+    : "цена для клиента";
 
   const badge = getExpiryBadge(d, svc);
   const badgeClean = badge ? String(badge).replace(/^⏳\s*/g, "").trim() : "";
@@ -2133,7 +2133,7 @@ const priceKind =
   if (accommodation) parts.push(`🛏 ${escapeHtml(accommodationLabel(accommodation))}`);
 
   if (priceWithCur != null && String(priceWithCur).trim()) {
-    const kind = role === "provider" ? "нетто" : "брутто";
+    const kind = role === "provider" ? "цена поставщика" : "цена для клиента";
     parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} <i>(${escapeHtml(kind)})</i>`);
   }
 

@@ -1,20 +1,25 @@
 const {waitingInfo,correctionHistory}=require('../../utils/correctionTracking');
 const {resolveProviderByTelegramActorId}=require('../../utils/providerTelegramResolver');
 const {ensureServiceModerationEvents}=require('../../utils/serviceModerationEvents');
-const {getCorrection,listCorrections,mutateCorrection}=require('../../utils/telegramCorrectionService');
+const {getCorrection,listCorrections,mutateCorrection,correctionCounts}=require('../../utils/telegramCorrectionService');
 const {submitProviderService}=require('../../utils/providerCorrections');
 const {getAllowedProviderServiceCategories}=require('../../utils/providerServiceCatalog');
 const {REFUSED_CATEGORIES}=require('../../utils/serviceCategories');
 const categories=async(pool,pid)=>{const result=await pool.query('SELECT type FROM providers WHERE id=$1',[pid]);const type=result.rows[0]?.type;return [...new Set([...(type==='agent'?[...REFUSED_CATEGORIES,'author_tour']:type==='hotel'?['refused_hotel']:[]),...getAllowedProviderServiceCategories(type)])];};
-const LABELS={NO_PROOF:'Добавить proof',BAD_PROOF:'Исправить proof',NO_DATES:'Проверить даты',BAD_PRICE:'Уточнить цену',HOTEL_DETAILS:'Уточнить отель',NO_PHOTO:'Добавить фото',MISSING_DETAILS:'Дополнить данные',WRONG_CATEGORY:'Исправить категорию',DUPLICATE:'Устранить дубль / объяснить отличие',OTHER:'Исправить замечание'};
-const FIELDS={net:'Netto',gross:'Gross',dates:'Даты',hotel:'Отель',roomCategory:'Категория номера',accommodation:'Размещение',title:'Название',description:'Описание / пояснение',category:'Категория услуги',directionCountry:'Страна',directionFrom:'Вылет из',directionTo:'Направление',food:'Питание',flightDetails:'Детали рейса'};
+const LABELS={NO_PROOF:'Подтверждение',BAD_PROOF:'Подтверждение',NO_DATES:'Проверить даты',BAD_PRICE:'Уточнить цену',HOTEL_DETAILS:'Уточнить отель',NO_PHOTO:'Добавить фото',MISSING_DETAILS:'Дополнить данные',WRONG_CATEGORY:'Исправить категорию',DUPLICATE:'Устранить дубль / объяснить отличие',OTHER:'Исправить замечание'};
+const FIELDS={net:'Цена поставщика',gross:'Цена для клиента',dates:'Даты',hotel:'Отель',roomCategory:'Категория номера',accommodation:'Размещение',title:'Название',description:'Описание / пояснение',category:'Категория услуги',directionCountry:'Страна',directionFrom:'Вылет из',directionTo:'Направление',food:'Питание',flightDetails:'Детали рейса'};
 const button=(text,data)=>({text,callback_data:data});
+function correctionAction(code,id,t){
+ const actions={NO_PROOF:['📎 Добавить подтверждение',`corr:media:${id}:proof:${t}`],BAD_PROOF:['📎 Заменить подтверждение',`corr:media:${id}:proof:${t}`],NO_DATES:['📅 Исправить даты',`corr:field:${id}:dates:${t}`],BAD_PRICE:['💳 Уточнить цену для клиента',`corr:field:${id}:gross:${t}`],HOTEL_DETAILS:['🏨 Уточнить отель',`corr:field:${id}:hotel:${t}`],NO_PHOTO:['🖼 Добавить фото карточки',`corr:media:${id}:photos:${t}`],WRONG_CATEGORY:['🏷 Исправить категорию',`corr:field:${id}:category:${t}`],DUPLICATE:['✏️ Объяснить отличие',`corr:field:${id}:description:${t}`]};
+ return button(...(actions[code]||['✏️ Открыть поля для исправления',`corr:fields:${id}`]));
+}
 function keyboard(state){const id=state.service.id,t=state.token;return {inline_keyboard:[
- [button('💵 Netto',`corr:field:${id}:net:${t}`),button('💵 Gross',`corr:field:${id}:gross:${t}`)],
+ [button('💵 Цена поставщика',`corr:field:${id}:net:${t}`)],
+ [button('💳 Цена для клиента',`corr:field:${id}:gross:${t}`)],
  [button('📅 Даты',`corr:field:${id}:dates:${t}`),button('🏨 Отель',`corr:field:${id}:hotel:${t}`)],
- [button('📎 Proof',`corr:media:${id}:proof:${t}`),button('🖼 Фото карточки',`corr:media:${id}:photos:${t}`)],
+ [button('📎 Подтверждение',`corr:media:${id}:proof:${t}`),button('🖼 Фото карточки',`corr:media:${id}:photos:${t}`)],
  [button('✏️ Другие поля',`corr:fields:${id}`)],
- ...state.correction.reasonCodes.map(code=>[button(`${state.checkedCodes.includes(code)?'✅':'⬜'} ${LABELS[code]||code}`,`corr:check:${id}:${code}:${state.checkedCodes.includes(code)?0:1}:${t}`)]),
+ ...state.correction.reasonCodes.flatMap(code=>[[correctionAction(code,id,t)],[button(`${state.checkedCodes.includes(code)?'✅':'⬜'} Исправлено: ${LABELS[code]||code}`,`corr:check:${id}:${code}:${state.checkedCodes.includes(code)?0:1}:${t}`)]]),
  [button('📤 Отправить на повторную проверку',`corr:submit:${id}:${t}`)],
  [button('История возвратов',`corr:history:${id}`)],
  [button('🔄 Обновить',`corr:open:${id}`),button('⬅️ К списку','corr:list:0')],
@@ -28,9 +33,9 @@ function createCorrectionFlow({pool,loadImage,notifyModerationNew,resolve=resolv
  const reply=async(ctx,text,kb)=>{const parts=chunks(text);for(let i=0;i<parts.length;i++)await ctx.reply(parts[i],{parse_mode:undefined,...(i===parts.length-1&&kb?{reply_markup:kb}:{})});};
  async function owned(ctx){if(ctx.chat?.type!=='private'||String(ctx.chat.id)!==String(ctx.from?.id))throw new Error('Откройте исправления в личном чате с ботом.');const p=await resolve(pool,ctx.from.id,{action:'telegram_corrections',ctxFromId:ctx.from.id,ctxChatId:ctx.chat.id,includeWebChatId:true});if(!p?.id)throw new Error('Привяжите Telegram к кабинету поставщика.');return p.id;}
  async function show(ctx,pid,id){const s=await getCorrection(pool,pid,id);ctx.session.correctionFlow={serviceId:id,mode:'none'};const d=s.service.details||{};const wait=waitingInfo({...s.service,correction_requested_at:s.correction.requestedAt});
-  const summary=`↩️ Исправления услуги #${id}\n${String(s.service.title||'').slice(0,200)}\n\nNetto: ${d.netPrice??s.service.net_price??'—'} · Gross: ${d.grossPrice??s.service.price??'—'}\nДаты: ${d.startDate||d.eventDate||'—'} → ${d.endDate||'—'}\nОтель: ${d.hotel||'—'}\nProof: ${(d.proofImages||[]).length} · Фото: ${(s.service.images||[]).length}\n\n${wait.phase==='returned'?'На повторной проверке':'На исправлении'}: ${wait.days===null?'срок неизвестен':`${wait.days} дн.`}\n\nЗамечания модератора:\n${s.correction.reason}\n\n${s.correction.pending?'Услуга уже на модерации. Дождитесь решения.':`Исправляйте поля кнопками ниже. Каждая правка сразу сохраняется в эту услугу и сбрасывает отметки чеклиста.\nОтмечено: ${s.checkedCodes.length} из ${s.correction.reasonCodes.length}.`}`;
+  const summary=`↩️ Исправления услуги #${id}\n${String(s.service.title||'').slice(0,200)}\n\nЦена поставщика: ${d.netPrice??s.service.net_price??'—'} · Цена для клиента: ${d.grossPrice??s.service.price??'—'}\nДаты: ${d.startDate||d.eventDate||'—'} → ${d.endDate||'—'}\nОтель: ${d.hotel||'—'}\nПодтверждений: ${(d.proofImages||[]).length} · Фото: ${(s.service.images||[]).length}\n\n${wait.phase==='returned'?'На повторной проверке':'На исправлении'}: ${wait.days===null?'срок неизвестен':`${wait.days} дн.`}\n\nЗамечания модератора:\n${s.correction.reason}\n\n${s.correction.pending?'Услуга уже на модерации. Дождитесь решения.':`Исправляйте поля кнопками ниже. Каждая правка сразу сохраняется в эту услугу и сбрасывает отметки чеклиста.\nОтметьте «Исправлено» только после изменения нужных полей.\nОтмечено: ${s.checkedCodes.length} из ${s.correction.reasonCodes.length}.`}`;
   await reply(ctx,summary,s.correction.pending?{inline_keyboard:[[button('История возвратов',`corr:history:${id}`)],[button('Вернулись на проверку','corr:returned:0')],[button('Ждём исправлений','corr:list:0')]]}:keyboard(s));return s;}
- async function list(ctx,pid,page,lane='waiting'){ctx.session.correctionFlow=null;const result=await listCorrections(pool,pid,page,lane);const prefix=lane==='returned'?'corr:returned':'corr:list';const rows=result.items.map(s=>{const wait=waitingInfo(s);return [button(`#${s.id} · ${String(s.title||s.category).slice(0,35)} · ${wait.days===null?'?':wait.days} дн.`,`corr:open:${s.id}`)];});if(page>0||result.more){const nav=[];if(page>0)nav.push(button('← Назад',`${prefix}:${page-1}`));if(result.more)nav.push(button('Далее →',`${prefix}:${page+1}`));rows.push(nav);}rows.push([button('Ждём исправлений','corr:list:0'),button('Вернулись на проверку','corr:returned:0')]);rows.push([button('⬅️ Мои услуги','prov_services:list')]);await reply(ctx,result.items.length?(lane==='returned'?'📨 На повторной проверке:':'↩️ На исправлении:'):'В этом разделе услуг пока нет.',{inline_keyboard:rows});}
+ async function list(ctx,pid,page,lane='waiting'){ctx.session.correctionFlow=null;const result=await listCorrections(pool,pid,page,lane);const prefix=lane==='returned'?'corr:returned':'corr:list';const rows=result.items.map(s=>{const wait=waitingInfo(s);return [button(`#${s.id} · ${String(s.title||s.category).slice(0,35)} · ${wait.days===null?'?':wait.days} дн.`,`corr:open:${s.id}`)];});if(page>0||result.more){const nav=[];if(page>0)nav.push(button('← Назад',`${prefix}:${page-1}`));if(result.more)nav.push(button('Далее →',`${prefix}:${page+1}`));rows.push(nav);}const counts=await correctionCounts(pool,pid);rows.push([button(`Нужны исправления (${counts.waiting})`,'corr:list:0')],[button(`На повторной проверке (${counts.returned})`,'corr:returned:0')]);rows.push([button('⬅️ Мои услуги','prov_services:list')]);await reply(ctx,result.items.length?(lane==='returned'?'📨 На повторной проверке:':'↩️ На исправлении:'):'В этом разделе услуг пока нет.',{inline_keyboard:rows});}
  async function handle(ctx){const pid=await owned(ctx);await ensureServiceModerationEvents(pool);const data=String(ctx.callbackQuery?.data||'');const start=String(ctx.message?.text||'').match(/^\/start(?:@\w+)? correction_(\d+)$/);
   if(start)return show(ctx,pid,Number(start[1]));
   if(!data){const flow=ctx.session.correctionFlow;if(!flow)return list(ctx,pid,0);
@@ -57,7 +62,7 @@ function createCorrectionFlow({pool,loadImage,notifyModerationNew,resolve=resolv
      await finish(`⚠️ ${reason}\nУспешное сохранение не подтверждено. Проверьте список файлов перед повторной отправкой.`,{inline_keyboard:[[button('Открыть замечания и проверить файлы',`corr:open:${flow.serviceId}`)]]});return;
     }
     const count=flow.field==='proof'?(saved.service.details?.proofImages||[]).length:(saved.service.images||[]).length;
-    await finish(`✅ ${flow.field==='proof'?'Подтверждение сохранено':'Фото карточки сохранено'} в услуге #${flow.serviceId}.\nВсего файлов: ${count} из 20.\n\nМожно отправить ещё изображение или нажать «Готово». После всех правок отметьте замечания заново.`,{inline_keyboard:[[button('Готово',`corr:open:${flow.serviceId}`)]]});return;
+    await finish(`✅ ${flow.field==='proof'?'Подтверждение сохранено':'Фото карточки сохранено'} в услуге #${flow.serviceId}.\nВсего файлов: ${count} из 20.\n\nМожно отправить ещё изображение или нажать «Готово». После всех правок нажмите «Исправлено» напротив каждого замечания.`,{inline_keyboard:[[button('Готово',`corr:open:${flow.serviceId}`)]]});return;
    }
    return reply(ctx,'Выберите действие кнопками в карточке замечаний.',{inline_keyboard:[[button('Открыть замечания',`corr:open:${flow.serviceId}`)]]});
   }
@@ -94,13 +99,13 @@ function createCorrectionFlow({pool,loadImage,notifyModerationNew,resolve=resolv
    if(parts[4]!==state.token)throw new Error('Кнопка устарела. Обновите замечания.');const images=field==='proof'?state.service.details?.proofImages||[]:state.service.images||[];
    const rows=[[button('➕ Добавить изображение',`corr:upload:${id}:${field}:${state.token}`)]];
    images.forEach((_,index)=>rows.push([button(`Открыть ${index+1}`,`corr:view:${id}:${field}:${index}:${state.token}`),button(`Удалить ${index+1}`,`corr:del:${id}:${field}:${index}:${state.token}`)]));rows.push([button('К замечаниям',`corr:open:${id}`)]);
-   return reply(ctx,field==='proof'?`📎 Proof: ${images.length} изображений. Это внутренние подтверждения, клиенты их не видят.`:`🖼 Фото карточки: ${images.length}. Эти изображения видят клиенты. Не загружайте сюда брони с личными данными.`,{inline_keyboard:rows});
+   return reply(ctx,field==='proof'?`📎 Подтверждения: ${images.length} изображений. Это внутренние подтверждения, клиенты их не видят.`:`🖼 Фото карточки: ${images.length}. Эти изображения видят клиенты. Не загружайте сюда брони с личными данными.`,{inline_keyboard:rows});
   }
   if(action==='upload'){if(parts[4]!==state.token)throw new Error('Кнопка устарела.');ctx.session.correctionFlow={serviceId:id,mode:'upload',field};return reply(ctx,'Отправьте фото или изображение файлом до 6 МБ. Каждое изображение сохранится сразу.',{inline_keyboard:[[button('Готово',`corr:open:${id}`)]]});}
   if(action==='del'||action==='view'){
    if(parts[5]!==state.token)throw new Error('Состав изображений изменился. Обновите замечания.');const index=Number(parts[4]);
    if(action==='del'){await mutateCorrection(pool,{providerId:pid,serviceId:id,expectedToken:parts[5],action:'remove',field,value:index,updateId:ctx.update?.update_id});return show(ctx,pid,id);}
-   const images=field==='proof'?state.service.details?.proofImages||[]:state.service.images||[];const src=images[index];if(!src)throw new Error('Изображение не найдено.');return ctx.replyWithPhoto(/^data:image\//.test(src)?{source:Buffer.from(src.split(',')[1],'base64')}:src,{caption:`${field==='proof'?'Proof':'Фото'} ${index+1} · #${id}`});
+   const images=field==='proof'?state.service.details?.proofImages||[]:state.service.images||[];const src=images[index];if(!src)throw new Error('Изображение не найдено.');return ctx.replyWithPhoto(/^data:image\//.test(src)?{source:Buffer.from(src.split(',')[1],'base64')}:src,{caption:`${field==='proof'?'Подтверждение':'Фото'} ${index+1} · #${id}`});
   }
   throw new Error('Неизвестная кнопка. Откройте замечания заново.');
  }

@@ -1,3 +1,4 @@
+const { correctionCounts } = require("../utils/telegramCorrectionService");
 const { replyProviderProfile } = require("../utils/telegramProviderProfile");
 // backend/telegram/bot.js
 const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");
@@ -3249,11 +3250,12 @@ async function fetchProviderServiceCounters(ctx) {
     const actorId = getActorId(ctx);
     if (!actorId) return { draft: 0, pending: 0, archive: 0, trash: 0 };
 
-    const [draftRes, pendingRes, archiveRes, trashRes] = await Promise.allSettled([
+    const [draftRes, pendingRes, archiveRes, trashRes, correctionRes] = await Promise.allSettled([
       axios.get(`/api/telegram/provider/${actorId}/services/drafts`),
       axios.get(`/api/telegram/provider/${actorId}/services/pending`),
       axios.get(`/api/telegram/provider/${actorId}/services/archive`),
       axios.get(`/api/telegram/provider/${actorId}/services/deleted`),
+      (async()=>{const pid=await resolveProviderIdByTelegramChatId(actorId);if(!pid)throw new Error("provider not linked");return correctionCounts(pool,pid);})(),
     ]);
 
     const draftItems =
@@ -3274,6 +3276,7 @@ async function fetchProviderServiceCounters(ctx) {
         : [];
 
     return {
+      corrections: correctionRes.status === "fulfilled" ? correctionRes.value : null,
       draft: Array.isArray(draftItems) ? draftItems.length : 0,
       pending: Array.isArray(pendingItems) ? pendingItems.length : 0,
       archive: Array.isArray(archiveItems) ? archiveItems.length : 0,
@@ -4300,7 +4303,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_price":
       await safeReply(
         ctx,
-        `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
+        `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -4308,7 +4311,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_grossPrice":
       await safeReply(
         ctx,
-        `💳 Цена БРУТТО (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
+        `💳 Цена для клиента (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -6252,7 +6255,7 @@ async function replyProviderDraftResumePrompt(ctx, row) {
     svc_hotel_early_checkin: "Ранний заезд",
     svc_hotel_fast_track: "Fast Track",
   
-    svc_create_price: "Цена нетто",
+    svc_create_price: "Цена поставщика",
     svc_create_grossPrice: "Цена для клиента",
     svc_create_expiration: "Срок актуальности",
     svc_create_photo: "Фото услуги",
@@ -7237,7 +7240,7 @@ function buildProofKeyboard(serviceId, count = 0) {
     ]);
     rows.push([
       { text: "✏️ Детали", callback_data: `proof:edit:${Number(serviceId || 0)}:details` },
-      { text: "🖼 Proof", callback_data: "proof:add_more" },
+      { text: "📎 Подтверждение", callback_data: "proof:add_more" },
     ]);
     rows.push([{ text: "👀 Просмотреть proof", callback_data: `proof:view:${Number(serviceId || 0)}` }]);
     rows.push([{ text: "🗑 Удалить последнее", callback_data: "proof:delete_last" }]);
@@ -7257,7 +7260,7 @@ function buildDraftProofSummary(ctx, serviceId, count = 0) {
   const route = [draft.country, draft.fromCity, draft.toCity].filter(Boolean).join(" → ");
   if (route) lines.push(`🌍 ${escapeHtml(route)}`);
   if (draft.startDate || draft.endDate) lines.push(`📅 ${escapeHtml([draft.startDate, draft.endDate].filter(Boolean).join(" → "))}`);
-  if (draft.price) lines.push(`💰 Нетто: ${escapeHtml(draft.price)}`);
+  if (draft.price) lines.push(`💰 Цена поставщика: ${escapeHtml(draft.price)}`);
   if (draft.grossPrice) lines.push(`💳 Клиенту: ${escapeHtml(draft.grossPrice)}`);
   lines.push(`📎 Доказательств: <b>${Number(count || 0)}</b>`);
   return lines.join("\n");
@@ -7973,8 +7976,8 @@ async function validateGrossNotLessThanNet(ctx, netStr, grossStr, backToState) {
 
   if (net !== null && gross < net) {
     await ctx.reply(
-      `⚠️ Цена *БРУТТО* не может быть меньше *НЕТТО*.\n` +
-        `НЕТТО: *${net}*\nБРУТТО: *${gross}*\n\nВведите корректную цену БРУТТО.`,
+      `⚠️ Цена *ЦЕНА ДЛЯ КЛИЕНТА* не может быть меньше *ЦЕНА ПОСТАВЩИКА*.\n` +
+        `Цена поставщика: *${net}*\nЦена для клиента: *${gross}*\n\nВведите корректную цену для клиента.`,
       { parse_mode: "Markdown", ...wizNavKeyboard() }
     );
     if (backToState) ctx.session.state = backToState;
@@ -8056,7 +8059,7 @@ function wizardCurrentPreview(ctx, state) {
     svc_hotel_early_checkin: ["Ранний заезд", bool(d.earlyCheckIn)],
     svc_hotel_fast_track: ["Fast Track", bool(d.arrivalFastTrack)],
 
-    svc_create_price: ["Нетто", d.price || d.netPrice],
+    svc_create_price: ["Цена поставщика", d.price || d.netPrice],
     svc_create_grossPrice: ["Цена для клиента", d.grossPrice],
     svc_create_expiration: ["Актуально до", d.expiration],
     svc_create_photo: ["Фото", Array.isArray(d.images) ? `${d.images.length} шт.` : ""],
@@ -8641,7 +8644,7 @@ async function promptWizardState(ctx, state) {
               ? "за билет"
               : "за тур";
       await ctx.reply(
-        `💰 Укажите *цену НЕТТО* (${label})\nПример: *1130* или *1130 USD*`,
+        `💰 Укажите *цену поставщика* (${label})\nПример: *1130* или *1130 USD*`,
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -8658,7 +8661,7 @@ async function promptWizardState(ctx, state) {
               ? "за билет"
               : "за тур";
       await ctx.reply(
-        `💳 Укажите *цену БРУТТО* (${label})\nПример: *1250* или *1250 USD*\n` +
+        `💳 Укажите *цену для клиента* (${label})\nПример: *1250* или *1250 USD*\n` +
           `Или нажмите «⏭ Пропустить» — посчитаю автоматически (+${
             DEFAULT_GROSS_MARKUP_PERCENT || 10
           }%).`,
@@ -8737,7 +8740,7 @@ async function finishCreateServiceFromWizard(ctx) {
     const grossNum = normalizePrice(draft.grossPrice);
     if (grossNum === null && String(draft.grossPrice || "").trim()) {
       await ctx.reply(
-        "😕 Не понял цену брутто.\nВведите число (например *1250*) или нажмите «⏭ Пропустить».",
+        "😕 Не понял цену для клиента.\nВведите число (например *1250*) или нажмите «⏭ Пропустить».",
         { parse_mode: "Markdown" }
       );
       ctx.session.state = "svc_create_grossPrice";
@@ -8753,9 +8756,9 @@ async function finishCreateServiceFromWizard(ctx) {
     // grossNumFinal уже финальный (введённый или рассчитанный)
     if (grossNumFinal !== null && grossNumFinal < priceNum) {
       await ctx.reply(
-        `⚠️ Цена *БРУТТО* не может быть меньше *НЕТТО*.\n` +
-          `Сейчас: нетто=${priceNum}, брутто=${grossNumFinal}.\n\n` +
-          `Введите цену БРУТТО заново (например: *1250* или *1250 USD*) ` +
+        `⚠️ Цена *ЦЕНА ДЛЯ КЛИЕНТА* не может быть меньше *ЦЕНА ПОСТАВЩИКА*.\n` +
+          `Сейчас: поставщик=${priceNum}, клиент=${grossNumFinal}.\n\n` +
+          `Введите цену для клиента заново (например: *1250* или *1250 USD*) ` +
           `или нажмите «⏭ Пропустить».`,
         { parse_mode: "Markdown" }
       );
@@ -10642,7 +10645,8 @@ await ctx.reply("🧳 Выберите действие:", {
       [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
       [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
       [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
-      [{ text: "↩️ Нужны исправления", callback_data: "corr:list:0" }],
+      [{ text: `↩️ Нужны исправления${counters.corrections ? ` (${counters.corrections.waiting})` : ""}`, callback_data: "corr:list:0" }],
+      [{ text: `📨 На повторной проверке${counters.corrections ? ` (${counters.corrections.returned})` : ""}`, callback_data: "corr:returned:0" }],
       [
         { text: pendingButtonLabel(counters.pending), callback_data: "pending:open" },
         { text: draftButtonLabel(counters.draft), callback_data: "drafts:open" },
@@ -10855,7 +10859,8 @@ bot.action("prov_services:list", async (ctx) => {
           [{ text: "➕ Создать услугу", callback_data: "prov_services:create" }],
           [{ text: "📤 Выбрать мою услугу", switch_inline_query_current_chat: "#my refused_tour" }],
           [{ text: "📢 Актуальные", callback_data: "prov_services:list_cards" }],
-      [{ text: "↩️ Нужны исправления", callback_data: "corr:list:0" }],
+      [{ text: `↩️ Нужны исправления${counters.corrections ? ` (${counters.corrections.waiting})` : ""}`, callback_data: "corr:list:0" }],
+      [{ text: `📨 На повторной проверке${counters.corrections ? ` (${counters.corrections.returned})` : ""}`, callback_data: "corr:returned:0" }],
           [
             { text: pendingButtonLabel(counters.pending), callback_data: "pending:open" },
             { text: draftButtonLabel(counters.draft), callback_data: "drafts:open" },
@@ -11066,11 +11071,10 @@ bot.action(/^svc_restore_archive:(\d+)$/, async (ctx) => {
     const serviceId = Number(ctx.match[1]);
     const actorId = getActorId(ctx);
 
-    await axios.post(
-      `/api/telegram/provider/${actorId}/services/${serviceId}/restore-archive`
-    );
-
-    await safeReply(ctx, "♻️ Услуга возвращена в активные и продлена на 7 дней.");
+    if(ctx.chat?.type!=="private")return safeReply(ctx,"Откройте личный чат с ботом.");
+    const {data}=await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/restore-archive`);
+    const service=data?.service;
+    await safeReply(ctx,service?.status === "published" ? "♻️ Услуга восстановлена в опубликованные. Срок актуальности — 7 дней." : "♻️ Услуга восстановлена. Если остались замечания, продолжите в «Нужны исправления». Иначе откройте «Черновики» и отправьте на проверку.",{reply_markup:{inline_keyboard:[[{text:"Мои услуги",callback_data:"prov_services:list"}]]}});
   } catch (e) {
     console.error("[tg-bot] svc_restore_archive error:", e?.response?.data || e);
     await safeReply(ctx, "⚠️ Не удалось вернуть услугу в активные.");
@@ -11078,22 +11082,24 @@ bot.action(/^svc_restore_archive:(\d+)$/, async (ctx) => {
 });
 
 bot.action(/^svc_archive:(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  if(ctx.chat?.type!=="private")return safeReply(ctx,"Откройте личный чат с ботом.");
+  const serviceId=Number(ctx.match[1]),actorId=getActorId(ctx);
   try {
-    await ctx.answerCbQuery("🗄 Архивирую…");
-    const serviceId = Number(ctx.match[1]);
-    const actorId = getActorId(ctx);
+    const {data}=await axios.get(`/api/telegram/provider/${actorId}/services/${serviceId}`);
+    const service=data?.service;if(!service)throw new Error("not found");
+    await safeReply(ctx,`🗄 Отправить услугу #${serviceId} в архив?\n${String(service.title||"").slice(0,150)}\n\nОна исчезнет из активных списков. Данные сохранятся, и услугу можно будет восстановить из архива.`,{reply_markup:{inline_keyboard:[[{text:"🗄 Да, в архив",callback_data:`svc_archive_confirm:${serviceId}`}],[{text:"Отмена — в меню услуг",callback_data:"prov_services:list"}]]}});
+  }catch{await safeReply(ctx,"Не удалось открыть услугу. Обновите список.");}
+});
 
-    await axios.post(
-      `/api/telegram/provider/${actorId}/services/${serviceId}/archive`
-    );
-
-    await safeReply(ctx, "🗄 Услуга архивирована.");
-
-    await replyProviderSupportPrompt(ctx, serviceId);
-  } catch (e) {
-    console.error("[tg-bot] svc_archive error:", e?.response?.data || e);
-    await safeReply(ctx, "⚠️ Не удалось архивировать услугу.");
-  }
+bot.action(/^svc_archive_confirm:(\d+)$/, async (ctx) => {
+  await ctx.answerCbQuery("Архивирую…");
+  if(ctx.chat?.type!=="private")return safeReply(ctx,"Откройте личный чат с ботом.");
+  const serviceId=Number(ctx.match[1]),actorId=getActorId(ctx);
+  try {
+    await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/archive`);
+    await safeReply(ctx,`🗄 Услуга #${serviceId} архивирована. Данные сохранены.`,{reply_markup:{inline_keyboard:[[{text:"♻️ Восстановить услугу",callback_data:`svc_restore_archive:${serviceId}`}],[{text:"🗄 Открыть архив",callback_data:"archive:open"}],[{text:"Мои услуги",callback_data:"prov_services:list"}]]}});
+  }catch{await safeReply(ctx,"⚠️ Не удалось архивировать услугу. Обновите список и попробуйте снова.");}
 });
 
 /* ===================== УДАЛЕНИЕ УСЛУГИ ИЗ "МОИ КАРТОЧКИ" ===================== */
@@ -11263,7 +11269,7 @@ bot.action(/^archive:item:(\d+)$/, async (ctx) => {
   const reply_markup = {
     inline_keyboard: [
       [
-        { text: "♻️ Вернуть в активные", callback_data: `svc_restore_archive:${serviceId}` },
+        { text: "♻️ Восстановить услугу", callback_data: `svc_restore_archive:${serviceId}` },
         { text: "⏳ Продлить 7 дней", callback_data: `svc_extend:${serviceId}` },
       ],
       [
@@ -16748,7 +16754,7 @@ async function handleSvcEditWizardText(ctx) {
 
         await go(
           "svc_edit_price",
-          `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -16915,7 +16921,7 @@ async function handleSvcEditWizardText(ctx) {
         if (draft.category === "refused_flight") {
           await go(
             "svc_edit_price",
-            `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+            `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
           );
           return true;
         }
@@ -17063,7 +17069,7 @@ async function handleSvcEditWizardText(ctx) {
       
         await go(
           "svc_edit_price",
-          `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -17296,7 +17302,7 @@ async function handleSvcEditWizardText(ctx) {
         
           await go(
             "svc_edit_price",
-            `💰 Цена НЕТТО (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+            `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
           );
           return true;
         }
@@ -17316,7 +17322,7 @@ async function handleSvcEditWizardText(ctx) {
 
         await go(
           "svc_edit_grossPrice",
-          `💳 Цена БРУТТО (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          `💳 Цена для клиента (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -17719,7 +17725,7 @@ bot.on("text", async (ctx, next) => {
           const priceWithCur = formatPriceWithCurrency(priceRaw);
 
           if (title) titleLine = `🏷 ${escapeMarkdown(title)}\n`;
-          if (priceWithCur) priceLine = `💳 Цена (брутто): *${escapeMarkdown(priceWithCur)}*\n`;
+          if (priceWithCur) priceLine = `💳 Цена для клиента: *${escapeMarkdown(priceWithCur)}*\n`;
         }
 
         const serviceUrl = SERVICE_URL_TEMPLATE
@@ -17805,7 +17811,7 @@ bot.on("text", async (ctx, next) => {
           const priceWithCur = formatPriceWithCurrency(priceRaw);
       
           if (title) titleLine = `🏷 ${escapeMarkdown(title)}\n`;
-          if (priceWithCur) priceLine = `💳 Цена (брутто): *${escapeMarkdown(priceWithCur)}*\n`;
+          if (priceWithCur) priceLine = `💳 Цена для клиента: *${escapeMarkdown(priceWithCur)}*\n`;
         }
       
         const serviceUrl = SERVICE_URL_TEMPLATE

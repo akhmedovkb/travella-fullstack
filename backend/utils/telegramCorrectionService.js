@@ -34,7 +34,7 @@ function validateField(field,input,service,providerType){
   const n=text.replace(',','.');const names=field==='net'?['netPrice','net_price']:['grossPrice','gross_price','price'];
   d[names[0]]=n;for(const key of names.slice(1))if(Object.hasOwn(d,key))d[key]=n;
   const net=Number(d.netPrice??d.net_price??service.net_price),gross=Number(d.grossPrice??d.gross_price??d.price??service.gross_price??service.price);
-  if(net>0&&gross>0&&gross<net)throw fail('Gross не может быть ниже Netto. Сначала исправьте соответствующую цену.',400);
+  if(net>0&&gross>0&&gross<net)throw fail('Цена для клиента не может быть ниже цены поставщика. Сначала исправьте соответствующую цену.',400);
   if(field==='gross'&&!String(service.category).startsWith('refused_')&&service.category!=='author_tour')patch.price=Number(n);
  }else if(field==='dates'){
   const dates=text.match(/\d{4}-\d{2}-\d{2}/g)||[];const single=['refused_ticket','refused_event_ticket'].includes(service.category);
@@ -81,3 +81,10 @@ async function mutateCorrection(pool,{providerId,serviceId,expectedToken,updateI
  }finally{if(open)await db.query('ROLLBACK');db.release();}
 }
 module.exports={getCorrection,listCorrections,mutateCorrection,validateField,token};
+
+async function correctionCounts(pool,providerId){
+ await ensureServiceModerationEvents(pool);
+ const result=await pool.query(`SELECT COUNT(*) FILTER(WHERE (${WAITING_SQL}))::int AS waiting,COUNT(*) FILTER(WHERE (${RETURNED_SQL}))::int AS returned FROM services s WHERE s.provider_id=$1 AND s.deleted_at IS NULL`,[providerId]);
+ return {waiting:Number(result.rows[0]?.waiting||0),returned:Number(result.rows[0]?.returned||0)};
+}
+module.exports.correctionCounts=correctionCounts;
