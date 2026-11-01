@@ -1,3 +1,6 @@
+const { WAITING_SQL, RETURNED_SQL } = require("../utils/correctionTracking");
+const { ensureServiceModerationEvents } = require("../utils/serviceModerationEvents");
+const CORRECTION_PHASE_SQL = `CASE WHEN (${WAITING_SQL}) THEN 'waiting' WHEN (${RETURNED_SQL}) THEN 'returned' ELSE NULL END AS correction_phase`;
 // backend/controllers/telegramProviderController.js
 const pool = require("../db");
 const axiosBase = require("axios");
@@ -788,6 +791,7 @@ async function getProviderDraftServices(req, res) {
       return res.status(403).json({ success: false });
     }
 
+    await ensureServiceModerationEvents(pool);
     const q = await pool.query(
       `
       SELECT
@@ -799,6 +803,8 @@ async function getProviderDraftServices(req, res) {
       WHERE s.provider_id = $1
         AND s.deleted_at IS NULL
         AND COALESCE(s.status, 'draft') = 'draft'
+        AND COALESCE(s.moderation_status, 'draft') NOT IN ('pending','approved','published','active','archived','deleted')
+        AND NOT COALESCE((${WAITING_SQL}), false)
       ORDER BY COALESCE(s.updated_at, s.created_at) DESC
       LIMIT 100
       `,
@@ -822,10 +828,12 @@ async function getProviderPendingServices(req, res) {
       return res.status(403).json({ success: false });
     }
 
+    await ensureServiceModerationEvents(pool);
     const q = await pool.query(
       `
       SELECT
         s.*,
+        ${CORRECTION_PHASE_SQL},
         p.name   AS provider_name,
         p.social AS provider_telegram
       FROM services s
@@ -1276,6 +1284,7 @@ async function getProviderServiceByIdFromBot(req, res) {
         .json({ success: false, error: "PROVIDER_NOT_FOUND" });
     }
 
+    await ensureServiceModerationEvents(pool);
     const svcRes = await pool.query(
       `
       SELECT
@@ -1289,6 +1298,7 @@ async function getProviderServiceByIdFromBot(req, res) {
         s.images,
         s.expiration_at AS expiration,
         s.created_at,
+        ${CORRECTION_PHASE_SQL},
         p.name   AS provider_name,
         p.social AS provider_telegram
       FROM services s

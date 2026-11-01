@@ -2954,7 +2954,7 @@ function buildDraftListText(items) {
 
   return (
     `📝 <b>Черновики</b>\n\n` +
-    `Здесь услуги, которые ещё не опубликованы. Нажмите на услугу, чтобы продолжить редактирование.\n\n` +
+    `Здесь новые услуги без замечаний модератора. Возвращённые карточки находятся в разделе «Нужны исправления». Нажмите на черновик, чтобы продолжить создание.\n\n` +
     lines.join("\n\n") +
     (items.length > 20 ? `\n\n…и ещё ${items.length - 20} шт.` : "")
   );
@@ -3327,7 +3327,7 @@ function buildPendingListText(items) {
       (cat ? `\n📌 ${cat}` : "") +
       (direction ? `\n🌍 ${direction}` : "") +
       (submitted ? `\n🕒 Отправлено: ${submitted}` : "") +
-      `\n🕓 Статус: на модерации`
+      `\n🕓 Статус: ${s.correction_phase === "returned" ? "на повторной проверке" : "на модерации"}`
     );
   });
 
@@ -4598,17 +4598,17 @@ bot.action(/^pending:item:(\d+)$/, async (ctx) => {
     const categoryLabel = escapeHtml(CATEGORY_LABELS?.[svc.category] || svc.category || "Услуга");
     const submitted = svc.submitted_at ? escapeHtml(prettyDateTime(svc.submitted_at)) : "—";
     const text =
-      `🕓 <b>Услуга на модерации #R${escapeHtml(svc.id)}</b>\n\n` +
+      `🕓 <b>${svc.correction_phase === "returned" ? "На повторной проверке" : "Услуга на модерации"} #R${escapeHtml(svc.id)}</b>\n\n` +
       `📌 <b>${title}</b>\n` +
       `🏷 <b>Категория:</b> ${categoryLabel}\n` +
       `🕒 <b>Отправлено:</b> ${submitted}\n\n` +
-      `Администратор проверяет данные и proof. После редактирования услуга вернётся в черновик и её нужно будет отправить повторно.`;
+      `Администратор проверяет данные и подтверждения. Дождитесь решения; если понадобятся правки, они появятся в разделе «Нужны исправления».`;
 
     await safeReply(ctx, text, {
       parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [
-          [{ text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` }],
+          ...(svc.correction_phase === "returned" ? [[{ text: "📋 Замечания и история", callback_data: `corr:open:${svc.id}` }]] : []),
           [{ text: "🌐 Открыть в кабинете", url: `${SITE_URL}/dashboard?from=tg&service=${svc.id}` }],
           [{ text: "⬅️ Назад", callback_data: "pending:open" }],
         ],
@@ -4642,6 +4642,11 @@ bot.action(/^draft:item:(\d+)$/, async (ctx) => {
 
     if (!svc || Number(svc.id) !== serviceId) {
       await safeReply(ctx, "⚠️ Черновик не найден. Нажмите «Обновить черновики».");
+      return;
+    }
+
+    if (svc.correction_phase) {
+      await safeReply(ctx, svc.correction_phase === "returned" ? "🕓 Услуга на повторной проверке. Дождитесь решения модератора." : "↩️ Услуга на исправлении. Откройте замечания, чтобы продолжить.", { reply_markup: { inline_keyboard: [[{ text: "Открыть замечания", callback_data: `corr:open:${serviceId}` }], [{ text: "⬅️ В меню услуг", callback_data: "prov_services:list" }]] } });
       return;
     }
 
@@ -4697,6 +4702,11 @@ bot.action(/^draft:continue:(\d+)$/, async (ctx) => {
 
     if (!svc || Number(svc.id) !== serviceId) {
       await safeReply(ctx, "⚠️ Черновик не найден.");
+      return;
+    }
+
+    if (svc.correction_phase) {
+      await safeReply(ctx, svc.correction_phase === "returned" ? "🕓 Услуга на повторной проверке. Дождитесь решения модератора." : "↩️ Услуга на исправлении. Откройте замечания, чтобы продолжить.", { reply_markup: { inline_keyboard: [[{ text: "Открыть замечания", callback_data: `corr:open:${serviceId}` }], [{ text: "⬅️ В меню услуг", callback_data: "prov_services:list" }]] } });
       return;
     }
 

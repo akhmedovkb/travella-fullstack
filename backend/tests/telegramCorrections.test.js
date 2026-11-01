@@ -106,7 +106,7 @@ test('old proof buttons cannot expose private confirmations in a group even to t
 
 test('Telegram separates waiting and returned services and history remains private',async()=>{
  const f=fixture(),{flow}=flowFor(f);let ctx=context({},'corr:list:0');await flow(ctx,()=>{});assert.ok(ctx.replies.at(-1).opts.reply_markup.inline_keyboard.flat().some(b=>b.callback_data==='corr:open:42'));
- f.state.service.status='pending';f.state.service.moderation_status='pending';f.state.service.submitted_at='2026-10-29T00:00:00Z';ctx=context({},'corr:returned:0');await flow(ctx,()=>{});assert.match(ctx.replies.at(-1).text,/повторную проверку/);assert.ok(ctx.replies.at(-1).opts.reply_markup.inline_keyboard.flat().some(b=>b.callback_data==='corr:open:42'));
+ f.state.service.status='pending';f.state.service.moderation_status='pending';f.state.service.submitted_at='2026-10-29T00:00:00Z';ctx=context({},'corr:returned:0');await flow(ctx,()=>{});assert.match(ctx.replies.at(-1).text,/На повторной проверке/);assert.ok(ctx.replies.at(-1).opts.reply_markup.inline_keyboard.flat().some(b=>b.callback_data==='corr:open:42'));
  ctx=context({},'corr:history:42');await flow(ctx,()=>{});assert.ok(ctx.replies.some(r=>r.text.includes('Уточните цену и proof')));
  ctx=context({},'corr:history:42',1,77);await flow(ctx,()=>{});assert.ok(!JSON.stringify(ctx.replies).includes('Уточните цену и proof'));
 });
