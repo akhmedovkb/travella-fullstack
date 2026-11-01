@@ -1,3 +1,4 @@
+const { replyProviderProfile } = require("../utils/telegramProviderProfile");
 // backend/telegram/bot.js
 const { normalizeRefusedFlightDetails } = require("../utils/flightDetailsNormalizer");
 require("dotenv").config();
@@ -2621,7 +2622,7 @@ function getMainMenuKeyboard(role) {
       [{ text: "🏠 Главное меню" }],
       [{ text: "🔍 Найти услугу" }, { text: "🧳 Мои услуги" }],
       [{ text: "🧺 Корзина" }, { text: "📄 Бронирования" }],
-      [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
+      [{ text: "📨 Заявки" }, { text: "👤 Мой профиль" }],
       [{ text: "⭐ Мои отзывы" }, { text: "🎓 Обучение" }],
       [{ text: "🆘 Поддержка" }, { text: "🔔 Настройки" }],
     ]);
@@ -2631,7 +2632,7 @@ function getMainMenuKeyboard(role) {
     [{ text: "🏠 Главное меню" }],
     [{ text: "🔍 Найти услугу" }, { text: "🔥 Горящие предложения" }],
     [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
-    [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
+    [{ text: "📨 Заявки" }, { text: "👤 Мой профиль" }],
     [{ text: "⭐ Мои отзывы" }, { text: "🎓 Обучение" }],
     [{ text: "🆘 Поддержка" }, { text: "🔔 Настройки" }],
     [{ text: "🏢 Стать поставщиком" }],
@@ -2757,7 +2758,7 @@ function getClientHomeKeyboard() {
     keyboard: [
       [{ text: "🔍 Найти услугу" }, { text: "🔥 Горящие предложения" }],
       [{ text: "❤️ Избранное" }, { text: "📄 Бронирования" }],
-      [{ text: "📨 Заявки" }, { text: "👤 Профиль" }],
+      [{ text: "📨 Заявки" }, { text: "👤 Мой профиль" }],
       [{ text: "🏢 Стать поставщиком" }],
     ],
     resize_keyboard: true,
@@ -10552,7 +10553,11 @@ bot.action(/^reqopen:(\d+)$/, async (ctx) => {
   }
 });
 
-bot.hears(/👤 Профиль/i, async (ctx) => {
+bot.hears(/^👤 (?:Мой профиль|Профиль)$/i, async (ctx) => {
+  if (ctx.chat?.type !== "private") {
+    await ctx.reply("👤 Откройте личный чат с ботом, чтобы посмотреть свой профиль.");
+    return;
+  }
   logUpdate(ctx, "hears Профиль");
 
   const maybeProvider = await ensureProviderRole(ctx);
@@ -10568,9 +10573,7 @@ bot.hears(/👤 Профиль/i, async (ctx) => {
   }
 
   if (role === "provider") {
-    await ctx.reply(
-      `🏢 Профиль поставщика можно изменить в кабинете:\n\n${SITE_URL}/dashboard/profile`
-    );
+    await replyProviderProfile(ctx, { pool, resolveProviderId: resolveProviderIdByTelegramChatId, siteUrl: SITE_URL });
     return;
   }
 
