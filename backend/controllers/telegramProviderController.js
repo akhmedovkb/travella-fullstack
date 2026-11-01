@@ -1046,6 +1046,7 @@ async function serviceActionFromBot(req, res, action) {
       providerId,
       serviceId: svcId,
       action,
+      expectedEditVersion: req.body?.expected_edit_version,
     });
 
     if (!applied.rowCount || !applied.service) {
@@ -1298,6 +1299,8 @@ async function getProviderServiceByIdFromBot(req, res) {
         s.images,
         s.expiration_at AS expiration,
         s.created_at,
+        s.moderation_status,
+        to_char(s.updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version,
         ${CORRECTION_PHASE_SQL},
         p.name   AS provider_name,
         p.social AS provider_telegram

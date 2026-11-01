@@ -24,7 +24,8 @@ const DEFAULT_RETURNING = `
   rejected_at,
   rejected_reason,
   created_at,
-  updated_at
+  updated_at,
+  to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') AS edit_version
 `;
 
 const SERVICE_LIFECYCLE_ACTIONS = new Set([
@@ -96,7 +97,7 @@ async function assertNoPurgeBlockers(pool, serviceId) {
   }
 }
 
-async function applyServiceLifecycleAction(pool, { providerId, serviceId, action }) {
+async function applyServiceLifecycleAction(pool, { providerId, serviceId, action, expectedEditVersion }) {
   const pid = Number(providerId);
   const sid = Number(serviceId);
   const act = assertLifecycleAction(action);
@@ -216,9 +217,12 @@ async function applyServiceLifecycleAction(pool, { providerId, serviceId, action
         WHERE id = $1
           AND provider_id = $2
           AND deleted_at IS NULL
+          AND ($3::text IS NULL OR to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')=$3)
+          AND ($3::text IS NULL OR status NOT IN ('archived','pending','deleted'))
         RETURNING ${DEFAULT_RETURNING}`,
-      [sid, pid]
+      [sid, pid, expectedEditVersion || null]
     );
+    if(expectedEditVersion && !result.rowCount){const error=new Error("SERVICE_VERSION_CONFLICT");error.code="SERVICE_VERSION_CONFLICT";error.status=409;throw error;}
   } else if (act === "restore_active") {
     result = await pool.query(
       `UPDATE services
@@ -252,9 +256,12 @@ async function applyServiceLifecycleAction(pool, { providerId, serviceId, action
         WHERE id = $1
           AND provider_id = $2
           AND deleted_at IS NULL
+          AND ($3::text IS NULL OR to_char(updated_at AT TIME ZONE 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"')=$3)
+          AND ($3::text IS NULL OR status='archived')
         RETURNING ${DEFAULT_RETURNING}`,
-      [sid, pid]
+      [sid, pid, expectedEditVersion || null]
     );
+    if(expectedEditVersion && !result.rowCount){const error=new Error("SERVICE_VERSION_CONFLICT");error.code="SERVICE_VERSION_CONFLICT";error.status=409;throw error;}
   } else if (act === "delete") {
     result = await pool.query(
       `UPDATE services

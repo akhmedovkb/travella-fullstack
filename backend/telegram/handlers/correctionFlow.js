@@ -115,7 +115,7 @@ function createCorrectionFlow({pool,loadImage,notifyModerationNew,resolve=resolv
   if(/^\/(cancel|menu|start)(?:@\w+)?\s*$/.test(text)){ctx.session.correctionFlow=null;return next();}
   if(!data.startsWith('corr:')&&!ctx.session.correctionFlow&&!/^\/corrections(?:@\w+)?$/.test(text)&&!/^\/start(?:@\w+)? correction_\d+$/.test(text))return next();
   if(ctx.callbackQuery)await ctx.answerCbQuery().catch(()=>{});
-  return serial(String(ctx.from?.id),async()=>{try{await handle(ctx);}catch(error){const labels=error.blockerDetails?.map(b=>b.label).filter(Boolean);const message=labels?.length?`Перед отправкой исправьте: ${labels.join('; ')}`:error.status===500||/^[0-9A-Z]{5}$/.test(error.code||'')?'Не удалось сохранить изменения. Попробуйте ещё раз.':error.message;await reply(ctx,`⚠️ ${message}`,{inline_keyboard:[[button('Обновить замечания',ctx.session.correctionFlow?.serviceId?`corr:open:${ctx.session.correctionFlow.serviceId}`:'corr:list:0')]]});}});
+  return serial(String(ctx.from?.id),async()=>{try{await handle(ctx);}catch(error){const labels=error.blockerDetails?.map(b=>b.label).filter(Boolean);const message=labels?.length?`Перед отправкой исправьте: ${labels.join('; ')}`:error.status===500||/^[0-9A-Z]{5}$/.test(error.code||'')?'Не удалось сохранить изменения. Попробуйте ещё раз.':error.message;await reply(ctx,`⚠️ ${message}`,{inline_keyboard:[[button('Открыть актуальную карточку',Number(data.split(':')[2])>0?`svc_current:${Number(data.split(':')[2])}`:ctx.session.correctionFlow?.serviceId?`svc_current:${ctx.session.correctionFlow.serviceId}`:'corr:list:0')]]});}});
  };
 }
 module.exports={createCorrectionFlow,keyboard,chunks,FIELDS};

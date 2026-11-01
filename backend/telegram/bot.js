@@ -1,3 +1,4 @@
+const { serviceButtonVersion } = require("../utils/telegramServiceActionGuard");
 const { correctionCounts } = require("../utils/telegramCorrectionService");
 const { replyProviderProfile } = require("../utils/telegramProviderProfile");
 // backend/telegram/bot.js
@@ -2361,6 +2362,7 @@ bot.use(async (ctx, next) => {
 
 
 // Corrections use the real Telegram actor and run before legacy text/photo wizards.
+bot.use(require("../utils/telegramServiceActionGuard").createServiceActionGuard({pool}));
 bot.use(require("./handlers/correctionFlow").createCorrectionFlow({pool,loadImage:tgFileIdToDataUrlForProof,notifyModerationNew:require("../utils/telegram").notifyModerationNew}));
 
 /* ===================== TG FILE LINK CACHE ===================== */
@@ -7229,7 +7231,7 @@ function legacyUrgencyLabel(value) {
 
 function buildProofKeyboard(serviceId, count = 0) {
   const rows = [
-    [{ text: count > 0 ? "➕ Добавить ещё подтверждение" : "📎 Какое подтверждение отправить?", callback_data: "proof:add_more" }],
+    [{ text: count > 0 ? "➕ Добавить ещё подтверждение" : "📎 Какое подтверждение отправить?", callback_data: `proof:add_more:${Number(serviceId || 0)}` }],
   ];
 
   if (count > 0) {
@@ -7240,11 +7242,11 @@ function buildProofKeyboard(serviceId, count = 0) {
     ]);
     rows.push([
       { text: "✏️ Детали", callback_data: `proof:edit:${Number(serviceId || 0)}:details` },
-      { text: "📎 Подтверждение", callback_data: "proof:add_more" },
+      { text: "📎 Подтверждение", callback_data: `proof:add_more:${Number(serviceId || 0)}` },
     ]);
     rows.push([{ text: "👀 Просмотреть proof", callback_data: `proof:view:${Number(serviceId || 0)}` }]);
     rows.push([{ text: "🗑 Удалить последнее", callback_data: "proof:delete_last" }]);
-    rows.push([{ text: "✅ Отправить на модерацию", callback_data: "proof:submit" }]);
+    rows.push([{ text: "✅ Отправить на модерацию", callback_data: `proof:submit:${Number(serviceId || 0)}` }]);
   }
 
   rows.push([{ text: "❌ Отменить отправку", callback_data: "proof:cancel" }]);
@@ -11065,14 +11067,14 @@ bot.action(/^svc_unpublish:(\d+)$/, async (ctx) => {
 });
 
 
-bot.action(/^svc_restore_archive:(\d+)$/, async (ctx) => {
+bot.action(/^svc_restore_archive:(\d+)(?::[a-f0-9]{12})?$/, async (ctx) => {
   try {
     await ctx.answerCbQuery("♻️ Возвращаю…");
     const serviceId = Number(ctx.match[1]);
     const actorId = getActorId(ctx);
 
     if(ctx.chat?.type!=="private")return safeReply(ctx,"Откройте личный чат с ботом.");
-    const {data}=await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/restore-archive`);
+    const {data}=await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/restore-archive`,{expected_edit_version:ctx.state.serviceActionVersion});
     const service=data?.service;
     await safeReply(ctx,service?.status === "published" ? "♻️ Услуга восстановлена в опубликованные. Срок актуальности — 7 дней." : "♻️ Услуга восстановлена. Если остались замечания, продолжите в «Нужны исправления». Иначе откройте «Черновики» и отправьте на проверку.",{reply_markup:{inline_keyboard:[[{text:"Мои услуги",callback_data:"prov_services:list"}]]}});
   } catch (e) {
@@ -11088,17 +11090,17 @@ bot.action(/^svc_archive:(\d+)$/, async (ctx) => {
   try {
     const {data}=await axios.get(`/api/telegram/provider/${actorId}/services/${serviceId}`);
     const service=data?.service;if(!service)throw new Error("not found");
-    await safeReply(ctx,`🗄 Отправить услугу #${serviceId} в архив?\n${String(service.title||"").slice(0,150)}\n\nОна исчезнет из активных списков. Данные сохранятся, и услугу можно будет восстановить из архива.`,{reply_markup:{inline_keyboard:[[{text:"🗄 Да, в архив",callback_data:`svc_archive_confirm:${serviceId}`}],[{text:"Отмена — в меню услуг",callback_data:"prov_services:list"}]]}});
+    await safeReply(ctx,`🗄 Отправить услугу #${serviceId} в архив?\n${String(service.title||"").slice(0,150)}\n\nОна исчезнет из активных списков. Данные сохранятся, и услугу можно будет восстановить из архива.`,{reply_markup:{inline_keyboard:[[{text:"🗄 Да, в архив",callback_data:`svc_archive_confirm:${serviceId}:${serviceButtonVersion(service)}`}],[{text:"Отмена — в меню услуг",callback_data:"prov_services:list"}]]}});
   }catch{await safeReply(ctx,"Не удалось открыть услугу. Обновите список.");}
 });
 
-bot.action(/^svc_archive_confirm:(\d+)$/, async (ctx) => {
+bot.action(/^svc_archive_confirm:(\d+)(?::[a-f0-9]{12})?$/, async (ctx) => {
   await ctx.answerCbQuery("Архивирую…");
   if(ctx.chat?.type!=="private")return safeReply(ctx,"Откройте личный чат с ботом.");
   const serviceId=Number(ctx.match[1]),actorId=getActorId(ctx);
   try {
-    await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/archive`);
-    await safeReply(ctx,`🗄 Услуга #${serviceId} архивирована. Данные сохранены.`,{reply_markup:{inline_keyboard:[[{text:"♻️ Восстановить услугу",callback_data:`svc_restore_archive:${serviceId}`}],[{text:"🗄 Открыть архив",callback_data:"archive:open"}],[{text:"Мои услуги",callback_data:"prov_services:list"}]]}});
+    const {data}=await axios.post(`/api/telegram/provider/${actorId}/services/${serviceId}/archive`,{expected_edit_version:ctx.state.serviceActionVersion});
+    await safeReply(ctx,`🗄 Услуга #${serviceId} архивирована. Данные сохранены.`,{reply_markup:{inline_keyboard:[[{text:"♻️ Восстановить услугу",callback_data:`svc_restore_archive:${serviceId}:${serviceButtonVersion(data.service)}`}],[{text:"🗄 Открыть архив",callback_data:"archive:open"}],[{text:"Мои услуги",callback_data:"prov_services:list"}]]}});
   }catch{await safeReply(ctx,"⚠️ Не удалось архивировать услугу. Обновите список и попробуйте снова.");}
 });
 
@@ -11269,7 +11271,7 @@ bot.action(/^archive:item:(\d+)$/, async (ctx) => {
   const reply_markup = {
     inline_keyboard: [
       [
-        { text: "♻️ Восстановить услугу", callback_data: `svc_restore_archive:${serviceId}` },
+        { text: "♻️ Восстановить услугу", callback_data: `svc_current:${serviceId}` },
         { text: "⏳ Продлить 7 дней", callback_data: `svc_extend:${serviceId}` },
       ],
       [
@@ -19594,13 +19596,17 @@ async function finishProofSubmissionFromBot(ctx) {
   }
 }
 
-bot.action("proof:submit", async (ctx) => {
+bot.action(/^proof:submit:(\d+)$/, async (ctx) => {
+  ctx.session=ctx.session||{};
+  ctx.session.awaitingProofForServiceId=Number(ctx.match[1]);
   await safeCb(ctx, "Отправляем на модерацию…");
   await finishProofSubmissionFromBot(ctx);
 });
 
-bot.action("proof:add_more", async (ctx) => {
-  const serviceId = Number(ctx.session?.awaitingProofForServiceId || 0);
+bot.action(/^proof:add_more:(\d+)$/, async (ctx) => {
+  const serviceId = Number(ctx.match[1]);
+  ctx.session=ctx.session||{};
+  ctx.session.awaitingProofForServiceId=serviceId;
   const count = serviceId ? (await getProofImagesForService(serviceId)).length : 0;
   await safeCb(ctx, "Отправьте следующий скриншот сюда в чат");
   await safeReply(
