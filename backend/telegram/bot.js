@@ -1,3 +1,4 @@
+const { activityPrompt, activityKeyboard } = require("../utils/telegramActivityStep");
 const { formatTelegramExpiration } = require("../utils/telegramDateDisplay");
 const { serviceButtonVersion } = require("../utils/telegramServiceActionGuard");
 const { correctionCounts } = require("../utils/telegramCorrectionService");
@@ -4332,8 +4333,8 @@ async function promptEditState(ctx, state) {
     case "svc_edit_isActive":
       await safeReply(
         ctx,
-        `✅ Активна? (текущее: ${draft.isActive ? "да" : "нет"}).\nда/нет или нажмите «⏭ Пропустить»:`,
-        editWizNavKeyboard()
+        activityPrompt(draft),
+        activityKeyboard(draft)
       );
       return;
 
@@ -4457,6 +4458,19 @@ bot.action(/^svc_actual:(\d+):(yes|no|extend7|ping)(?::.*)?$/, async (ctx) => {
 });
 // ===================== /ACTUAL REMINDER CALLBACK =====================
 
+bot.action(/^svc_edit:activity:(\d+):(yes|no|keep)$/, async (ctx) => {
+  await ctx.answerCbQuery();
+  const draft=ctx.session?.serviceDraft;
+  const step=ctx.session?.editWiz?.step || ctx.session?.state;
+  if(ctx.chat?.type!=="private" || !draft || Number(draft.id||0)!==Number(ctx.match[1]) || step!=="svc_edit_isActive") {
+    return safeReply(ctx,"Этот шаг уже закрыт или устарел. Откройте редактирование услуги заново.",{reply_markup:{inline_keyboard:[[{text:"Мои услуги",callback_data:"prov_services:list"}]]}});
+  }
+  // Use the same validation and expiry handling as typed yes/no responses.
+  const input=Object.create(ctx);
+  Object.defineProperty(input,"message",{value:{text:{yes:"да",no:"нет",keep:"пропустить"}[ctx.match[2]]}});
+  await handleSvcEditWizardText(input);
+});
+
 bot.action("svc_edit:skip", async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -4501,7 +4515,7 @@ bot.action("svc_edit:skip", async (ctx) => {
       return;
     }
 
-    const nextState = getNextEditWizardStep(category, state, ctx.session.serviceDraft);
+    const nextState = state === "svc_edit_isActive" ? "svc_edit_images" : getNextEditWizardStep(category, state, ctx.session.serviceDraft);
 
     if (!nextState) {
       await safeReply(ctx, "⚠️ Уже нечего пропускать на этом шаге.");
@@ -17382,7 +17396,7 @@ async function handleSvcEditWizardText(ctx) {
 
         await go(
           "svc_edit_isActive",
-          `✅ Активна? (текущее: ${draft.isActive ? "да" : "нет"}).\nда/нет или нажмите «⏭ Пропустить»:`
+          activityPrompt(draft)
         );
         return true;
       }
