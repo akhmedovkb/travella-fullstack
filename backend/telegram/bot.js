@@ -1,3 +1,4 @@
+const { formatTelegramExpiration } = require("../utils/telegramDateDisplay");
 const { serviceButtonVersion } = require("../utils/telegramServiceActionGuard");
 const { correctionCounts } = require("../utils/telegramCorrectionService");
 const { replyProviderProfile } = require("../utils/telegramProviderProfile");
@@ -4323,7 +4324,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_expiration":
       await safeReply(
         ctx,
-        `⏳ Актуально до (YYYY-MM-DD, YYYY-MM-DD HH:mm) или "нет"\nТекущее: ${draft.expiration || "(нет)"}\nВведите или нажмите «⏭ Пропустить»:`,
+        `⏳ Актуально до (YYYY-MM-DD, YYYY-MM-DD HH:mm) или "нет"\nТекущее: ${formatTelegramExpiration(draft.expiration)}\nВведите или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -17345,7 +17346,7 @@ async function handleSvcEditWizardText(ctx) {
 
         await go(
           "svc_edit_expiration",
-          `⏳ Актуально до (YYYY-MM-DD, YYYY-MM-DD HH:mm) или "нет"\nТекущее: ${draft.expiration || "(нет)"}\nВведите или нажмите «⏭ Пропустить»:`
+          `⏳ Актуально до (YYYY-MM-DD, YYYY-MM-DD HH:mm) или "нет"\nТекущее: ${formatTelegramExpiration(draft.expiration)}\nВведите или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
