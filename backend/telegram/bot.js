@@ -7241,7 +7241,7 @@ function buildProofKeyboard(serviceId, count = 0) {
       { text: "📅 Даты", callback_data: `proof:edit:${Number(serviceId || 0)}:dates` },
     ]);
     rows.push([
-      { text: "✏️ Детали", callback_data: `proof:edit:${Number(serviceId || 0)}:details` },
+      { text: "✏️ Редактировать", callback_data: `proof:edit:${Number(serviceId || 0)}:details` },
       { text: "📎 Подтверждение", callback_data: `proof:add_more:${Number(serviceId || 0)}` },
     ]);
     rows.push([{ text: "👀 Просмотреть proof", callback_data: `proof:view:${Number(serviceId || 0)}` }]);
