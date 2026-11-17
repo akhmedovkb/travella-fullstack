@@ -232,31 +232,14 @@ function parseDetailsAny(details) {
   return {};
 }
 
-/**
- * ⭐️ stars extractor (UPGRADED)
- */
 function extractStars(details) {
   const d = details || {};
-  const raw = String(d.accommodationCategory || d.roomCategory || "").trim();
-  if (!raw) return null;
-
-  const s = raw.toLowerCase();
-
-  let m = raw.match(/([1-7])\s*\*|⭐\s*([1-7])/);
-  let stars = m ? Number(m[1] || m[2]) : null;
-
-  if (!stars) {
-    m = s.match(/([1-7])\s*(star|stars|зв|зв\.|звезд|звёзд|звезда|звёзда)/i);
-    stars = m ? Number(m[1]) : null;
+  const pattern = /(?:^|[^\p{L}\p{N}])([1-7])\s*(?:\*|stars?(?!\p{L})|зв(?:ёзд|езд)(?:а|ы)?(?!\p{L})|зв\.)|⭐️?\s*([1-7])(?!\d)/iu;
+  for (const value of [d.hotel, d.hotelName, d.accommodationCategory, d.roomCategory]) {
+    const match = String(value ?? "").match(pattern);
+    if (match) return `⭐️ ${match[1] || match[2]}*`;
   }
-
-  if (!stars) {
-    m = s.match(/(^|[^\d])([1-7])([^\d]|$)/);
-    stars = m ? Number(m[2]) : null;
-  }
-
-  if (!stars) return null;
-  return `⭐️ ${stars}*`;
+  return null;
 }
 
 function stripStarsFromRoomCat(raw) {
