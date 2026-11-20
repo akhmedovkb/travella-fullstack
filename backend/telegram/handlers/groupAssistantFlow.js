@@ -45,11 +45,12 @@ function clarification(intent) {
 }
 function createGroupAssistantFlow({ pool, env = process.env, model = createGroupAssistantModel({ env }), store = createGroupAssistantStore(pool), search = filters => searchGroupOffers(pool, filters), now = Date.now } = {}) {
   const sessions = new Map(), busy = new Set(), rates = new Map();
-  const key = ctx => `${ctx.chat.id}:${ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id || 0}:${ctx.from.id}`;
+  const topic = ctx => { const message = ctx.message || ctx.callbackQuery?.message; return message?.is_topic_message ? message.message_thread_id || 0 : 0; };
+  const key = ctx => `${ctx.chat.id}:${topic(ctx)}:${ctx.from.id}`;
   const reply = (ctx, text, extra = {}) => ctx.reply(text, {
     parse_mode: undefined, disable_web_page_preview: true,
     ...(ctx.message?.message_id ? { reply_parameters: { message_id: ctx.message.message_id, allow_sending_without_reply: true } } : {}),
-    ...(ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id ? { message_thread_id: ctx.message?.message_thread_id || ctx.callbackQuery?.message?.message_thread_id } : {}), ...extra,
+    ...(topic(ctx) ? { message_thread_id: topic(ctx) } : {}), ...extra,
   });
   function prune() {
     for (const [id, value] of sessions) if (value.expires <= now()) sessions.delete(id);
@@ -101,12 +102,12 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
         const state = sessions.get(sessionKey);
         const [, action, token] = data.split(':');
         if (!state?.pending || state.token !== token || state.messageId !== ctx.callbackQuery.message?.message_id) return ctx.answerCbQuery('Эта кнопка доступна автору запроса в течение 15 минут.').catch(() => {});
-        await ctx.answerCbQuery().catch(() => {});
-        if (action === 'change') { state.pending = false; return reply(ctx, 'Напишите уточнение ответом на это сообщение или снова обратитесь ко мне по @имени.'); }
+        if (action === 'change') { state.pending = false; await ctx.answerCbQuery().catch(() => {}); return reply(ctx, 'Напишите уточнение ответом на это сообщение или снова обратитесь ко мне по @имени.'); }
         if (action !== 'search') return;
         busy.add(sessionKey);
+        state.pending = false;
         try {
-          state.pending = false;
+          await ctx.answerCbQuery().catch(() => {});
           const offers = await search(state.intent.filters);
           await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
           return reply(ctx, formatOffers(offers, state.intent.language));

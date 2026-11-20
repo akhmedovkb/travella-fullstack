@@ -9,8 +9,8 @@ const intent = (patch = {}) => normalizeIntent({ kind: 'search', language: 'ru',
 function context(text, { actor = 7, chat = -100, type = 'supergroup', topic = 1, data, messageId = 50, admin = false } = {}) {
   const replies = [], answers = [], edits = [];
   return { from: { id: actor }, chat: { id: chat, type }, botInfo: { id: 99, username: 'TravellaBot' }, session: { state: 'svc_create_price', serviceDraft: { title: 'PRIVATE DRAFT' } },
-    message: data ? undefined : { text, message_id: 10, message_thread_id: topic },
-    callbackQuery: data ? { data, message: { message_id: messageId, message_thread_id: topic } } : undefined,
+    message: data ? undefined : { text, message_id: 10, message_thread_id: topic, is_topic_message: true },
+    callbackQuery: data ? { data, message: { message_id: messageId, message_thread_id: topic, is_topic_message: true } } : undefined,
     replies, answers, edits,
     telegram: { getChatMember: async () => ({ status: admin ? 'administrator' : 'member' }) },
     answerCbQuery: async text => answers.push(text), editMessageReplyMarkup: async value => edits.push(value),
@@ -183,4 +183,19 @@ test('short price-basis answers preserve the itinerary and never restart an ambi
     assert.equal(result.filters.start, '2026-12-01');
     assert.deepEqual(result.filters.destination, filters.destination);
   }
+});
+
+test('ordinary group replies do not turn a reply thread into a forum topic and invalidate buttons', async () => {
+  const f = fixture();
+  const c = context('@TravellaBot дубай');
+  delete c.message.message_thread_id;
+  delete c.message.is_topic_message;
+  await f.flow(c, () => assert.fail());
+  const data = c.replies[0].options.reply_markup.inline_keyboard[0][0].callback_data;
+  assert.equal(c.replies[0].options.message_thread_id, undefined);
+  const click = context(null, { data, topic: 10 });
+  delete click.callbackQuery.message.is_topic_message;
+  await Promise.all([f.flow(click, () => assert.fail()), f.flow(contextCopy(click), () => assert.fail())]);
+  assert.equal(f.calls.filter(c => c[0] === 'search').length, 1);
+  function contextCopy(original) { const c = context(null, { data, topic: 10 }); delete c.callbackQuery.message.is_topic_message; return c; }
 });
