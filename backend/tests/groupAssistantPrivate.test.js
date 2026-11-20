@@ -98,3 +98,26 @@ test('sharing does not bypass a member mute or a read-only group and concurrent 
  const data=f.panels.get(7).extra.reply_markup.inline_keyboard.flat().find(b=>b.callback_data?.includes(':share:')).callback_data;
  await Promise.all([f.send({chat:7,data}),f.send({chat:7,data})]);assert.equal(f.posts.length,1);
 });
+
+test('empty private results have no share button and an old share callback cannot publish',async()=>{
+ const f=fixture();await f.send({text:'/ask@TravellaBot Вьетнам'});await f.send({chat:7,text:'/start '+f.link(-100)});await f.press('search');
+ const old=f.panels.get(7);const share=old.extra.reply_markup.inline_keyboard.flat().find(b=>b.callback_data?.includes(':share:')).callback_data;
+ await f.press('ui_edit');await f.press('ui_edit_destination');await f.press('ui_dest_turkey');
+ f.state.offers=[];await f.press('ui_search');
+ const panel=f.panels.get(7);assert.ok(!panel.extra.reply_markup.inline_keyboard.flat().some(b=>b.callback_data?.includes(':share:')));
+ await f.send({chat:7,data:share,messageId:old.id});
+ assert.equal(f.posts.length,0);assert.equal(f.replies.filter(r=>r.chat<0).length,1);
+});
+
+test('editing and starting a new private search never publish or revive a previously shared result',async()=>{
+ const f=fixture();await f.send({text:'/ask@TravellaBot Вьетнам'});await f.send({chat:7,text:'/start '+f.link(-100)});await f.press('search');
+ const original=f.panels.get(7);const oldShare=original.extra.reply_markup.inline_keyboard.flat().find(b=>b.callback_data?.includes(':share:')).callback_data;
+ await f.press('share');await f.send({chat:7,data:oldShare,messageId:original.id});assert.equal(f.posts.length,1);
+ await f.press('ui_edit');await f.press('ui_edit_destination');await f.press('ui_dest_turkey');await f.press('ui_search');
+ assert.ok(f.calls.filter(c=>c.kind==='search').at(-1).filters.destination.includes('Турция'));
+ await f.send({chat:7,data:oldShare,messageId:original.id});assert.equal(f.posts.length,1);
+ await f.press('ui_home');
+ for(const action of ['ui_tour','ui_dest_vietnam','ui_origin_tashkent','ui_date_any','ui_guests_2','ui_budget_any','ui_search'])await f.press(action);
+ assert.ok(f.calls.filter(c=>c.kind==='search').at(-1).filters.destination.includes('Вьетнам'));
+ assert.equal(f.posts.length,1);assert.equal(f.replies.filter(r=>r.chat<0).length,1);
+});
