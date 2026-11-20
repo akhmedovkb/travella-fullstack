@@ -1,3 +1,4 @@
+const { excludedCountries } = require('./groupAssistantCountries');
 const { normalizeIntent, CATEGORIES } = require('./groupAssistantModel');
 const { isServiceActual } = require('../telegram/helpers/serviceActual');
 const clean = (value, length = 120) => String(value || '').replace(/[<>\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, length);
@@ -5,7 +6,13 @@ const GROSS = "COALESCE(NULLIF(s.details->>'grossPrice',''),NULLIF(s.details->>'
 const MONEY = `CASE WHEN REPLACE(${GROSS},',','.') ~ '^\\d+(\\.\\d{1,2})?$' THEN REPLACE(${GROSS},',','.')::numeric ELSE NULL END`;
 const CURRENCY = "UPPER(COALESCE(NULLIF(s.details->>'currency',''),NULLIF(s.currency,''),'USD'))";
 const START = "SUBSTRING(COALESCE(NULLIF(s.details->>'startDate',''),NULLIF(s.details->>'checkInDate',''),s.details->>'departureFlightDate') FROM 1 FOR 10)";
-const BASIS = "CASE WHEN s.details->'companion'->>'priceBasis'='per_person' OR s.details->>'priceFor'='person' OR s.details->>'pricePerPerson'='true' THEN 'person' WHEN s.details->>'priceFor' IN ('total','tour','room') THEN 'total' ELSE 'unknown' END";
+const countValue = keys => keys.map(key => `CASE WHEN s.details->>'${key}' ~ '^[0-9]{1,2}$' THEN NULLIF((s.details->>'${key}')::int,0) END`);
+const accommodationCount = pattern => `NULLIF(SUBSTRING(LOWER(COALESCE(s.details->>'accommodation','')) FROM '${pattern}')::int,0)`;
+const ADULTS = `COALESCE(${countValue(['adt','adults','accommodationADT','passengersCount']).join(',')},${accommodationCount('([0-9]{1,2})[[:space:]]*(adl|adt|adult|взр)')},CASE WHEN LOWER(s.details->>'accommodation') ~ '(^|[^a-z])dbl([^a-z]|$)' THEN 2 END)`;
+const CHILDREN = `COALESCE(${countValue(['chd','children','accommodationCHD']).join(',')},${accommodationCount('([0-9]{1,2})[[:space:]]*(chd|child|реб)')},0)`;
+const INFANTS = `COALESCE(${countValue(['inf','infants','accommodationINF']).join(',')},${accommodationCount('([0-9]{1,2})[[:space:]]*(inf|млад)')},0)`;
+const BASIS = `CASE WHEN s.details->'companion'->>'priceBasis'='per_person' OR s.details->>'priceFor'='person' OR s.details->>'pricePerPerson'='true' THEN 'person' WHEN s.details->>'priceFor' IN ('total','tour','room') THEN 'total' WHEN s.category IN ('refused_tour','refused_hotel') AND ${ADULTS}>1 AND ${CHILDREN}=0 AND ${INFANTS}=0 THEN 'total' ELSE 'unknown' END`;
+
 function buildSearch(filters) {
   const f = normalizeIntent({ kind: 'search', filters }).filters;
   const args = [];
@@ -14,6 +21,14 @@ function buildSearch(filters) {
   const patterns = values => values.map(value => `%${value.replace(/[\\%_]/g, '\\$&')}%`);
   if (f.destination.length) where.push(`CONCAT_WS(' ',s.details->>'directionCountry',s.details->>'country',s.details->>'directionTo',s.details->>'toCity',s.details->>'city',s.details->>'location') ILIKE ANY(${param(patterns(f.destination))}::text[])`);
   if (f.origin.length) where.push(`CONCAT_WS(' ',s.details->>'directionFrom',s.details->>'fromCity') ILIKE ANY(${param(patterns(f.origin))}::text[])`);
+  const excluded = excludedCountries(f.excludedCountries, f.excludeArab);
+  if (excluded.length) {
+    const country = "CONCAT_WS(' ',s.details->>'directionCountry',s.details->>'country')";
+    const excludedParam = param(excluded);
+    const normalized = key => `LOWER(TRIM(REGEXP_REPLACE(COALESCE(s.details->>'${key}',''),'[^[:alnum:]]+',' ','g')))`;
+    where.push(`TRIM(${country})<>''`, `NOT (${normalized('directionCountry')}=ANY(${excludedParam}::text[]) OR ${normalized('country')}=ANY(${excludedParam}::text[]))`);
+  }
+  if (f.guests !== null) where.push(`${ADULTS}=${param(f.guests)}`, `${CHILDREN}=0`, `${INFANTS}=0`);
   if (f.start) where.push(`${START}>=${param(f.start)}`);
   if (f.end || f.start) where.push(`${START}<=${param(f.end || f.start)}`);
   if (f.companion) where.push("s.details->'companion'->>'enabled'='true'");
@@ -22,7 +37,7 @@ function buildSearch(filters) {
     if (!f.currency || !f.priceBasis) throw new Error('BUDGET_NEEDS_CLARIFICATION');
     where.push(`${MONEY}<=${param(f.budget)}`, `${CURRENCY}=${param(f.currency)}`, `${BASIS}=${param(f.priceBasis)}`);
   }
-  return { sql: `SELECT s.id,s.title,s.category,s.expiration_at,${MONEY} AS public_price,${CURRENCY} AS currency,${BASIS} AS price_basis,
+  return { sql: `SELECT s.id,s.title,s.category,s.expiration_at,${MONEY} AS public_price,${CURRENCY} AS currency,${BASIS} AS price_basis,${ADULTS} AS adults,${CHILDREN} AS children,${INFANTS} AS infants,
     jsonb_build_object('startDate',s.details->>'startDate','endDate',s.details->>'endDate','checkInDate',s.details->>'checkInDate','checkOutDate',s.details->>'checkOutDate',
       'departureFlightDate',s.details->>'departureFlightDate','returnFlightDate',s.details->>'returnFlightDate','expiration',s.details->>'expiration','isActive',s.details->>'isActive') AS details,
     s.details->>'directionFrom' AS origin,s.details->>'directionTo' AS destination,s.details->>'directionCountry' AS country,
@@ -39,7 +54,7 @@ async function searchGroupOffers(pool, filters) {
     origin: clean(row.origin, 60), destination: clean(row.destination || row.country, 60), hotel: clean(row.hotel),
     start: clean(row.details?.startDate || row.details?.checkInDate || row.details?.departureFlightDate, 10),
     end: clean(row.details?.endDate || row.details?.checkOutDate || row.details?.returnFlightDate, 10),
-    price: row.public_price === null || row.public_price === undefined ? null : Number(row.public_price), currency: clean(row.currency, 3), priceBasis: row.price_basis,
+    price: row.public_price === null || row.public_price === undefined ? null : Number(row.public_price), currency: clean(row.currency, 3), priceBasis: row.price_basis, guests: row.adults && !Number(row.children) && !Number(row.infants) ? Number(row.adults) : null,
     gala: ['mandatory','optional'].includes(row.gala_status) ? { status: row.gala_status, adultPrice: clean(row.gala_adult_price, 20), currency: clean(row.gala_currency, 3) } : null,
     companion: row.companion_enabled === 'true', gender: row.companion_gender, room: row.companion_room,
     url: `https://travella.uz/marketplace?opened=${Number(row.id)}`,

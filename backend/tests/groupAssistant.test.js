@@ -17,13 +17,13 @@ function context(text, { actor = 7, chat = -100, type = 'supergroup', topic = 1,
     reply: async (text, options) => { replies.push({ text, options }); return { message_id: messageId }; },
   };
 }
-function fixture({ output = intent(), enabled = true, ready = true, offers = [] } = {}) {
-  const calls = [], active = new Map([[-100, enabled]]);
+function fixture({ output = intent(), enabled = true, ready = true, offers = [], auto = false } = {}) {
+  const calls = [], active = new Map([[-100, enabled]]), autoActive = new Map([[-100, auto]]);
   const flow = createGroupAssistantFlow({ pool: {}, model: { ready: () => ready, interpret: async (...args) => { calls.push(['model', ...args]); return output; } },
-    store: { enabled: async id => active.get(id), activate: async (id, _actor, value) => active.set(id, value), reserve: async () => { calls.push(['reserve']); return true; } },
+    store: { autoEnabled: async id => active.get(id) && autoActive.get(id), setAuto: async (id, _actor, value) => { autoActive.set(id, value); if (value) active.set(id, true); }, enabled: async id => active.get(id), activate: async (id, _actor, value) => active.set(id, value), reserve: async () => { calls.push(['reserve']); return true; } },
     search: async f => { calls.push(['search', f]); return offers; },
   });
-  return { flow, calls, active };
+  return { flow, calls, active, autoActive };
 }
 test('addressing accepts own mentions, explicit commands and replies, but not other bots', () => {
   assert.ok(addressed(context('@TravellaBot таш дубай')));
@@ -229,4 +229,146 @@ test('compact results use readable dates, correct price units and matching URL b
   assert.deepEqual(offerButtons([], 'ru'), {});
   assert.match(formatOffers(offers, 'uz'), /necha kishi uchunligini/);
   assert.match(formatOffers(offers, 'en'), /per person/);
+});
+
+test('automatic capture is opt-in, costs no model calls and combines only the author’s own refinements', async () => {
+  const output = intent({ filters: { ...filters, destination: [], origin: [], anyDestination: true, guests: 2, excludeArab: true, priceBasis: 'total', companion: false, gender: null } });
+  const f = fixture({ auto: true, output });
+  const first = context('У кого есть на завтра послезавтра на двоих отказной?');
+  first.message.message_id = 11;
+  await f.flow(first, () => assert.fail());
+  assert.equal(first.replies.length, 1);
+  const button = first.replies[0].options.reply_markup.inline_keyboard[0][0];
+  assert.equal(button.text, '🔎 Подобрать варианты?');
+  assert.equal(f.calls.length, 0);
+  const other = context('куда', { actor: 8 });
+  await f.flow(other, () => assert.fail());
+  assert.equal(other.replies.length, 0);
+  for (const [id, text] of [[12, 'Разницы нет бюджет 1000$ на двоих'], [13, 'Кроме арабских стран']]) {
+    const c = context(text); c.message.message_id = id;
+    await f.flow(c, () => assert.fail());
+    assert.equal(c.replies.length, 0); // No repeated invitations or model calls for refinements.
+  }
+  assert.equal(f.calls.length, 0);
+  const foreign = context(null, { data: button.callback_data, actor: 8 });
+  await f.flow(foreign, () => assert.fail());
+  assert.equal(f.calls.length, 0);
+  const click = context(null, { data: button.callback_data });
+  await f.flow(click, () => assert.fail());
+  const question = f.calls.find(c => c[0] === 'model')[1];
+  assert.match(question, /на завтра послезавтра/);
+  assert.match(question, /1000\$ на двоих/);
+  assert.match(question, /Кроме арабских/);
+  assert.ok(!question.split('\n').includes('куда'));
+  assert.match(click.replies[0].text, /Взрослых: 2/);
+  assert.match(click.replies[0].text, /арабские страны/);
+  assert.equal(f.calls.filter(c => c[0] === 'search').length, 0);
+  const confirmed = click.replies[0].options.reply_markup.inline_keyboard[0][0].callback_data;
+  await f.flow(context(null, { data: confirmed }), () => assert.fail());
+  assert.equal(f.calls.filter(c => c[0] === 'search').length, 1);
+  assert.equal(f.calls.find(c => c[0] === 'search')[1].guests, 2);
+});
+test('ordinary requests remain silent with auto mode off; only an admin can enable it', async () => {
+  const f = fixture();
+  const c = context('Коллеги нужен отказной тур на двоих');
+  await f.flow(c, () => assert.fail());
+  assert.equal(c.replies.length, 0);
+  await f.flow(context('/travella_auto_on@TravellaBot'), () => assert.fail());
+  assert.equal(f.autoActive.get(-100), false);
+  await f.flow(context('/travella_auto_on@TravellaBot', { admin: true }), () => assert.fail());
+  assert.ok(f.autoActive.get(-100));
+  await f.flow(context('/travella_auto_off@TravellaBot', { admin: true }), () => assert.fail());
+  assert.equal(f.autoActive.get(-100), false);
+  assert.ok(f.active.get(-100)); // Direct /ask is still on.
+});
+test('auto mode ignores forwards and conversation, respects dismissal and caps new invitations', async () => {
+  const f = fixture({ auto: true });
+  const forward = context('Нужен отказной тур'); forward.message.forward_origin = { type: 'user' };
+  await f.flow(forward, () => assert.fail());
+  assert.equal(forward.replies.length, 0);
+  for (const text of ['Привет коллеги', 'Отказной тур Фукуок 3650 USD']) {
+    const c = context(text); await f.flow(c, () => assert.fail()); assert.equal(c.replies.length, 0);
+  }
+  const c = context('Нужен отказной тур на двоих');
+  await f.flow(c, () => assert.fail());
+  const dismiss = c.replies[0].options.reply_markup.inline_keyboard[1][0].callback_data;
+  await f.flow(context(null, { data: dismiss }), () => assert.fail());
+  const follow = context('Бюджет 1000 USD'); follow.message.message_id = 20;
+  await f.flow(follow, () => assert.fail()); assert.equal(follow.replies.length, 0);
+  for (const [actor, expected] of [[8, 1], [9, 0]]) {
+    const request = context('Нужен отказной тур на двоих', { actor });
+    await f.flow(request, () => assert.fail()); assert.equal(request.replies.length, expected);
+  }
+  assert.equal(f.calls.length, 0);
+});
+test('party size and excluded countries are validated and enforced by bound SQL before pagination', () => {
+  for (const guests of [0, 1.5, 21, '2']) assert.throws(() => intent({ filters: { ...filters, guests } }));
+  const result = buildSearch({ ...filters, destination: [], anyDestination: true, guests: 2, excludedCountries: ['Turkey', 'Турция'], excludeArab: true });
+  assert.ok(result.args.includes(2));
+  const patterns = result.args.filter(Array.isArray).flat();
+  assert.ok(patterns.includes('turkey'));
+  assert.ok(patterns.includes('египет'));
+  assert.ok(patterns.includes('uae'));
+  assert.ok(!result.sql.includes('Египет'));
+  assert.match(result.sql, /NOT \(LOWER/);
+  assert.match(result.sql, /accommodationADT/);
+  assert.match(result.sql, /adults/);
+  assert.match(result.sql, /infants/);
+});
+
+test('country exclusions use exact normalized country names and do not confuse Oman with Romania', () => {
+  const { excludedCountries } = require('../ai/groupAssistantCountries');
+  const arab = excludedCountries([], true);
+  assert.ok(arab.includes('oman'));
+  assert.ok(!arab.includes('romania'));
+  assert.ok(!arab.includes('turkey'));
+  assert.ok(!arab.includes('south sudan'));
+  const named = excludedCountries(['Egipt', 'Турция'], false);
+  assert.ok(named.includes('egypt'));
+  assert.ok(named.includes('turkey'));
+  assert.ok(named.includes('turkiya'));
+});
+
+test('refinement arriving during model processing invalidates the stale confirmation without another model call', async () => {
+  let finish, entered;
+  const started = new Promise(resolve => { entered = resolve; });
+  let calls = 0;
+  const flow = createGroupAssistantFlow({ pool: {}, model: { ready: () => true, interpret: async () => { calls++; entered(); return new Promise(resolve => { finish = resolve; }); } }, store: { enabled: async () => true, autoEnabled: async () => true, reserve: async () => true } });
+  const first = context('У кого есть отказной на двоих на завтра?'); first.message.message_id = 11;
+  await flow(first, () => assert.fail());
+  const data = first.replies[0].options.reply_markup.inline_keyboard[0][0].callback_data;
+  const click = context(null, { data });
+  const work = flow(click, () => assert.fail());
+  await started;
+  const follow = context('Кроме арабских стран'); follow.message.message_id = 12;
+  await flow(follow, () => assert.fail());
+  finish(intent()); await work;
+  assert.equal(calls, 1);
+  assert.match(click.replies[0].options.reply_markup.inline_keyboard[0][0].callback_data, /^grp_ai:auto:/);
+  assert.doesNotMatch(click.replies[0].text, /Правильно понял/);
+});
+test('local detector keeps the root request when many refinements arrive and redacts documents', () => {
+  const { appendAutoText, isTourRequest } = require('../ai/groupAssistantAuto');
+  assert.equal(isTourRequest('У кого есть на завтра на двоих отказной?'), true);
+  const entry = { texts: [], messageIds: [], revision: 0 };
+  appendAutoText(entry, 'У кого есть на завтра отказной?', 1);
+  for (let i = 2; i <= 9; i++) appendAutoText(entry, 'Бюджет 1000 USD ' + i, i);
+  assert.equal(entry.texts.length, 6);
+  assert.match(entry.texts[0], /на завтра/);
+  assert.match(entry.texts.at(-1), /9$/);
+  appendAutoText(entry, 'Бюджет 1000 USD, телефон +998901234567, паспорт AB1234567', 10);
+  assert.doesNotMatch(entry.texts.at(-1), /998901234567|AB1234567/);
+});
+
+test('simultaneous author messages produce one invitation and retain all refinements', async () => {
+  const f = fixture({ auto: true });
+  const messages = ['У кого есть на завтра на двоих отказной?', 'Бюджет 1000$ на двоих, разницы нет', 'Кроме арабских стран'].map((text, i) => { const c = context(text); c.message.message_id = i + 11; return c; });
+  await Promise.all(messages.map(c => f.flow(c, () => assert.fail())));
+  assert.equal(messages.flatMap(c => c.replies).length, 1);
+  const data = messages[0].replies[0].options.reply_markup.inline_keyboard[0][0].callback_data;
+  await f.flow(context(null, { data }), () => assert.fail());
+  const question = f.calls.find(c => c[0] === 'model')[1];
+  assert.match(question, /на завтра/);
+  assert.match(question, /1000\$/);
+  assert.match(question, /Кроме арабских/);
 });
