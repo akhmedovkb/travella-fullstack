@@ -171,3 +171,16 @@ test('daily quota rollback covers both global and group counters and releases th
     assert.equal(calls.at(-1), 'release');
   }
 });
+
+test('short price-basis answers preserve the itinerary and never restart an ambiguous model interpretation', async () => {
+  const model = createGroupAssistantModel({ env: { OPENAI_API_KEY: 'test' }, fetchImpl: async () => assert.fail('no extra model call for an exact clarification answer') });
+  for (const [answer, basis, language] of [['за одного', 'person', 'ru'], ['за весь тур', 'total', 'ru'], ['bir kishiga', 'person', 'uz'], ['per person', 'person', 'en']]) {
+    const result = await model.interpret(answer, { ...filters, priceBasis: null });
+    assert.equal(result.kind, 'search');
+    assert.equal(result.language, language);
+    assert.equal(result.filters.priceBasis, basis);
+    assert.equal(result.filters.budget, 1000);
+    assert.equal(result.filters.start, '2026-12-01');
+    assert.deepEqual(result.filters.destination, filters.destination);
+  }
+});

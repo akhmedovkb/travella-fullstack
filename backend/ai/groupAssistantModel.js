@@ -53,6 +53,16 @@ function createGroupAssistantModel({ env = process.env, fetchImpl = fetch } = {}
     ready: () => Boolean(env.OPENAI_API_KEY?.trim()) && env.TELEGRAM_GROUP_AI_ENABLED !== 'false',
     async interpret(text, previous = null) {
       if (!this.ready()) throw new Error('AI_NOT_CONFIGURED');
+      // A short answer to our price-basis question is unambiguous; keep the already
+      // understood itinerary rather than asking the model to infer it a second time.
+      const answer = String(text || '').trim().toLowerCase().replace(/[.!?]+$/, '').replace(/\s+/g, ' ');
+      const person = ['за одного', 'на одного', 'за человека', 'на человека', 'за 1 человека', 'на 1 человека', 'bir kishi uchun', 'bir kishiga', '1 kishiga', 'бир киши учун', 'бир кишига', 'per person', 'for one person'];
+      const total = ['за весь тур', 'за весь номер', 'за номер', 'за всю поездку', 'total', 'whole tour', 'whole room', 'butun tur uchun', 'butun xona uchun', 'бутун тур учун'];
+      if (previous?.budget != null && !previous.priceBasis && (person.includes(answer) || total.includes(answer))) {
+        const language = /bir |kish|butun|xona|бир |киши|бутун/.test(answer) ? 'uz' : /[a-z]/.test(answer) ? 'en' : 'ru';
+        return normalizeIntent({ kind: 'search', language, helpTopic: null, clarification: '', filters: { ...previous, priceBasis: person.includes(answer) ? 'person' : 'total' } });
+      }
+
       const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Tashkent', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
       const response = await fetchImpl('https://api.openai.com/v1/chat/completions', {
         method: 'POST', signal: AbortSignal.timeout(20000),
