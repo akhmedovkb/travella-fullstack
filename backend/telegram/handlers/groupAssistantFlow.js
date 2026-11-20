@@ -8,6 +8,7 @@ const { groupAssistantHelp } = require('../../ai/groupAssistantHelp');
 
 function addressed(ctx) {
   const text = ctx.message?.text || '';
+  if(ctx.chat?.type==='private'&&ctx.__travellaAssistantPrivate&&text)return true;
   const username = String(ctx.botInfo?.username || '').toLowerCase();
   const command = text.match(/^\/(ask|travella_help|travella_on|travella_off|travella_auto_on|travella_auto_off)(?:@([a-z0-9_]+))?(?:\s|$)/i);
   if (command) return !command[2] || command[2].toLowerCase() === username;
@@ -72,7 +73,7 @@ function clarification(intent) {
   const f = intent.filters;
   return (prompts[intent.language] || prompts.ru)[!f.destination.length && !f.anyDestination ? 0 : f.budget !== null && (!f.currency || !f.priceBasis) ? 1 : 2];
 }
-function createGroupAssistantFlow({ pool, env = process.env, model = createGroupAssistantModel({ env }), store = createGroupAssistantStore(pool), search = filters => searchGroupOffers(pool, filters), now = Date.now } = {}) {
+function createGroupAssistantFlow({ pool, env = process.env, model = createGroupAssistantModel({ env }), store = createGroupAssistantStore(pool), search = filters => searchGroupOffers(pool, filters), now = Date.now, handoffs, onShare } = {}) {
   const sessions = new Map(), busy = new Set(), rates = new Map(), autoEntries = new Map(), autoRates = new Map(), captureWork = new Map();
   const topic = ctx => { const message = ctx.message || ctx.callbackQuery?.message; return message?.is_topic_message ? message.message_thread_id || 0 : 0; };
   const key = ctx => `${ctx.chat.id}:${topic(ctx)}:${ctx.from.id}`;
@@ -121,7 +122,7 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
     const previous = sessions.get(id);
     if (previous?.autoEntry) previous.autoEntry.dismissed = true;
     autoEntries.delete(id);
-    const state = { ui: startSearchUi(ctx.message?.message_id || ctx.callbackQuery?.message?.reply_to_message?.message_id), messageId: ctx.callbackQuery ? previous?.messageId : null };
+    const state = { origin:ctx.__travellaAssistantPrivate?.origin || previous?.origin, ui: startSearchUi(ctx.message?.message_id || ctx.callbackQuery?.message?.reply_to_message?.message_id), messageId: ctx.callbackQuery ? previous?.messageId : null };
     if (existing) { state.ui.filters = { ...existing }; state.ui.step = 'edit'; }
     sessions.set(id, state);
     return showUi(ctx, state);
@@ -144,6 +145,7 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
         if(ctx.sendChatAction)await ctx.sendChatAction('typing').catch(()=>{});
         const labels={destination:'Направление',origin:'Город вылета',dates:'Даты начала поездки'};
         const intent=await model.interpret(`Уточняю только поле «${labels[result.field]}»: ${text}. Остальные выбранные условия из previousFilters сохранить.`,state.ui.filters);
+        if(ctx.__travellaAssistantPrivate?.isCurrent && !ctx.__travellaAssistantPrivate.isCurrent())return;
         if(result.field==='destination'){
           if(!intent.filters.destination.length&&!intent.filters.anyDestination){await showUi(ctx,state,'Уточните направление.');return askUiInput(ctx,state);}
           state.ui.filters.destination=intent.filters.destination;state.ui.filters.anyDestination=intent.filters.anyDestination;
@@ -165,6 +167,7 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
     return showUi(ctx,state);
   }
   async function processQuestion(ctx, question, sessionKey, autoEntry = null) {
+      const requestOrigin=ctx.__travellaAssistantPrivate?.origin;
       if (!question) return openUi(ctx);
       if (question.length > 1500) return reply(ctx, 'Сократите запрос до 1500 символов.');
       if (!model.ready()) return reply(ctx, 'Подключение к ИИ сейчас недоступно. Попробуйте позже.');
@@ -176,9 +179,10 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
         const previous = sessions.get(sessionKey);
         const revision = autoEntry?.revision;
         const intent = await model.interpret(question, previous?.autoEntry === autoEntry || !autoEntry ? previous?.intent?.filters || null : null);
+        if(ctx.__travellaAssistantPrivate?.isCurrent && !ctx.__travellaAssistantPrivate.isCurrent())return;
         if (!await store.enabled(ctx.chat.id) || (autoEntry && !await store.autoEnabled?.(ctx.chat.id))) return;
         if (autoEntry && revision !== autoEntry.revision) return await publishInvitation(ctx, autoEntry, sessionKey);
-        const state = { intent, autoEntry, expires: now() + 15 * 60000, pending: false };
+        const state = { intent, origin:requestOrigin, autoEntry, expires: now() + 15 * 60000, pending: false };
         sessions.set(sessionKey, state);
         if (intent.kind === 'help') return reply(ctx, groupAssistantHelp(intent.language, intent.helpTopic));
         if (intent.kind === 'other') return reply(ctx, groupAssistantHelp(intent.language, 'support'));
@@ -195,6 +199,12 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
       } finally { busy.delete(sessionKey); }
   }
   async function publishInvitation(ctx, entry, sessionKey) {
+    if(handoffs){
+      entry.handoffToken=await handoffs.create({ownerId:ctx.from.id,groupId:ctx.chat.id,topicId:topic(ctx)||null,title:ctx.chat.title,question:entry.texts.join('\n')});
+      const username=ctx.botInfo?.username||env.TELEGRAM_CLIENT_BOT_USERNAME;
+      const message=await reply(ctx,'🔎 Могу помочь с подбором. Все условия и результаты — в личном чате.',{reply_markup:{inline_keyboard:[[{text:'🔎 Подобрать в личном чате',url:`https://t.me/${username}?start=pick_${entry.handoffToken}`}]]}});
+      entry.messageId=message?.message_id;entry.invitationPending=true;return;
+    }
     const state = { autoEntry: entry, expires: entry.expires, pending: true, token: randomBytes(8).toString('hex') };
     const keyboard = { inline_keyboard: [[{ text: '🔎 Подобрать варианты?', callback_data: `grp_ai:auto:${state.token}` }], [{ text: 'Не предлагать', callback_data: `grp_ai:dismiss:${state.token}` }]] };
     const text = 'Вижу запрос на подбор тура. Могу поискать предложения в Travella.\n\nУточнения того же автора учту вместе. Запрос передам ИИ только после нажатия кнопки.';
@@ -237,12 +247,13 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
         autoEntries.set(sessionKey, entry);
       }
       appendAutoText(entry, text, ctx.message.message_id);
+      if(entry.handoffToken&&handoffs)await handoffs.update(entry.handoffToken,ctx.from.id,entry.texts.join('\n'));
       if (entry.invitationPending || busy.has(sessionKey)) return;
       return await publishInvitation(ctx, entry, sessionKey);
     } catch { console.warn('[group-assistant] auto capture unavailable'); }
   }
   const middleware = async (ctx, next) => {
-    if (!['group', 'supergroup'].includes(ctx.chat?.type)) return next();
+    if (!['group', 'supergroup'].includes(ctx.chat?.type) && !(ctx.chat?.type==='private'&&ctx.__travellaAssistantPrivate)) return next();
     // Every group update stops here, before per-user private sessions and service editors.
     if (!ctx.from || ctx.from.is_bot || ctx.message?.sender_chat) return;
     const data = String(ctx.callbackQuery?.data || '');
@@ -283,6 +294,19 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
         let [, action, token] = data.split(':');
         let uiSearch = false;
         if (!state?.pending || state.token !== token || state.messageId !== ctx.callbackQuery.message?.message_id) return ctx.answerCbQuery('Эта кнопка доступна автору запроса в течение 15 минут.').catch(() => {});
+        if(action==='share'){
+          if(!ctx.__travellaAssistantPrivate||!onShare||!state.results?.ids?.length)return ctx.answerCbQuery('Нет результатов для публикации.').catch(()=>{});
+          if(state.shareStatus)return ctx.answerCbQuery(state.shareStatus==='sent'?'Подбор уже опубликован.':'Проверьте группу: предыдущая отправка уже выполнялась.').catch(()=>{});
+          busy.add(sessionKey);state.shareStatus='sending';
+          try{
+            await ctx.answerCbQuery().catch(()=>{});
+            const result=await onShare(ctx,state);
+            state.shareStatus=result.sent?'sent':null;
+            if(result.sent&&state.resultMarkup){for(const row of state.resultMarkup.inline_keyboard)for(const button of row)if(button.callback_data===data)button.text='✓ Опубликовано в группе';await ctx.editMessageReplyMarkup(state.resultMarkup).catch(()=>{});}
+            return reply(ctx,result.text);
+          }catch{state.shareStatus='unknown';return reply(ctx,'Не удалось подтвердить отправку. Проверьте исходную группу, прежде чем повторять публикацию.');}
+          finally{busy.delete(sessionKey);}
+        }
         if(action.startsWith('ui_')&&state.ui){
           if(!renderSearchUi(state.ui,now()).rows.flat().some(b=>b.action===action))return ctx.answerCbQuery('Выберите действие на текущем экране.').catch(()=>{});
           busy.add(sessionKey);let continueSearch=false;
@@ -317,15 +341,20 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
           if(uiSearch&&ctx.editMessageText)await ctx.editMessageText('🔎 Ищу подходящие предложения…',{reply_markup:{inline_keyboard:[]}}).catch(()=>{});
           const offers = await search(state.intent.filters);
           await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
-          if(uiSearch){
+          if(uiSearch||ctx.__travellaAssistantPrivate){
+            if(!state.ui){state.ui=startSearchUi(ctx.message?.message_id);state.ui.filters={...state.intent.filters};}
             const options=offerButtons(offers,state.intent.language);
             options.reply_markup=options.reply_markup||{inline_keyboard:[]};
             state.token=randomBytes(8).toString('hex');state.pending=true;state.ui.step='results';
+            state.results={ids:offers.map(offer=>offer.id),filters:structuredClone(state.intent.filters),language:state.intent.language};state.shareStatus=null;
+            if(ctx.__travellaAssistantPrivate&&state.origin&&offers.length)options.reply_markup.inline_keyboard.push([{text:'📤 Поделиться в группе',callback_data:`grp_ai:share:${state.token}`}]);
             options.reply_markup.inline_keyboard.push([{text:'✏️ Изменить условия',callback_data:`grp_ai:ui_edit:${state.token}`},{text:'🔄 Новый поиск',callback_data:`grp_ai:ui_home:${state.token}`}]);
-            if(ctx.telegram?.editMessageText){
-              try{await ctx.telegram.editMessageText(ctx.chat.id,state.messageId,undefined,formatOffers(offers,state.intent.language),options);return;}catch{}
+            state.resultMarkup=options.reply_markup;
+            const resultText=formatOffers(offers,state.intent.language)+(ctx.__travellaAssistantPrivate&&offers.length?'\n\n📤 Группа для публикации: '+displayText(state.origin?.title||'исходная группа',70):'');
+            if(uiSearch&&ctx.telegram?.editMessageText){
+              try{await ctx.telegram.editMessageText(ctx.chat.id,state.messageId,undefined,resultText,options);return;}catch{}
             }
-            const message=await reply(ctx,formatOffers(offers,state.intent.language),options);state.messageId=message?.message_id;return;
+            const message=await reply(ctx,resultText,options);state.messageId=message?.message_id;return;
           }
           return reply(ctx, formatOffers(offers, state.intent.language), offerButtons(offers, state.intent.language));
         } finally { busy.delete(sessionKey); }
@@ -341,6 +370,11 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
       if(current?.ui){await showUi(ctx,current,'Не удалось выполнить действие. Попробуйте ещё раз.');if(current.ui.awaiting)return askUiInput(ctx,current);return;}
       return reply(ctx, 'Не удалось обработать запрос. Попробуйте чуть позже.');
     }
+  };
+  middleware.openPrivate=async(ctx,question='')=>{
+    if(ctx.chat?.type!=='private'||!ctx.__travellaAssistantPrivate)return;
+    sessions.delete(key(ctx));autoEntries.delete(key(ctx));
+    return processQuestion(ctx,question,key(ctx));
   };
   middleware.initialize = async () => {
     await store.initialize?.();
