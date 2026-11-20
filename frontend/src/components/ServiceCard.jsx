@@ -1,3 +1,4 @@
+import { CompanionSummary } from "./Companion";
 import { GalaDinnerSummary } from "./GalaDinner";
 // frontend/src/components/ServiceCard.jsx
 import React, { useEffect, useRef, useState } from "react";
@@ -2191,6 +2192,7 @@ return (
             </button>
           )}
 
+          <CompanionSummary category={categoryRaw} value={details.companion} />
           <GalaDinnerSummary category={categoryRaw} value={details.galaDinner} />
 
           {/* Contact / paywall area */}
@@ -2480,7 +2482,8 @@ return (
           </div>
 
           <div className="space-y-4 p-4 pb-5 sm:p-6 sm:pb-6">
-            <GalaDinnerSummary category={categoryRaw} value={details.galaDinner} />
+            <CompanionSummary category={categoryRaw} value={details.companion} />
+          <GalaDinnerSummary category={categoryRaw} value={details.galaDinner} />
             {/* Decision summary */}
             <div className="grid gap-3 sm:grid-cols-3">
               {dates && (

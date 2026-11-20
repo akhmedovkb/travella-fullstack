@@ -716,6 +716,7 @@ export default function Marketplace() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [guests, setGuests] = useState(1);
+  const [companionOnly, setCompanionOnly] = useState(false);
     // подсказки поиска
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggest, setShowSuggest] = useState(false);
@@ -738,8 +739,9 @@ export default function Marketplace() {
       start_date: startDate || undefined,
       end_date: endDate || startDate || undefined,
       guests: Number(guests) > 0 ? Number(guests) : undefined,
+      companion_only: companionOnly || undefined,
     }),
-    [q, category, startDate, endDate, guests]
+    [q, category, startDate, endDate, guests, companionOnly]
   );
 
   const openedParams = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -1271,7 +1273,7 @@ const search = async (opts = {}) => {
   ];
 
   const runSearch = () => {
-    const wantSearch = Boolean(q.trim() || category || startDate || endDate || Number(guests) > 1);
+    const wantSearch = Boolean(q.trim() || category || startDate || endDate || companionOnly || Number(guests) > 1);
     setSearchMode(wantSearch);
     wantSearch ? search() : ["top", "new", "upcoming"].forEach((key) => loadSection(key, 1));
   };
@@ -1571,6 +1573,7 @@ const search = async (opts = {}) => {
           {t("common.find") || "Найти"}
         </button>
         </div>
+        <label className="mt-3 flex w-fit max-w-full items-center gap-2 text-sm font-semibold text-slate-700"><input type="checkbox" checked={companionOnly} onChange={event => setCompanionOnly(event.target.checked)} className="h-4 w-4 accent-orange-600" />{t("marketplace.companion_only", { defaultValue: "👥 Ищут попутчика" })}</label>
         <div className="mt-3 flex items-center justify-between gap-3 border-t border-slate-100 pt-3">
           <p className="text-xs font-medium text-slate-500">{t("marketplace.search_hint", { defaultValue: "Укажите направление или выберите категорию — подходящие варианты появятся ниже." })}</p>
           {(startDate || endDate || Number(guests) > 1) && <button type="button" onClick={() => { setStartDate(""); setEndDate(""); setGuests(1); }} className="shrink-0 text-xs font-bold text-slate-600 underline underline-offset-4 hover:text-orange-600">{t("marketplace.clear_dates", { defaultValue: "Сбросить даты" })}</button>}

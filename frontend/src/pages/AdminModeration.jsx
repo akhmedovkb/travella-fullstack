@@ -1,3 +1,4 @@
+import { CompanionEditor, CompanionSummary, companionError } from "../components/Companion";
 import { GalaDinnerEditor, GalaDinnerSummary, galaDinnerError } from "../components/GalaDinner";
 // frontend/src/pages/AdminModeration.jsx
 import React, { useEffect, useRef, useState, useId } from "react";
@@ -165,7 +166,7 @@ const QUICK_DETAIL_KEYS = new Set([
   "directionCountry", "country", "city", "location", "title", "directionFrom", "directionTo", "direction",
   "startDate", "departureDate", "departureFlightDate", "endDate", "returnFlightDate", "returnDate",
   "nights", "hotel", "eventName", "roomCategory", "accommodationCategory", "accommodation", "netPrice", "net_price",
-  "grossPrice", "gross_price", "price", "pricePerPerson", "priceFor", "food", "galaDinner",
+  "grossPrice", "gross_price", "price", "pricePerPerson", "priceFor", "food", "galaDinner", "companion",
   "flightDetails", "flight_details", "flight_info", "flightIncluded", "airTickets",
   "aviaTickets", "transferIncluded", "hasTransfer", "transfer", "insurance",
   "insuranceIncluded", "visa", "visaIncluded", "proofImages", "proofUrl", "telegramProofFileId",
@@ -3103,6 +3104,8 @@ export default function AdminModeration({ embedded = false }) {
     }
     if (editConflict) return tError("Сначала загрузите актуальную версию услуги. Ваш черновик остаётся в форме.");
     const details = rowsToDetails(editDetailsRows);
+    const companionValidation = companionError(details.companion);
+    if (companionValidation) return tError(companionValidation);
     const galaError = galaDinnerError(details.galaDinner, details);
     if (galaError) return tError(galaError);
     let images;
@@ -3919,6 +3922,7 @@ export default function AdminModeration({ embedded = false }) {
                       onChange={(value) => setDetailValue("food", value)}
                       placeholder="AI / BB"
                     />
+                    <div className="sm:col-span-2"><CompanionEditor category={editForm.category} value={editDetails.companion} onChange={value => setDetailValue("companion", value)} /><CompanionSummary category={editForm.category} value={editDetails.companion} /></div>
                     <div className="sm:col-span-2"><GalaDinnerEditor category={editForm.category} value={editDetails.galaDinner} onChange={value => setDetailValue("galaDinner", value)} /><GalaDinnerSummary category={editForm.category} value={editDetails.galaDinner} /></div>
                     <TextField
                       label="Детали рейса"

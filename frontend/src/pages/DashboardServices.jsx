@@ -1,3 +1,4 @@
+import { CompanionEditor, CompanionSummary, companionError } from "../components/Companion";
 import { GalaDinnerEditor, GalaDinnerSummary, galaDinnerError } from "../components/GalaDinner";
 // frontend/src/pages/DashboardServices.jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -2134,6 +2135,8 @@ export default function DashboardServices({ viewMode = "create" }) {
       return;
     }
 
+    const companionValidation = companionError(details.companion);
+    if (companionValidation) return tError(companionValidation);
     const galaError = galaDinnerError(details.galaDinner, details);
     if (galaError) return tError(galaError);
     if (!validate()) return;
@@ -3166,6 +3169,7 @@ export default function DashboardServices({ viewMode = "create" }) {
                               </>
                             )}
 
+                            <div className="sm:col-span-2"><CompanionEditor category={category} value={details.companion} onChange={companion => patchDetails({ companion })} /><div className="mt-3"><CompanionSummary category={category} value={details.companion} /></div></div>
                             {['refused_tour', 'refused_hotel'].includes(category) && <div className="sm:col-span-2"><GalaDinnerEditor category={category} value={details.galaDinner} onChange={galaDinner => patchDetails({ galaDinner })} /><div className="mt-3"><GalaDinnerSummary category={category} value={details.galaDinner} /></div></div>}
 
                             {category === "refused_flight" && (
@@ -3493,8 +3497,8 @@ export default function DashboardServices({ viewMode = "create" }) {
                             <div className="text-sm font-medium text-slate-500">{t("service_form.step_price_hint", { defaultValue: "Стоимость и актуальность" })}</div>
                           </div>
                           <div className="grid gap-4 sm:grid-cols-2">
-                            <Field correctionGroup="price" label={t("net_price", { defaultValue: "Цена нетто" })} hint={t("service_form.hint_net_price", { defaultValue: "Внутренняя цена поставщика. Клиент её не видит." })}><TextInput inputMode="decimal" value={details.netPrice} onChange={(e) => patchDetails({ netPrice: e.target.value })} placeholder={t("service_form.ph_net_price", { defaultValue: "Например: 2500" })} /></Field>
-                            <Field correctionGroup="price" label={t("gross_price", { defaultValue: "Цена для клиента" })} hint={t("service_form.hint_gross_price", { defaultValue: "Цена, которую клиент увидит в маркетплейсе." })}><TextInput inputMode="decimal" value={details.grossPrice} onChange={(e) => patchDetails({ grossPrice: e.target.value })} placeholder={t("service_form.ph_gross_price", { defaultValue: "Например: 2750" })} /></Field>
+                            <Field correctionGroup="price" label={`${t("net_price", { defaultValue: "Цена нетто" })}${details.companion?.priceBasis === "per_person" ? " — за одного попутчика" : ""}`} hint={t("service_form.hint_net_price", { defaultValue: "Внутренняя цена поставщика. Клиент её не видит." })}><TextInput inputMode="decimal" value={details.netPrice} onChange={(e) => patchDetails({ netPrice: e.target.value })} placeholder={t("service_form.ph_net_price", { defaultValue: "Например: 2500" })} /></Field>
+                            <Field correctionGroup="price" label={`${t("gross_price", { defaultValue: "Цена для клиента" })}${details.companion?.priceBasis === "per_person" ? " — за одного попутчика" : ""}`} hint={t("service_form.hint_gross_price", { defaultValue: "Цена, которую клиент увидит в маркетплейсе." })}><TextInput inputMode="decimal" value={details.grossPrice} onChange={(e) => patchDetails({ grossPrice: e.target.value })} placeholder={t("service_form.ph_gross_price", { defaultValue: "Например: 2750" })} /></Field>
                             <Field label={t("expiration_timer", { defaultValue: "Таймер актуальности" })} hint={t("service_form.expiration_hint", { defaultValue: "После этого времени предложение станет менее актуальным." })}>
                               <TextInput type="datetime-local" value={details.expiration} onChange={(e) => patchDetails({ expiration: e.target.value })} />
                             </Field>

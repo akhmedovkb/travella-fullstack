@@ -406,6 +406,7 @@ module.exports.search = async (req, res, next) => {
     const limit       = Math.min(200, Math.max(1, parseInt(src.limit  ?? "60", 10)));
     const offset      = Math.max(0, parseInt(src.offset ?? "0", 10));
 
+    const companionOnly = String(src.companion_only || "").toLowerCase() === "true";
     const cats = expandCategory(category);
     tr.log("filters", { q, category, cats, only_active, sort, limit, offset });
 
@@ -466,6 +467,9 @@ module.exports.search = async (req, res, next) => {
       where.push(`COALESCE((s.details->>'isActive')::boolean, TRUE) = TRUE`);
     }
 
+    if (companionOnly) {
+      where.push("s.category IN ('refused_tour','refused_hotel') AND s.details->'companion'->>'enabled' = 'true'");
+    }
     if (cats && cats.length) {
       const ph = cats.map(() => `$${p++}`).join(",");
       params.push(...cats);

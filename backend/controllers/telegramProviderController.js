@@ -1,3 +1,4 @@
+const { normalizeCompanion } = require("../utils/companion");
 const { normalizeGalaDinner } = require("../utils/galaDinner");
 const { WAITING_SQL, RETURNED_SQL } = require("../utils/correctionTracking");
 const { ensureServiceModerationEvents } = require("../utils/serviceModerationEvents");
@@ -451,6 +452,7 @@ function normalizeRefusedBotDetails(category, details = {}) {
   delete d.arrival_fast_track;
   delete d.visa_included;
 
+  if (d.companion !== undefined) d.companion = normalizeCompanion(d.companion, cat);
   if (d.galaDinner !== undefined) d.galaDinner = normalizeGalaDinner(d.galaDinner, d, cat);
   return d;
 }

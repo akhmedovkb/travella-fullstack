@@ -2209,7 +2209,7 @@ bot.use(async (ctx, next) => {
     if (!ctx.session) ctx.session = {};
 
     const data = String(ctx.callbackQuery?.data || "");
-    if(ctx.session.galaFlow || data.startsWith("gala:") || ctx.session.correctionFlow || data.startsWith("corr:") || /^\/corrections/.test(ctx.message?.text || "") || /^\/start.* correction_/.test(ctx.message?.text || "")) return next();
+    if((ctx.session.companionFlow && !ctx.session.companionFlow.draftMode) || (data.startsWith("comp:") && !ctx.session.serviceDraft) || ctx.session.galaFlow || data.startsWith("gala:") || ctx.session.correctionFlow || data.startsWith("corr:") || /^\/corrections/.test(ctx.message?.text || "") || /^\/start.* correction_/.test(ctx.message?.text || "")) return next();
     if (data === "tg_draft:continue" || data === "tg_draft:delete") {
       return next();
     }
@@ -2364,6 +2364,11 @@ bot.use(async (ctx, next) => {
 
 
 // Corrections use the real Telegram actor and run before legacy text/photo wizards.
+const companionFlow = require("./handlers/companionFlow").createCompanionFlow({ pool, onDraftComplete: async ctx => {
+  ctx.session.state = "svc_create_price";
+  await promptWizardState(ctx, "svc_create_price");
+} });
+bot.use(companionFlow);
 bot.use(require("./handlers/galaDinnerFlow").createGalaDinnerFlow({pool}));
 bot.use(require("../utils/telegramServiceActionGuard").createServiceActionGuard({pool}));
 bot.use(require("./handlers/correctionFlow").createCorrectionFlow({pool,loadImage:tgFileIdToDataUrlForProof,notifyModerationNew:require("../utils/telegram").notifyModerationNew}));
@@ -4308,7 +4313,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_price":
       await safeReply(
         ctx,
-        `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
+        `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -4316,7 +4321,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_grossPrice":
       await safeReply(
         ctx,
-        `💳 Цена для клиента (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
+        `💳 Цена для клиента${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -4739,6 +4744,7 @@ bot.action(/^draft:continue:(\d+)$/, async (ctx) => {
       title: svc.title || det.title || "",
       price: det.netPrice ?? det.price ?? svc.price ?? "",
       grossPrice: det.grossPrice ?? svc.grossPrice ?? "",
+      companion: det.companion,
       expiration: det.expiration || svc.expiration || "",
       isActive: typeof det.isActive === "boolean" ? det.isActive : (typeof svc.isActive === "boolean" ? svc.isActive : true),
       country: det.directionCountry || "",
@@ -4838,6 +4844,7 @@ bot.action(/^svc_edit_start:(\d+)$/, async (ctx) => {
       title: svc.title || det.title || "",
       price: det.netPrice ?? det.price ?? svc.price ?? "",
       grossPrice: det.grossPrice ?? svc.grossPrice ?? "",
+      companion: det.companion,
 
       expiration: det.expiration || svc.expiration || "",
       isActive: typeof det.isActive === "boolean" ? det.isActive : (typeof svc.isActive === "boolean" ? svc.isActive : true),
@@ -6897,6 +6904,7 @@ function parseAuthorProgramDaysInput(value) {
 
 function buildDetailsForRefusedTour(draft, netPriceNum) {
   return {
+    ...(draft.companion !== undefined ? { companion: draft.companion } : {}),
     title: draft.title || "",
     directionCountry: draft.country || "",
     directionFrom: draft.fromCity || "",
@@ -6933,6 +6941,7 @@ function buildDetailsForRefusedTour(draft, netPriceNum) {
 
 function buildDetailsForRefusedHotel(draft, netPriceNum) {
   return {
+    ...(draft.companion !== undefined ? { companion: draft.companion } : {}),
     title: draft.title || "",
     directionCountry: draft.country || "",
     directionTo: draft.toCity || "",
@@ -7250,6 +7259,7 @@ function buildProofKeyboard(serviceId, count = 0, category = "") {
     [{ text: count > 0 ? "➕ Добавить ещё подтверждение" : "📎 Какое подтверждение отправить?", callback_data: `proof:add_more:${Number(serviceId || 0)}` }],
   ];
 
+  if (["refused_tour", "refused_hotel"].includes(category)) rows.push([{ text: "👥 Попутчик", callback_data: `comp:open:${Number(serviceId || 0)}` }]);
   if (["refused_tour", "refused_hotel"].includes(category)) rows.push([{ text: "🎉 Гала-ужин", callback_data: `gala:open:${Number(serviceId || 0)}` }]);
 
   if (count > 0) {
@@ -8090,6 +8100,7 @@ function wizardCurrentPreview(ctx, state) {
 }
 
 async function promptWizardState(ctx, state) {
+  if (state === "svc_create_price" && !ctx.session?.serviceDraft?.id && ["refused_tour", "refused_hotel"].includes(ctx.session?.serviceDraft?.category) && ctx.session.serviceDraft.companion === undefined) return companionFlow.startDraft(ctx);
   await trackProviderFunnelFromBot(ctx, "wizard_step", {
     step: state,
     meta: { state },
@@ -8656,7 +8667,7 @@ async function promptWizardState(ctx, state) {
     case "svc_create_price": {
       const cat = ctx.session?.serviceDraft?.category;
             const label =
-        cat === "refused_hotel"
+        ctx.session?.serviceDraft?.companion?.enabled ? "за одного попутчика" : cat === "refused_hotel"
           ? "за отель"
           : cat === "refused_flight"
             ? "за авиабилет"
@@ -8673,7 +8684,7 @@ async function promptWizardState(ctx, state) {
     case "svc_create_grossPrice": {
       const cat = ctx.session?.serviceDraft?.category;
             const label =
-        cat === "refused_hotel"
+        ctx.session?.serviceDraft?.companion?.enabled ? "за одного попутчика" : cat === "refused_hotel"
           ? "за отель"
           : cat === "refused_flight"
             ? "за авиабилет"
@@ -10981,8 +10992,8 @@ bot.action(/^prov_services:list_cards(?::more)?$/, async (ctx) => {
 
       const keyboard = {
         inline_keyboard: [
+          ...(["refused_tour", "refused_hotel"].includes(svc.category) ? [[{ text: "👥 Попутчик", callback_data: `comp:open:${svc.id}` }, { text: "🎉 Гала-ужин", callback_data: `gala:open:${svc.id}` }]] : []),
           [
-            ...(["refused_tour", "refused_hotel"].includes(svc.category) ? [{ text: "🎉 Гала-ужин", callback_data: `gala:open:${svc.id}` }] : []),
             { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
             { text: "⏳ Продлить", callback_data: `svc_extend:${svc.id}` },
           ],
@@ -16775,7 +16786,7 @@ async function handleSvcEditWizardText(ctx) {
 
         await go(
           "svc_edit_price",
-          `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -16942,7 +16953,7 @@ async function handleSvcEditWizardText(ctx) {
         if (draft.category === "refused_flight") {
           await go(
             "svc_edit_price",
-            `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+            `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
           );
           return true;
         }
@@ -17090,7 +17101,7 @@ async function handleSvcEditWizardText(ctx) {
       
         await go(
           "svc_edit_price",
-          `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -17323,7 +17334,7 @@ async function handleSvcEditWizardText(ctx) {
         
           await go(
             "svc_edit_price",
-            `💰 Цена поставщика (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+            `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
           );
           return true;
         }
@@ -17343,7 +17354,7 @@ async function handleSvcEditWizardText(ctx) {
 
         await go(
           "svc_edit_grossPrice",
-          `💳 Цена для клиента (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          `💳 Цена для клиента${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -19663,6 +19674,7 @@ async function startQuickProofEdit(ctx, serviceId, group) {
       title: svc.title || det.title || det.eventName || det.hotel || "",
       price: det.netPrice ?? det.price ?? svc.price ?? "",
       grossPrice: det.grossPrice ?? svc.grossPrice ?? "",
+      companion: det.companion,
       expiration: det.expiration || svc.expiration || "",
       isActive: typeof det.isActive === "boolean" ? det.isActive : true,
       country: det.directionCountry || det.country || "",

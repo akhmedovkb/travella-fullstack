@@ -1,3 +1,4 @@
+const { validateCompanionBody } = require("../utils/companion");
 const { validateGalaBody } = require("../utils/galaDinner");
 const {WAITING_SQL,RETURNED_SQL,readTracking,correctionHistory,remindCorrection}=require("../utils/correctionTracking");
 // backend/routes/adminRoutes.js
@@ -351,7 +352,7 @@ router.post("/services/:id(\\d+)/correction-reminder",authenticateToken,requireA
 });
 
 // полное редактирование услуги админом без ломания модерации
-router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, validateGalaBody, async (req, res) => {
+router.put("/services/:id(\\d+)", authenticateToken, requireAdmin, validateGalaBody, validateCompanionBody, async (req, res) => {
   const id = Number(req.params.id);
   if (!Number.isFinite(id) || id <= 0) {
     return res.status(400).json({ message: "Bad service id" });

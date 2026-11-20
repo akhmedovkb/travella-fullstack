@@ -1,3 +1,4 @@
+const { companionText } = require("./companion");
 const { galaDinnerText, CATEGORIES: GALA_CATEGORIES } = require("./galaDinner");
 // backend/utils/telegramServiceCard.js
 
@@ -549,7 +550,8 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
       const compact = gala ? { ...gala, childConditions: String(gala.childConditions || "").slice(0, 100), notes: String(gala.notes || "").slice(0, 120) } : undefined;
       const priceIndex = parts.findIndex(part => /💵|💸|💰|<b>Цена/.test(part));
       const position = priceIndex >= 0 ? priceIndex + 1 : Math.min(2, parts.length);
-      return [...parts.slice(0, position), "", escapeHtml(galaDinnerText(compact)), "", ...parts.slice(position)].join("\n");
+      const companion = companionText(d.companion ? { ...d.companion, travelers: String(d.companion.travelers || "").slice(0, 100), preferences: String(d.companion.preferences || "").slice(0, 120) } : undefined);
+      return [...parts.slice(0, position), ...(companion ? ["", escapeHtml(companion)] : []), "", escapeHtml(galaDinnerText(compact)), "", ...parts.slice(position)].join("\n");
     }
     return parts.join("\n");
   };

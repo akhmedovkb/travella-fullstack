@@ -19,7 +19,7 @@ function keyboard(state){const id=state.service.id,t=state.token;return {inline_
  [button('📅 Даты',`corr:field:${id}:dates:${t}`),button('🏨 Отель',`corr:field:${id}:hotel:${t}`)],
  [button('📎 Подтверждение',`corr:media:${id}:proof:${t}`),button('🖼 Фото карточки',`corr:media:${id}:photos:${t}`)],
  [button('✏️ Другие поля',`corr:fields:${id}`)],
- ...(['refused_tour','refused_hotel'].includes(state.service.category)?[[button('🎉 Гала-ужин',`gala:open:${id}`)]]:[]),
+ ...(['refused_tour','refused_hotel'].includes(state.service.category)?[[button('👥 Попутчик',`comp:open:${id}`)],[button('🎉 Гала-ужин',`gala:open:${id}`)]]:[]),
  ...state.correction.reasonCodes.flatMap(code=>[[correctionAction(code,id,t)],[button(`${state.checkedCodes.includes(code)?'✅':'⬜'} Исправлено: ${LABELS[code]||code}`,`corr:check:${id}:${code}:${state.checkedCodes.includes(code)?0:1}:${t}`)]]),
  [button('📤 Отправить на повторную проверку',`corr:submit:${id}:${t}`)],
  [button('История возвратов',`corr:history:${id}`)],
