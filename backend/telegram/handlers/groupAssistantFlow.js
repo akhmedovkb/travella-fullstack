@@ -6,12 +6,15 @@ const { createGroupAssistantStore } = require('../../ai/groupAssistantStore');
 const { searchGroupOffers } = require('../../ai/groupAssistantSearch');
 const { groupAssistantHelp } = require('../../ai/groupAssistantHelp');
 
+const assistantName = /^\s*отказбот(?=$|[^\p{L}\p{N}_])[,!?:;—–.\s-]*/iu;
+function stripAssistantName(text) { return String(text || '').replace(assistantName, '').trim(); }
 function addressed(ctx) {
   const text = ctx.message?.text || '';
   if(ctx.chat?.type==='private'&&ctx.__travellaAssistantPrivate&&text)return true;
   const username = String(ctx.botInfo?.username || '').toLowerCase();
   const command = text.match(/^\/(ask|travella_help|travella_on|travella_off|travella_auto_on|travella_auto_off)(?:@([a-z0-9_]+))?(?:\s|$)/i);
   if (command) return !command[2] || command[2].toLowerCase() === username;
+  if (assistantName.test(text)) return true;
   if (username && new RegExp(`@${username}\\b`, 'i').test(text)) return true;
   return Boolean(ctx.message?.reply_to_message?.from?.id === ctx.botInfo?.id && text);
 }
@@ -359,7 +362,7 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
           return reply(ctx, formatOffers(offers, state.intent.language), offerButtons(offers, state.intent.language));
         } finally { busy.delete(sessionKey); }
       }
-      const question = text.replace(/^\/ask(?:@[a-z0-9_]+)?\s*/i, '').replace(new RegExp(`@${username}\\b`, 'gi'), '').trim();
+      const question = stripAssistantName(text).replace(/^\/ask(?:@[a-z0-9_]+)?\s*/i, '').replace(new RegExp(`@${username}\\b`, 'gi'), '').trim();
       const uiState=sessions.get(sessionKey);
       if(uiState?.ui?.awaiting && question) return await acceptUiText(ctx,uiState,question);
       return await processQuestion(ctx, question, sessionKey);
@@ -383,3 +386,5 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
   return middleware;
 }
 module.exports = { createGroupAssistantFlow, addressed, summary, formatOffers, offerButtons };
+
+module.exports.stripAssistantName = stripAssistantName;

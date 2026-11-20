@@ -121,3 +121,18 @@ test('editing and starting a new private search never publish or revive a previo
  assert.ok(f.calls.filter(c=>c.kind==='search').at(-1).filters.destination.includes('Вьетнам'));
  assert.equal(f.posts.length,1);assert.equal(f.replies.filter(r=>r.chat<0).length,1);
 });
+
+test('Russian bot name opens an author-bound private handoff without publishing the request',async()=>{
+ for(const name of ['ОТКАЗБОТ, ', 'отказбот ', 'Отказбот: ', 'ОТКАЗБОТ — ']){
+  const f=fixture();await f.send({text:name+'найди мне на Фукуок на ближайшие даты'});
+  assert.equal(f.replies.length,1);assert.equal(f.posts.length,0);assert.equal(f.calls.filter(c=>c.kind==='model').length,0);
+  const start=f.link(-100);await f.send({chat:8,actor:8,text:'/start '+start});assert.equal(f.calls.filter(c=>c.kind==='model').length,0);
+  await f.send({chat:7,text:'/start '+start});assert.equal(f.calls.find(c=>c.kind==='model').text,'найди мне на Фукуок на ближайшие даты');
+  assert.equal(f.replies.filter(r=>r.chat<0).length,1);assert.equal(f.posts.length,0);
+ }
+});
+
+test('bot name matches only a direct address, not a word fragment or discussion about the bot',()=>{
+ const {addressed}=require('../telegram/handlers/groupAssistantFlow');
+ for(const text of ['ОТКАЗБОТик найди тур','Про ОТКАЗБОТ говорят','не ОТКАЗБОТ, а другой бот'])assert.equal(addressed({message:{text},botInfo:{id:99,username:'TravellaBot'}}),false);
+});

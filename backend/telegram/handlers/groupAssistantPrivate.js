@@ -1,4 +1,4 @@
-const { createGroupAssistantFlow, addressed, formatOffers, offerButtons } = require('./groupAssistantFlow');
+const { createGroupAssistantFlow, addressed, stripAssistantName, formatOffers, offerButtons } = require('./groupAssistantFlow');
 const { createGroupAssistantStore } = require('../../ai/groupAssistantStore');
 const { createGroupAssistantHandoffs } = require('../../ai/groupAssistantHandoffs');
 const { searchGroupOffers } = require('../../ai/groupAssistantSearch');
@@ -62,7 +62,7 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
       if(command&&addressed(ctx))return core(ctx,next);
       if(addressed(ctx)){
         if(!await store.enabled(ctx.chat.id))return ctx.reply('Помощник выключен. Администратор может включить его командой /travella_on.');
-        const text=String(ctx.message?.text||'').replace(/^\/(ask|travella_help)(?:@[a-z0-9_]+)?\s*/i,'').replace(new RegExp(`@${username(ctx)}\\b`,'gi'),'').trim();
+        const text=stripAssistantName(ctx.message?.text).replace(/^\/(ask|travella_help)(?:@[a-z0-9_]+)?\s*/i,'').replace(new RegExp(`@${username(ctx)}\\b`,'gi'),'').trim();
         return entryLink(ctx,text);
       }
       return core(ctx,next); // Only local auto detection; invitations are deep links.
