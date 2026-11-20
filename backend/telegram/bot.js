@@ -2379,6 +2379,23 @@ bot.use(require("./handlers/galaDinnerFlow").createGalaDinnerFlow({pool}));
 bot.use(require("../utils/telegramServiceActionGuard").createServiceActionGuard({pool}));
 bot.use(require("./handlers/correctionFlow").createCorrectionFlow({pool,loadImage:tgFileIdToDataUrlForProof,notifyModerationNew:require("../utils/telegram").notifyModerationNew}));
 
+// Import booking images only in private provider chats, before legacy photo handlers.
+bot.use(require("./handlers/bookingScreenshotFlow").createBookingScreenshotFlow({
+  authorize: async ctx => (await ensureProviderRole(ctx)) === "provider",
+  onAccept: async (ctx, draft, editStep) => {
+    ctx.session.editWiz = null;
+    ctx.session.editDraft = null;
+    ctx.session.editingServiceId = null;
+    ctx.session.serviceDraft = draft;
+    ctx.session.wizardStack = [];
+    ctx.session.state = editStep || "svc_create_title";
+    await persistProviderCreateWizard(ctx);
+    await ctx.reply("✅ Данные перенесены в черновик. Проверим недостающее. Состав туристов сохранён с ваших слов. Скриншот не добавлен в публичные фото — на шаге подтверждения его можно прислать отдельно.");
+    await promptWizardState(ctx, ctx.session.state);
+    await persistProviderCreateWizard(ctx);
+  },
+}));
+
 /* ===================== TG FILE LINK CACHE ===================== */
 // file_id -> { url, ts }
 const tgFileLinkCache = new Map();
@@ -5130,9 +5147,9 @@ async function finishEditWizard(ctx) {
       earlyCheckIn: !isTicket && !isFlight ? !!draft.earlyCheckIn : false,
       arrivalFastTrack: !isTicket && !isFlight ? !!draft.arrivalFastTrack : false,
 
-      adt: isHotel ? Number(draft.adt ?? 0) : 0,
-      chd: isHotel ? Number(draft.chd ?? 0) : 0,
-      inf: isHotel ? Number(draft.inf ?? 0) : 0,
+      adt: isHotel || (category === "refused_tour" && Number(draft.adt) > 0) ? Number(draft.adt ?? 0) : 0,
+      chd: isHotel || (category === "refused_tour" && Number(draft.adt) > 0) ? Number(draft.chd ?? 0) : 0,
+      inf: isHotel || (category === "refused_tour" && Number(draft.adt) > 0) ? Number(draft.inf ?? 0) : 0,
 
       flightType: isFlight ? (draft.flightType === "round_trip" ? "round_trip" : "one_way") : null,
       oneWay: isFlight ? draft.flightType !== "round_trip" : null,
@@ -6910,6 +6927,7 @@ function parseAuthorProgramDaysInput(value) {
 
 function buildDetailsForRefusedTour(draft, netPriceNum) {
   return {
+    ...(draft.bookingPartyConfirmed ? { adt: draft.adt, chd: draft.chd, inf: draft.inf } : {}),
     ...(draft.companion !== undefined ? { companion: draft.companion } : {}),
     title: draft.title || "",
     directionCountry: draft.country || "",
@@ -8106,6 +8124,9 @@ function wizardCurrentPreview(ctx, state) {
 }
 
 async function promptWizardState(ctx, state) {
+  const importedStep = require("../ai/bookingScreenshot").importedNextStep(ctx.session?.serviceDraft, state, getServiceWizardOrder(ctx.session?.serviceDraft?.category, state));
+  if (importedStep !== state) { ctx.session.state = importedStep; return promptWizardState(ctx, importedStep); }
+
   if (state === "svc_create_price" && !ctx.session?.serviceDraft?.id && ["refused_tour", "refused_hotel"].includes(ctx.session?.serviceDraft?.category) && ctx.session.serviceDraft.companion === undefined) return companionFlow.startDraft(ctx);
   await trackProviderFunnelFromBot(ctx, "wizard_step", {
     step: state,
@@ -10865,6 +10886,7 @@ bot.action("prov_services:create", async (ctx) => {
     await ctx.reply("Выберите категорию отказной услуги:", {
       reply_markup: {
         inline_keyboard: [
+          [{ text: "📷 Создать по скриншоту", callback_data: "booking:start" }],
           [{ text: "📍 Отказной тур", callback_data: "svc_new_cat:refused_tour" }],
           [{ text: "🧭 Авторский тур", callback_data: "svc_new_cat:author_tour" }],
           [{ text: "🏨 Отказной отель", callback_data: "svc_new_cat:refused_hotel" }],
