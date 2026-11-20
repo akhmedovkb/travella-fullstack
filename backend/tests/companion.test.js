@@ -104,8 +104,9 @@ test('bot creation records companion requirements before continuing to price wit
   assert.equal(continued, false);
   await send('gender_female');
   await send('room_shared');
-  await send('count', '2');
-  await send('travelers', 'Девушка, 28 лет');
+  await flow(context(session, null, '2'), () => assert.fail());
+  await flow(context(session, null, 'Девушка, 28 лет'), () => assert.fail());
+  await send('skip');
   await send('save');
   assert.ok(continued);
   assert.equal(session.companionFlow, null);
@@ -119,7 +120,7 @@ test('bot no-companion creation skips extra fields and continues', async () => {
   const session = { serviceDraft: { category: 'refused_hotel' } };
   await flow.startDraft(context(session));
   const send = sender(flow, session);
-  await send('disabled'); await send('save');
+  await send('disabled');
   assert.ok(continued);
   assert.deepEqual(session.serviceDraft.companion, { enabled: false });
 });
@@ -165,4 +166,64 @@ test('Telegram public card escapes supplier text and corrections detect edits', 
     assert.match(card.text, /&lt;b&gt;/);
   }
   assert.notEqual(correctionSnapshot({ details: { companion: value } }).companion.signature, correctionSnapshot({ details: {} }).companion?.signature);
+});
+
+test('creation shows one compact question at a time and removes the main reply keyboard', async () => {
+  const flow = createCompanionFlow({ pool: {}, resolve: async () => ({ id: 5 }) });
+  const session = { serviceDraft: { category: 'refused_tour' } };
+  const first = context(session);
+  await flow.startDraft(first);
+  assert.equal(first.replies[0].options.reply_markup.remove_keyboard, true);
+  assert.equal(first.replies[1].options.reply_markup.inline_keyboard.flat().length, 4);
+  const send = sender(flow, session);
+  const gender = await send('enabled');
+  assert.match(gender.replies[0].text, /Кого ищем/);
+  assert.equal(gender.replies[0].options.reply_markup.inline_keyboard.length, 3);
+  assert.doesNotMatch(gender.replies[0].text, /Ищут:|Указанная цена/);
+  const room = await send('gender_female');
+  assert.match(room.replies[0].text, /Как будет размещаться/);
+  assert.equal(room.replies[0].options.reply_markup.inline_keyboard.length, 3);
+  await send('room_shared');
+  assert.equal(session.companionFlow.field, 'count');
+  await send('skip');
+  assert.equal(session.companionFlow.step, 'count'); // Required count cannot be skipped.
+  await send('count_1');
+  assert.equal(session.companionFlow.field, 'travelers');
+  await send('previous');
+  assert.equal(session.companionFlow.step, 'count');
+  await send('count_2'); await send('skip'); await send('skip');
+  assert.equal(session.companionFlow.step, 'review');
+  assert.equal(session.companionFlow.value.count, 2);
+});
+test('callback selections edit one message and old buttons cannot alter a later step', async () => {
+  const session = { serviceDraft: { category: 'refused_hotel' } };
+  const messages = [], edits = [], clears = [];
+  const flow = createCompanionFlow({ pool: {}, resolve: async () => ({ id: 5 }) });
+  function ctx(data, text) {
+    const value = context(session, data, text);
+    value.reply = async (body, options) => { messages.push({ body, options }); return { message_id: messages.length }; };
+    value.telegram = {
+      editMessageText: async (...args) => edits.push(args),
+      editMessageReplyMarkup: async (...args) => clears.push(args),
+    };
+    return value;
+  }
+  await flow.startDraft(ctx());
+  const firstId = session.companionFlow.messageId;
+  const oldToken = session.companionFlow.token;
+  await flow(ctx(`comp:enabled:0:${oldToken}`), () => assert.fail());
+  assert.equal(messages.length, 2); // Intro hides keyboard; the second message is the single question.
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0][1], firstId);
+  assert.notEqual(session.companionFlow.token, oldToken);
+  await flow(ctx(`comp:disabled:0:${oldToken}`), () => assert.fail());
+  assert.equal(session.companionFlow.step, 'gender');
+  for (const action of ['gender_any', 'room_separate', 'count_1']) {
+    await flow(ctx(`comp:${action}:0:${session.companionFlow.token}`), () => assert.fail());
+  }
+  await flow(ctx(null, 'Пара, 30 лет'), () => assert.fail());
+  assert.equal(messages.length, 3); // Text answer gets the next prompt below it.
+  assert.equal(session.companionFlow.step, 'preferences');
+  assert.ok(clears.length);
+  assert.deepEqual(clears.at(-1)[3], { inline_keyboard: [] });
 });
