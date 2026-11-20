@@ -17,9 +17,9 @@ function context(text, { actor = 7, chat = -100, type = 'supergroup', topic = 1,
     reply: async (text, options) => { replies.push({ text, options }); return { message_id: messageId }; },
   };
 }
-function fixture({ output = intent(), enabled = true, ready = true, offers = [], auto = false } = {}) {
+function fixture({ output = intent(), enabled = true, ready = true, offers = [], auto = false, now = Date.now } = {}) {
   const calls = [], active = new Map([[-100, enabled]]), autoActive = new Map([[-100, auto]]);
-  const flow = createGroupAssistantFlow({ pool: {}, model: { ready: () => ready, interpret: async (...args) => { calls.push(['model', ...args]); return output; } },
+  const flow = createGroupAssistantFlow({ pool: {}, now, model: { ready: () => ready, interpret: async (...args) => { calls.push(['model', ...args]); return output; } },
     store: { autoEnabled: async id => active.get(id) && autoActive.get(id), setAuto: async (id, _actor, value) => { autoActive.set(id, value); if (value) active.set(id, true); }, enabled: async id => active.get(id), activate: async (id, _actor, value) => active.set(id, value), reserve: async () => { calls.push(['reserve']); return true; } },
     search: async f => { calls.push(['search', f]); return offers; },
   });
@@ -371,4 +371,19 @@ test('simultaneous author messages produce one invitation and retain all refinem
   assert.match(question, /на завтра/);
   assert.match(question, /1000\$/);
   assert.match(question, /Кроме арабских/);
+});
+
+test('an expired automatic invitation does not prevent a new request after fifteen minutes', async () => {
+  let time = 0;
+  const f = fixture({ auto: true, now: () => time });
+  const first = context('У кого есть отказной на двоих?');
+  await f.flow(first, () => assert.fail());
+  time = 14 * 60000;
+  const follow = context('Бюджет 1000 USD'); follow.message.message_id = 12;
+  await f.flow(follow, () => assert.fail());
+  time = 16 * 60000;
+  const next = context('У кого есть отказной на завтра?'); next.message.message_id = 13;
+  await f.flow(next, () => assert.fail());
+  assert.equal(next.replies.length, 1);
+  assert.match(next.replies[0].options.reply_markup.inline_keyboard[0][0].callback_data, /grp_ai:auto:/);
 });

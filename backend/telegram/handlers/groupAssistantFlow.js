@@ -173,7 +173,6 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
         autoEntries.set(sessionKey, entry);
       }
       appendAutoText(entry, text, ctx.message.message_id);
-      entry.expires = now() + 15 * 60000;
       if (entry.invitationPending || busy.has(sessionKey)) return;
       return await publishInvitation(ctx, entry, sessionKey);
     } catch { console.warn('[group-assistant] auto capture unavailable'); }
