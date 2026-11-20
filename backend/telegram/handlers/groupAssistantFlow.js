@@ -13,26 +13,52 @@ function addressed(ctx) {
   return Boolean(ctx.message?.reply_to_message?.from?.id === ctx.botInfo?.id && text);
 }
 const words = {
-  ru: { confirm: 'Правильно понял запрос?', destination: 'Куда', origin: 'Откуда', dates: 'Даты начала', any: 'любые', budget: 'Бюджет', person: 'за человека', total: 'за весь тур / номер', companion: 'Ищем попутчика', yes: '✅ Да, найти', no: 'Изменить', noOffers: 'Подходящих актуальных предложений с подтверждёнными условиями цены не нашёл. Можно изменить даты, бюджет или направление.', found: 'Нашёл в Travella', priceUnknown: 'Цена уточняется', unitUnknown: 'условия цены уточняйте в карточке', open: 'Открыть карточку', female: 'Нужна попутчица', male: 'Нужен попутчик', anyGender: 'Попутчик без предпочтений', shared: 'Один номер', separate: 'Отдельные номера' },
-  uz: { confirm: 'So‘rovni to‘g‘ri tushundimmi?', destination: 'Qayerga', origin: 'Qayerdan', dates: 'Boshlanish sanalari', any: 'istalgan', budget: 'Budjet', person: 'bir kishi uchun', total: 'butun tur / xona uchun', companion: 'Hamroh qidirish', yes: '✅ Ha, qidirish', no: 'O‘zgartirish', noOffers: 'Narx shartlari tasdiqlangan mos dolzarb taklif topilmadi. Sana, budjet yoki yo‘nalishni o‘zgartirish mumkin.', found: 'Travella takliflari', priceUnknown: 'Narxni aniqlashtiring', unitUnknown: 'narx shartlarini kartada tekshiring', open: 'Kartani ochish', female: 'Ayol hamroh kerak', male: 'Erkak hamroh kerak', anyGender: 'Hamroh kerak, farqi yo‘q', shared: 'Bitta xona', separate: 'Alohida xonalar' },
-  en: { confirm: 'Did I understand correctly?', destination: 'To', origin: 'From', dates: 'Start dates', any: 'any', budget: 'Budget', person: 'per person', total: 'whole tour / room', companion: 'Looking for a companion', yes: '✅ Yes, search', no: 'Change', noOffers: 'No current offers with confirmed matching price terms found. Try different dates, budget or destination.', found: 'Found on Travella', priceUnknown: 'Price to be confirmed', unitUnknown: 'confirm price basis in the card', open: 'Open offer', female: 'Female companion needed', male: 'Male companion needed', anyGender: 'Companion needed, no preference', shared: 'Sharing a room', separate: 'Separate rooms' },
+  ru: { confirm: 'Правильно понял запрос?', destination: 'Куда', origin: 'Откуда', dates: 'Даты начала', any: 'любые', budget: 'Бюджет', person: 'за человека', total: 'за весь тур / номер', companion: 'Ищем попутчика', yes: '✅ Да, найти', no: 'Изменить', noOffers: 'Подходящих актуальных предложений с подтверждёнными условиями цены не нашёл. Можно изменить даты, бюджет или направление.', found: 'Нашёл в Travella', priceUnknown: 'Цена уточняется', unitUnknown: 'за сколько человек — нужно уточнить', open: 'Открыть карточку', female: 'Нужна попутчица', male: 'Нужен попутчик', anyGender: 'Попутчик без предпочтений', shared: 'Один номер', separate: 'Отдельные номера' },
+  uz: { confirm: 'So‘rovni to‘g‘ri tushundimmi?', destination: 'Qayerga', origin: 'Qayerdan', dates: 'Boshlanish sanalari', any: 'istalgan', budget: 'Budjet', person: 'bir kishi uchun', total: 'butun tur / xona uchun', companion: 'Hamroh qidirish', yes: '✅ Ha, qidirish', no: 'O‘zgartirish', noOffers: 'Narx shartlari tasdiqlangan mos dolzarb taklif topilmadi. Sana, budjet yoki yo‘nalishni o‘zgartirish mumkin.', found: 'Travella takliflari', priceUnknown: 'Narxni aniqlashtiring', unitUnknown: 'necha kishi uchunligini aniqlashtiring', open: 'Kartani ochish', female: 'Ayol hamroh kerak', male: 'Erkak hamroh kerak', anyGender: 'Hamroh kerak, farqi yo‘q', shared: 'Bitta xona', separate: 'Alohida xonalar' },
+  en: { confirm: 'Did I understand correctly?', destination: 'To', origin: 'From', dates: 'Start dates', any: 'any', budget: 'Budget', person: 'per person', total: 'whole tour / room', companion: 'Looking for a companion', yes: '✅ Yes, search', no: 'Change', noOffers: 'No current offers with confirmed matching price terms found. Try different dates, budget or destination.', found: 'Found on Travella', priceUnknown: 'Price to be confirmed', unitUnknown: 'confirm how many people the price covers', open: 'Open offer', female: 'Female companion needed', male: 'Male companion needed', anyGender: 'Companion needed, no preference', shared: 'Sharing a room', separate: 'Separate rooms' },
 };
 function summary(intent) {
   const w = words[intent.language] || words.ru, f = intent.filters;
   return [w.confirm, `${w.destination}: ${f.destination[0] || w.any}`, `${w.origin}: ${f.origin[0] || w.any}`, `${w.dates}: ${f.start || w.any}${f.end && f.end !== f.start ? ` — ${f.end}` : ''}`, f.budget !== null && `${w.budget}: ${f.budget} ${f.currency || '?'} · ${w[f.priceBasis] || '?'}`, f.budget !== null && ({ru: 'Это основная цена; возможные доплаты проверяйте в карточке.',uz: 'Bu asosiy narx; qo‘shimcha to‘lovlarni kartada tekshiring.',en: 'This is the base price; check supplements in the offer.'}[intent.language] || ''), f.companion && `${w.companion}${f.gender ? ` · ${{ female: w.female, male: w.male, any: w.anyGender }[f.gender]}` : ''}`].filter(Boolean).join('\n');
 }
+function displayText(value, max = 85) {
+  const text = String(value || '').replace(/https?:\/\/\S+/gi, '').replace(/[<>\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim();
+  return text.length > max ? text.slice(0, max - 1).trimEnd() + '…' : text;
+}
+function offerDates(start, end) {
+  const valid = value => /^\d{4}-\d{2}-\d{2}$/.test(value || '');
+  const date = value => value.split('-').reverse().join('.');
+  if (!valid(start)) return '';
+  if (!valid(end) || end === start) return date(start);
+  const first = start.slice(0, 4) === end.slice(0, 4) ? date(start).slice(0, 5) : date(start);
+  return `${first} — ${date(end)}`;
+}
+function priceUnit(offer, language) {
+  const w = words[language] || words.ru;
+  if (offer.priceBasis === 'person') return w.person;
+  if (offer.priceBasis !== 'total') return w.unitUnknown;
+  const key = offer.category === 'refused_hotel' ? 'hotel' : ['refused_tour', 'author_tour'].includes(offer.category) ? 'tour' : 'service';
+  return ({ ru: { hotel: 'за весь номер', tour: 'за весь тур', service: 'за услугу целиком' }, uz: { hotel: 'butun xona uchun', tour: 'butun tur uchun', service: 'butun xizmat uchun' }, en: { hotel: 'for the whole room', tour: 'for the whole tour', service: 'for the whole service' } }[language] || { hotel: 'за весь номер', tour: 'за весь тур', service: 'за услугу целиком' })[key];
+}
 function formatOffers(offers, language) {
   const w = words[language] || words.ru;
   if (!offers.length) return w.noOffers;
-  return `${w.found}:\n\n` + offers.map((offer, i) => [
-    `${i + 1}. #${offer.id} · ${offer.title}`,
-    [offer.origin, offer.destination].filter(Boolean).join(' → '),
-    offer.start && `${offer.start}${offer.end ? ` — ${offer.end}` : ''}`,
-    offer.price === null ? w.priceUnknown : `${offer.price} ${offer.currency} · ${w[offer.priceBasis] || w.unitUnknown}`,
-    offer.companion && `${{ female: w.female, male: w.male, any: w.anyGender }[offer.gender] || w.companion}${offer.room ? ` · ${w[offer.room] || ''}` : ''}`,
+  const locale = { ru: 'ru-RU', uz: 'uz-UZ', en: 'en-US' }[language] || 'ru-RU';
+  return `${w.found}: ${offers.length}\n\n` + offers.map((offer, i) => [
+    `${i + 1}. ${displayText(offer.title) || '#' + offer.id}`,
+    `📍 ${[displayText(offer.origin, 45), displayText(offer.destination, 45)].filter(Boolean).join(' → ')}`,
+    offer.start && `📅 ${offerDates(offer.start, offer.end)}`,
+    offer.price === null || !Number.isFinite(offer.price) ? `💰 ${w.priceUnknown}` : `💰 ${new Intl.NumberFormat(locale, { maximumFractionDigits: 2 }).format(offer.price)} ${offer.currency} · ${priceUnit(offer, language)}`,
+    offer.companion && `👥 ${{ female: w.female, male: w.male, any: w.anyGender }[offer.gender] || w.companion}${offer.room ? ` · ${w[offer.room] || ''}` : ''}`,
     offer.gala && `🎉 ${offer.gala.status === 'mandatory' ? ({ru:'Обязательная доплата',uz:'Majburiy qo‘shimcha to‘lov',en:'Mandatory supplement'}[language] || '') : ({ru:'Доплата по желанию',uz:'Ixtiyoriy to‘lov',en:'Optional supplement'}[language] || '')}: ${offer.gala.adultPrice} ${offer.gala.currency} / ${w.person}`,
-    offer.url,
-  ].filter(Boolean).join('\n')).join('\n\n');
+  ].filter(line => line && line !== '📍 ').join('\n')).join('\n\n');
+}
+function offerButtons(offers, language) {
+  const w = words[language] || words.ru;
+  return offers.length ? { reply_markup: { inline_keyboard: offers.map((offer, i) => [{
+    text: `${i + 1}. ${w.open} · #${offer.id}`,
+    url: `https://travella.uz/marketplace?opened=${Number(offer.id)}`,
+  }]) } } : {};
 }
 function clarification(intent) {
   const prompts = {
@@ -110,7 +136,7 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
           await ctx.answerCbQuery().catch(() => {});
           const offers = await search(state.intent.filters);
           await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
-          return reply(ctx, formatOffers(offers, state.intent.language));
+          return reply(ctx, formatOffers(offers, state.intent.language), offerButtons(offers, state.intent.language));
         } finally { busy.delete(sessionKey); }
       }
       const question = text.replace(/^\/ask(?:@[a-z0-9_]+)?\s*/i, '').replace(new RegExp(`@${username}\\b`, 'gi'), '').trim();
@@ -146,4 +172,4 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
   };
   return middleware;
 }
-module.exports = { createGroupAssistantFlow, addressed, summary, formatOffers };
+module.exports = { createGroupAssistantFlow, addressed, summary, formatOffers, offerButtons };

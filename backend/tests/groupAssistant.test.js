@@ -3,7 +3,7 @@ const assert = require('node:assert/strict');
 const { normalizeIntent, createGroupAssistantModel, redactQuestion } = require('../ai/groupAssistantModel');
 const { buildSearch, searchGroupOffers } = require('../ai/groupAssistantSearch');
 const { createGroupAssistantStore } = require('../ai/groupAssistantStore');
-const { createGroupAssistantFlow, addressed, formatOffers } = require('../telegram/handlers/groupAssistantFlow');
+const { createGroupAssistantFlow, addressed, formatOffers, offerButtons } = require('../telegram/handlers/groupAssistantFlow');
 const filters = { destination: ['Дубай', 'Dubai', 'Dubay'], origin: ['Ташкент', 'Tashkent'], start: '2026-12-01', end: '2026-12-31', budget: 1000, currency: 'USD', priceBasis: 'person', category: 'refused_tour', companion: true, gender: 'female' };
 const intent = (patch = {}) => normalizeIntent({ kind: 'search', language: 'ru', filters, ...patch });
 function context(text, { actor = 7, chat = -100, type = 'supergroup', topic = 1, data, messageId = 50, admin = false } = {}) {
@@ -154,7 +154,8 @@ test('public results omit private properties even if a mocked DB returns them', 
   const message = formatOffers(offers, 'ru');
   assert.match(message, /650 USD/);
   assert.match(message, /за человека/);
-  assert.match(message, /marketplace\?opened=42/);
+  assert.doesNotMatch(message, /https?:\/\//);
+  assert.equal(offerButtons(offers, 'ru').reply_markup.inline_keyboard[0][0].url, 'https://travella.uz/marketplace?opened=42');
 });
 test('daily quota rollback covers both global and group counters and releases the connection', async () => {
   for (const blocked of ['global', 'group', null]) {
@@ -198,4 +199,34 @@ test('ordinary group replies do not turn a reply thread into a forum topic and i
   await Promise.all([f.flow(click, () => assert.fail()), f.flow(contextCopy(click), () => assert.fail())]);
   assert.equal(f.calls.filter(c => c[0] === 'search').length, 1);
   function contextCopy(original) { const c = context(null, { data, topic: 10 }); delete c.callbackQuery.message.is_topic_message; return c; }
+});
+
+test('compact results use readable dates, correct price units and matching URL buttons', async () => {
+  const offers = [
+    { id: 1253, title: 'Отказной тур на Фукуок', category: 'refused_tour', origin: 'Ташкент', destination: 'Фукуок', start: '2026-12-04', end: '2026-12-11', price: 3650, currency: 'USD', priceBasis: 'unknown' },
+    { id: 1237, title: 'Отказной тур Фукуок', category: 'refused_tour', start: '2026-12-29', end: '2027-01-05', price: 650, currency: 'USD', priceBasis: 'person' },
+    { id: 1220, title: 'Отель', category: 'refused_hotel', price: 1200, currency: 'USD', priceBasis: 'total', gala: { status: 'mandatory', adultPrice: '100', currency: 'USD' } },
+  ];
+  const text = formatOffers(offers, 'ru');
+  assert.match(text, /Нашёл в Travella: 3/);
+  assert.match(text, /04\.12 — 11\.12\.2026/);
+  assert.match(text, /29\.12\.2026 — 05\.01\.2027/);
+  assert.match(text, /за сколько человек — нужно уточнить/);
+  assert.match(text, /650 USD · за человека/);
+  assert.match(text, /за весь номер/);
+  assert.match(text, /Обязательная доплата: 100 USD/);
+  assert.doesNotMatch(text, /https?:|2026-12-/);
+  const f = fixture({ offers });
+  const c = context('@TravellaBot фукуок');
+  await f.flow(c, () => assert.fail());
+  const data = c.replies[0].options.reply_markup.inline_keyboard[0][0].callback_data;
+  const click = context(null, { data });
+  await f.flow(click, () => assert.fail());
+  const buttons = click.replies[0].options.reply_markup.inline_keyboard;
+  assert.equal(buttons.length, 3);
+  assert.equal(buttons[1][0].text, '2. Открыть карточку · #1237');
+  assert.equal(buttons[1][0].url, 'https://travella.uz/marketplace?opened=1237');
+  assert.deepEqual(offerButtons([], 'ru'), {});
+  assert.match(formatOffers(offers, 'uz'), /necha kishi uchunligini/);
+  assert.match(formatOffers(offers, 'en'), /per person/);
 });
