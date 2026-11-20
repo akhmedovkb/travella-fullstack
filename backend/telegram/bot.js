@@ -2215,6 +2215,8 @@ bot.use(async (ctx, next) => {
     if (!ctx.session) ctx.session = {};
 
     const data = String(ctx.callbackQuery?.data || "");
+    // Explicit screenshot import has its own review; do not consume it with a resume prompt.
+    if (ctx.session.bookingImport || data.startsWith("booking:") || /^\/frombooking(?:@\w+)?(?:\s|$)/i.test(ctx.message?.text || "")) return next();
     if((ctx.session.companionFlow && !ctx.session.companionFlow.draftMode) || (data.startsWith("comp:") && !ctx.session.serviceDraft) || ctx.session.galaFlow || data.startsWith("gala:") || ctx.session.correctionFlow || data.startsWith("corr:") || /^\/corrections/.test(ctx.message?.text || "") || /^\/start.* correction_/.test(ctx.message?.text || "")) return next();
     if (data === "tg_draft:continue" || data === "tg_draft:delete") {
       return next();
