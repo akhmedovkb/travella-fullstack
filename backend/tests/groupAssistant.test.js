@@ -387,3 +387,13 @@ test('an expired automatic invitation does not prevent a new request after fifte
   assert.equal(next.replies.length, 1);
   assert.match(next.replies[0].options.reply_markup.inline_keyboard[0][0].callback_data, /grp_ai:auto:/);
 });
+
+test('nearest dates always cover seven Tashkent calendar days including today across year boundaries',async()=>{
+ for(const [clock,start,end] of [['2026-11-20T18:45:00Z','2026-11-20','2026-11-26'],['2026-12-30T20:00:00Z','2026-12-31','2027-01-06']]){
+  for(const phrase of ['на ближайшие даты','на ближ даты']){
+   const model=createGroupAssistantModel({env:{OPENAI_API_KEY:'test'},now:()=>Date.parse(clock),fetchImpl:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({...intent(),filters:{...intent().filters,start,end:start}})}}]})})});
+   const result=await model.interpret('Найди на Фукуок '+phrase);
+   assert.equal(result.filters.start,start);assert.equal(result.filters.end,end);
+  }
+ }
+});
