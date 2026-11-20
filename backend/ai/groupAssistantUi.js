@@ -65,6 +65,16 @@ function renderSearchUi(ui, now = Date.now()) {
   const order=steps(ui); const index=order.indexOf(ui.step);
   return { text: `${index >= 0 ? `Шаг ${index+1} из ${order.length}\n\n` : ''}${text}\n\n${selections(f)}`.trim(), rows:[...rows,...nav] };
 }
+function uiHtml(text) {
+  const escape=value=>String(value).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  let heading=false;
+  return String(text).split('\n').map(line=>{
+    const safe=escape(line);
+    if(/^Шаг \d+ из \d+$/.test(line))return `<i>${safe}</i>`;
+    if(line.trim()&&!heading){heading=true;return `<b>${safe}</b>`;}
+    return safe;
+  }).join('\n');
+}
 function inputPrompt(field) {
   return { full:'Напишите пожелания: направление, даты, сколько человек и бюджет — как удобно.', destination:'Напишите направление, например «Анталья».', origin:'Напишите город вылета, например «Бухара».', dates:'Напишите даты, например «с 5 по 10 декабря» или «в январе».', guests:'Введите число взрослых от 1 до 20 (без детей).', budget:'Напишите сумму и валюту, например «1200 USD» или «800 EUR». Если валюта не указана, считаем USD.' }[field];
 }
@@ -110,4 +120,4 @@ function uiText(ui,text) {
   return {interpret:true, field:ui.awaiting};
 }
 function uiIntent(ui) { return normalizeIntent({kind:'search',language:'ru',filters:ui.filters}); }
-module.exports = { startSearchUi, renderSearchUi, uiAction, uiText, uiIntent, inputPrompt, dateChoice };
+module.exports = { startSearchUi, renderSearchUi, uiAction, uiText, uiIntent, inputPrompt, dateChoice, uiHtml };

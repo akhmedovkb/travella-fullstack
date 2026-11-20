@@ -76,3 +76,12 @@ test('custom date interpretation changes only dates, keeping existing direction 
   await f.dispatch({text:'10–15 января'});assert.match(f.panel.text,/10.01.2027/);assert.match(f.panel.text,/Турция/);assert.match(f.panel.text,/Ташкент/);assert.match(f.panel.text,/2 взрослых/);
   assert.equal(f.calls.filter(c=>c.kind==='model').length,1);
 });
+
+test('visual heading hierarchy escapes text instead of accepting supplier HTML',()=>{
+  const {uiHtml}=require('../ai/groupAssistantUi');
+  const html=uiHtml('Шаг 1 из 5\n\n🌍 Куда поехать?\n\n✓ A & B <unsafe>');
+  assert.match(html,/<i>Шаг 1 из 5<\/i>/);
+  assert.match(html,/<b>🌍 Куда поехать\?<\/b>/);
+  assert.match(html,/A &amp; B &lt;unsafe&gt;/);
+  assert.ok(!html.includes('<unsafe>'));
+});

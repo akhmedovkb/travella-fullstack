@@ -1,4 +1,4 @@
-const { startSearchUi, renderSearchUi, uiAction, uiText, uiIntent, inputPrompt } = require('../../ai/groupAssistantUi');
+const { startSearchUi, renderSearchUi, uiAction, uiText, uiIntent, inputPrompt, uiHtml } = require('../../ai/groupAssistantUi');
 const { isTourRequest, isClarification, appendAutoText } = require('../../ai/groupAssistantAuto');
 const { randomBytes } = require('node:crypto');
 const { createGroupAssistantModel } = require('../../ai/groupAssistantModel');
@@ -107,8 +107,8 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
     state.token = randomBytes(8).toString('hex'); state.pending = true; state.expires = now() + 15 * 60000;
     state.intent = uiIntent(state.ui);
     const view = renderSearchUi(state.ui, now());
-    const text = error ? `⚠️ ${error}\n\n${view.text}` : view.text;
-    const options = { reply_markup: { inline_keyboard: view.rows.map(row => row.map(b => ({ text: b.text, callback_data: `grp_ai:${b.action}:${state.token}` }))) } };
+    const text = error ? `${uiHtml('⚠️ '+error)}\n\n${uiHtml(view.text)}` : uiHtml(view.text);
+    const options = { parse_mode: 'HTML', reply_markup: { inline_keyboard: view.rows.map(row => row.map(b => ({ text: b.text, callback_data: `grp_ai:${b.action}:${state.token}` }))) } };
     if (ctx.callbackQuery && state.messageId && ctx.telegram?.editMessageText) {
       try { await ctx.telegram.editMessageText(ctx.chat.id, state.messageId, undefined, text, options); return; }
       catch (error) { if (String(error.message).includes('message is not modified')) return; }
