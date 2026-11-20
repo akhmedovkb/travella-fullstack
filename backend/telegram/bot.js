@@ -2190,6 +2190,12 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
+// Group assistance is read-only and must run before private sessions and draft restoration.
+const groupAssistant = require("./handlers/groupAssistantFlow").createGroupAssistantFlow({ pool });
+bot.use(groupAssistant);
+groupAssistant.initialize().then(() => console.info("[group-assistant] storage and public search ready")).catch(() => console.warn("[group-assistant] storage/search initialization unavailable"));
+console.info("[group-assistant] mode loaded", { aiConfigured: Boolean(process.env.OPENAI_API_KEY) && process.env.TELEGRAM_GROUP_AI_ENABLED !== "false" });
+
 // ✅ Сессия всегда по пользователю (важно для inline/групп -> ЛС)
 bot.use(
   session({
