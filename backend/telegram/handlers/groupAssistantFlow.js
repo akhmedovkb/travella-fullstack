@@ -1,3 +1,4 @@
+const { startSearchUi, renderSearchUi, uiAction, uiText, uiIntent, inputPrompt } = require('../../ai/groupAssistantUi');
 const { isTourRequest, isClarification, appendAutoText } = require('../../ai/groupAssistantAuto');
 const { randomBytes } = require('node:crypto');
 const { createGroupAssistantModel } = require('../../ai/groupAssistantModel');
@@ -102,14 +103,76 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
       return admins.some(member => member.user?.id === ctx.from.id);
     }
   }
+  async function showUi(ctx, state, error = '') {
+    state.token = randomBytes(8).toString('hex'); state.pending = true; state.expires = now() + 15 * 60000;
+    state.intent = uiIntent(state.ui);
+    const view = renderSearchUi(state.ui, now());
+    const text = error ? `⚠️ ${error}\n\n${view.text}` : view.text;
+    const options = { reply_markup: { inline_keyboard: view.rows.map(row => row.map(b => ({ text: b.text, callback_data: `grp_ai:${b.action}:${state.token}` }))) } };
+    if (ctx.callbackQuery && state.messageId && ctx.telegram?.editMessageText) {
+      try { await ctx.telegram.editMessageText(ctx.chat.id, state.messageId, undefined, text, options); return; }
+      catch (error) { if (String(error.message).includes('message is not modified')) return; }
+    }
+    if(state.messageId && ctx.telegram?.editMessageReplyMarkup) await ctx.telegram.editMessageReplyMarkup(ctx.chat.id,state.messageId,undefined,{inline_keyboard:[]}).catch(()=>{});
+    const message = await reply(ctx, text, options); state.messageId = message?.message_id;
+  }
+  async function openUi(ctx, existing) {
+    const id = key(ctx);
+    const previous = sessions.get(id);
+    if (previous?.autoEntry) previous.autoEntry.dismissed = true;
+    autoEntries.delete(id);
+    const state = { ui: startSearchUi(ctx.message?.message_id || ctx.callbackQuery?.message?.reply_to_message?.message_id), messageId: ctx.callbackQuery ? previous?.messageId : null };
+    if (existing) { state.ui.filters = { ...existing }; state.ui.step = 'edit'; }
+    sessions.set(id, state);
+    return showUi(ctx, state);
+  }
+  async function askUiInput(ctx,state) {
+    return reply(ctx,inputPrompt(state.ui.awaiting),{
+      reply_markup:{force_reply:true,selective:true,input_field_placeholder:'Ваш вариант'},
+      ...(state.ui.sourceMessageId ? {reply_parameters:{message_id:state.ui.sourceMessageId,allow_sending_without_reply:true}} : {}),
+    });
+  }
+  async function acceptUiText(ctx,state,text) {
+    const result=uiText(state.ui,text);
+    if(result.error){await showUi(ctx,state,result.error);return askUiInput(ctx,state);}
+    if(result.interpret){
+      if(result.field==='full') return processQuestion(ctx,text,key(ctx));
+      if(!model.ready())return showUi(ctx,state,'Подключение к ИИ сейчас недоступно.');
+      const id=key(ctx);if(busy.has(id))return;busy.add(id);
+      try{
+        if(limited(ctx)||!await store.reserve(ctx.chat.id))return showUi(ctx,state,'Лимит запросов достигнут. Попробуйте позже.');
+        if(ctx.sendChatAction)await ctx.sendChatAction('typing').catch(()=>{});
+        const labels={destination:'Направление',origin:'Город вылета',dates:'Даты начала поездки'};
+        const intent=await model.interpret(`Уточняю только поле «${labels[result.field]}»: ${text}. Остальные выбранные условия из previousFilters сохранить.`,state.ui.filters);
+        if(result.field==='destination'){
+          if(!intent.filters.destination.length&&!intent.filters.anyDestination){await showUi(ctx,state,'Уточните направление.');return askUiInput(ctx,state);}
+          state.ui.filters.destination=intent.filters.destination;state.ui.filters.anyDestination=intent.filters.anyDestination;
+        }else if(result.field==='origin'){
+          if(!intent.filters.origin.length){await showUi(ctx,state,'Уточните город вылета.');return askUiInput(ctx,state);}
+          state.ui.filters.origin=intent.filters.origin;
+        }
+        else if(result.field==='dates'){
+          if(!intent.filters.start){await showUi(ctx,state,'Уточните даты поездки.');return askUiInput(ctx,state);}
+          state.ui.filters.start=intent.filters.start;state.ui.filters.end=intent.filters.end;
+        }
+        state.ui.awaiting=null;
+        // Advance through the same button path, preserving all other chosen fields.
+        const field=result.field, f=state.ui.filters;
+        if(state.ui.editing){state.ui.step='review';state.ui.editing=false;}
+        else state.ui.step=field==='destination'?(f.category==='refused_hotel'?'dates':'origin'):field==='origin'?'dates':'guests';
+      }finally{busy.delete(id);}
+    }
+    return showUi(ctx,state);
+  }
   async function processQuestion(ctx, question, sessionKey, autoEntry = null) {
-      if (!question) return reply(ctx, groupAssistantHelp('ru', 'search'));
+      if (!question) return openUi(ctx);
       if (question.length > 1500) return reply(ctx, 'Сократите запрос до 1500 символов.');
       if (!model.ready()) return reply(ctx, 'Подключение к ИИ сейчас недоступно. Попробуйте позже.');
       if (busy.has(sessionKey)) return;
       busy.add(sessionKey);
       try {
         if (limited(ctx) || sessions.size >= 1000 || !await store.reserve(ctx.chat.id)) return reply(ctx, 'Лимит запросов к помощнику достигнут. Попробуйте позже.');
+        if(ctx.sendChatAction)await ctx.sendChatAction('typing').catch(()=>{});
         const previous = sessions.get(sessionKey);
         const revision = autoEntry?.revision;
         const intent = await model.interpret(question, previous?.autoEntry === autoEntry || !autoEntry ? previous?.intent?.filters || null : null);
@@ -159,6 +222,7 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
     if (!text || text.length > 1500 || ctx.message.forward_origin || ctx.message.forward_from || ctx.message.via_bot) return;
     prune();
     const sessionKey = key(ctx);
+    if(sessions.get(sessionKey)?.ui)return;
     let entry = autoEntries.get(sessionKey);
     const candidate = isTourRequest(text);
     if ((!entry && !candidate) || (entry && !candidate && !isClarification(text)) || entry?.dismissed || !model.ready()) return;
@@ -183,7 +247,9 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
     if (!ctx.from || ctx.from.is_bot || ctx.message?.sender_chat) return;
     const data = String(ctx.callbackQuery?.data || '');
     if (ctx.callbackQuery && !data.startsWith('grp_ai:')) return ctx.answerCbQuery('Откройте эту услугу в личном чате с ботом.').catch(() => {});
-    if (!ctx.callbackQuery && !addressed(ctx)) return captureAuto(ctx);
+    prune();
+    const uiInput = sessions.get(key(ctx))?.ui?.awaiting;
+    if (!ctx.callbackQuery && !addressed(ctx) && !uiInput) return captureAuto(ctx);
     try {
       const username = ctx.botInfo?.username || env.TELEGRAM_CLIENT_BOT_USERNAME || 'bot';
       const text = String(ctx.message?.text || '');
@@ -214,8 +280,20 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
       if (busy.has(sessionKey)) { if (ctx.callbackQuery) await ctx.answerCbQuery('Уже обрабатываю запрос.').catch(() => {}); return; }
       if (ctx.callbackQuery) {
         const state = sessions.get(sessionKey);
-        const [, action, token] = data.split(':');
+        let [, action, token] = data.split(':');
+        let uiSearch = false;
         if (!state?.pending || state.token !== token || state.messageId !== ctx.callbackQuery.message?.message_id) return ctx.answerCbQuery('Эта кнопка доступна автору запроса в течение 15 минут.').catch(() => {});
+        if(action.startsWith('ui_')&&state.ui){
+          if(!renderSearchUi(state.ui,now()).rows.flat().some(b=>b.action===action))return ctx.answerCbQuery('Выберите действие на текущем экране.').catch(()=>{});
+          busy.add(sessionKey);let continueSearch=false;
+          try{
+            await ctx.answerCbQuery().catch(()=>{});
+            const result=uiAction(state.ui,action,now());
+            if(result.close){state.pending=false;state.ui=null;sessions.delete(sessionKey);return ctx.editMessageText('Подбор закрыт. Начать заново можно командой /ask.',{reply_markup:{inline_keyboard:[]}}).catch(()=>{});}
+            if(result.search){state.intent=uiIntent(state.ui);action='search';uiSearch=true;continueSearch=true;}
+            else{await showUi(ctx,state);if(result.input)await askUiInput(ctx,state);return;}
+          }finally{if(!continueSearch)busy.delete(sessionKey);}
+        }
         if (action === 'dismiss') {
           state.pending = false;
           if (state.autoEntry) state.autoEntry.dismissed = true;
@@ -229,22 +307,38 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
           await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
           return await processQuestion(ctx, state.autoEntry.texts.join('\n'), sessionKey, state.autoEntry);
         }
-        if (action === 'change') { state.pending = false; await ctx.answerCbQuery().catch(() => {}); return reply(ctx, 'Напишите уточнение ответом на это сообщение или снова обратитесь ко мне по @имени.'); }
+        if (action === 'change') { state.pending = false; await ctx.answerCbQuery().catch(() => {}); return openUi(ctx,state.intent.filters); }
         if (action !== 'search') return;
         busy.add(sessionKey);
         state.pending = false;
         try {
-          await ctx.answerCbQuery().catch(() => {});
+          if(!uiSearch)await ctx.answerCbQuery().catch(() => {});
+          if(ctx.sendChatAction)await ctx.sendChatAction('typing').catch(()=>{});
+          if(uiSearch&&ctx.editMessageText)await ctx.editMessageText('🔎 Ищу подходящие предложения…',{reply_markup:{inline_keyboard:[]}}).catch(()=>{});
           const offers = await search(state.intent.filters);
           await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+          if(uiSearch){
+            const options=offerButtons(offers,state.intent.language);
+            options.reply_markup=options.reply_markup||{inline_keyboard:[]};
+            state.token=randomBytes(8).toString('hex');state.pending=true;state.ui.step='results';
+            options.reply_markup.inline_keyboard.push([{text:'✏️ Изменить условия',callback_data:`grp_ai:ui_edit:${state.token}`},{text:'🔄 Новый поиск',callback_data:`grp_ai:ui_home:${state.token}`}]);
+            if(ctx.telegram?.editMessageText){
+              try{await ctx.telegram.editMessageText(ctx.chat.id,state.messageId,undefined,formatOffers(offers,state.intent.language),options);return;}catch{}
+            }
+            const message=await reply(ctx,formatOffers(offers,state.intent.language),options);state.messageId=message?.message_id;return;
+          }
           return reply(ctx, formatOffers(offers, state.intent.language), offerButtons(offers, state.intent.language));
         } finally { busy.delete(sessionKey); }
       }
       const question = text.replace(/^\/ask(?:@[a-z0-9_]+)?\s*/i, '').replace(new RegExp(`@${username}\\b`, 'gi'), '').trim();
+      const uiState=sessions.get(sessionKey);
+      if(uiState?.ui?.awaiting && question) return await acceptUiText(ctx,uiState,question);
       return await processQuestion(ctx, question, sessionKey);
     } catch (error) {
       // Never log request bodies, credentials, raw group messages or private service data.
       console.warn('[group-assistant] request failed', { code: error.status || error.code || 'UNAVAILABLE' });
+      const current=sessions.get(key(ctx));
+      if(current?.ui){await showUi(ctx,current,'Не удалось выполнить действие. Попробуйте ещё раз.');if(current.ui.awaiting)return askUiInput(ctx,current);return;}
       return reply(ctx, 'Не удалось обработать запрос. Попробуйте чуть позже.');
     }
   };
