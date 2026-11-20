@@ -25,7 +25,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(s&&/^\/(?!frombooking(?:@|\s|$))/.test(ctx.message?.text||'')){delete ctx.session.bookingImport;return next();}
   if(!data.startsWith('booking:')&&!command&&!file&&!(s?.stage==='party'&&ctx.message?.text))return next();
   if(file&&blocked(ctx))return next();
-  if(!await authorize(ctx))return ctx.reply('Создание по скриншоту доступно подтверждённым поставщикам.');
+  if(!await authorize(ctx))return file&&!s?next():ctx.reply('Создание по скриншоту доступно подтверждённым поставщикам.');
   if(command||data==='booking:start'){
    if(ctx.callbackQuery)await ctx.answerCbQuery().catch(()=>{});
    if(blocked(ctx))return ctx.reply('Сначала завершите или отмените текущее редактирование. Сохранённый черновик не будет заменён.');

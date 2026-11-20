@@ -2379,23 +2379,6 @@ bot.use(require("./handlers/galaDinnerFlow").createGalaDinnerFlow({pool}));
 bot.use(require("../utils/telegramServiceActionGuard").createServiceActionGuard({pool}));
 bot.use(require("./handlers/correctionFlow").createCorrectionFlow({pool,loadImage:tgFileIdToDataUrlForProof,notifyModerationNew:require("../utils/telegram").notifyModerationNew}));
 
-// Import booking images only in private provider chats, before legacy photo handlers.
-bot.use(require("./handlers/bookingScreenshotFlow").createBookingScreenshotFlow({
-  authorize: async ctx => (await ensureProviderRole(ctx)) === "provider",
-  onAccept: async (ctx, draft, editStep) => {
-    ctx.session.editWiz = null;
-    ctx.session.editDraft = null;
-    ctx.session.editingServiceId = null;
-    ctx.session.serviceDraft = draft;
-    ctx.session.wizardStack = [];
-    ctx.session.state = editStep || "svc_create_title";
-    await persistProviderCreateWizard(ctx);
-    await ctx.reply("✅ Данные перенесены в черновик. Проверим недостающее. Состав туристов сохранён с ваших слов. Скриншот не добавлен в публичные фото — на шаге подтверждения его можно прислать отдельно.");
-    await promptWizardState(ctx, ctx.session.state);
-    await persistProviderCreateWizard(ctx);
-  },
-}));
-
 /* ===================== TG FILE LINK CACHE ===================== */
 // file_id -> { url, ts }
 const tgFileLinkCache = new Map();
@@ -4393,6 +4376,23 @@ bot.use(async (ctx, next) => {
   } catch {}
   return next();
 });
+
+// Import booking images only in private provider chats, before legacy photo handlers.
+bot.use(require("./handlers/bookingScreenshotFlow").createBookingScreenshotFlow({
+  authorize: async ctx => (await ensureProviderRole(ctx)) === "provider",
+  onAccept: async (ctx, draft, editStep) => {
+    ctx.session.editWiz = null;
+    ctx.session.editDraft = null;
+    ctx.session.editingServiceId = null;
+    ctx.session.serviceDraft = draft;
+    ctx.session.wizardStack = [];
+    ctx.session.state = editStep || "svc_create_title";
+    await persistProviderCreateWizard(ctx);
+    await ctx.reply("✅ Данные перенесены в черновик. Проверим недостающее. Состав туристов сохранён с ваших слов. Скриншот не добавлен в публичные фото — на шаге подтверждения его можно прислать отдельно.");
+    await promptWizardState(ctx, ctx.session.state);
+    await persistProviderCreateWizard(ctx);
+  },
+}));
 
 // ===================== ACTUAL REMINDER CALLBACK (svc_actual:...) =====================
 bot.action(/^tour_order:(\d+):(accepted|declined)$/, async (ctx) => {
