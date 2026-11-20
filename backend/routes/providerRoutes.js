@@ -1,3 +1,4 @@
+const { validateGalaBody } = require("../utils/galaDinner");
 // backend/routes/providerRoutes.js
 const express = require("express");
 const router = express.Router();
@@ -594,8 +595,8 @@ router.get("/services/:id/corrections",authenticateToken,requireProvider,async(r
 });
 
 router.get("/services", authenticateToken, requireProvider, getServices);
-router.post("/services", authenticateToken, requireProvider, addService);
-router.put("/services/:id", authenticateToken, requireProvider, updateService);
+router.post("/services", authenticateToken, requireProvider, validateGalaBody, addService);
+router.put("/services/:id", authenticateToken, requireProvider, validateGalaBody, updateService);
 router.delete("/services/:id", authenticateToken, requireProvider, deleteService);
 router.post("/services/:id/restore", authenticateToken, requireProvider, restoreService);
 router.delete("/services/:id/purge", authenticateToken, requireProvider, purgeService);

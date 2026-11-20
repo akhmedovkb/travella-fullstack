@@ -1,3 +1,4 @@
+const { normalizeGalaDinner } = require("./galaDinner");
 // backend/utils/serviceSubmitValidation.js
 
 const {
@@ -8,7 +9,11 @@ const {
 } = require("./serviceFieldMatrix");
 
 function buildSubmitValidationBlockers(service = {}) {
-  return getSubmitBlockers(service);
+  const blockers = getSubmitBlockers(service);
+  const details = normalizeDetails(service.details);
+  try { normalizeGalaDinner(details.galaDinner, details, service.category); }
+  catch (error) { blockers.push({ code: "GALA_DINNER_INVALID", field: "galaDinner", label: error.message }); }
+  return blockers;
 }
 
 function assertServiceSubmittable(service) {

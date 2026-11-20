@@ -1,3 +1,4 @@
+const { normalizeGalaDinner } = require("../utils/galaDinner");
 const { WAITING_SQL, RETURNED_SQL } = require("../utils/correctionTracking");
 const { ensureServiceModerationEvents } = require("../utils/serviceModerationEvents");
 const CORRECTION_PHASE_SQL = `CASE WHEN (${WAITING_SQL}) THEN 'waiting' WHEN (${RETURNED_SQL}) THEN 'returned' ELSE NULL END AS correction_phase`;
@@ -450,6 +451,7 @@ function normalizeRefusedBotDetails(category, details = {}) {
   delete d.arrival_fast_track;
   delete d.visa_included;
 
+  if (d.galaDinner !== undefined) d.galaDinner = normalizeGalaDinner(d.galaDinner, d, cat);
   return d;
 }
 

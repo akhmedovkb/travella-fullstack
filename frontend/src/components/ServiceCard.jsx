@@ -1,3 +1,4 @@
+import { GalaDinnerSummary } from "./GalaDinner";
 // frontend/src/components/ServiceCard.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
@@ -2190,6 +2191,8 @@ return (
             </button>
           )}
 
+          <GalaDinnerSummary category={categoryRaw} value={details.galaDinner} />
+
           {/* Contact / paywall area */}
           <div className="mt-auto pt-2.5 space-y-1.5">
             {(unlocked || isProviderViewer || isAdminViewer) &&
@@ -2477,6 +2480,7 @@ return (
           </div>
 
           <div className="space-y-4 p-4 pb-5 sm:p-6 sm:pb-6">
+            <GalaDinnerSummary category={categoryRaw} value={details.galaDinner} />
             {/* Decision summary */}
             <div className="grid gap-3 sm:grid-cols-3">
               {dates && (

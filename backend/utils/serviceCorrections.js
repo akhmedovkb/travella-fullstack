@@ -41,6 +41,7 @@ function correctionSnapshot(service) {
   add("nights","dates","Ночей",d.nights);
   for (const key of ["persons","peopleCount","priceFor","priceForChild","priceForInfant"]) add(`price_${key}`,"price",key,d[key]);
   for (const key of ["includesFlight","transferIncluded","insuranceIncluded","visaIncluded","description","eventLocation","eventTime","ticketType","ticketCategory"]) add(`extra_${key}`,"details",key,d[key]);
+  if (d.galaDinner !== undefined) add("galaDinner", "details", "Гала-ужин", JSON.stringify(d.galaDinner));
   return result;
 }
 function buildCorrectionReview(request, service, review) {

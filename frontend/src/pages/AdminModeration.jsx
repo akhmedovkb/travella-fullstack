@@ -1,3 +1,4 @@
+import { GalaDinnerEditor, GalaDinnerSummary, galaDinnerError } from "../components/GalaDinner";
 // frontend/src/pages/AdminModeration.jsx
 import React, { useEffect, useRef, useState, useId } from "react";
 import { Link, useSearchParams } from "react-router-dom";
@@ -164,7 +165,7 @@ const QUICK_DETAIL_KEYS = new Set([
   "directionCountry", "country", "city", "location", "title", "directionFrom", "directionTo", "direction",
   "startDate", "departureDate", "departureFlightDate", "endDate", "returnFlightDate", "returnDate",
   "nights", "hotel", "eventName", "roomCategory", "accommodationCategory", "accommodation", "netPrice", "net_price",
-  "grossPrice", "gross_price", "price", "pricePerPerson", "priceFor", "food",
+  "grossPrice", "gross_price", "price", "pricePerPerson", "priceFor", "food", "galaDinner",
   "flightDetails", "flight_details", "flight_info", "flightIncluded", "airTickets",
   "aviaTickets", "transferIncluded", "hasTransfer", "transfer", "insurance",
   "insuranceIncluded", "visa", "visaIncluded", "proofImages", "proofUrl", "telegramProofFileId",
@@ -3102,6 +3103,8 @@ export default function AdminModeration({ embedded = false }) {
     }
     if (editConflict) return tError("Сначала загрузите актуальную версию услуги. Ваш черновик остаётся в форме.");
     const details = rowsToDetails(editDetailsRows);
+    const galaError = galaDinnerError(details.galaDinner, details);
+    if (galaError) return tError(galaError);
     let images;
     try {
       images = collectEditorImages(editImages, newImageUrl);
@@ -3916,6 +3919,7 @@ export default function AdminModeration({ embedded = false }) {
                       onChange={(value) => setDetailValue("food", value)}
                       placeholder="AI / BB"
                     />
+                    <div className="sm:col-span-2"><GalaDinnerEditor category={editForm.category} value={editDetails.galaDinner} onChange={value => setDetailValue("galaDinner", value)} /><GalaDinnerSummary category={editForm.category} value={editDetails.galaDinner} /></div>
                     <TextField
                       label="Детали рейса"
                       value={formatDetailValue(editDetails.flightDetails || editDetails.flight_details || editDetails.flight_info)}

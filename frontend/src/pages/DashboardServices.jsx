@@ -1,3 +1,4 @@
+import { GalaDinnerEditor, GalaDinnerSummary, galaDinnerError } from "../components/GalaDinner";
 // frontend/src/pages/DashboardServices.jsx
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
@@ -2133,6 +2134,8 @@ export default function DashboardServices({ viewMode = "create" }) {
       return;
     }
 
+    const galaError = galaDinnerError(details.galaDinner, details);
+    if (galaError) return tError(galaError);
     if (!validate()) return;
     try {
       setSaving(true);
@@ -3162,6 +3165,8 @@ export default function DashboardServices({ viewMode = "create" }) {
                                 </Field>
                               </>
                             )}
+
+                            {['refused_tour', 'refused_hotel'].includes(category) && <div className="sm:col-span-2"><GalaDinnerEditor category={category} value={details.galaDinner} onChange={galaDinner => patchDetails({ galaDinner })} /><div className="mt-3"><GalaDinnerSummary category={category} value={details.galaDinner} /></div></div>}
 
                             {category === "refused_flight" && (
                               <>

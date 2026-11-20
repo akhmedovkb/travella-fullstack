@@ -1,3 +1,4 @@
+const { galaDinnerText, CATEGORIES: GALA_CATEGORIES } = require("./galaDinner");
 // backend/utils/telegramServiceCard.js
 
 const { getServiceDisplayTitle } = require("./serviceDisplay");
@@ -542,6 +543,16 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
   category = catNorm;
 
   const serviceId = svc.id;
+  const cardText = parts => {
+    if (GALA_CATEGORIES.has(category)) {
+      const gala = d.galaDinner;
+      const compact = gala ? { ...gala, childConditions: String(gala.childConditions || "").slice(0, 100), notes: String(gala.notes || "").slice(0, 120) } : undefined;
+      const priceIndex = parts.findIndex(part => /💵|💸|💰|<b>Цена/.test(part));
+      const position = priceIndex >= 0 ? priceIndex + 1 : Math.min(2, parts.length);
+      return [...parts.slice(0, position), "", escapeHtml(galaDinnerText(compact)), "", ...parts.slice(position)].join("\n");
+    }
+    return parts.join("\n");
+  };
   const serviceUrl = buildServiceUrl(serviceId);
 
   const escapeHtml = (s) =>
@@ -1766,7 +1777,7 @@ const priceKind =
     }
 
     return {
-      text: parts.join("\n"),
+      text: cardText(parts),
       photoUrl: getFirstImageUrl(svc),
       serviceUrl,
       kbExtra: { inline_keyboard: kbRows, replaceDefault: true },
@@ -1885,7 +1896,7 @@ const priceKind =
     if (flightDetails) extraRows.push([{ text: "✈️ Детали рейса", callback_data: `fd:${serviceId}` }]);
 
     return {
-      text: parts.join("\n"),
+      text: cardText(parts),
       photoUrl: getFirstImageUrl(svc),
       serviceUrl,
       kbExtra: sellingKb(extraRows),
@@ -1964,7 +1975,7 @@ const priceKind =
     providerCompactBlock(parts);
 
     return {
-      text: parts.join("\n"),
+      text: cardText(parts),
       photoUrl: getFirstImageUrl(svc),
       serviceUrl,
       kbExtra: sellingKb(),
@@ -2035,7 +2046,7 @@ const priceKind =
     if (flightDetails) extraRows.push([{ text: "✈️ Детали рейса", callback_data: `fd:${serviceId}` }]);
 
     return {
-      text: parts.join("\n"),
+      text: cardText(parts),
       photoUrl: getFirstImageUrl(svc),
       serviceUrl,
       kbExtra: sellingKb(extraRows),
@@ -2098,7 +2109,7 @@ const priceKind =
     providerCompactBlock(parts);
 
     return {
-      text: parts.join("\n"),
+      text: cardText(parts),
       photoUrl: getFirstImageUrl(svc),
       serviceUrl,
       kbExtra: sellingKb(),
@@ -2134,7 +2145,7 @@ const priceKind =
   pushDivider(parts);
   parts.push(`👉 Подробнее и бронирование: ${a(serviceUrl, "открыть")}`);
 
-  return { text: parts.join("\n"), photoUrl: getFirstImageUrl(svc), serviceUrl };
+  return { text: cardText(parts), photoUrl: getFirstImageUrl(svc), serviceUrl };
 }
 
 function shouldRenderUnlockButton(role = "client", options = {}) {

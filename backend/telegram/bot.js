@@ -2209,7 +2209,7 @@ bot.use(async (ctx, next) => {
     if (!ctx.session) ctx.session = {};
 
     const data = String(ctx.callbackQuery?.data || "");
-    if(ctx.session.correctionFlow || data.startsWith("corr:") || /^\/corrections/.test(ctx.message?.text || "") || /^\/start.* correction_/.test(ctx.message?.text || "")) return next();
+    if(ctx.session.galaFlow || data.startsWith("gala:") || ctx.session.correctionFlow || data.startsWith("corr:") || /^\/corrections/.test(ctx.message?.text || "") || /^\/start.* correction_/.test(ctx.message?.text || "")) return next();
     if (data === "tg_draft:continue" || data === "tg_draft:delete") {
       return next();
     }
@@ -2364,6 +2364,7 @@ bot.use(async (ctx, next) => {
 
 
 // Corrections use the real Telegram actor and run before legacy text/photo wizards.
+bot.use(require("./handlers/galaDinnerFlow").createGalaDinnerFlow({pool}));
 bot.use(require("../utils/telegramServiceActionGuard").createServiceActionGuard({pool}));
 bot.use(require("./handlers/correctionFlow").createCorrectionFlow({pool,loadImage:tgFileIdToDataUrlForProof,notifyModerationNew:require("../utils/telegram").notifyModerationNew}));
 
@@ -7244,10 +7245,12 @@ function legacyUrgencyLabel(value) {
   return "Не указано";
 }
 
-function buildProofKeyboard(serviceId, count = 0) {
+function buildProofKeyboard(serviceId, count = 0, category = "") {
   const rows = [
     [{ text: count > 0 ? "➕ Добавить ещё подтверждение" : "📎 Какое подтверждение отправить?", callback_data: `proof:add_more:${Number(serviceId || 0)}` }],
   ];
+
+  if (["refused_tour", "refused_hotel"].includes(category)) rows.push([{ text: "🎉 Гала-ужин", callback_data: `gala:open:${Number(serviceId || 0)}` }]);
 
   if (count > 0) {
     rows.push([{ text: "🧾 Предпросмотр карточки", callback_data: `proof:card:${Number(serviceId || 0)}` }]);
@@ -7344,7 +7347,7 @@ async function replyProofUploadPrompt(ctx, { serviceId, category, isEditMode = f
       `<b>Как отправить:</b> нажмите 📎 у поля сообщения → выберите фото / скриншот → отправьте. Можно несколько изображений. После первой загрузки появится кнопка <b>«✅ Отправить на модерацию»</b>.`,
     {
       parse_mode: "HTML",
-      ...buildProofKeyboard(serviceId, count),
+      ...buildProofKeyboard(serviceId, count, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category),
     }
   );
 }
@@ -7353,7 +7356,7 @@ async function sendProofPreview(ctx, serviceId) {
   await assertTelegramActorOwnsService(ctx,serviceId,"proof_view");
   const images = await getProofImagesForService(serviceId);
   if (!images.length) {
-    await safeReply(ctx, "📎 Доказательства пока не загружены. Отправьте фото/скриншот сюда в чат.", buildProofKeyboard(serviceId, 0));
+    await safeReply(ctx, "📎 Доказательства пока не загружены. Отправьте фото/скриншот сюда в чат.", buildProofKeyboard(serviceId, 0, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category));
     return;
   }
 
@@ -7374,7 +7377,7 @@ async function sendProofPreview(ctx, serviceId) {
     }
   }
 
-  await safeReply(ctx, "Что сделать дальше?", buildProofKeyboard(serviceId, images.length));
+  await safeReply(ctx, "Что сделать дальше?", buildProofKeyboard(serviceId, images.length, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category));
 }
 
 
@@ -7401,7 +7404,7 @@ async function sendProofCardPreview(ctx, serviceId) {
     `${built.text || "Карточка сформирована."}\n\n` +
     `Проверьте, как выглядит услуга. Если всё верно — отправьте на модерацию.`;
   const proofCount = (await getProofImagesForService(serviceId)).length;
-  const kb = buildProofKeyboard(serviceId, proofCount).reply_markup;
+  const kb = buildProofKeyboard(serviceId, proofCount, category).reply_markup;
 
   if (built.photoUrl) {
     await safeReplyWithPhoto(ctx, built.photoUrl, caption, {
@@ -7428,7 +7431,7 @@ async function deleteLastProofImage(ctx) {
   const currentDetails = r.rows?.[0]?.details && typeof r.rows[0].details === "object" ? r.rows[0].details : {};
   const proofImages = Array.isArray(currentDetails.proofImages) ? currentDetails.proofImages.filter(Boolean) : [];
   if (!proofImages.length) {
-    await safeReply(ctx, "📎 Список доказательств уже пуст.", buildProofKeyboard(serviceId, 0));
+    await safeReply(ctx, "📎 Список доказательств уже пуст.", buildProofKeyboard(serviceId, 0, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category));
     return;
   }
 
@@ -7438,7 +7441,7 @@ async function deleteLastProofImage(ctx) {
     [JSON.stringify({ ...currentDetails, proofImages }), serviceId]
   );
   if(!proofUpdate.rowCount){await safeReply(ctx,"Статус услуги изменился. Обновите карточку.");return;}
-  await safeReply(ctx, `🗑 Последнее доказательство удалено. Осталось: ${proofImages.length}.`, buildProofKeyboard(serviceId, proofImages.length));
+  await safeReply(ctx, `🗑 Последнее доказательство удалено. Осталось: ${proofImages.length}.`, buildProofKeyboard(serviceId, proofImages.length, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category));
 }
 
 function yesNoWizardKeyboard() {
@@ -10979,6 +10982,7 @@ bot.action(/^prov_services:list_cards(?::more)?$/, async (ctx) => {
       const keyboard = {
         inline_keyboard: [
           [
+            ...(["refused_tour", "refused_hotel"].includes(svc.category) ? [{ text: "🎉 Гала-ужин", callback_data: `gala:open:${svc.id}` }] : []),
             { text: "✏️ Редактировать", callback_data: `svc_edit_start:${svc.id}` },
             { text: "⏳ Продлить", callback_data: `svc_extend:${svc.id}` },
           ],
@@ -19387,7 +19391,7 @@ bot.on("photo", async (ctx, next) => {
       await safeReply(
         ctx,
         `📎 Доказательство загружено.\nСейчас загружено: ${proofImages.length} шт.\n\nПроверьте материалы и отправьте услугу на модерацию.`,
-        buildProofKeyboard(proofServiceId, proofImages.length)
+        buildProofKeyboard(proofServiceId, proofImages.length, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category)
       );
       return;
     }
@@ -19537,7 +19541,7 @@ async function finishProofSubmissionFromBot(ctx) {
         `${formatQualityText(svcRes.rows[0])}
 
 Нажмите <b>🧾 Предпросмотр карточки</b> или быстрые кнопки редактирования, затем отправьте повторно.`,
-        { parse_mode: "HTML", ...buildProofKeyboard(serviceId, proofImages.length) }
+        { parse_mode: "HTML", ...buildProofKeyboard(serviceId, proofImages.length, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category) }
       );
       return;
     }
@@ -19627,7 +19631,7 @@ bot.action(/^proof:add_more:(\d+)$/, async (ctx) => {
   await safeReply(
     ctx,
     `📎 Отправьте сюда в чат фото или скриншот брони, ваучера, билета либо переписки с поставщиком. На нём должны быть видны услуга, даты и подтверждение наличия / брони; цену можно подтвердить отдельным скриншотом переписки.\n\nФото отеля и рекламная картинка не подходят. Личные данные туристов, QR-коды и данные оплаты можно закрыть. Для PDF сделайте скриншот страницы.\n\nНажмите 📎 у поля сообщения и отправьте изображение как фото.\n\nСейчас загружено: ${count}. После загрузки нажмите «✅ Отправить на модерацию».`,
-    buildProofKeyboard(serviceId, count)
+    buildProofKeyboard(serviceId, count, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category)
   );
 });
 
