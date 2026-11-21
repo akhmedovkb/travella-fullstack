@@ -29,6 +29,7 @@ function normalizeBooking(input,category='refused_tour'){
  for(const k of ['accommodation','food'])if(props[k].enum.includes(input[k])&&input[k])d[k]=input[k];
  for(const k of ['transferIncluded','insuranceIncluded'])if(typeof input[k]==='boolean')d[k]=input[k];
  const flights=Array.isArray(input.flights)?input.flights.slice(0,8):[];
+ d.bookingFlightDates=[...new Set(flights.map(f=>day(f.date)).filter(Boolean))];
  d.flightDetails=flights.map(f=>[
   /^(?:[A-Z]{2,3}|[A-Z][0-9]|[0-9][A-Z])\s?\d{1,5}$/i.test(f.number||'')?f.number:null,
   safe(f.airline,60),safe(f.from,45),safe(f.to,45),day(f.date),

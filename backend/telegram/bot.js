@@ -4386,10 +4386,11 @@ const bookingProofSources = require("./handlers/bookingProofSources").createBook
   pool,
   resolveOwner:(ctx,id)=>assertTelegramActorOwnsService(ctx,id,"proof_booking_source"),
   loadImage:tgFileIdToDataUrlForProof,
+  inspectImage:require("../ai/proofPrivacy").createProofPrivacyChecker(),
   onAttached:async(ctx,id,count,category)=>{
     ctx.session.awaitingProofForServiceId=id;ctx.session.awaitingProofForCategory=category;
     await trackProviderFunnelFromBot(ctx,"proof_uploaded",{serviceId:id,status:"proof_uploaded",meta:{proof_count:count,source:"booking_screenshots"}});
-    return ctx.reply(`✅ Подтверждения прикреплены: ${count}. Проверьте их и отправьте услугу на модерацию.`,buildProofKeyboard(id,count,category));
+    return ctx.reply(`✅ Подтверждений: ${count}. Черновик готов к отправке на модерацию. Нажмите «Отправить на модерацию», когда закончите проверку.`,buildProofKeyboard(id,count,category));
   },
 });
 bot.use(bookingProofSources);
@@ -8907,6 +8908,7 @@ async function finishCreateServiceFromWizard(ctx) {
     }
 
     if(draft.bookingCompact){
+      Object.assign(details,require("../ai/bookingQuality").priceDetails(draft));
       for(const key of ["transferIncluded","insuranceIncluded","visaIncluded","earlyCheckIn","arrivalFastTrack","halal","changeable"]){
         if(draft[key]===undefined||draft[key]===null){details[key]=null;if(key==='transferIncluded')details.transfer=null;if(key==='visaIncluded')details.visa=null;}
       }
@@ -8978,6 +8980,7 @@ async function finishCreateServiceFromWizard(ctx) {
         isEditMode,
       });
 
+      await ctx.reply("📋 Черновик сохранён. Для публикации осталось: 1) прикрепить подтверждение, 2) отправить на модерацию.");
       if (bookingProofReady) { try { await bookingProofSources.prompt(ctx,createdServiceId); } catch {} }
 
       resetServiceWizard(ctx);

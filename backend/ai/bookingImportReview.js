@@ -9,6 +9,7 @@ function refreshTitle(s){if(!s.manualFields?.includes('title')){const title=book
 function mergeRecognition(s,incoming,source){
  s.conflicts=s.conflicts||[];s.warnings=s.warnings||[];s.manualFields=s.manualFields||[];s.fieldSources=s.fieldSources||{};
  if(!s.draft)s.draft={category:incoming.category,images:[]};
+ if(incoming.bookingFlightDates?.length&&!s.manualFields.includes('flightDetails'))s.draft.bookingFlightDates=[...new Set([...(s.draft.bookingFlightDates||[]),...incoming.bookingFlightDates])];
  for(const [field,value]of Object.entries(incoming)){
   if(!labels[field]||field==='title'||value==null||value==='')continue;
   if(s.manualFields.includes(field))continue;
@@ -46,7 +47,7 @@ function validateEdit(field,text,draft){
  if(next.departureFlightDate&&next.returnFlightDate&&next.flightType!=='one_way'&&next.departureFlightDate>next.returnFlightDate)throw Error('Обратный вылет раньше вылета туда.');
  return value;
 }
-function setField(s,field,value){s.draft[field]=value;s.manualFields=[...new Set([...(s.manualFields||[]),field])];s.conflicts=(s.conflicts||[]).filter(c=>c.field!==field);s.warnings=(s.warnings||[]).filter(w=>w.field!==field);delete s.duplicateAck;refreshTitle(s);}
+function setField(s,field,value){if(field==='flightDetails')delete s.draft.bookingFlightDates;s.draft[field]=value;s.manualFields=[...new Set([...(s.manualFields||[]),field])];s.conflicts=(s.conflicts||[]).filter(c=>c.field!==field);s.warnings=(s.warnings||[]).filter(w=>w.field!==field);delete s.duplicateAck;refreshTitle(s);}
 function missingFields(draft){
  const fields=stepFieldsFor(draft.category);const out=[];
  for(const f of getServiceCategoryContract(draft.category,draft))if(f.required&&f.createStep){const key=fields[f.createStep];if(key&&(draft[key]===undefined||draft[key]===''))out.push(labels[key]||f.label);}

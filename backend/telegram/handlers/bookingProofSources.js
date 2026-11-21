@@ -1,6 +1,6 @@
 const {randomBytes,createHash}=require('node:crypto');
 const hash=files=>createHash('sha256').update(JSON.stringify(files)).digest('hex');
-function createBookingProofSources({pool,resolveOwner,loadImage,onAttached,now=Date.now}){
+function createBookingProofSources({pool,resolveOwner,loadImage,onAttached,inspectImage,redact=require('../../ai/proofPrivacy').redactImages,now=Date.now}){
  let ready;const busy=new Set();
  const initialize=()=>ready||(ready=pool.query(`CREATE TABLE IF NOT EXISTS telegram_booking_proof_sources (
  service_id BIGINT PRIMARY KEY,actor_id BIGINT NOT NULL,files JSONB NOT NULL,used BOOLEAN NOT NULL DEFAULT false,
@@ -27,14 +27,27 @@ function createBookingProofSources({pool,resolveOwner,loadImage,onAttached,now=D
      const send=files[i].kind==='document'?ctx.replyWithDocument?.bind(ctx):ctx.replyWithPhoto?.bind(ctx);
      if(!send||!await send(files[i].id,{caption:`Скриншот ${i+1} из ${files.length}. Проверьте: ФИО, даты рождения, документы, QR-коды и данные оплаты должны быть скрыты.`}))throw Error('PREVIEW_UNAVAILABLE');
     }
-    const reviewToken=randomBytes(8).toString('hex');ctx.session.bookingProofReview={serviceId:id,token:reviewToken,signature:hash(files),expires:now()+10*60000};
+    const privacy=[];const images=[];
+    if(inspectImage){for(let i=0;i<files.length;i++){await ctx.reply(`🔎 Проверяю возможные личные данные: ${i+1} из ${files.length}…`);let image;try{image=await loadImage(files[i].id);const result=await inspectImage(image);privacy.push(result);images.push(image);}catch{privacy.push({status:'unavailable',boxes:[]});images.push(null);}}}
+    const flagged=privacy.some(r=>r.status==='detected'||r.status==='uncertain'),canRedact=flagged&&privacy.every(r=>['clear','detected'].includes(r.status))&&images.every(Boolean);
+    const reviewToken=randomBytes(8).toString('hex');ctx.session.bookingProofReview={serviceId:id,token:reviewToken,signature:hash(files),expires:now()+10*60000,privacy,images:canRedact?images:undefined,flagged};
+    if(flagged)return ctx.reply('⚠️ Возможно, на скриншотах есть личные данные. Исходные изображения пока не прикреплены.\n'+[...new Set(privacy.flatMap(r=>r.boxes||[]).map(b=>require('../../ai/proofPrivacy').kindLabels[b.kind]).filter(Boolean))].join(', ')+ '\n\n'+(canRedact?'Можно скрыть найденные области и проверить результат.':'Скройте данные на изображении и загрузите безопасную версию отдельно.'),{reply_markup:{inline_keyboard:[...(canRedact?[[{text:'🔒 Скрыть найденное',callback_data:`bookingproof:redact:${id}:${reviewToken}`}]]:[]),[{text:'Не прикреплять',callback_data:`bookingproof:cancel:${id}:${reviewToken}`}]]}});
+    if(privacy.length)await ctx.reply(privacy.some(r=>r.status==='unavailable')?'⚠️ Проверка личных данных недоступна. Проверьте все изображения вручную перед прикреплением.':'🔎 Возможные личные данные не найдены. Проверка может ошибаться — осмотрите изображения вручную.');
     return ctx.reply('🔒 Проверьте все изображения выше\n\nЕсли есть персональные данные, не прикрепляйте эти файлы: скройте их и загрузите безопасную версию обычной кнопкой подтверждений.\n\nПрикреплённые материалы увидят модераторы. В публичное фото карточки они не попадут.',{reply_markup:{inline_keyboard:[[{text:'✅ Данные скрыты — прикрепить',callback_data:`bookingproof:attach:${id}:${reviewToken}`}],[{text:'Не прикреплять',callback_data:`bookingproof:cancel:${id}:${reviewToken}`}]]}});
    }
    const review=ctx.session?.bookingProofReview;
    if(!review||review.serviceId!==id||review.token!==token||review.expires<=now()||review.signature!==hash(saved.files))return ctx.reply('Сначала откройте просмотр скриншотов и проверьте их заново.');
    if(action==='cancel'){delete ctx.session.bookingProofReview;return ctx.reply('Исходные скриншоты не прикреплены. Можно загрузить безопасное подтверждение отдельно.');}
+   if(action==='redact'){
+    if(!review.flagged||!review.images||!review.privacy.every(r=>['clear','detected'].includes(r.status)))return ctx.reply('Загрузите безопасную версию отдельно.');
+    const images=await redact(review.images,review.privacy);
+    for(let i=0;i<images.length;i++)await ctx.replyWithPhoto({source:Buffer.from(images[i].split(',')[1],'base64')},{caption:`Скрытые области · ${i+1} из ${images.length}. Проверьте, что все личные данные закрыты и сведения об услуге читаются.`});
+    review.redactedImages=images;review.flagged=false;review.token=randomBytes(8).toString('hex');review.expires=now()+10*60000;delete review.images;
+    return ctx.reply('🔒 Проверьте обработанные изображения выше. Скрытие может быть неполным. Прикрепляем только после вашей проверки.',{reply_markup:{inline_keyboard:[[{text:'✅ Проверено — прикрепить',callback_data:`bookingproof:attach:${id}:${review.token}`}],[{text:'Не прикреплять',callback_data:`bookingproof:cancel:${id}:${review.token}`}]]}});
+   }
    if(action!=='attach')return;
-   const images=[];for(const f of saved.files){const image=await loadImage(f.id);if(typeof image!=='string'||!/^data:image\/(?:jpeg|png|webp);base64,/.test(image))throw Error('INVALID_IMAGE');images.push(image);}
+   if(review.flagged)return ctx.reply('Сначала скройте личные данные и проверьте безопасные изображения.');
+   const images=review.redactedImages?[...review.redactedImages]:[];if(!review.redactedImages)for(const f of saved.files){const image=await loadImage(f.id);if(typeof image!=='string'||!/^data:image\/(?:jpeg|png|webp);base64,/.test(image))throw Error('INVALID_IMAGE');images.push(image);}
    const db=await pool.connect();let count;
    try{
     await db.query('BEGIN');
@@ -59,11 +72,11 @@ function createBookingProofSources({pool,resolveOwner,loadImage,onAttached,now=D
   const normalized=files.slice(0,5).map(f=>typeof f==='string'?{id:f,kind:'photo'}:{id:f.id,kind:f.kind==='document'?'document':'photo'}).filter(f=>typeof f.id==='string'&&f.id.length<1000);
   if(!normalized.length)return;
   await pool.query('DELETE FROM telegram_booking_proof_sources WHERE expires_at<NOW()');
-  await pool.query(`INSERT INTO telegram_booking_proof_sources(service_id,actor_id,files) VALUES($1,$2,$3::jsonb) ON CONFLICT(service_id) DO NOTHING`,[id,ctx.from.id,JSON.stringify(normalized)]);
+  await pool.query(`INSERT INTO telegram_booking_proof_sources(service_id,actor_id,files) VALUES($1,$2,$3::jsonb) ON CONFLICT(service_id) DO UPDATE SET files=EXCLUDED.files,used=false,expires_at=EXCLUDED.expires_at WHERE telegram_booking_proof_sources.actor_id=EXCLUDED.actor_id AND telegram_booking_proof_sources.files IS DISTINCT FROM EXCLUDED.files`,[id,ctx.from.id,JSON.stringify(normalized)]);
  };
  flow.prompt=async(ctx,id)=>{
   const s=await source(ctx,id);if(s.used)return;
-  return ctx.reply(`📎 Можно использовать исходные скриншоты (${s.files.length}) как подтверждение. Сначала откройте их и проверьте, что персональные данные скрыты.`,{reply_markup:{inline_keyboard:[[{text:'👀 Проверить скриншоты',callback_data:`bookingproof:preview:${id}`}]]}});
+  return ctx.reply(`📎 Можно использовать исходные скриншоты (${s.files.length}) как подтверждение. По кнопке проверим возможные личные данные на сервере Travella и покажем изображения. Перед прикреплением потребуется ваша проверка.`,{reply_markup:{inline_keyboard:[[{text:'👀 Проверить скриншоты',callback_data:`bookingproof:preview:${id}`}]]}});
  };
  return flow;
 }
