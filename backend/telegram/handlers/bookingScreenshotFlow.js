@@ -18,7 +18,7 @@ async function downloadImage(ctx,id){
 function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReader(),loadImage=downloadImage,now=Date.now}={}){
  const busy=new Set(),rates=new Map();
  const keyboard=(token,rows)=>({reply_markup:{inline_keyboard:rows.map(row=>row.map(([text,action])=>({text,callback_data:`booking:${action}:${token}`})))}});
- const notice='📷 Создать услугу по скриншоту бронирования\n\nПришлите один скриншот или изображение файлом до 6 МБ. Перед отправкой закройте ФИО, даты рождения, паспорта и контакты туристов.\n\nПо кнопке «Распознать» изображение будет обработано ИИ OpenAI. Оно не станет публичным фото или подтверждением автоматически.\n\nБот покажет данные для проверки и спросит недостающее. Выберите категорию: тур, отель или авиабилет.';
+ const notice='📷 Создать услугу по скриншоту бронирования\n\nПришлите один скриншот или изображение файлом до 6 МБ. Перед отправкой закройте ФИО, даты рождения, паспорта и контакты туристов.\n\nНажмите «Распознать» и проверьте данные. Изображение не станет публичным фото или подтверждением автоматически.\n\nБот покажет данные для проверки и спросит недостающее. Выберите категорию: тур, отель или авиабилет.';
  async function showReview(ctx,s,inPlace=false){
   const draft=s.draft;
   const token=s.token;

@@ -30,7 +30,7 @@ function fixture(){
  return {session,replies,accepted,calls,state,send,press,expire(){clock+=16*60000;}};
 }
 test('image consent, review, party confirmation and accept use no public sends and do not auto-publish the source',async()=>{
- const f=fixture();await f.send({photo:[{file_id:'private',file_size:100}]});assert.equal(f.calls.length,0);assert.match(f.replies.at(-1).text,/OpenAI/);
+ const f=fixture();await f.send({photo:[{file_id:'private',file_size:100}]});assert.equal(f.calls.length,0);assert.match(f.replies.at(-1).text,/Распознать/);assert.doesNotMatch(f.replies.at(-1).text,/OpenAI|ИИ/);
  await f.press('read');assert.deepEqual(f.calls,['download','read']);assert.equal(f.accepted.length,0);assert.match(f.replies.at(-1).text,/Hotel/);
  await f.press('accept');assert.equal(f.session.bookingImport.stage,'party');assert.equal(f.accepted.length,0);
  await f.send({text:'Иван Иванов'});assert.equal(f.accepted.length,0);
