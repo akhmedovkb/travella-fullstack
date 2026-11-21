@@ -4398,9 +4398,11 @@ bot.use(bookingProofSources);
 // Import booking images only in private provider chats, before legacy photo handlers.
 bot.use(require("./handlers/bookingScreenshotFlow").createBookingScreenshotFlow({
   compact:true,
+  inspectQuality:require("../ai/bookingImageQuality").createImageQualityChecker(),
+  loadUpdate:require("../ai/bookingDraftUpdate").createBookingUpdateReview(pool),
   store:require("./handlers/bookingImportStore").createBookingImportStore(pool),
-  onUpdate:async(ctx,id,draft,files)=>{
-    const updated=await require("../ai/bookingDraftUpdate").createBookingDraftUpdater(pool)(ctx,id,draft);
+  onUpdate:async(ctx,id,draft,files,expectedVersion)=>{
+    const updated=await require("../ai/bookingDraftUpdate").createBookingDraftUpdater(pool)(ctx,id,draft,expectedVersion);
     if(files.length)await bookingProofSources.prepare(ctx,id,files);
     ctx.session.awaitingProofForServiceId=id;ctx.session.awaitingProofForCategory=draft.category;
     await ctx.reply(`✅ Черновик #${id} обновлён. Фото и ранее прикреплённые подтверждения сохранены.`,buildProofKeyboard(id,updated.proofCount,draft.category));
