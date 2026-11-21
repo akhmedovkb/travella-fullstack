@@ -22,9 +22,9 @@ test('recognized steps advance through the real tour contract but remain editabl
 function fixture(){
  const session={},replies=[],accepted=[],calls=[];let clock=100000;
  const state={authorized:true,fail:false};
- const flow=createBookingScreenshotFlow({authorize:async()=>state.authorized,now:()=>clock,loadImage:async()=>{calls.push('download');return Buffer.from('image');},read:async(_bytes,category)=>{calls.push('read');if(state.fail)throw Error('failed');return normalizeBooking({country:'Вьетнам',hotel:'Hotel',accommodation:'DBL',startDate:'2099-11-25',endDate:'2099-12-02',transferIncluded:true,flights:[]},category);},onAccept:async(ctx,draft,step)=>accepted.push({draft,step})});
+ const flow=createBookingScreenshotFlow({authorize:async()=>state.authorized,now:()=>clock,loadImage:async()=>{calls.push('download');return Buffer.from('image');},read:async(_bytes,category)=>{calls.push('read');if(state.fail)throw Error('failed');return normalizeBooking({country:'Вьетнам',hotel:'Hotel',accommodation:'DBL',startDate:'2099-11-25',endDate:'2099-12-02',transferIncluded:true,flightType:state.flightType,flights:[]},category);},onAccept:async(ctx,draft,step)=>accepted.push({draft,step})});
  async function send({text,data,photo,document,chat=7,actor=7}={}){
-  let passed=false;await flow({session,chat:{id:chat,type:chat<0?'supergroup':'private'},from:{id:actor},message:data?undefined:{text,photo,document},callbackQuery:data?{data}:undefined,answerCbQuery:async()=>{},reply:async(text,extra)=>{replies.push({text,extra});}},()=>{passed=true;});return passed;
+  let passed=false;await flow({session,chat:{id:chat,type:chat<0?'supergroup':'private'},from:{id:actor},message:data?undefined:{text,photo,document},callbackQuery:data?{data}:undefined,answerCbQuery:async()=>{},editMessageText:state.inlineEdit?async()=>{calls.push('edit-panel');return {message_id:1};}:undefined,reply:async(text,extra)=>{replies.push({text,extra});}},()=>{passed=true;});return passed;
  }
  const press=async action=>send({data:`booking:${action}:${session.bookingImport?.token}`});
  return {session,replies,accepted,calls,state,send,press,expire(){clock+=16*60000;}};
@@ -103,4 +103,27 @@ test('connecting flights never turn the second outbound segment into a return jo
  const raw={flightType:'round_trip',flights:[{from:'TAS',to:'IST',date:'2099-12-01'},{from:'IST',to:'CDG',date:'2099-12-02'}]};
  assert.equal(normalizeBooking(raw,'refused_flight').returnFlightDate,undefined);
  assert.equal(normalizeBooking({...raw,returnFlightDate:'2099-12-10'},'refused_flight').returnFlightDate,'2099-12-10');
+});
+
+test('compact edit menu groups hotel fields and returning to review neither reparses nor saves the draft',async()=>{
+ const {bookingEditRows}=require('../ai/bookingScreenshotUi');
+ const rows=bookingEditRows({category:'refused_hotel'});
+ assert.ok(rows.length<=7);assert.ok(rows.every(r=>r.length<=2));
+ const f=fixture();await f.send({text:'/frombooking'});await f.press('cat_refused_hotel');await f.send({photo:[{file_id:'test'}]});await f.press('read');
+ const before=JSON.stringify(f.session.bookingImport.draft);await f.press('edit');await f.press('review');
+ assert.equal(JSON.stringify(f.session.bookingImport.draft),before);assert.equal(f.calls.filter(x=>x==='read').length,1);assert.equal(f.accepted.length,0);assert.match(f.replies.at(-1).text,/Проверьте распознанные данные/);
+});
+test('one-way flight edit menu omits return date and forged stale return actions cannot enter a party or save',async()=>{
+ const {bookingEditRows}=require('../ai/bookingScreenshotUi');
+ assert.ok(!bookingEditRows({category:'refused_flight',flightType:'one_way'}).flat().some(([,a])=>a==='fix_svc_create_flight_return'));
+ assert.ok(bookingEditRows({category:'refused_flight',flightType:'round_trip'}).flat().some(([,a])=>a==='fix_svc_create_flight_return'));
+ const f=fixture();f.state.flightType='one_way';await f.send({text:'/frombooking'});await f.press('cat_refused_flight');await f.send({photo:[{file_id:'test'}]});await f.press('read');
+ await f.press('fix_svc_create_flight_return');assert.equal(f.session.bookingImport.stage,'review');assert.equal(f.accepted.length,0);
+});
+
+test('edit and review update one Telegram panel without losing recognized data or issuing another AI request',async()=>{
+ const f=fixture();f.state.inlineEdit=true;await f.send({photo:[{file_id:'test'}]});await f.press('read');
+ const count=f.replies.length;const draft=JSON.stringify(f.session.bookingImport.draft);
+ await f.press('edit');await f.press('review');
+ assert.equal(f.calls.filter(x=>x==='edit-panel').length,2);assert.equal(f.replies.length,count);assert.equal(f.calls.filter(x=>x==='read').length,1);assert.equal(JSON.stringify(f.session.bookingImport.draft),draft);assert.equal(f.accepted.length,0);
 });
