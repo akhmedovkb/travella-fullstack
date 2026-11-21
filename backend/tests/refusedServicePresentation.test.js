@@ -88,3 +88,8 @@ test("Telegram card renders lifecycle labels without false urgency", () => {
   assert.match(render({ status: "inactive" }), /🔴 неактуально/);
   assert.match(render({ status: "published", details: { isActive: false } }), /🔴 неактуально/);
 });
+
+test('explicit screenshot price basis overrides legacy DBL audience inference',()=>{
+ const card=buildServiceMessage({id:42,title:'TEST',category:'refused_tour',details:{accommodation:'DBL',adt:2,grossPrice:125,pricePerPerson:125,priceBasis:'person',priceFor:'за 1 человека'}},'refused_tour','client',{unlocked:true});
+ assert.match(card.text,/125 USD<\/b> <i>за 1 человека<\/i>/);assert.doesNotMatch(card.text,/125 USD<\/b> <i>за 2/);
+});

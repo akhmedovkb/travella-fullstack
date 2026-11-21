@@ -1224,7 +1224,7 @@ const priceKind =
 
   const priceHeroLine = () => {
     if (priceWithCur == null || !String(priceWithCur).trim()) return "";
-    const explicitPerPerson = formatPriceWithCurrency(firstValue(
+    const explicitPerPerson = d.priceBasis === "person" ? "" : formatPriceWithCurrency(firstValue(
       d.pricePerPerson,
       d.price_per_person,
       d.perPersonPrice,
