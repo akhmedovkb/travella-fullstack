@@ -4396,9 +4396,25 @@ bot.use(bookingProofSources);
 
 // Import booking images only in private provider chats, before legacy photo handlers.
 bot.use(require("./handlers/bookingScreenshotFlow").createBookingScreenshotFlow({
+  compact:true,
+  store:require("./handlers/bookingImportStore").createBookingImportStore(pool),
+  onUpdate:async(ctx,id,draft,files)=>{
+    const updated=await require("../ai/bookingDraftUpdate").createBookingDraftUpdater(pool)(ctx,id,draft);
+    if(files.length)await bookingProofSources.prepare(ctx,id,files);
+    ctx.session.awaitingProofForServiceId=id;ctx.session.awaitingProofForCategory=draft.category;
+    await ctx.reply(`✅ Черновик #${id} обновлён. Фото и ранее прикреплённые подтверждения сохранены.`,buildProofKeyboard(id,updated.proofCount,draft.category));
+    if(files.length)await bookingProofSources.prompt(ctx,id);
+  },
   findDuplicates:findBookingDuplicates,
   authorize: async ctx => (await ensureProviderRole(ctx)) === "provider",
   onAccept: async (ctx, draft, editStep) => {
+    if(draft.bookingCompact){
+      const previous={state:ctx.session.state,serviceDraft:ctx.session.serviceDraft,wizardStack:ctx.session.wizardStack};
+      ctx.session.serviceDraft=draft;ctx.session.state="svc_create_photo";ctx.session.wizardStack=[];
+      try{await finishCreateServiceFromWizard(ctx);if(!ctx.session.awaitingProofForServiceId)throw Error("SAVE_FAILED");}
+      finally{Object.assign(ctx.session,previous);}
+      return;
+    }
     ctx.session.editWiz = null;
     ctx.session.editDraft = null;
     ctx.session.editingServiceId = null;
@@ -8890,6 +8906,11 @@ async function finishCreateServiceFromWizard(ctx) {
           : autoTitleRefusedHotel(draft);
     }
 
+    if(draft.bookingCompact){
+      for(const key of ["transferIncluded","insuranceIncluded","visaIncluded","earlyCheckIn","arrivalFastTrack","halal","changeable"]){
+        if(draft[key]===undefined||draft[key]===null){details[key]=null;if(key==='transferIncluded')details.transfer=null;if(key==='visaIncluded')details.visa=null;}
+      }
+    }
     if (details && typeof details === "object") {
       const computedUrgency = getServiceUrgency(draft.expiration || details.expiration || details.expiration_at);
       details.urgency = computedUrgency.code;
@@ -8945,7 +8966,7 @@ async function finishCreateServiceFromWizard(ctx) {
       try { await bookingProofSources.prepare(ctx,createdServiceId,draft.bookingSourceFiles); bookingProofReady=true; }
       catch { await ctx.reply("Услуга сохранена. Исходные скриншоты не удалось подготовить — подтверждения можно загрузить отдельно."); }
     }
-    await finishProviderServiceDraft(ctx, "submitted");
+    if(!draft.bookingCompact)await finishProviderServiceDraft(ctx, "submitted");
 
     if (proofRequiredCategories.includes(String(category || "").toLowerCase())) {
       ctx.session.awaitingProofForServiceId = createdServiceId;

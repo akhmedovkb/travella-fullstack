@@ -26,3 +26,12 @@
 Используется существующий `OPENAI_API_KEY`, необязательный `TELEGRAM_BOOKING_AI_MODEL` (по умолчанию `gpt-4.1-mini`), `store:false`. Telegram URL и токен не передаются модели. Изображения обрабатываются в памяти, лимиты размера и пикселей применяются до распознавания. Модель получает строгую схему с разрешёнными полями и идентификаторами сомнений; персональные записи, контакты, документы и цены не извлекаются.
 
 До подтверждения сводка находится в сессии. После подтверждения используется существующее сохранение мастера в PostgreSQL; заполненные шаги пропускаются. Команды и отмена закрывают несохранённое распознавание. Proof и вложения заказов не перехватываются новым сценарием. Обычная модерация обязательна.
+
+
+## Compact creation (November 2026)
+
+Production uses the compact review flow for tours, hotels and flights. Required category fields, confirmed party, both prices and an explicit expiry choice are completed inside review. Optional conditions live under a separate menu with three-state answers; unknown is not serialized as excluded. Public photos are explicitly uploaded separately from booking screenshots. A full preview and a matching confirmation are required before saving. Adding new screenshots blocks saving until recognition completes.
+
+Private actor-scoped checkpoints live in `telegram_booking_import_drafts` for 30 days. `/frombooking` offers continuation or a fresh start; field edits and original Telegram file identifiers survive restart. The ordinary provider wizard is stored independently and is not consumed by compact creation.
+
+Duplicate review offers opening any matching own service, creating a separate draft, or updating an own draft. Updating rechecks ownership, category, deletion and moderation state under a row lock. Published/pending services are never updated through this action. Existing proof, public photos and unrelated conditions are preserved; supplied public photos are appended. Proof reuse still requires a separate preview and explicit confirmation.
