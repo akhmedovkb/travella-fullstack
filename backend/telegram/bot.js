@@ -5149,9 +5149,9 @@ async function finishEditWizard(ctx) {
       earlyCheckIn: !isTicket && !isFlight ? !!draft.earlyCheckIn : false,
       arrivalFastTrack: !isTicket && !isFlight ? !!draft.arrivalFastTrack : false,
 
-      adt: isHotel || (category === "refused_tour" && Number(draft.adt) > 0) ? Number(draft.adt ?? 0) : 0,
-      chd: isHotel || (category === "refused_tour" && Number(draft.adt) > 0) ? Number(draft.chd ?? 0) : 0,
-      inf: isHotel || (category === "refused_tour" && Number(draft.adt) > 0) ? Number(draft.inf ?? 0) : 0,
+      adt: isHotel || (["refused_tour", "refused_flight"].includes(category) && Number(draft.adt) > 0) ? Number(draft.adt ?? 0) : 0,
+      chd: isHotel || (["refused_tour", "refused_flight"].includes(category) && Number(draft.adt) > 0) ? Number(draft.chd ?? 0) : 0,
+      inf: isHotel || (["refused_tour", "refused_flight"].includes(category) && Number(draft.adt) > 0) ? Number(draft.inf ?? 0) : 0,
 
       flightType: isFlight ? (draft.flightType === "round_trip" ? "round_trip" : "one_way") : null,
       oneWay: isFlight ? draft.flightType !== "round_trip" : null,
@@ -6551,6 +6551,7 @@ function autoTitleRefusedFlight(draft) {
 function buildDetailsForRefusedFlight(draft, netPriceNum) {
   // ВАЖНО: netPriceNum = уже нормализованная priceNum
   return normalizeRefusedFlightDetails({
+    ...(draft.bookingPartyConfirmed ? { adt: draft.adt, chd: draft.chd, inf: draft.inf } : {}),
     directionCountry: draft.country || null,
     directionFrom: draft.fromCity || null,
     directionTo: draft.toCity || null,
@@ -7250,8 +7251,8 @@ function airlineValueFromCode(code) {
   return found ? `${found.code} — ${found.label}` : String(code || "").trim();
 }
 
-function getServiceWizardOrder(category = "", state = "") {
-  return getServiceWizardSteps(category, state);
+function getServiceWizardOrder(category = "", state = "", draft = {}) {
+  return getServiceWizardSteps(category, state, draft);
 }
 
 function getServiceEditWizardOrder(category = "", state = "") {
@@ -8126,7 +8127,7 @@ function wizardCurrentPreview(ctx, state) {
 }
 
 async function promptWizardState(ctx, state) {
-  const importedStep = require("../ai/bookingScreenshot").importedNextStep(ctx.session?.serviceDraft, state, getServiceWizardOrder(ctx.session?.serviceDraft?.category, state));
+  const importedStep = require("../ai/bookingScreenshot").importedNextStep(ctx.session?.serviceDraft, state, getServiceWizardOrder(ctx.session?.serviceDraft?.category, state, ctx.session?.serviceDraft));
   if (importedStep !== state) { ctx.session.state = importedStep; return promptWizardState(ctx, importedStep); }
 
   if (state === "svc_create_price" && !ctx.session?.serviceDraft?.id && ["refused_tour", "refused_hotel"].includes(ctx.session?.serviceDraft?.category) && ctx.session.serviceDraft.companion === undefined) return companionFlow.startDraft(ctx);

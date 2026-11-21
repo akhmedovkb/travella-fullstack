@@ -1,6 +1,7 @@
 const {randomBytes}=require('node:crypto');
-const {createBookingReader,stepFields}=require('../../ai/bookingScreenshot');
-const labels={country:'Страна',fromCity:'Город вылета',toCity:'Город прибытия',startDate:'Начало',endDate:'Окончание',hotel:'Отель',accommodation:'Размещение',roomCategory:'Номер',food:'Питание',transferIncluded:'Трансфер',insuranceIncluded:'Страховка',flightDetails:'Перелёты'};
+const {createBookingReader,stepFieldsFor}=require('../../ai/bookingScreenshot');
+const categoryLabels={refused_tour:'Отказной тур',refused_hotel:'Отказной отель',refused_flight:'Отказной авиабилет'};
+const labels={departureFlightDate:'Дата вылета',returnFlightDate:'Дата обратного рейса',flightType:'Тип перелёта',country:'Страна',fromCity:'Город вылета',toCity:'Город прибытия',startDate:'Начало',endDate:'Окончание',hotel:'Отель',accommodation:'Размещение',roomCategory:'Номер',food:'Питание',transferIncluded:'Трансфер',insuranceIncluded:'Страховка',flightDetails:'Перелёты'};
 async function downloadImage(ctx,id){
  const link=await ctx.telegram.getFileLink(id);const response=await fetch(link,{signal:AbortSignal.timeout(20000)});
  if(!response.ok||Number(response.headers.get('content-length')||0)>6*1024*1024)throw new Error('IMAGE_DOWNLOAD');
@@ -9,12 +10,12 @@ async function downloadImage(ctx,id){
 function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReader(),loadImage=downloadImage,now=Date.now}={}){
  const busy=new Set(),rates=new Map();
  const keyboard=(token,rows)=>({reply_markup:{inline_keyboard:rows.map(row=>row.map(([text,action])=>({text,callback_data:`booking:${action}:${token}`})))}});
- const notice='📷 Создать отказной тур по бронированию\n\nПришлите один скриншот или изображение файлом до 6 МБ. Перед отправкой закройте ФИО, даты рождения, паспорта и контакты туристов.\n\nПо кнопке «Распознать» изображение будет обработано ИИ OpenAI. Оно не станет публичным фото или подтверждением автоматически.\n\nБот покажет данные для проверки и спросит недостающее. Для отелей и билетов пока используйте обычное создание.';
+ const notice='📷 Создать услугу по бронированию\n\nПришлите один скриншот или изображение файлом до 6 МБ. Перед отправкой закройте ФИО, даты рождения, паспорта и контакты туристов.\n\nПо кнопке «Распознать» изображение будет обработано ИИ OpenAI. Оно не станет публичным фото или подтверждением автоматически.\n\nБот покажет данные для проверки и спросит недостающее. Выберите категорию: тур, отель или авиабилет.';
  const active=ctx=>ctx.session?.bookingImport;
  const blocked=ctx=>ctx.session?.editingServiceId||ctx.session?.editWiz||ctx.session?.awaitingProofForServiceId||ctx.session?.correctionFlow||ctx.session?.companionFlow||ctx.session?.galaFlow||(ctx.session?.state&&ctx.session.state!=='svc_create_choose_category');
- async function offer(ctx,file){
-  const s={token:randomBytes(8).toString('hex'),expires:now()+15*60000,file,stage:file?'consent':'upload'};ctx.session.bookingImport=s;
-  return ctx.reply(notice,keyboard(s.token,[[...(file?[['🔎 Распознать','read']]:[])],[['❌ Отмена','cancel']]].filter(r=>r.length)));
+ async function offer(ctx,file,category=active(ctx)?.category||'refused_tour'){
+  const s={token:randomBytes(8).toString('hex'),expires:now()+15*60000,file,category,stage:file?'consent':'upload'};ctx.session.bookingImport=s;
+  return ctx.reply(notice+'\n\nВыбрано: '+categoryLabels[category],keyboard(s.token,[[['📍 Тур','cat_refused_tour'],['🏨 Отель','cat_refused_hotel'],['✈️ Авиабилет','cat_refused_flight']],[...(file?[['🔎 Распознать','read']]:[])],[['❌ Отмена','cancel']]].filter(r=>r.length)));
  }
  return async(ctx,next)=>{
   if(ctx.chat?.type!=='private'||ctx.chat.id!==ctx.from?.id)return next();
@@ -47,6 +48,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   await ctx.answerCbQuery().catch(()=>{});
   const [,action,token]=data.split(':');
   if(!s||s.token!==token||s.expires<=now())return ctx.reply('Эта кнопка устарела. Начните заново: /frombooking');
+  if(action.startsWith('cat_')&&['upload','consent'].includes(s.stage)){const cat=action.slice(4);if(!categoryLabels[cat])return;return offer(ctx,s.file,cat);}
   if(action==='cancel'){delete ctx.session.bookingImport;return ctx.reply('Распознавание отменено.');}
   if(blocked(ctx))return ctx.reply('Сначала завершите текущее редактирование. Черновик не заменён.');
   if(action==='read'&&s.stage==='consent'){
@@ -55,15 +57,16 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
    busy.add(ctx.from.id);s.stage='reading';
    try{
     await ctx.reply('🔎 Распознаю бронирование…');
-    const draft=await read(await loadImage(ctx,s.file.id));
+    const draft=await read(await loadImage(ctx,s.file.id),s.category);
     if(active(ctx)!==s)return;
     s.draft=draft;s.stage='review';delete s.file;
-    const lines=Object.entries(labels).filter(([k])=>draft[k]!==undefined).map(([k,l])=>`${l}: ${typeof draft[k]==='boolean'?(draft[k]?'Да':'Нет'):(['startDate','endDate'].includes(k)?draft[k].split('-').reverse().join('.'):draft[k])}`);
-    return ctx.reply('Проверьте распознанные данные\n\n'+lines.join('\n')+'\n\nЭто ещё не опубликованная услуга. Состав туристов, цены, условия и гала-ужин нужно подтвердить отдельно. Неуказанное бот спросит дальше.',keyboard(token,[[['✅ Всё верно','accept']],[['✏️ Исправить','edit']],[['❌ Отмена','cancel']]]));
+    const lines=Object.entries(labels).filter(([k])=>draft[k]!==undefined).map(([k,l])=>`${l}: ${k==='flightType'?({one_way:'В одну сторону',round_trip:'Туда-обратно'}[draft[k]]):typeof draft[k]==='boolean'?(draft[k]?'Да':'Нет'):(['startDate','endDate','departureFlightDate','returnFlightDate'].includes(k)?draft[k].split('-').reverse().join('.'):draft[k])}`);
+    return ctx.reply('Проверьте распознанные данные\nКатегория: '+categoryLabels[s.category]+'\n\n'+lines.join('\n')+'\n\nЭто ещё не опубликованная услуга. '+(s.category==='refused_flight'?'Состав пассажиров, цены и условия нужно подтвердить отдельно.':'Состав туристов, цены, условия и гала-ужин нужно подтвердить отдельно.')+' Неуказанное бот спросит дальше.',keyboard(token,[[['✅ Всё верно','accept']],[['✏️ Исправить','edit']],[['❌ Отмена','cancel']]]));
    }catch{s.stage='consent';return ctx.reply('Не удалось распознать бронирование. Пришлите более чёткое изображение или создайте услугу вручную.');}
    finally{busy.delete(ctx.from.id);}
   }
   if(s.stage!=='review')return;
+  const stepFields=stepFieldsFor(s.category);
   if(action==='edit')return ctx.reply('Какое поле исправить?',keyboard(token,[...Object.entries(stepFields).filter(([,k])=>labels[k]).map(([step,k])=>[[labels[k],'fix_'+step]]),[['✅ Всё верно','accept']],[['❌ Отмена','cancel']]]));
   if(action==='accept'||action.startsWith('fix_')){
    const step=action.startsWith('fix_')?action.slice(4):s.editStep||null;

@@ -22,7 +22,7 @@ test('recognized steps advance through the real tour contract but remain editabl
 function fixture(){
  const session={},replies=[],accepted=[],calls=[];let clock=100000;
  const state={authorized:true,fail:false};
- const flow=createBookingScreenshotFlow({authorize:async()=>state.authorized,now:()=>clock,loadImage:async()=>{calls.push('download');return Buffer.from('image');},read:async()=>{calls.push('read');if(state.fail)throw Error('failed');return normalizeBooking({country:'Вьетнам',hotel:'Hotel',accommodation:'DBL',startDate:'2099-11-25',endDate:'2099-12-02',transferIncluded:true,flights:[]});},onAccept:async(ctx,draft,step)=>accepted.push({draft,step})});
+ const flow=createBookingScreenshotFlow({authorize:async()=>state.authorized,now:()=>clock,loadImage:async()=>{calls.push('download');return Buffer.from('image');},read:async(_bytes,category)=>{calls.push('read');if(state.fail)throw Error('failed');return normalizeBooking({country:'Вьетнам',hotel:'Hotel',accommodation:'DBL',startDate:'2099-11-25',endDate:'2099-12-02',transferIncluded:true,flights:[]},category);},onAccept:async(ctx,draft,step)=>accepted.push({draft,step})});
  async function send({text,data,photo,document,chat=7,actor=7}={}){
   let passed=false;await flow({session,chat:{id:chat,type:chat<0?'supergroup':'private'},from:{id:actor},message:data?undefined:{text,photo,document},callbackQuery:data?{data}:undefined,answerCbQuery:async()=>{},reply:async(text,extra)=>{replies.push({text,extra});}},()=>{passed=true;});return passed;
  }
@@ -69,4 +69,38 @@ test('after fixing a recognized field the real wizard returns to earlier missing
  d.title='TEST tour';
  assert.equal(importedNextStep(d,'svc_create_tour_country',steps),'svc_create_tour_visa');
  assert.equal(d.hotel,'TEST corrected');assert.equal(d.bookingImportEditingStep,undefined);
+});
+
+test('hotel and flight normalization keeps only category-specific facts and never guesses one-way from one leg',()=>{
+ const raw={hotel:'TEST hotel',country:'Вьетнам',fromCity:'Ташкент',toCity:'Фукуок',startDate:'2099-12-01',endDate:'2099-12-08',food:'BB',flights:[{number:'HH2233',date:'2099-12-01',from:'TAS',to:'PQC'}]};
+ const hotel=normalizeBooking(raw,'refused_hotel');assert.equal(hotel.hotel,'TEST hotel');assert.equal(hotel.flightDetails,undefined);assert.equal(hotel.fromCity,undefined);
+ const flight=normalizeBooking(raw,'refused_flight');assert.equal(flight.hotel,undefined);assert.equal(flight.food,undefined);assert.equal(flight.startDate,undefined);assert.equal(flight.departureFlightDate,'2099-12-01');assert.equal(flight.flightType,undefined);
+ const round=normalizeBooking({...raw,flightType:'round_trip',returnFlightDate:'2099-12-08',flights:[...raw.flights,{date:'2099-12-08',number:'HH2234'}]},'refused_flight');assert.equal(round.returnFlightDate,'2099-12-08');
+ const one=normalizeBooking({...raw,flightType:'one_way',flights:round.flights},'refused_flight');assert.equal(one.returnFlightDate,undefined);
+});
+test('category selection reaches the appropriate real wizard and field corrections cannot cross categories',async()=>{
+ const {stepFieldsFor}=require('../ai/bookingScreenshot');
+ for(const category of ['refused_hotel','refused_flight']){
+  const f=fixture();await f.send({text:'/frombooking'});await f.press('cat_'+category);await f.send({photo:[{file_id:'test'}]});await f.press('read');
+  assert.equal(f.session.bookingImport.draft.category,category);
+  await f.press('fix_svc_create_tour_hotel');assert.equal(f.accepted.length,0);assert.equal(f.session.bookingImport.stage,'review');
+  await f.press('edit');const step=category==='refused_hotel'?'svc_hotel_name':'svc_create_flight_details';await f.press('fix_'+step);await f.send({text:'2+0+0'});await f.press('accept');
+  const d=f.accepted[0].draft;assert.equal(d.category,category);assert.equal(f.accepted[0].step,step);
+  const steps=getServiceWizardSteps(category,'',d);assert.ok(steps.includes(step));assert.ok(d.bookingImportSkip.every(s=>steps.includes(s)));
+  assert.equal(stepFieldsFor(category)[step],category==='refused_hotel'?'hotel':'flightDetails');
+ }
+});
+test('one-way imported flights never stop at return date and stale category buttons cannot change a newer image',async()=>{
+ const {stepFieldsFor}=require('../ai/bookingScreenshot');
+ const d={category:'refused_flight',bookingPartyConfirmed:true,flightType:'one_way',departureFlightDate:'2099-12-01',flightDetails:'HH2233'};
+ d.bookingImportSkip=Object.entries(stepFieldsFor(d.category)).filter(([,k])=>d[k]!==undefined).map(([s])=>s);
+ const steps=getServiceWizardSteps(d.category,'',d);assert.ok(!steps.includes('svc_create_flight_return'));assert.equal(importedNextStep(d,'svc_create_flight_type',steps),'svc_create_price');
+ assert.equal(importedNextStep(d,'svc_create_tour_country',steps),'svc_create_tour_from');
+ const f=fixture();await f.send({text:'/frombooking'});const stale='booking:cat_refused_hotel:'+f.session.bookingImport.token;await f.send({photo:[{file_id:'new'}]});await f.send({data:stale});assert.equal(f.session.bookingImport.category,'refused_tour');
+});
+
+test('connecting flights never turn the second outbound segment into a return journey',()=>{
+ const raw={flightType:'round_trip',flights:[{from:'TAS',to:'IST',date:'2099-12-01'},{from:'IST',to:'CDG',date:'2099-12-02'}]};
+ assert.equal(normalizeBooking(raw,'refused_flight').returnFlightDate,undefined);
+ assert.equal(normalizeBooking({...raw,returnFlightDate:'2099-12-10'},'refused_flight').returnFlightDate,'2099-12-10');
 });
