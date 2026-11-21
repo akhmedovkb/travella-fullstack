@@ -2216,7 +2216,7 @@ bot.use(async (ctx, next) => {
 
     const data = String(ctx.callbackQuery?.data || "");
     // Explicit screenshot import has its own review; do not consume it with a resume prompt.
-    if (ctx.session.bookingImport || data.startsWith("booking:") || /^\/frombooking(?:@\w+)?(?:\s|$)/i.test(ctx.message?.text || "")) return next();
+    if (ctx.session.bookingImport || data.startsWith("booking:") || data.startsWith("bookingproof:") || /^\/frombooking(?:@\w+)?(?:\s|$)/i.test(ctx.message?.text || "")) return next();
     if((ctx.session.companionFlow && !ctx.session.companionFlow.draftMode) || (data.startsWith("comp:") && !ctx.session.serviceDraft) || ctx.session.galaFlow || data.startsWith("gala:") || ctx.session.correctionFlow || data.startsWith("corr:") || /^\/corrections/.test(ctx.message?.text || "") || /^\/start.* correction_/.test(ctx.message?.text || "")) return next();
     if (data === "tg_draft:continue" || data === "tg_draft:delete") {
       return next();
@@ -4379,8 +4379,24 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
+const findBookingDuplicates = require("../ai/bookingDuplicates").createBookingDuplicateFinder(pool);
+const bookingDuplicateGuard = require("../ai/bookingDuplicates").createBookingDuplicateGuard({find:findBookingDuplicates,onContinue:finishCreateServiceFromWizard});
+bot.use(bookingDuplicateGuard);
+const bookingProofSources = require("./handlers/bookingProofSources").createBookingProofSources({
+  pool,
+  resolveOwner:(ctx,id)=>assertTelegramActorOwnsService(ctx,id,"proof_booking_source"),
+  loadImage:tgFileIdToDataUrlForProof,
+  onAttached:async(ctx,id,count,category)=>{
+    ctx.session.awaitingProofForServiceId=id;ctx.session.awaitingProofForCategory=category;
+    await trackProviderFunnelFromBot(ctx,"proof_uploaded",{serviceId:id,status:"proof_uploaded",meta:{proof_count:count,source:"booking_screenshots"}});
+    return ctx.reply(`✅ Подтверждения прикреплены: ${count}. Проверьте их и отправьте услугу на модерацию.`,buildProofKeyboard(id,count,category));
+  },
+});
+bot.use(bookingProofSources);
+
 // Import booking images only in private provider chats, before legacy photo handlers.
 bot.use(require("./handlers/bookingScreenshotFlow").createBookingScreenshotFlow({
+  findDuplicates:findBookingDuplicates,
   authorize: async ctx => (await ensureProviderRole(ctx)) === "provider",
   onAccept: async (ctx, draft, editStep) => {
     ctx.session.editWiz = null;
@@ -4390,7 +4406,7 @@ bot.use(require("./handlers/bookingScreenshotFlow").createBookingScreenshotFlow(
     ctx.session.wizardStack = [];
     ctx.session.state = editStep || "svc_create_title";
     await persistProviderCreateWizard(ctx);
-    await ctx.reply("✅ Данные перенесены в черновик. Проверим недостающее. Состав туристов сохранён с ваших слов. Скриншот не добавлен в публичные фото — на шаге подтверждения его можно прислать отдельно.");
+    await ctx.reply("✅ Данные перенесены в черновик. Проверим недостающее. Состав туристов сохранён с ваших слов. Скриншоты не добавлены в публичные фото. После сохранения можно проверить и прикрепить их как подтверждение.");
     await promptWizardState(ctx, ctx.session.state);
     await persistProviderCreateWizard(ctx);
   },
@@ -8894,6 +8910,7 @@ async function finishCreateServiceFromWizard(ctx) {
     if (!chatId) return;
 
     const isEditMode = Number.isFinite(Number(draft.id)) && Number(draft.id) > 0;
+    if (!isEditMode && !await bookingDuplicateGuard.check(ctx,draft)) return;
 
     const { data } = isEditMode
       ? await axios.patch(
@@ -8923,6 +8940,11 @@ async function finishCreateServiceFromWizard(ctx) {
       meta: { is_edit_mode: isEditMode },
     });
 
+    let bookingProofReady=false;
+    if (createdServiceId && draft.bookingSourceFiles?.length) {
+      try { await bookingProofSources.prepare(ctx,createdServiceId,draft.bookingSourceFiles); bookingProofReady=true; }
+      catch { await ctx.reply("Услуга сохранена. Исходные скриншоты не удалось подготовить — подтверждения можно загрузить отдельно."); }
+    }
     await finishProviderServiceDraft(ctx, "submitted");
 
     if (proofRequiredCategories.includes(String(category || "").toLowerCase())) {
@@ -8934,6 +8956,8 @@ async function finishCreateServiceFromWizard(ctx) {
         category,
         isEditMode,
       });
+
+      if (bookingProofReady) { try { await bookingProofSources.prompt(ctx,createdServiceId); } catch {} }
 
       resetServiceWizard(ctx);
 

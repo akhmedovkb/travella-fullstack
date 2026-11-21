@@ -39,10 +39,13 @@ test('image consent, review, party confirmation and accept use no public sends a
  assert.ok(f.accepted[0].draft.bookingImportSkip.includes('svc_create_tour_hotel'));
  await f.send({data:stale});assert.equal(f.accepted.length,1);
 });
-test('edit selects an existing field while keeping other recognized fields and confirmed party intact',async()=>{
- const f=fixture();await f.send({photo:[{file_id:'x'}]});await f.press('read');await f.press('edit');await f.press('fix_svc_create_tour_hotel');await f.send({text:'2+1+0'});await f.press('accept');
- assert.equal(f.accepted[0].step,'svc_create_tour_hotel');assert.equal(f.accepted[0].draft.chd,1);assert.ok(!f.accepted[0].draft.bookingImportSkip.includes('svc_create_tour_hotel'));assert.ok(f.accepted[0].draft.bookingImportSkip.includes('svc_create_tour_start'));
+test('editing a recognized field returns to review before accepting the corrected draft',async()=>{
+ const f=fixture();await f.send({photo:[{file_id:'x'}]});await f.press('read');await f.press('edit');await f.press('fix_svc_create_tour_hotel');
+ await f.send({text:'TEST corrected hotel'});assert.equal(f.session.bookingImport.stage,'review');assert.equal(f.accepted.length,0);assert.match(f.replies.at(-1).text,/TEST corrected hotel/);
+ await f.press('accept');await f.send({text:'2+1+0'});await f.press('accept');
+ assert.equal(f.accepted[0].step,null);assert.equal(f.accepted[0].draft.hotel,'TEST corrected hotel');assert.equal(f.accepted[0].draft.chd,1);assert.ok(f.accepted[0].draft.bookingImportSkip.includes('svc_create_tour_hotel'));
 });
+
 test('group images, proof, edits and existing wizard uploads keep their original routes',async()=>{
  for(const session of [{state:'svc_create_photo'}, {awaitingProofForServiceId:42}, {editingServiceId:42},{correctionFlow:{}},{companionFlow:{}}]){
   const f=fixture();Object.assign(f.session,session);assert.equal(await f.send({photo:[{file_id:'x'}]}),true);assert.equal(f.calls.length,0);
@@ -53,7 +56,7 @@ test('authorization, expiry, oversized files and failed recognition cannot accep
  const f=fixture();f.state.authorized=false;await f.send({photo:[{file_id:'x'}]});assert.equal(f.session.bookingImport,undefined);
  f.state.authorized=true;await f.send({photo:[{file_id:'x',file_size:7*1024*1024}]});assert.equal(f.session.bookingImport,undefined);
  await f.send({photo:[{file_id:'x'}]});f.expire();await f.press('read');assert.equal(f.calls.length,0);
- await f.send({photo:[{file_id:'x'}]});f.state.fail=true;await f.press('read');assert.equal(f.accepted.length,0);assert.match(f.replies.at(-1).text,/Не удалось/);
+ await f.send({photo:[{file_id:'x'}]});f.state.fail=true;await f.press('read');assert.equal(f.accepted.length,0);assert.ok(f.replies.some(r=>/Не удалось/.test(r.text)));
 });
 
 test('after fixing a recognized field the real wizard returns to earlier missing fields without asking fixed values twice',()=>{
@@ -85,8 +88,8 @@ test('category selection reaches the appropriate real wizard and field correctio
   const f=fixture();await f.send({text:'/frombooking'});await f.press('cat_'+category);await f.send({photo:[{file_id:'test'}]});await f.press('read');
   assert.equal(f.session.bookingImport.draft.category,category);
   await f.press('fix_svc_create_tour_hotel');assert.equal(f.accepted.length,0);assert.equal(f.session.bookingImport.stage,'review');
-  await f.press('edit');const step=category==='refused_hotel'?'svc_hotel_name':'svc_create_flight_details';await f.press('fix_'+step);await f.send({text:'2+0+0'});await f.press('accept');
-  const d=f.accepted[0].draft;assert.equal(d.category,category);assert.equal(f.accepted[0].step,step);
+  await f.press('edit');const step=category==='refused_hotel'?'svc_hotel_name':'svc_create_flight_details';await f.press('fix_'+step);await f.send({text:'TEST corrected'});await f.press('accept');await f.send({text:'2+0+0'});await f.press('accept');
+  const d=f.accepted[0].draft;assert.equal(d.category,category);assert.equal(f.accepted[0].step,null);
   const steps=getServiceWizardSteps(category,'',d);assert.ok(steps.includes(step));assert.ok(d.bookingImportSkip.every(s=>steps.includes(s)));
   assert.equal(stepFieldsFor(category)[step],category==='refused_hotel'?'hotel':'flightDetails');
  }
@@ -112,7 +115,7 @@ test('compact edit menu groups hotel fields and returning to review neither repa
  assert.ok(rows.length<=8);assert.ok(rows.every(r=>r.length<=2));
  const f=fixture();await f.send({text:'/frombooking'});await f.press('cat_refused_hotel');await f.send({photo:[{file_id:'test'}]});await f.press('read');
  const before=JSON.stringify(f.session.bookingImport.draft);await f.press('edit');await f.press('review');
- assert.equal(JSON.stringify(f.session.bookingImport.draft),before);assert.equal(f.calls.filter(x=>x==='read').length,1);assert.equal(f.accepted.length,0);assert.match(f.replies.at(-1).text,/Проверьте распознанные данные/);
+ assert.equal(JSON.stringify(f.session.bookingImport.draft),before);assert.equal(f.calls.filter(x=>x==='read').length,1);assert.equal(f.accepted.length,0);assert.match(f.replies.at(-1).text,/Проверьте данные/);
 });
 test('one-way flight edit menu omits return date and forged stale return actions cannot enter a party or save',async()=>{
  const {bookingEditRows}=require('../ai/bookingScreenshotUi');
@@ -139,8 +142,8 @@ test('auto titles use only recognized category facts and do not invent a missing
 test('all categories can change the title in review and accept it without a second wizard title prompt',async()=>{
  for(const category of ['refused_tour','refused_hotel','refused_flight']){
   const f=fixture();await f.send({text:'/frombooking'});await f.press('cat_'+category);await f.send({photo:[{file_id:'test'}]});await f.press('read');
-  await f.press('fix_svc_create_title');assert.equal(f.session.bookingImport.stage,'title');
-  await f.send({text:'x'});assert.equal(f.session.bookingImport.stage,'title');
+  await f.press('fix_svc_create_title');assert.equal(f.session.bookingImport.stage,'field');
+  await f.send({text:'x'});assert.equal(f.session.bookingImport.stage,'field');
   await f.send({text:'TEST — моё название'});assert.equal(f.session.bookingImport.stage,'review');assert.match(f.replies.at(-1).text,/TEST — моё название/);assert.equal(f.accepted.length,0);
   await f.press('accept');await f.send({text:'2+0+0'});await f.press('accept');
   const d=f.accepted[0].draft;assert.equal(d.title,'TEST — моё название');assert.ok(d.bookingImportSkip.includes('svc_create_title'));
