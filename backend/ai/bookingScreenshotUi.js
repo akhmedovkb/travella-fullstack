@@ -2,15 +2,16 @@ const {stepFieldsFor}=require('./bookingScreenshot');
 const {getServiceWizardSteps}=require('../utils/serviceWizardEngine');
 
 const names={
+ title:'✏️ Название услуги',
  country:'🌍 Страна',fromCity:'🛫 Откуда',toCity:'📍 Куда',hotel:'🏨 Название отеля',
  startDate:'📅 Начало',endDate:'📅 Окончание',roomCategory:'🛏 Тип номера',accommodation:'👥 Размещение',
  food:'🍽 Питание',transferIncluded:'🚐 Трансфер',insuranceIncluded:'🛡 Страховка',
  flightType:'↔️ Тип перелёта',departureFlightDate:'📅 Дата вылета',returnFlightDate:'📅 Обратный вылет',flightDetails:'✈️ Рейс и багаж',
 };
 const groups={
- refused_hotel:[['country','toCity'],['hotel'],['startDate','endDate'],['roomCategory','accommodation'],['food','insuranceIncluded']],
- refused_flight:[['fromCity','toCity'],['flightType'],['departureFlightDate','returnFlightDate'],['flightDetails']],
- refused_tour:[['country','fromCity'],['toCity','hotel'],['startDate','endDate'],['flightDetails'],['roomCategory','accommodation'],['food','transferIncluded'],['insuranceIncluded']],
+ refused_hotel:[['title'],['country','toCity'],['hotel'],['startDate','endDate'],['roomCategory','accommodation'],['food','insuranceIncluded']],
+ refused_flight:[['title'],['fromCity','toCity'],['flightType'],['departureFlightDate','returnFlightDate'],['flightDetails']],
+ refused_tour:[['title'],['country','fromCity'],['toCity','hotel'],['startDate','endDate'],['flightDetails'],['roomCategory','accommodation'],['food','transferIncluded'],['insuranceIncluded']],
 };
 function editableBookingSteps(draft){
  const contract=new Set(getServiceWizardSteps(draft.category,'',draft));

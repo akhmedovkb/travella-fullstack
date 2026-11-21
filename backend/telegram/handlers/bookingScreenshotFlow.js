@@ -2,7 +2,7 @@ const {randomBytes}=require('node:crypto');
 const {bookingEditRows,editableBookingSteps}=require('../../ai/bookingScreenshotUi');
 const {createBookingReader,stepFieldsFor}=require('../../ai/bookingScreenshot');
 const categoryLabels={refused_tour:'Отказной тур',refused_hotel:'Отказной отель',refused_flight:'Отказной авиабилет'};
-const labels={departureFlightDate:'Дата вылета',returnFlightDate:'Дата обратного рейса',flightType:'Тип перелёта',country:'Страна',fromCity:'Город вылета',toCity:'Город прибытия',startDate:'Начало',endDate:'Окончание',hotel:'Отель',accommodation:'Размещение',roomCategory:'Номер',food:'Питание',transferIncluded:'Трансфер',insuranceIncluded:'Страховка',flightDetails:'Перелёты'};
+const labels={title:'Название',departureFlightDate:'Дата вылета',returnFlightDate:'Дата обратного рейса',flightType:'Тип перелёта',country:'Страна',fromCity:'Город вылета',toCity:'Город прибытия',startDate:'Начало',endDate:'Окончание',hotel:'Отель',accommodation:'Размещение',roomCategory:'Номер',food:'Питание',transferIncluded:'Трансфер',insuranceIncluded:'Страховка',flightDetails:'Перелёты'};
 const sendPanel=(ctx,text,extra)=>ctx.reply(text,extra);
 async function updatePanel(ctx,text,extra){
  if(ctx.callbackQuery&&ctx.editMessageText){
@@ -23,7 +23,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   const draft=s.draft;
   const token=s.token;
   const lines=Object.entries(labels).filter(([k])=>draft[k]!==undefined).map(([k,l])=>`${l}: ${k==='flightType'?({one_way:'В одну сторону',round_trip:'Туда-обратно'}[draft[k]]):typeof draft[k]==='boolean'?(draft[k]?'Да':'Нет'):(['startDate','endDate','departureFlightDate','returnFlightDate'].includes(k)?draft[k].split('-').reverse().join('.'):draft[k])}`);
-    return (inPlace?updatePanel:sendPanel)(ctx,'Проверьте распознанные данные\nКатегория: '+categoryLabels[s.category]+'\n\n'+lines.join('\n')+'\n\nЭто ещё не опубликованная услуга. '+(s.category==='refused_flight'?'Состав пассажиров, цены и условия нужно подтвердить отдельно.':'Состав туристов, цены, условия и гала-ужин нужно подтвердить отдельно.')+' Неуказанное бот спросит дальше.',keyboard(token,[[['✅ Подтвердить данные','accept']],[['✏️ Исправить','edit']],[['❌ Отмена','cancel']]]));
+    return (inPlace?updatePanel:sendPanel)(ctx,'Проверьте распознанные данные\nКатегория: '+categoryLabels[s.category]+'\n\n'+lines.join('\n')+'\n\nЭто ещё не опубликованная услуга. '+(s.category==='refused_flight'?'Состав пассажиров, цены и условия нужно подтвердить отдельно.':'Состав туристов, цены, условия и гала-ужин нужно подтвердить отдельно.')+' Неуказанное бот спросит дальше.',keyboard(token,[[['✅ Подтвердить данные','accept']],[['✏️ Изменить название','fix_svc_create_title']],[['✏️ Другие поля','edit']],[['❌ Отмена','cancel']]]));
  }
  const active=ctx=>ctx.session?.bookingImport;
  const blocked=ctx=>ctx.session?.editingServiceId||ctx.session?.editWiz||ctx.session?.awaitingProofForServiceId||ctx.session?.correctionFlow||ctx.session?.companionFlow||ctx.session?.galaFlow||(ctx.session?.state&&ctx.session.state!=='svc_create_choose_category');
@@ -38,7 +38,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   const file=photo?{id:photo.file_id,size:photo.file_size}:doc&&['image/jpeg','image/png','image/webp'].includes(doc.mime_type)?{id:doc.file_id,size:doc.file_size}:null;
   const s=active(ctx);
   if(s&&/^\/(?!frombooking(?:@|\s|$))/.test(ctx.message?.text||'')){delete ctx.session.bookingImport;return next();}
-  if(!data.startsWith('booking:')&&!command&&!file&&!(s?.stage==='party'&&ctx.message?.text))return next();
+  if(!data.startsWith('booking:')&&!command&&!file&&!(['party','title'].includes(s?.stage)&&ctx.message?.text))return next();
   if(file&&blocked(ctx))return next();
   if(!await authorize(ctx))return file&&!s?next():ctx.reply('Создание по скриншоту доступно подтверждённым поставщикам.');
   if(command||data==='booking:start'){
@@ -50,6 +50,12 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(file){
    if(file.size>6*1024*1024)return ctx.reply('Изображение слишком большое. Пришлите файл до 6 МБ.');
    return offer(ctx,file);
+  }
+  if(s?.stage==='title'&&ctx.message?.text){
+   if(s.expires<=now()){delete ctx.session.bookingImport;return ctx.reply('Начните заново: /frombooking');}
+   const value=ctx.message.text.replace(/\s+/g,' ').trim();
+   if(value.length<2||value.length>200)return ctx.reply('Введите название от 2 до 200 символов или вернитесь к проверке.');
+   s.draft.title=value;s.stage='review';return showReview(ctx,s);
   }
   if(s?.stage==='party'&&ctx.message?.text){
    if(s.expires<=now()){delete ctx.session.bookingImport;return ctx.reply('Начните заново: /frombooking');}
@@ -77,6 +83,10 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
     return showReview(ctx,s);
    }catch{s.stage='consent';return ctx.reply('Не удалось распознать бронирование. Пришлите более чёткое изображение или создайте услугу вручную.');}
    finally{busy.delete(ctx.from.id);}
+  }
+  if(action==='review'&&s.stage==='title'){s.stage='review';return showReview(ctx,s,true);}
+  if(action==='fix_svc_create_title'&&s.stage==='review'){
+   s.stage='title';return ctx.reply('✏️ Название услуги\n\nСейчас: '+(s.draft.title||'не указано')+'\n\nОтправьте новое название. После изменения вернёмся к сводке.',keyboard(token,[[['⬅️ К проверке','review'],['✖️ Отменить','cancel']]]));
   }
   if(s.stage!=='review')return;
   const stepFields=stepFieldsFor(s.category);

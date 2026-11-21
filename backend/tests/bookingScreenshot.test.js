@@ -22,7 +22,7 @@ test('recognized steps advance through the real tour contract but remain editabl
 function fixture(){
  const session={},replies=[],accepted=[],calls=[];let clock=100000;
  const state={authorized:true,fail:false};
- const flow=createBookingScreenshotFlow({authorize:async()=>state.authorized,now:()=>clock,loadImage:async()=>{calls.push('download');return Buffer.from('image');},read:async(_bytes,category)=>{calls.push('read');if(state.fail)throw Error('failed');return normalizeBooking({country:'Вьетнам',hotel:'Hotel',accommodation:'DBL',startDate:'2099-11-25',endDate:'2099-12-02',transferIncluded:true,flightType:state.flightType,flights:[]},category);},onAccept:async(ctx,draft,step)=>accepted.push({draft,step})});
+ const flow=createBookingScreenshotFlow({authorize:async()=>state.authorized,now:()=>clock,loadImage:async()=>{calls.push('download');return Buffer.from('image');},read:async(_bytes,category)=>{calls.push('read');if(state.fail)throw Error('failed');return normalizeBooking({country:'Вьетнам',hotel:'Hotel',accommodation:'DBL',startDate:'2099-11-25',endDate:'2099-12-02',transferIncluded:true,flightType:state.flightType,flights:[],...state.source},category);},onAccept:async(ctx,draft,step)=>accepted.push({draft,step})});
  async function send({text,data,photo,document,chat=7,actor=7}={}){
   let passed=false;await flow({session,chat:{id:chat,type:chat<0?'supergroup':'private'},from:{id:actor},message:data?undefined:{text,photo,document},callbackQuery:data?{data}:undefined,answerCbQuery:async()=>{},editMessageText:state.inlineEdit?async()=>{calls.push('edit-panel');return {message_id:1};}:undefined,reply:async(text,extra)=>{replies.push({text,extra});}},()=>{passed=true;});return passed;
  }
@@ -59,6 +59,7 @@ test('authorization, expiry, oversized files and failed recognition cannot accep
 test('after fixing a recognized field the real wizard returns to earlier missing fields without asking fixed values twice',()=>{
  const steps=getServiceWizardSteps('refused_tour');
  const d=normalizeBooking({country:'Вьетнам',fromCity:'Ташкент',toCity:'Фукуок',startDate:'2099-11-25',endDate:'2099-12-02',hotel:'TEST Hotel',accommodation:'DBL',roomCategory:'Standard',food:'BB',flightDetails:'ignored',transferIncluded:true,insuranceIncluded:true});
+ delete d.title; // Existing drafts without an auto-generated title still require it.
  d.flightDetails='HH2233';
  const {stepFields}=require('../ai/bookingScreenshot');
  d.bookingImportSkip=Object.entries(stepFields).filter(([s,k])=>s!=='svc_create_tour_hotel'&&d[k]!==undefined).map(([s])=>s);
@@ -108,7 +109,7 @@ test('connecting flights never turn the second outbound segment into a return jo
 test('compact edit menu groups hotel fields and returning to review neither reparses nor saves the draft',async()=>{
  const {bookingEditRows}=require('../ai/bookingScreenshotUi');
  const rows=bookingEditRows({category:'refused_hotel'});
- assert.ok(rows.length<=7);assert.ok(rows.every(r=>r.length<=2));
+ assert.ok(rows.length<=8);assert.ok(rows.every(r=>r.length<=2));
  const f=fixture();await f.send({text:'/frombooking'});await f.press('cat_refused_hotel');await f.send({photo:[{file_id:'test'}]});await f.press('read');
  const before=JSON.stringify(f.session.bookingImport.draft);await f.press('edit');await f.press('review');
  assert.equal(JSON.stringify(f.session.bookingImport.draft),before);assert.equal(f.calls.filter(x=>x==='read').length,1);assert.equal(f.accepted.length,0);assert.match(f.replies.at(-1).text,/Проверьте распознанные данные/);
@@ -126,4 +127,37 @@ test('edit and review update one Telegram panel without losing recognized data o
  const count=f.replies.length;const draft=JSON.stringify(f.session.bookingImport.draft);
  await f.press('edit');await f.press('review');
  assert.equal(f.calls.filter(x=>x==='edit-panel').length,2);assert.equal(f.replies.length,count);assert.equal(f.calls.filter(x=>x==='read').length,1);assert.equal(JSON.stringify(f.session.bookingImport.draft),draft);assert.equal(f.accepted.length,0);
+});
+
+test('auto titles use only recognized category facts and do not invent a missing destination or hotel',()=>{
+ assert.equal(normalizeBooking({toCity:'Фукуок'}).title,'Отказной тур — Фукуок');
+ assert.equal(normalizeBooking({country:'Вьетнам'}).title,'Отказной тур — Вьетнам');
+ assert.equal(normalizeBooking({hotel:'TH Luxury Phu Quoc'},'refused_hotel').title,'Отказной отель — TH Luxury Phu Quoc');
+ assert.equal(normalizeBooking({fromCity:'Ташкент',toCity:'Дубай'},'refused_flight').title,'Отказной авиабилет — Ташкент → Дубай');
+ assert.equal(normalizeBooking({}).title,undefined);assert.equal(normalizeBooking({toCity:'Дубай'},'refused_flight').title,undefined);assert.equal(normalizeBooking({country:'Вьетнам'},'refused_hotel').title,undefined);
+});
+test('all categories can change the title in review and accept it without a second wizard title prompt',async()=>{
+ for(const category of ['refused_tour','refused_hotel','refused_flight']){
+  const f=fixture();await f.send({text:'/frombooking'});await f.press('cat_'+category);await f.send({photo:[{file_id:'test'}]});await f.press('read');
+  await f.press('fix_svc_create_title');assert.equal(f.session.bookingImport.stage,'title');
+  await f.send({text:'x'});assert.equal(f.session.bookingImport.stage,'title');
+  await f.send({text:'TEST — моё название'});assert.equal(f.session.bookingImport.stage,'review');assert.match(f.replies.at(-1).text,/TEST — моё название/);assert.equal(f.accepted.length,0);
+  await f.press('accept');await f.send({text:'2+0+0'});await f.press('accept');
+  const d=f.accepted[0].draft;assert.equal(d.title,'TEST — моё название');assert.ok(d.bookingImportSkip.includes('svc_create_title'));
+  assert.notEqual(importedNextStep(d,'svc_create_title',getServiceWizardSteps(category,'',d)),'svc_create_title');assert.equal(f.calls.filter(x=>x==='read').length,1);
+ }
+});
+test('back from title editing preserves the generated title without accepting or rerunning recognition',async()=>{
+ const f=fixture();await f.send({photo:[{file_id:'test'}]});await f.press('read');const title=f.session.bookingImport.draft.title;
+ await f.press('fix_svc_create_title');await f.press('review');assert.equal(f.session.bookingImport.draft.title,title);assert.equal(f.session.bookingImport.stage,'review');assert.equal(f.accepted.length,0);
+});
+
+test('accepting an automatically generated title skips the title step for tours hotels and flights',async()=>{
+ for(const category of ['refused_tour','refused_hotel','refused_flight']){
+  const f=fixture();f.state.source={fromCity:'Ташкент',toCity:'Дубай',hotel:'TEST Hotel'};
+  await f.send({text:'/frombooking'});await f.press('cat_'+category);await f.send({photo:[{file_id:'test'}]});await f.press('read');
+  const title=f.session.bookingImport.draft.title;assert.ok(title);assert.match(f.replies.at(-1).text,/Название:/);
+  await f.press('accept');await f.send({text:'1+0+0'});await f.press('accept');
+  const d=f.accepted[0].draft;assert.equal(d.title,title);assert.ok(d.bookingImportSkip.includes('svc_create_title'));assert.notEqual(importedNextStep(d,'svc_create_title',getServiceWizardSteps(category,'',d)),'svc_create_title');
+ }
 });

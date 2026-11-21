@@ -9,6 +9,13 @@ props.flightType={type:['string','null'],enum:['one_way','round_trip',null],desc
 const schema={type:'object',additionalProperties:false,properties:props,required:Object.keys(props)};
 function safe(value,max=100){return typeof value==='string'?value.replace(/https?:\/\/\S+|@[\w_]+|[\w.+-]+@[\w.-]+\.[a-z]+|\b[A-Z]{2}\d{7}\b|(?:\+?\d[ ()-]*){9,}/gi,'').replace(/[<>\u0000-\u001f]/g,' ').trim().slice(0,max):'';}
 function day(v){if(/^\d{2}\.\d{2}\.\d{4}$/.test(v||''))v=v.split('.').reverse().join('-');if(!/^\d{4}-\d{2}-\d{2}$/.test(v||''))return null;const d=new Date(v+'T12:00:00Z');return Number.isFinite(+d)&&d.toISOString().slice(0,10)===v?v:null;}
+function bookingTitle(draft){
+ let title='';
+ if(draft.category==='refused_tour'&&(draft.toCity||draft.country))title='Отказной тур — '+(draft.toCity||draft.country);
+ if(draft.category==='refused_hotel'&&draft.hotel)title='Отказной отель — '+draft.hotel;
+ if(draft.category==='refused_flight'&&draft.fromCity&&draft.toCity)title='Отказной авиабилет — '+draft.fromCity+' → '+draft.toCity;
+ return title.slice(0,200);
+}
 const categories=['refused_tour','refused_hotel','refused_flight'];
 function normalizeBooking(input,category='refused_tour'){
  if(!categories.includes(category))throw new Error('INVALID_BOOKING_CATEGORY');
@@ -39,6 +46,7 @@ function normalizeBooking(input,category='refused_tour'){
   if(d.flightType!=='one_way'&&ret&&(!dep||ret>=dep))d.returnFlightDate=ret;
   if(d.flightType)d.oneWay=d.flightType==='one_way';
  }
+ const title=bookingTitle(d);if(title)d.title=title;
  // No prices, personal records, document numbers, inferred party size or public images.
  return d;
 }
@@ -81,4 +89,4 @@ function importedNextStep(draft,state,steps){
   draft.bookingImportSkip=draft.bookingImportSkip.filter(s=>s!==steps[i]);i++;
  }return steps[i];
 }
-module.exports={createBookingReader,normalizeBooking,stepFields,stepFieldsFor,importedNextStep};
+module.exports={createBookingReader,normalizeBooking,bookingTitle,stepFields,stepFieldsFor,importedNextStep};
