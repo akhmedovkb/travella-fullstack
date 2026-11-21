@@ -46,7 +46,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   rows.push([['⬅️ К проверке','review'],['✖️ Отменить','cancel']]);
   return ctx.reply(`✏️ ${labels[field]||compactFields[field]?.label}\n\nСейчас: ${display(s.draft[field],field)}\n\n${hint}\n${compact&&s.completing?'Затем перейдём к следующему недостающему полю.':'После изменения вернёмся к сводке.'}`,keyboard(s.token,rows));
  }
- async function applyField(ctx,s,text){try{const value=compactFields[s.field]?validateCompact(s.field,text,s.draft):validateEdit(s.field,text,s.draft);setField(s,s.field,value);s.stage='review';delete s.previewConfirmed;delete s.field;if(compact&&s.completing)return accept(ctx,s);return showReview(ctx,s);}catch(e){return ctx.reply(e.message);}}
+ async function applyField(ctx,s,text){try{const before={...s.draft};const value=compactFields[s.field]?validateCompact(s.field,text,s.draft):validateEdit(s.field,text,s.draft);setField(s,s.field,value);if(compact)s.changeLines=changes(before,s.draft);s.stage='review';delete s.previewConfirmed;delete s.field;if(compact&&s.completing)return accept(ctx,s);return showReview(ctx,s);}catch(e){return ctx.reply(e.message);}}
  async function accept(ctx,s){
   if(compact&&s.files.some(f=>!f.processed))return ctx.reply('Сначала распознайте добавленные скриншоты.',keyboard(s.token,[[['🔎 Распознать','read']]]));
   if(s.conflicts.length)return showConflicts(ctx,s);
@@ -88,7 +88,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(file){
    if(file.size>6*1024*1024)return ctx.reply('Пришлите изображение до 6 МБ.');
    if(!s||s.expires<=now())s=session(ctx);
-   if(compact&&s.stage==='replacefile'){const i=s.replaceIndex;if(!s.files[i])return ctx.reply('Скриншот уже удалён. Откройте список заново.');s.files[i]=file;delete s.replaceIndex;rebuild(s);s.stage='consent';s.token=randomBytes(8).toString('hex');return showUpload(ctx,s);}
+   if(compact&&s.stage==='replacefile'){const i=s.replaceIndex;if(!s.files[i])return ctx.reply('Скриншот уже удалён. Откройте список заново.');s.sourceChangeBefore={...s.draft};s.files[i]=file;delete s.replaceIndex;rebuild(s);s.stage='consent';s.token=randomBytes(8).toString('hex');return showUpload(ctx,s);}
    if(compact&&s.stage==='publicphoto'){if((s.draft.images||[]).length>=5)return ctx.reply('Можно до 5 фото карточки.');const bytes=await loadImage(ctx,file.id);const image=await require('sharp')(bytes).rotate().resize({width:1600,height:1600,fit:'inside',withoutEnlargement:true}).jpeg({quality:85}).toBuffer();s.draft.images.push('data:image/jpeg;base64,'+image.toString('base64'));delete s.previewConfirmed;s.stage='review';return showReview(ctx,s);}
    if(s.files.some(f=>f.id===file.id))return ctx.reply('Этот скриншот уже добавлен.');
    if(s.files.length>=5)return ctx.reply('Можно до 5 скриншотов одной брони. Начните отдельное создание для другой брони.');
@@ -115,13 +115,13 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(action==='read'&&['consent','review'].includes(s.stage)){
    const last=rates.get(ctx.from.id);if(last&&now()-last<30000)return ctx.reply('Подождите полминуты перед новым распознаванием.');
    rates.set(ctx.from.id,now());if(rates.size>2000)for(const [id,t]of rates)if(now()-t>60000)rates.delete(id);
-   const before={...s.draft};const pending=s.files.filter(f=>!f.processed);if(!pending.length)return showReview(ctx,s);
+   const before={...(s.sourceChangeBefore||s.draft)};const pending=s.files.filter(f=>!f.processed);if(!pending.length)return showReview(ctx,s);
    busy.add(ctx.from.id);s.stage='reading';
    try{
     for(const f of pending){if(active(ctx)!==s)return;await ctx.reply(`🔎 Распознаю скриншот ${s.files.indexOf(f)+1} из ${s.files.length}…`);try{const d=await read(await loadImage(ctx,f.id),s.category);if(active(ctx)!==s)return;mergeRecognition(s,d,s.files.indexOf(f)+1);f.recognition=d;f.processed=true;}catch{await ctx.reply(`Не удалось разобрать скриншот ${s.files.indexOf(f)+1}. Остальные данные сохранятся.`);}}
     if(active(ctx)!==s)return;
     if(!s.draft){s.stage='consent';return ctx.reply('Пришлите более чёткие скриншоты или повторите распознавание.');}
-    s.changeLines=changes(before,s.draft);if(s.conflicts.length)s.changeLines.push('⚠️ Есть различия — выберите правильные значения');s.stage='review';s.token=randomBytes(8).toString('hex');return showReview(ctx,s);
+    s.changeLines=changes(before,s.draft);if(s.files.every(f=>f.processed))delete s.sourceChangeBefore;if(s.conflicts.length)s.changeLines.push('⚠️ Есть различия — выберите правильные значения');s.stage='review';s.token=randomBytes(8).toString('hex');return showReview(ctx,s);
    }finally{busy.delete(ctx.from.id);}
   }
   if(action==='review'&&s.draft){delete s.completing;delete s.previewConfirmed;s.stage='review';delete s.previewConfirmed;delete s.field;return showReview(ctx,s,true);}
@@ -150,7 +150,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
    return ctx.reply(`⚠️ ${labels[c.field]}\n\n`+c.values.map((v,n)=>`${n+1}. ${display(v.value,c.field).slice(0,200)} (скриншот ${v.source})`).join('\n'),keyboard(s.token,[...c.values.map((v,n)=>[[`${n+1}. Выбрать вариант`,`choose_${i}_${n}`],['👁 Посмотреть',`view_${i}_${n}`]]),...(fieldStep?[[['✏️ Ввести вручную','fix_'+fieldStep]]]:[]),[['⬅️ К проверке','review']]]));
   }
   if(action.startsWith('view_')){const [,i,n]=action.split('_'),c=s.conflicts[Number(i)],v=c?.values[Number(n)];if(v)return ctx.reply(`${labels[c.field]} · вариант ${Number(n)+1}\nСкриншот ${v.source}\n\n${display(v.value,c.field).slice(0,3600)}`);return;}
-  if(action.startsWith('choose_')){const [,i,n]=action.split('_'),c=s.conflicts[Number(i)],v=c?.values[Number(n)];if(!v)return;try{const checked=validateEdit(c.field,typeof v.value==='boolean'?(v.value?'да':'нет'):String(v.value),s.draft);setField(s,c.field,checked);return showReview(ctx,s);}catch(e){return ctx.reply(e.message);}}
+  if(action.startsWith('choose_')){const [,i,n]=action.split('_'),c=s.conflicts[Number(i)],v=c?.values[Number(n)];if(!v)return;try{const checked=validateEdit(c.field,typeof v.value==='boolean'?(v.value?'да':'нет'):String(v.value),s.draft);const before={...s.draft};setField(s,c.field,checked);if(compact)s.changeLines=changes(before,s.draft);return showReview(ctx,s);}catch(e){return ctx.reply(e.message);}}
   if(action.startsWith('fix_')){delete s.completing;delete s.previewConfirmed;const step=action.slice(4);const entry=editableBookingSteps(s.draft).find(([st])=>st===step);if(!entry)return;return showField(ctx,s,entry[1]);}
   if(action==='edit'){delete s.completing;delete s.previewConfirmed;return updatePanel(ctx,'✏️ Исправить данные\n\nВыберите поле. После ввода вернёмся к обновлённой сводке.',keyboard(s.token,[...bookingEditRows(s.draft).slice(0,-2),...(compact?[[['💰 Цена поставщика','extra_price'],['💵 Цена клиента','extra_grossPrice']],[['⏳ Срок актуальности','extra_expiration'],['💵 За что цена','extra_priceBasis']]]:[]),...bookingEditRows(s.draft).slice(-2)]));}
   if(action==='duplicate_continue'){s.duplicateAck=s.lastDuplicateSignature;return accept(ctx,s);}
