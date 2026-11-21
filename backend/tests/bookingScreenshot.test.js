@@ -55,3 +55,18 @@ test('authorization, expiry, oversized files and failed recognition cannot accep
  await f.send({photo:[{file_id:'x'}]});f.expire();await f.press('read');assert.equal(f.calls.length,0);
  await f.send({photo:[{file_id:'x'}]});f.state.fail=true;await f.press('read');assert.equal(f.accepted.length,0);assert.match(f.replies.at(-1).text,/Не удалось/);
 });
+
+test('after fixing a recognized field the real wizard returns to earlier missing fields without asking fixed values twice',()=>{
+ const steps=getServiceWizardSteps('refused_tour');
+ const d=normalizeBooking({country:'Вьетнам',fromCity:'Ташкент',toCity:'Фукуок',startDate:'2099-11-25',endDate:'2099-12-02',hotel:'TEST Hotel',accommodation:'DBL',roomCategory:'Standard',food:'BB',flightDetails:'ignored',transferIncluded:true,insuranceIncluded:true});
+ d.flightDetails='HH2233';
+ const {stepFields}=require('../ai/bookingScreenshot');
+ d.bookingImportSkip=Object.entries(stepFields).filter(([s,k])=>s!=='svc_create_tour_hotel'&&d[k]!==undefined).map(([s])=>s);
+ d.bookingImportEditingStep='svc_create_tour_hotel';
+ assert.equal(importedNextStep(d,'svc_create_tour_hotel',steps),'svc_create_tour_hotel');
+ d.hotel='TEST corrected';
+ assert.equal(importedNextStep(d,'svc_create_tour_accommodation',steps),'svc_create_title');
+ d.title='TEST tour';
+ assert.equal(importedNextStep(d,'svc_create_tour_country',steps),'svc_create_tour_visa');
+ assert.equal(d.hotel,'TEST corrected');assert.equal(d.bookingImportEditingStep,undefined);
+});

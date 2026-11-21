@@ -69,7 +69,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
    const step=action.startsWith('fix_')?action.slice(4):s.editStep||null;
    if(step&&!stepFields[step])return;
    if(!s.draft.bookingPartyConfirmed){s.editStep=step;s.stage='party';return ctx.reply('Сколько туристов едет? Количество билетов и DBL не определяют состав группы.\n\nВведите без имён: взрослые + дети + младенцы.\nНапример: 2+0+0 — двое взрослых без детей.',keyboard(token,[[['❌ Отмена','cancel']]]));}
-   const draft={...s.draft,bookingImportSkip:Object.entries(stepFields).filter(([st,k])=>st!==step&&s.draft[k]!==undefined).map(([st])=>st)};
+   const draft={...s.draft,...(step?{bookingImportEditingStep:step}:{}),bookingImportSkip:Object.entries(stepFields).filter(([st,k])=>st!==step&&s.draft[k]!==undefined).map(([st])=>st)};
    delete ctx.session.bookingImport;
    return onAccept(ctx,draft,step);
   }

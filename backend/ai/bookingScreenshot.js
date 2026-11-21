@@ -41,6 +41,17 @@ function createBookingReader({env=process.env,fetchImpl=fetch}={}){return async 
 };}
 const stepFields={svc_create_title:'title',svc_create_tour_country:'country',svc_create_tour_from:'fromCity',svc_create_tour_to:'toCity',svc_create_tour_start:'startDate',svc_create_tour_end:'endDate',svc_create_flight_details:'flightDetails',svc_create_tour_hotel:'hotel',svc_create_tour_accommodation:'accommodation',svc_create_tour_roomcat:'roomCategory',svc_create_tour_food:'food',svc_create_tour_transfer:'transferIncluded',svc_create_tour_insurance:'insuranceIncluded'};
 function importedNextStep(draft,state,steps){
+ const editing=draft?.bookingImportEditingStep;
+ if(editing){
+  if(state===editing){draft.bookingImportEditStarted=true;return state;}
+  if(draft.bookingImportEditStarted){
+   delete draft.bookingImportEditingStep;delete draft.bookingImportEditStarted;
+   const key=stepFields[editing];
+   if(draft[key]!==undefined&&draft[key]!==''&&!draft.bookingImportSkip.includes(editing))draft.bookingImportSkip.push(editing);
+   const missing=steps.find(step=>{const field=stepFields[step];return field&&(draft[field]===undefined||draft[field]==='');});
+   if(missing&&steps.indexOf(missing)<steps.indexOf(state))return missing;
+  }
+ }
  const skip=draft?.bookingImportSkip;
  if(!Array.isArray(skip)||!skip.includes(state)||steps.indexOf(state)<0)return state;
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tashkent',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());
