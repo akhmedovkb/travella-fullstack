@@ -40,15 +40,15 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(field==='food')hint='Укажите RO, BB, HB, FB, AI или UAI.';
   if(field==='accommodation')hint='Укажите SGL, DBL, TRPL или QDRPL.';
   rows.push([['⬅️ К проверке','review'],['✖️ Отменить','cancel']]);
-  return ctx.reply(`✏️ ${labels[field]||compactFields[field]?.label}\n\nСейчас: ${display(s.draft[field],field)}\n\n${hint}\nПосле изменения вернёмся к сводке.`,keyboard(s.token,rows));
+  return ctx.reply(`✏️ ${labels[field]||compactFields[field]?.label}\n\nСейчас: ${display(s.draft[field],field)}\n\n${hint}\n${compact&&s.completing?'Затем перейдём к следующему недостающему полю.':'После изменения вернёмся к сводке.'}`,keyboard(s.token,rows));
  }
- async function applyField(ctx,s,text){try{const value=compactFields[s.field]?validateCompact(s.field,text,s.draft):validateEdit(s.field,text,s.draft);setField(s,s.field,value);s.stage='review';delete s.previewConfirmed;delete s.field;return showReview(ctx,s);}catch(e){return ctx.reply(e.message);}}
+ async function applyField(ctx,s,text){try{const value=compactFields[s.field]?validateCompact(s.field,text,s.draft):validateEdit(s.field,text,s.draft);setField(s,s.field,value);s.stage='review';delete s.previewConfirmed;delete s.field;if(compact&&s.completing)return accept(ctx,s);return showReview(ctx,s);}catch(e){return ctx.reply(e.message);}}
  async function accept(ctx,s){
   if(compact&&s.files.some(f=>!f.processed))return ctx.reply('Сначала распознайте добавленные скриншоты.',keyboard(s.token,[[['🔎 Распознать','read']]]));
   if(s.conflicts.length)return showConflicts(ctx,s);
   if(s.warnings.some(w=>s.draft[w.field]!==undefined))return showReview(ctx,s);
-  if(!s.draft.bookingPartyConfirmed){s.stage='party';return ctx.reply((s.category==='refused_flight'?'👥 Сколько пассажиров летит?':'👥 Сколько гостей едет?')+'\n\nБез имён: взрослые + дети + младенцы.\nНапример: 2+0+0.',keyboard(s.token,[[['⬅️ К проверке','review'],['❌ Отмена','cancel']]]));}
-  if(compact){const missing=requiredMissing(s.draft);if(!s.draft.price)missing.push('price');if(!s.draft.grossPrice)missing.push('grossPrice');if(!Object.hasOwn(s.draft,'expiration'))missing.push('expiration');if(missing.length)return showField(ctx,s,missing[0]);if(s.previewConfirmed!==JSON.stringify(s.draft)){s.previewShown=JSON.stringify(s.draft);s.stage='review';if(s.draft.images?.length&&ctx.replyWithPhoto)await ctx.replyWithPhoto({source:Buffer.from(s.draft.images[0].split(',')[1],'base64')},{caption:'Фото публичной карточки'});return ctx.reply(previewText(s.draft),keyboard(s.token,[[['💾 Сохранить черновик','save']],[['✏️ Изменить','edit'],['⚙️ Условия','options']],[['📷 Фото карточки','publicphoto']],[['⬅️ К сводке','review']]]));}}
+  if(!s.draft.bookingPartyConfirmed){if(compact)s.completing=true;s.stage='party';return ctx.reply((s.category==='refused_flight'?'👥 Сколько пассажиров летит?':'👥 Сколько гостей едет?')+'\n\nБез имён: взрослые + дети + младенцы.\nНапример: 2+0+0.',keyboard(s.token,[[['⬅️ К проверке','review'],['❌ Отмена','cancel']]]));}
+  if(compact){const missing=requiredMissing(s.draft);if(!s.draft.price)missing.push('price');if(!s.draft.grossPrice)missing.push('grossPrice');if(!Object.hasOwn(s.draft,'expiration'))missing.push('expiration');if(missing.length){s.completing=true;return showField(ctx,s,missing[0]);}delete s.completing;if(s.previewConfirmed!==JSON.stringify(s.draft)){s.previewShown=JSON.stringify(s.draft);s.stage='review';if(s.draft.images?.length&&ctx.replyWithPhoto)await ctx.replyWithPhoto({source:Buffer.from(s.draft.images[0].split(',')[1],'base64')},{caption:'Фото публичной карточки'});return ctx.reply(previewText(s.draft),keyboard(s.token,[[['💾 Сохранить черновик','save']],[['✏️ Изменить','edit'],['⚙️ Условия','options']],[['📷 Фото карточки','publicphoto']],[['⬅️ К сводке','review']]]));}}
   let matches;try{matches=await findDuplicates(ctx,s.draft);}catch{return ctx.reply('Не удалось проверить похожие услуги. Данные сохранены в сводке — нажмите подтверждение ещё раз позже.');}
   const signature=duplicateSignature(s.draft,matches);
   if(matches.length&&s.duplicateAck!==signature){
@@ -74,7 +74,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(file&&blocked(ctx))return next();
   if(!await authorize(ctx))return file&&!s?next():ctx.reply('Создание по скриншоту доступно подтверждённым поставщикам.');
   s=active(ctx);
-  if(command||data==='booking:start'){if(compact&&s){s.expires=now()+(compact?30*86400000:15*60000);s.token=randomBytes(8).toString('hex');s.stage=s.draft?'review':'upload';return ctx.reply('💾 У вас есть сохранённое создание. Продолжить?',keyboard(s.token,[[['▶️ Продолжить','resume']],[['Начать заново','restart']]]));}if(ctx.callbackQuery)await ctx.answerCbQuery().catch(()=>{});if(blocked(ctx))return ctx.reply('Сначала завершите текущее редактирование. Черновик не заменён.');return showUpload(ctx,session(ctx));}
+  if(command||data==='booking:start'){if(compact&&s){s.expires=now()+(compact?30*86400000:15*60000);s.token=randomBytes(8).toString('hex');s.resumeStage=s.stage;s.stage=s.draft?'review':'upload';return ctx.reply('💾 У вас есть сохранённое создание. Продолжить?',keyboard(s.token,[[['▶️ Продолжить','resume']],[['Начать заново','restart']]]));}if(ctx.callbackQuery)await ctx.answerCbQuery().catch(()=>{});if(blocked(ctx))return ctx.reply('Сначала завершите текущее редактирование. Черновик не заменён.');return showUpload(ctx,session(ctx));}
   if(data.startsWith('booking:')){
    await ctx.answerCbQuery().catch(()=>{});const token=data.split(':')[2];
    if(!s||token!==s.token||s.expires<=now())return ctx.reply('Эта кнопка устарела. Начните заново: /frombooking');
@@ -95,12 +95,12 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(text&&s.stage==='party'){
    const m=text.trim().match(/^(\d{1,2})\s*\+\s*(\d{1,2})\s*\+\s*(\d{1,2})$/);
    if(!m||+m[1]<1||m.slice(1).reduce((n,v)=>n+Number(v),0)>20)return ctx.reply('Введите состав без имён: взрослые + дети + младенцы. Например: 2+0+0.');
-   Object.assign(s.draft,{adt:+m[1],chd:+m[2],inf:+m[3],bookingPartyConfirmed:true});s.stage='review';return showReview(ctx,s);
+   Object.assign(s.draft,{adt:+m[1],chd:+m[2],inf:+m[3],bookingPartyConfirmed:true});s.stage='review';if(compact)return accept(ctx,s);return showReview(ctx,s);
   }
   if(!data.startsWith('booking:'))return next();
   const action=data.split(':')[1];
   if(action==='restart')return showUpload(ctx,session(ctx));
-  if(action==='resume')return s.draft?showReview(ctx,s):showUpload(ctx,s);
+  if(action==='resume'){if(s.resumeStage==='field'&&s.field){delete s.resumeStage;return showField(ctx,s,s.field);}if(s.resumeStage==='party'){delete s.resumeStage;return accept(ctx,s);}delete s.resumeStage;return s.draft?showReview(ctx,s):showUpload(ctx,s);}
   if(action==='pause')return ctx.reply('💾 Прогресс сохранён. Чтобы продолжить с этого места, нажмите кнопку или отправьте /frombooking.',keyboard(s.token,[[['▶️ Продолжить','resume']]]));
   if(action.startsWith('cat_')&&['upload','consent'].includes(s.stage)){
    const cat=action.slice(4);if(!categoryLabels[cat])return;
@@ -119,13 +119,13 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
     s.stage='review';s.token=randomBytes(8).toString('hex');return showReview(ctx,s);
    }finally{busy.delete(ctx.from.id);}
   }
-  if(action==='review'&&s.draft){delete s.previewConfirmed;s.stage='review';delete s.previewConfirmed;delete s.field;return showReview(ctx,s,true);}
+  if(action==='review'&&s.draft){delete s.completing;delete s.previewConfirmed;s.stage='review';delete s.previewConfirmed;delete s.field;return showReview(ctx,s,true);}
   if(action.startsWith('value_')&&s.stage==='field')return applyField(ctx,s,({value_yes:'да',value_no:'нет',value_one:'в одну сторону',value_round:'туда-обратно',value_unknown:'не знаю'})[action]||'');
   if(compact&&action==='accept'&&s.stage==='consent')return ctx.reply('Сначала распознайте добавленные скриншоты.',keyboard(s.token,[[['🔎 Распознать','read']]]));
   if(s.stage!=='review')return;
   if(action==='publicphoto'&&compact){s.stage='publicphoto';return ctx.reply('Пришлите одно фото для публичной карточки: отель или направление, без документов и персональных данных.',keyboard(s.token,[[['⬅️ К сводке','review']]]));}
   if(action==='save'&&compact){if(s.previewShown!==JSON.stringify(s.draft))return showReview(ctx,s);s.previewConfirmed=s.previewShown;return accept(ctx,s);}
-  if(action==='options'&&compact)return updatePanel(ctx,'⚙️ Дополнительные условия\nЗаполняйте только известное. Неизвестное не означает «не включено». Фото карточки можно добавить после сохранения. Поиск попутчика и гала-ужин доступны там же.',keyboard(s.token,[...Object.entries(compactFields).filter(([,v])=>v.optional&&(s.category!=='refused_flight'||v.flight)).map(([k,v])=>[[v.label,'extra_'+k]]),[['⬅️ К сводке','review']]]));
+  if(action==='options'&&compact){delete s.completing;return updatePanel(ctx,'⚙️ Дополнительные условия\nЗаполняйте только известное. Неизвестное не означает «не включено». Фото карточки можно добавить после сохранения. Поиск попутчика и гала-ужин доступны там же.',keyboard(s.token,[...Object.entries(compactFields).filter(([,v])=>v.optional&&(s.category!=='refused_flight'||v.flight)).map(([k,v])=>[[v.label,'extra_'+k]]),[['⬅️ К сводке','review']]]));}
   if(action.startsWith('extra_')&&compact){const field=action.slice(6);if(compactFields[field])return showField(ctx,s,field);return;}
   if(action.startsWith('update_')&&compact&&onUpdate){if(s.previewConfirmed!==JSON.stringify(s.draft)||requiredMissing(s.draft).length)return showReview(ctx,s);const id=Number(action.slice(7));const matches=await findDuplicates(ctx,s.draft);if(!matches.some(m=>Number(m.id)===id&&m.status==='draft'))return ctx.reply('Этот черновик больше нельзя обновить. Вернитесь к сводке.');if(busy.has(ctx.from.id))return;busy.add(ctx.from.id);try{await onUpdate(ctx,id,s.draft,s.files.filter(f=>f.processed));delete ctx.session.bookingImport;}finally{busy.delete(ctx.from.id);}return;}
   if(action==='add')return ctx.reply('Отправьте следующий скриншот этой же брони. Уже распознанные данные сохранятся.');
@@ -138,8 +138,8 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   }
   if(action.startsWith('view_')){const [,i,n]=action.split('_'),c=s.conflicts[Number(i)],v=c?.values[Number(n)];if(v)return ctx.reply(`${labels[c.field]} · вариант ${Number(n)+1}\nСкриншот ${v.source}\n\n${display(v.value,c.field).slice(0,3600)}`);return;}
   if(action.startsWith('choose_')){const [,i,n]=action.split('_'),c=s.conflicts[Number(i)],v=c?.values[Number(n)];if(!v)return;try{const checked=validateEdit(c.field,typeof v.value==='boolean'?(v.value?'да':'нет'):String(v.value),s.draft);setField(s,c.field,checked);return showReview(ctx,s);}catch(e){return ctx.reply(e.message);}}
-  if(action.startsWith('fix_')){delete s.previewConfirmed;const step=action.slice(4);const entry=editableBookingSteps(s.draft).find(([st])=>st===step);if(!entry)return;return showField(ctx,s,entry[1]);}
-  if(action==='edit'){delete s.previewConfirmed;return updatePanel(ctx,'✏️ Исправить данные\n\nВыберите поле. После ввода вернёмся к обновлённой сводке.',keyboard(s.token,[...bookingEditRows(s.draft).slice(0,-2),...(compact?[[['💰 Цена поставщика','extra_price'],['💵 Цена клиента','extra_grossPrice']],[['⏳ Срок актуальности','extra_expiration']]]:[]),...bookingEditRows(s.draft).slice(-2)]));}
+  if(action.startsWith('fix_')){delete s.completing;delete s.previewConfirmed;const step=action.slice(4);const entry=editableBookingSteps(s.draft).find(([st])=>st===step);if(!entry)return;return showField(ctx,s,entry[1]);}
+  if(action==='edit'){delete s.completing;delete s.previewConfirmed;return updatePanel(ctx,'✏️ Исправить данные\n\nВыберите поле. После ввода вернёмся к обновлённой сводке.',keyboard(s.token,[...bookingEditRows(s.draft).slice(0,-2),...(compact?[[['💰 Цена поставщика','extra_price'],['💵 Цена клиента','extra_grossPrice']],[['⏳ Срок актуальности','extra_expiration']]]:[]),...bookingEditRows(s.draft).slice(-2)]));}
   if(action==='duplicate_continue'){s.duplicateAck=s.lastDuplicateSignature;return accept(ctx,s);}
   if(action==='accept')return accept(ctx,s);
  };
