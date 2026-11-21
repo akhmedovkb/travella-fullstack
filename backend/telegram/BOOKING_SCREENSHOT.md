@@ -55,3 +55,14 @@ One-level undo snapshots import fields, source caches and manual corrections bef
 Duplicate update first loads the current owned editable draft and shows old/new values. Confirmation is bound to the current import fingerprint and a hash of the database row. A changed row triggers a fresh comparison; the updater also checks the version under the row lock.
 
 The existing local proof checker compares labelled hotel, city/route and date values with the service. It returns only whitelisted field/status identifiers, never OCR text or private document values. Complementary screenshots combine, explicit differences remain visible, and missing/unclear facts remain unverified. Differences or unverified fields require a separate manual conditions acknowledgement before the final privacy/attachment confirmation. Service identity is rechecked both before attaching and inside the transaction. This does not establish document authenticity. Failed preview/redaction/attachment offers a guarded retry.
+
+
+## Quick choices, one editor panel and independent bookings
+
+Production offers party presets (one/two adults and a confirmed family selector) while retaining typed ADT+CHD+INF input. Expiry presets use Asia/Tashkent: end of today at 23:59 or exactly 24 hours from the current time. The calendar disables past dates and dates after trip start. Exact expiry date/time appears in review and preview.
+
+The private import stores its canonical text panel message ID. Field prompts, party choices, calendar, progress and review edit that message; deleted/uneditable messages fall back to a fresh panel. Updates are serialized per actor to avoid duplicate panels during albums. Proof images and error notices remain separate when necessary.
+
+Recognition uses high image detail and can return whitelisted independent offers from a single screenshot. Across screenshots, clearly different/disjoint identities trigger a choice. Return and connecting flight legs remain together. Nothing splits automatically: users choose separate drafts or one booking with field conflicts. Split drafts form a persisted queue and are saved one by one only after individual confirmation; commercial fields and party are not copied across offers. Whole multi-booking images are excluded from automatic proof reuse. The source image can be viewed, but each service needs its own cropped confirmation. Queued drafts remain available through /frombooking after proof work or restart.
+
+Usability research is separate from automated checks. A local task/feedback packet is prepared for 3–5 colleagues; no participants are invited or results claimed until participants and delivery are specified by the owner.
