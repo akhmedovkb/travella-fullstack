@@ -10,7 +10,7 @@ async function downloadImage(ctx,id){
 function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReader(),loadImage=downloadImage,now=Date.now}={}){
  const busy=new Set(),rates=new Map();
  const keyboard=(token,rows)=>({reply_markup:{inline_keyboard:rows.map(row=>row.map(([text,action])=>({text,callback_data:`booking:${action}:${token}`})))}});
- const notice='📷 Создать услугу по бронированию\n\nПришлите один скриншот или изображение файлом до 6 МБ. Перед отправкой закройте ФИО, даты рождения, паспорта и контакты туристов.\n\nПо кнопке «Распознать» изображение будет обработано ИИ OpenAI. Оно не станет публичным фото или подтверждением автоматически.\n\nБот покажет данные для проверки и спросит недостающее. Выберите категорию: тур, отель или авиабилет.';
+ const notice='📷 Создать услугу по скриншоту бронирования\n\nПришлите один скриншот или изображение файлом до 6 МБ. Перед отправкой закройте ФИО, даты рождения, паспорта и контакты туристов.\n\nПо кнопке «Распознать» изображение будет обработано ИИ OpenAI. Оно не станет публичным фото или подтверждением автоматически.\n\nБот покажет данные для проверки и спросит недостающее. Выберите категорию: тур, отель или авиабилет.';
  const active=ctx=>ctx.session?.bookingImport;
  const blocked=ctx=>ctx.session?.editingServiceId||ctx.session?.editWiz||ctx.session?.awaitingProofForServiceId||ctx.session?.correctionFlow||ctx.session?.companionFlow||ctx.session?.galaFlow||(ctx.session?.state&&ctx.session.state!=='svc_create_choose_category');
  async function offer(ctx,file,category=active(ctx)?.category||'refused_tour'){
