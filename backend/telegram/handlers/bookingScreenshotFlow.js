@@ -113,6 +113,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(action==='retryphoto'&&compact&&s.photoRetry)return publicPhoto(ctx,s,s.photoRetry);
   if(action.startsWith('retry_')){const f=s.files[Number(action.slice(6))];if(!f?.error)return;delete f.error;s.stage='consent';rates.delete(ctx.from.id);action='read';}
   if(action.startsWith('qualitygo_')){const f=s.files[Number(action.slice(10))];if(!f?.quality?.issues?.length)return;f.qualityAck=true;s.stage='consent';rates.delete(ctx.from.id);action='read';}
+  if(action==='upload'){s.stage='consent';return showUpload(ctx,s);}
   if(action==='restart')return showUpload(ctx,session(ctx));
   if(action==='resume'){if(s.resumeStage==='replacefile'&&s.files[s.replaceIndex]){s.stage='replacefile';return ctx.reply('Пришлите новый скриншот вместо выбранного.',keyboard(s.token,[[['⬅️ К сводке','review']]]));}if(s.resumeStage==='field'&&s.field){delete s.resumeStage;return showField(ctx,s,s.field);}if(s.resumeStage==='party'){delete s.resumeStage;return accept(ctx,s);}delete s.resumeStage;return s.draft?showReview(ctx,s):showUpload(ctx,s);}
   if(action==='pause')return ctx.reply('💾 Прогресс сохранён. Чтобы продолжить с этого места, нажмите кнопку или отправьте /frombooking.',keyboard(s.token,[[['▶️ Продолжить','resume']]]));
@@ -130,7 +131,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
     for(const f of pending){if(active(ctx)!==s)return;const i=s.files.indexOf(f);await ctx.reply(`🔎 Проверяю скриншот ${i+1} из ${s.files.length}…`);try{
      const bytes=await loadImage(ctx,f.id);
      if(inspectQuality&&!f.quality){try{f.quality=await inspectQuality(bytes);}catch{f.quality={issues:['Не удалось оценить читаемость. Проверьте размер и чёткость текста вручную.']};}}
-     if(f.quality?.issues?.length&&!f.qualityAck){s.stage='quality';return ctx.reply(`⚠️ Скриншот ${i+1}: проверьте качество\n\n`+f.quality.issues.join('\n')+'\n\nЛучше заменить изображение. Можно продолжить распознавание текущего.',keyboard(s.token,[[['🔄 Заменить',`replace_${i}`]],[['Распознать текущий',`qualitygo_${i}`]],[['🖼 Все скриншоты','files']]]));}
+     if(f.quality?.issues?.length&&!f.qualityAck){s.stage='quality';return ctx.reply(`⚠️ Скриншот ${i+1}: проверьте качество\n\n`+f.quality.issues.join('\n')+'\n\nЛучше заменить изображение. Можно продолжить распознавание текущего.',keyboard(s.token,[[['🔄 Заменить',`replace_${i}`]],[['Распознать текущий',`qualitygo_${i}`]],[['🖼 Все скриншоты','files']],[['❌ Отмена','cancel']]]));}
      await ctx.reply(`🔎 Распознаю скриншот ${i+1} из ${s.files.length}…`);const d=await read(bytes,s.category);if(active(ctx)!==s)return;if(compact&&!readCheckpoint){checkpoint(s,'распознавание скриншотов');readCheckpoint=true;}mergeRecognition(s,d,i+1);f.recognition=d;f.processed=true;delete f.error;
     }catch(e){f.error=imageError(e);await ctx.reply(`⚠️ Скриншот ${i+1}: ${f.error} Остальные поля сохранены.`,keyboard(s.token,[[['🔄 Повторить',`retry_${i}`],['Заменить',`replace_${i}`]],[['🖼 Все скриншоты','files']]]));}}
 
@@ -141,7 +142,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   }
   if(action==='review'&&s.draft){delete s.completing;delete s.previewConfirmed;s.stage='review';delete s.previewConfirmed;delete s.field;return showReview(ctx,s,true);}
   if(action.startsWith('basis_')&&s.stage==='field'&&s.field==='priceBasis')return applyField(ctx,s,action.slice(6));
-  if(compact&&action==='files')return ctx.reply('🖼 Скриншоты этой брони\nПосмотрите изображение, замените его или уберите. После замены данные пересоберём; ручные правки и цены сохраним.',keyboard(s.token,[...s.files.map((f,i)=>[[`${i+1}. ${f.error?'Ошибка обработки':f.processed?'Распознан':'Ожидает распознавания'}`,`file_${i}`]]),[['⬅️ К сводке','review']]]));
+  if(compact&&action==='files')return ctx.reply('🖼 Скриншоты этой брони\nПосмотрите изображение, замените его или уберите. После замены данные пересоберём; ручные правки и цены сохраним.',keyboard(s.token,[...s.files.map((f,i)=>[[`${i+1}. ${f.error?'Ошибка обработки':f.processed?'Распознан':'Ожидает распознавания'}`,`file_${i}`]]),[['⬅️ Назад',s.draft?'review':'upload']]]));
   if(compact&&action.startsWith('file_')){const i=Number(action.slice(5));if(!s.files[i])return;return ctx.reply(`Скриншот ${i+1}`,keyboard(s.token,[...(s.files[i].error?[[['🔄 Повторить обработку',`retry_${i}`]]]:[]),[['👁 Посмотреть',`sourceview_${i}`]],[['🔄 Заменить',`replace_${i}`],['Убрать',`remove_${i}`]],[['⬅️ Скриншоты','files']]]));}
   if(compact&&action.startsWith('sourceview_')){const f=s.files[Number(action.slice(11))];if(!f)return;return f.kind==='document'?ctx.replyWithDocument(f.id):ctx.replyWithPhoto(f.id);}
   if(compact&&action.startsWith('replace_')){const i=Number(action.slice(8));if(!s.files[i])return;s.replaceIndex=i;s.stage='replacefile';return ctx.reply('Пришлите новый скриншот вместо выбранного.',keyboard(s.token,[[['⬅️ К сводке','review']]]));}
