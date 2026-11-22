@@ -3014,11 +3014,11 @@ function buildDraftDetailText(svc) {
   const d = pickDetails(svc);
   const category = String(svc?.category || "refused_tour").toLowerCase();
   const categoryLabel = CATEGORY_LABELS?.[category] || category || "Услуга";
-  const title = getCanonicalServiceDisplayTitle(svc, { maxLength: 80 }) || "Без названия";
+  const title = require("../utils/bookingFlightDisplay").displayBookingTitle(getCanonicalServiceDisplayTitle(svc, { maxLength: 80 })) || "Без названия";
   const route = [
     firstNonEmptyValue(d.directionFrom, d.fromCity),
     firstNonEmptyValue(d.directionTo, d.toCity, d.city, d.location),
-  ].filter(Boolean).join(" → ");
+  ].filter(Boolean).map(require("../utils/bookingFlightDisplay").displayCity).join(" → ");
   const objectLabel = category === "refused_flight"
     ? firstNonEmptyValue(d.flightDetails, d.flightNumber, d.airline)
     : firstNonEmptyValue(d.hotel, d.hotelName, d.eventName, d.venue, d.location);
