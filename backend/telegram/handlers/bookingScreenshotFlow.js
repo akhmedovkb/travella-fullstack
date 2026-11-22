@@ -1,3 +1,4 @@
+const {sourceIndexes}=require('../../ai/bookingPresentation');
 const {randomBytes,createHash}=require('node:crypto');
 const draftFingerprint=d=>createHash('sha256').update(JSON.stringify(d)).digest('hex');
 const {bookingEditRows,editableBookingSteps}=require('../../ai/bookingScreenshotUi');
@@ -30,7 +31,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
  async function publicPhoto(ctx,s,file){s.photoRetry=file;try{if((s.draft.images||[]).length>=5)return ctx.reply('🖼 Можно добавить до 5 фото карточки.');const bytes=await loadImage(ctx,file.id),image=await require('sharp')(bytes).rotate().resize({width:1600,height:1600,fit:'inside',withoutEnlargement:true}).jpeg({quality:85}).toBuffer();checkpoint(s,'добавление фото карточки');s.draft.images.push('data:image/jpeg;base64,'+image.toString('base64'));delete s.photoRetry;delete s.previewConfirmed;s.stage='review';return showReview(ctx,s);}catch(e){return ctx.reply('🖼 Фото карточки не добавлено. '+imageError(e)+' Заполненные поля сохранены.',keyboard(s.token,[[['🔄 Повторить загрузку','retryphoto']],[['⬅️ К сводке','review']]]));}}
  function showReview(ctx,s,inPlace=false){
   const rows=[];
-  for(const w of s.warnings||[]){const entry=editableBookingSteps(s.draft).find(([,field])=>field===w.field);if(entry&&!rows.flat().some(([,a])=>a==='fix_'+entry[0]))rows.push([['⚠️ Исправить: '+labels[w.field],'fix_'+entry[0]]]);}
+  for(const w of s.warnings||[]){const entry=editableBookingSteps(s.draft).find(([,field])=>field===w.field);if(entry&&!rows.flat().some(([,a])=>a==='fix_'+entry[0]))rows.push([['⚠️ '+labels[w.field],'fix_'+entry[0]],...(sourceIndexes(s,w.field).length?[['🖼 Источник','fieldsource_'+w.field]]:[])]);}
   if(s.conflicts.length)rows.push([['⚠️ Разобрать различия','conflicts']]);
   if(s.warnings.some(w=>s.draft[w.field]!==undefined))rows.push([['✅ Проверил отмеченные данные','ackwarnings']]);
   rows.push([['✅ Подтвердить данные','accept']],[['✏️ Изменить название','fix_svc_create_title'],['✏️ Другие поля','edit']]);
@@ -54,6 +55,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(field==='food'){hint='🍽 Выберите питание. Можно также написать код сообщением.';rows=[[['RO · Без питания','pick_RO'],['BB · Завтраки','pick_BB']],[['HB · Завтрак и ужин','pick_HB'],['FB · Три раза в день','pick_FB']],[['AI · Всё включено','pick_AI'],['UAI · Ультра всё включено','pick_UAI']]];}
   if(field==='accommodation'){hint='🛏 Выберите размещение в номере.';rows=[[['SGL · Одноместное','pick_SGL'],['DBL · Двухместное','pick_DBL']],[['TRPL · Трёхместное','pick_TRPL'],['QDRPL · Четырёхместное','pick_QDRPL']]];}
   if(field.endsWith('Date')&&compact&&!manual)rows.push([['📅 Выбрать в календаре','tripcalendar'],['✍️ Ввести дату','manualdate']]);
+  if(compact&&sourceIndexes(s,field).length)rows.push([['🖼 Посмотреть источник','fieldsource_'+field]]);
   if(compact&&s.undo)rows.push([['↩️ Отменить последнюю правку','undo']]);
   rows.push([['⬅️ К проверке','review'],['✖️ Отменить','cancel']]);
   return render(ctx,s,`${compact?progressText(s.draft)+'\n\n':''}${['price','grossPrice','priceBasis'].includes(field)?'💰 Цены · '+({price:1,grossPrice:2,priceBasis:3}[field])+' из 3\n'+priceSummary(s.draft)+'\n\n':''}${compactFields[field]?.label||(fieldIcons[field]||'✏️')+' '+labels[field]}\n\n📌 Сейчас: ${field==='expiration'?expiryLabel(s.draft[field]):display(s.draft[field],field)}\n\n${hint}\n${s.pricing&&s.pricing!=='priceBasis'?'➡️ Продолжим настройку цен в этом блоке.':compact&&s.completing?'➡️ Затем перейдём к следующему недостающему полю.':'✅ После изменения покажем обновлённую сводку.'}`,keyboard(s.token,rows));
@@ -125,6 +127,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(!data.startsWith('booking:'))return next();
   let action=data.split(':')[1];
   if(action==='noop')return;
+  if(action.startsWith('fieldsource_')&&compact){const field=action.slice(12),indexes=sourceIndexes(s,field);if(!indexes.length)return ctx.reply('🖼 Для этого поля нет скриншота-источника.');for(const i of indexes){const f=s.files[i],caption='🖼 '+labels[field]+' · скриншот '+(i+1)+'\nСравните значение со сводкой. Изображение доступно только в этом личном чате.';if(f.kind==='document')await ctx.replyWithDocument(f.id,{caption});else await ctx.replyWithPhoto(f.id,{caption});}return;}
   if(action==='edit'||action==='partyedit'||action.startsWith('fix_')||action.startsWith('extra_'))delete s.pricing;
   if(action==='prices'&&compact&&s.draft){delete s.completing;s.pricing='price';return showField(ctx,s,'price');}
   if(action==='pick_RO'||action.startsWith('pick_')){const value=action.slice(5),allowed=s.field==='food'?['RO','BB','HB','FB','AI','UAI']:s.field==='accommodation'?['SGL','DBL','TRPL','QDRPL']:[];if(s.stage==='field'&&allowed.includes(value))return applyField(ctx,s,value);return;}
@@ -171,7 +174,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
     if(active(ctx)!==s)return;
     if(!s.draft){s.stage='consent';return ctx.reply('📷 Пришлите более чёткий скриншот или нажмите «🔄 Повторить» у нужного изображения.');}
     if(compact&&bookingGroups(s).length>1&&s.singleBookingAck!==groupSignature(s.files)){s.stage='review';s.token=randomBytes(8).toString('hex');return groupChoice(ctx,s);}
-    s.changeLines=changes(before,s.draft);if(s.files.every(f=>f.processed))delete s.sourceChangeBefore;if(s.conflicts.length)s.changeLines.push('⚠️ Есть различия — выберите правильные значения');s.stage='review';s.token=randomBytes(8).toString('hex');return showReview(ctx,s);
+    s.changeLines=changes(before,s.draft,s.conflicts);if(s.files.every(f=>f.processed))delete s.sourceChangeBefore;s.stage='review';s.token=randomBytes(8).toString('hex');return showReview(ctx,s);
    }finally{busy.delete(ctx.from.id);}
   }
   if(action==='review'&&s.draft){delete s.pricing;delete s.completing;delete s.previewConfirmed;s.stage='review';delete s.previewConfirmed;delete s.field;return showReview(ctx,s,true);}
