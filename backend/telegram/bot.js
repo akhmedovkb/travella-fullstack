@@ -7398,7 +7398,7 @@ async function assertTelegramActorOwnsService(ctx, serviceId, action) {
   return resolved.id;
 }
 
-async function replyProofUploadPrompt(ctx, { serviceId, category, isEditMode = false } = {}) {
+async function replyProofUploadPrompt(ctx, { serviceId, category, isEditMode = false, service } = {}) {
   if (!ctx.session) ctx.session = {};
   if (serviceId) ctx.session.awaitingProofForServiceId = Number(serviceId);
   if (category) ctx.session.awaitingProofForCategory = String(category || "").toLowerCase();
@@ -7406,17 +7406,16 @@ async function replyProofUploadPrompt(ctx, { serviceId, category, isEditMode = f
   const count = (await getProofImagesForService(serviceId)).length;
   await safeReply(
     ctx,
-    `${isEditMode ? "✅ Изменения сохранены." : "✅ Услуга сохранена."}\n\n` +
-      `📎 <b>Подтверждение услуги</b>\n\n` +
-      `🏨 <b>Тур / отель:</b> бронь или ваучер.\n` +
-      `✈️ <b>Билет:</b> билет или подтверждение бронирования.\n` +
-      `💬 <b>Переписка:</b> поставщик подтверждает услугу, даты и цену.\n\n` +
-      `👀 Должны быть видны <b>услуга, даты и бронь / наличие</b>. Цену можно подтвердить отдельным скриншотом переписки.\n\n` +
-      `🔒 Скройте ФИО, паспортные данные, QR-коды и оплату. Файлы видят модераторы; в публичную карточку они не попадут.\n\n` +
-      `❌ Фото отеля и реклама не подходят.\n` +
-      `📄 PDF → скриншот нужной страницы <b>как фото</b>.\n\n` +
-      `${buildDraftProofSummary(ctx, serviceId, count)}\n\n` +
-      `📲 <b>Как отправить:</b> 📎 → фото / скриншот → отправить.\n✅ После первой загрузки нажмите <b>«Отправить на модерацию»</b>.`,
+    `📎 <b>Подтверждение услуги #${escapeHtml(serviceId)}</b>\n\n` +
+      (service?.title ? `📝 ${escapeHtml(service.title)}\n\n` : "") +
+      (category === "refused_flight" ? "✈️ Пришлите билет или скриншот бронирования рейса.\n" : category === "refused_hotel" ? "🏨 Пришлите бронь отеля или ваучер.\n" : "🧳 Пришлите бронь тура или ваучер.\n") +
+      `💬 Подойдёт и переписка с поставщиком.\n\n` +
+      `👀 Должны быть видны услуга, даты и подтверждение брони. Цену можно подтвердить отдельно.\n` +
+      `🔒 Скройте ФИО, документы, QR-коды и оплату. Файлы увидят только модераторы.\n` +
+      `❌ Реклама и фото без подтверждения брони не подходят.\n` +
+      `📄 PDF → скриншот нужной страницы.\n\n` +
+      `📎 Прикреплено: ${count}.\n` +
+      `👇 Нажмите 📎 и отправьте фото / скриншот. Затем — «✅ Отправить на модерацию».`,
     {
       parse_mode: "HTML",
       ...buildProofKeyboard(serviceId, count, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category),
@@ -19734,7 +19733,7 @@ bot.action(/^proof:add_more:(\d+)$/, async (ctx) => {
     ctx.session.awaitingProofForServiceId=serviceId;
     ctx.session.awaitingProofForCategory=svc.category;
     await safeCb(ctx,"📎 Добавьте подтверждение");
-    await replyProofUploadPrompt(ctx,{serviceId,category:svc.category});
+    await replyProofUploadPrompt(ctx,{serviceId,category:svc.category,service:svc});
     try{await bookingProofSources.prompt(ctx,serviceId);}catch{}
   } catch { await safeReply(ctx,"🔄 Не удалось открыть подтверждения. Попробуйте ещё раз."); }
 });
