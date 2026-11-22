@@ -85,7 +85,7 @@ function createBookingSurcharges({ render, keyboard, onDone }) {
       if (text) {
         if (s.feeStep === 'name') { const name = text.trim(); if (!name || name.length > 80) throw Error('✍️ Назовите доплату: от 1 до 80 символов.'); f.name = name; next(s, 'amount'); }
         else if (s.feeStep === 'amount') { f.amount = amount(text); next(s, 'currency'); }
-        else return step(ctx, s);
+        else return ctx.reply('👇 Выберите условие доплаты кнопкой под текущим вопросом. Введённые данные сохранены.');
       } else if (s.feeStep === 'currency' && /^fee_currency_(USD|EUR|UZS)$/.test(action)) { f.currency = action.slice(13); next(s, 'required'); }
       else if (s.feeStep === 'required' && /^fee_required_(yes|no)$/.test(action)) { f.required = action.endsWith('_yes'); next(s, 'basis'); }
       else if (s.feeStep === 'basis' && /^fee_basis_(total|person|room)$/.test(action)) {

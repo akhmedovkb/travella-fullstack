@@ -1,0 +1,5 @@
+const test=require('node:test'),assert=require('node:assert/strict');
+const {createBookingReader}=require('../ai/bookingScreenshot');
+const {imageError}=require('../ai/bookingRecovery');
+test('a corrupt image is rejected before any recognition request',async()=>{let called=false;const read=createBookingReader({env:{OPENAI_API_KEY:'test'},fetchImpl:async()=>{called=true;}});await assert.rejects(read(Buffer.from('not an image'),'refused_hotel'),/INVALID_IMAGE/);assert.equal(called,false);assert.match(imageError(Error('INVALID_IMAGE')),/Пришлите другой скриншот/);});
+test('an image with no booking facts is rejected for every category without creating a title or a draft',async()=>{const sharp=require('sharp'),bytes=await sharp({create:{width:80,height:80,channels:3,background:'blue'}}).png().toBuffer();const read=createBookingReader({env:{OPENAI_API_KEY:'test'},fetchImpl:async()=>({ok:true,json:async()=>({choices:[{finish_reason:'stop',message:{content:JSON.stringify({hotel:null,toCity:null,flights:[],offers:[]})}}]})})});for(const category of ['refused_tour','refused_hotel','refused_flight'])await assert.rejects(read(bytes,category),/UNREADABLE_BOOKING/);});

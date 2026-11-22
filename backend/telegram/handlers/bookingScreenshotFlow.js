@@ -94,6 +94,16 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(compact)draft.bookingCompact=true;
   if(busy.has(ctx.from.id))return;busy.add(ctx.from.id);try{await onAccept(ctx,draft,null);await afterSave(ctx,s);}finally{busy.delete(ctx.from.id);}
  }
+ function inputHint(s){
+  if(s.stage==='field'){if(['price','grossPrice'].includes(s.field))return '💰 Сейчас нужна сумма сообщением. Например: 1000.';if(s.field?.endsWith('Date')||s.field==='expiration')return '📅 Сейчас нужна дата: ДД.ММ.ГГГГ. Или выберите её кнопкой.';if(s.field==='priceBasis'||s.field==='pricePeriod'||compactFields[s.field]?.boolean||s.field==='flightType')return '👇 Сейчас выберите значение кнопкой под текущим вопросом.';return '✍️ Сейчас нужно значение поля «'+(labels[s.field]||compactFields[s.field]?.label||'Данные')+'» — напишите его сообщением.';}
+  if(['party','partychildren'].includes(s.stage))return '👥 Сейчас выберите состав туристов кнопками или напишите, например: 2+0+0.';
+  if(s.stage==='surcharges')return s.feeStep==='amount'?'💰 Сейчас нужна сумма доплаты сообщением. Например: 25.50.':s.feeStep==='name'?'✍️ Напишите название доплаты или выберите шаблон.':'👇 Сейчас выберите условие доплаты кнопкой под текущим вопросом.';
+  if(s.stage==='calendar')return '📅 Выберите дату в календаре или напишите её: ДД.ММ.ГГГГ.';
+  if(s.stage==='publicphoto')return '🖼 Пришлите фото отеля или направления для публичной карточки. Без документов и личных данных.';
+  if(s.stage==='reading')return '⏳ Обрабатываю скриншоты. Дождитесь результата.';
+  if(['upload','consent','replacefile','quality'].includes(s.stage))return '📷 Пришлите скриншот бронирования как фото или изображение JPG, PNG, WebP до 6 МБ. Для PDF сделайте скриншот нужной страницы. После загрузки нажмите «🔎 Распознать».';
+  return '👇 Выберите действие кнопкой в текущей карточке. Для исправления данных нажмите «Другие поля».';
+ }
  const handle=async(ctx,next)=>{
   if(ctx.chat?.type!=='private'||String(ctx.chat.id)!==String(ctx.from?.id))return next();
   const data=String(ctx.callbackQuery?.data||''),text=ctx.message?.text||'',command=/^\/frombooking(?:@\w+)?(?:\s|$)/i.test(text);
@@ -101,8 +111,13 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   const file=p?{id:p.file_id,size:p.file_size,kind:'photo'}:doc&&['image/jpeg','image/png','image/webp'].includes(doc.mime_type)?{id:doc.file_id,size:doc.file_size,kind:'document'}:null;
   let s=active(ctx);
   if(s&&/^\/(?!frombooking(?:@|\s|$))/.test(text)){if(compact)s.stage='paused';else delete ctx.session.bookingImport;return next();}
-  if(s&&doc&&!file)return ctx.reply('📷 Пришлите JPG, PNG или WebP до 6 МБ. Для PDF сделайте скриншот страницы.\n💾 Заполненные поля сохранены.');
-  if(!data.startsWith('booking:')&&!command&&!file&&!(s&&['field','party','partychildren','surcharges'].includes(s.stage)&&text))return next();
+  const ownsInput=s&&s.stage!=='paused'&&!blocked(ctx);
+  if(ownsInput&&/^(?:🏠 Главное меню|🧳 Мои услуги|👤 (?:Мой профиль|Профиль)|🆘 Поддержка)$/.test(text)){s.stage='paused';return next();}
+  const unsupported=doc&&!file||['voice','audio','video','video_note','animation','sticker','contact','location','venue','poll'].some(key=>ctx.message?.[key]);
+  if(ownsInput&&unsupported)return ctx.reply(inputHint(s)+'\n💾 Заполненные поля сохранены.');
+  if(ownsInput&&file&&['field','party','partychildren','surcharges','calendar'].includes(s.stage))return ctx.reply(inputHint(s)+'\n📎 Для добавления скриншота сначала вернитесь к сводке. Данные сохранены.');
+  if(ownsInput&&text&&!command&&!['field','party','partychildren','surcharges','calendar'].includes(s.stage))return ctx.reply(inputHint(s)+'\n💾 Заполненные поля сохранены.');
+  if(!data.startsWith('booking:')&&!command&&!file&&!(s&&['field','party','partychildren','surcharges','calendar'].includes(s.stage)&&text))return next();
   if(file&&blocked(ctx))return next();
   if(!await authorize(ctx))return file&&!s?next():ctx.reply('🔐 Создание по скриншоту доступно после подтверждения аккаунта поставщика.');
   s=active(ctx);
@@ -128,6 +143,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(data.startsWith('booking:nextbooking:')&&s.stage==='queued'){if(blocked(ctx))return ctx.reply('Сначала завершите подтверждение текущей услуги или нажмите «Отменить отправку». Следующий черновик сохранён.');const [next,...rest]=s.queue;if(!next)return;const n={...next,token:randomBytes(8).toString('hex'),expires:now()+30*86400000,stage:'review',queue:rest,panelMessageId:s.panelMessageId};ctx.session.bookingImport=n;return showReview(ctx,n);}
   if(blocked(ctx))return ctx.reply('✏️ Сначала завершите текущее редактирование. Ваш черновик сохранён.');
   if(text&&s.stage==='surcharges')return surchargeFlow.handle(ctx,s,null,text);
+  if(text&&s.stage==='calendar')return applyField(ctx,s,text);
   if(text&&s.stage==='field')return applyField(ctx,s,text);
   if(text&&['party','partychildren'].includes(s.stage)){const m=text.trim().match(/^(\d{1,2})\s*\+\s*(\d{1,2})\s*\+\s*(\d{1,2})$/);if(!m)return ctx.reply('👥 Выберите состав кнопками или напишите, например 2+1+0.');return setParty(ctx,s,{adt:+m[1],chd:+m[2],inf:+m[3]});}
 
@@ -170,7 +186,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(action==='read'&&['consent','review'].includes(s.stage)){
    const last=rates.get(ctx.from.id);if(last&&now()-last<30000)return ctx.reply('⏳ Повторить распознавание можно через 30 секунд. Данные сохранены.');
    rates.set(ctx.from.id,now());if(rates.size>2000)for(const [id,t]of rates)if(now()-t>60000)rates.delete(id);
-   const before={...(s.sourceChangeBefore||s.draft)};const pending=s.files.filter(f=>!f.processed);if(!pending.length)return showReview(ctx,s);
+   const before={...(s.sourceChangeBefore||s.draft)};const pending=s.files.filter(f=>!f.processed);if(!pending.length)return s.draft?showReview(ctx,s):showUpload(ctx,s);
    busy.add(ctx.from.id);s.stage='reading';let readCheckpoint=false;
    try{
     for(const f of pending){if(active(ctx)!==s)return;const i=s.files.indexOf(f);await render(ctx,s,`🔎 Проверяю скриншот ${i+1} из ${s.files.length}…`);try{
