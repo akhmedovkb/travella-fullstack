@@ -3030,19 +3030,13 @@ function buildDraftDetailText(svc) {
   const touristPrice = firstNonEmptyValue(d.grossPrice, svc?.gross_price);
   const currency = firstNonEmptyValue(d.currency, svc?.price_currency, svc?.currency, "USD");
   const created = svc?.created_at ? formatTelegramExpiration(svc.created_at) : "";
-  const { filled, total, checks } = countDraftFilledFields(svc);
-  const bar = buildDraftProgressBar(filled, total);
-
-  const checklist = checks
-    .map((item) => `${item.ok ? "✅" : "▫️"} ${escapeHtml(({ "Цена нетто": "Цена для коллег", "Цена для клиента": "Цена для туристов", "Цена для клиента не ниже нетто": "Цена для туристов не ниже цены для коллег" })[item.label] || item.label)}`)
-    .join("\n");
+  const readinessText = require("../utils/telegramDraftReadiness").draftReadiness(svc);
 
   let html =
     `✏️ <b>Продолжение черновика #R${escapeHtml(svc?.id || "")}</b>\n\n` +
     `📌 <b>${escapeHtml(title)}</b>\n` +
     `🏷 <b>Категория:</b> ${escapeHtml(categoryLabel)}\n` +
-    `📝 <b>Заполнено:</b> ${filled}/${total} полей\n` +
-    `<code>${escapeHtml(bar)}</code>\n`;
+    `${escapeHtml(readinessText)}\n`;
 
   if (route) html += `\n🌍 <b>Маршрут:</b> ${escapeHtml(route)}`;
   if (objectLabel) {
@@ -3063,8 +3057,7 @@ function buildDraftDetailText(svc) {
   if (created) html += `\n🕒 <b>Создан:</b> ${escapeHtml(created)}`;
 
   html +=
-    `\n\n<b>Что уже заполнено:</b>\n${checklist}` +
-    `\n\nНажмите <b>✏️ Продолжить</b>, чтобы открыть пошаговое редактирование прямо в боте.`;
+    `\n\n✏️ Нажмите «Редактировать», чтобы изменить данные.`;
 
   return html;
 }
@@ -3072,7 +3065,8 @@ function buildDraftDetailText(svc) {
 function buildDraftDetailKeyboard(serviceId) {
   return {
     inline_keyboard: [
-      [{ text: "✏️ Продолжить", callback_data: `draft:continue:${serviceId}` }],
+      [{ text: "📎 Добавить подтверждение", callback_data: `proof:add_more:${serviceId}` }],
+      [{ text: "✏️ Редактировать", callback_data: `draft:continue:${serviceId}` }],
       [{ text: "🌐 Открыть в веб", url: `${SITE_URL}/dashboard/services/marketplace?tab=draft&service_id=${serviceId}&from=tg` }],
       [{ text: "🗑 Удалить черновик", callback_data: `svc_delete:${serviceId}` }],
       [{ text: "⬅️ Назад к черновикам", callback_data: "drafts:open" }],
@@ -4408,11 +4402,10 @@ bot.use(require("./handlers/bookingScreenshotFlow").createBookingScreenshotFlow(
   loadUpdate:require("../ai/bookingDraftUpdate").createBookingUpdateReview(pool),
   store:require("./handlers/bookingImportStore").createBookingImportStore(pool),
   onUpdate:async(ctx,id,draft,files,expectedVersion)=>{
-    const updated=await require("../ai/bookingDraftUpdate").createBookingDraftUpdater(pool)(ctx,id,draft,expectedVersion);
+    await require("../ai/bookingDraftUpdate").createBookingDraftUpdater(pool)(ctx,id,draft,expectedVersion);
     if(files.length)await bookingProofSources.prepare(ctx,id,files);
     ctx.session.awaitingProofForServiceId=id;ctx.session.awaitingProofForCategory=draft.category;
-    await ctx.reply(`✅ Черновик #${id} обновлён. Фото и ранее прикреплённые подтверждения сохранены.`,buildProofKeyboard(id,updated.proofCount,draft.category));
-    if(files.length)await bookingProofSources.prompt(ctx,id);
+    ctx.session.lastBookingSavedId=id;
   },
   findDuplicates:findBookingDuplicates,
   authorize: async ctx => (await ensureProviderRole(ctx)) === "provider",
@@ -8978,6 +8971,13 @@ async function finishCreateServiceFromWizard(ctx) {
       catch { await ctx.reply("Услуга сохранена. Исходные скриншоты не удалось подготовить — подтверждения можно загрузить отдельно."); }
     }
     if(!draft.bookingCompact)await finishProviderServiceDraft(ctx, "submitted");
+
+    if(draft.bookingCompact){
+      ctx.session.lastBookingSavedId=createdServiceId;
+      ctx.session.awaitingProofForServiceId=createdServiceId;
+      resetServiceWizard(ctx);
+      return;
+    }
 
     if (proofRequiredCategories.includes(String(category || "").toLowerCase())) {
       ctx.session.awaitingProofForServiceId = createdServiceId;
@@ -19722,16 +19722,21 @@ bot.action(/^proof:submit:(\d+)$/, async (ctx) => {
 });
 
 bot.action(/^proof:add_more:(\d+)$/, async (ctx) => {
-  const serviceId = Number(ctx.match[1]);
-  ctx.session=ctx.session||{};
-  ctx.session.awaitingProofForServiceId=serviceId;
-  const count = serviceId ? (await getProofImagesForService(serviceId)).length : 0;
-  await safeCb(ctx, "Отправьте следующий скриншот сюда в чат");
-  await safeReply(
-    ctx,
-    `📎 Отправьте сюда в чат фото или скриншот брони, ваучера, билета либо переписки с поставщиком. На нём должны быть видны услуга, даты и подтверждение наличия / брони; цену можно подтвердить отдельным скриншотом переписки.\n\nФото отеля и рекламная картинка не подходят. Личные данные туристов, QR-коды и данные оплаты можно закрыть. Для PDF сделайте скриншот страницы.\n\nНажмите 📎 у поля сообщения и отправьте изображение как фото.\n\nСейчас загружено: ${count}. После загрузки нажмите «✅ Отправить на модерацию».`,
-    buildProofKeyboard(serviceId, count, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category)
-  );
+  if(ctx.chat?.type!=="private")return;
+  try {
+    const serviceId=Number(ctx.match[1]);
+    const actorId=getActorId(ctx);
+    if(!actorId||await ensureProviderRole(ctx)!=="provider")return;
+    const {data}=await axios.get(`/api/telegram/provider/${actorId}/services/${serviceId}`);
+    const svc=data?.service||data?.item||data?.data;
+    if(!svc||Number(svc.id)!==serviceId||svc.status!=="draft")return safeReply(ctx,"🔄 Откройте актуальную карточку услуги.");
+    ctx.session=ctx.session||{};
+    ctx.session.awaitingProofForServiceId=serviceId;
+    ctx.session.awaitingProofForCategory=svc.category;
+    await safeCb(ctx,"📎 Добавьте подтверждение");
+    await replyProofUploadPrompt(ctx,{serviceId,category:svc.category});
+    try{await bookingProofSources.prompt(ctx,serviceId);}catch{}
+  } catch { await safeReply(ctx,"🔄 Не удалось открыть подтверждения. Попробуйте ещё раз."); }
 });
 
 

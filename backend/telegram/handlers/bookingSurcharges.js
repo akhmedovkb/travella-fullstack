@@ -6,6 +6,9 @@ const templates = {
   transfer: { name: 'Трансфер', label: '🚐 Трансфер', categories: ['refused_tour', 'refused_hotel'] },
   gala: { name: 'Гала-ужин', label: '🎉 Гала-ужин', categories: ['refused_tour', 'refused_hotel'] },
 };
+templates.seat = { name: 'Выбор места', label: '💺 Выбор места', categories: ['refused_flight'] };
+templates.reissue = { name: 'Переоформление', label: '📝 Переоформление', categories: ['refused_flight'] };
+templates.service = { name: 'Сервисный сбор', label: '🧾 Сервисный сбор', categories: ['refused_flight'] };
 const fields = { name: '✍️ Название', amount: '💰 Сумма', currency: '💱 Валюта', required: '📌 Обязательность', basis: '👥 За кого', period: '⏱ Как часто' };
 function createBookingSurcharges({ render, keyboard, onDone }) {
   const editing = s => Number.isInteger(s.feeEditIndex);
@@ -21,7 +24,7 @@ function createBookingSurcharges({ render, keyboard, onDone }) {
     s.stage = 'surcharges'; delete s.field; clear(s);
     const list = s.draft.surcharges || [];
     const delta = (s.changeLines || []).filter(x => x.startsWith('🧮 Итог:')).join('\n');
-    return render(ctx, s, '➕ Доплаты сверх основной цены\n\n📝 Добавьте все известные сборы.\n🎉 Гала-ужин уже указан отдельно? Не добавляйте повторно.\n\n' + list.map((f, i) => (i + 1) + '. ' + feeText(f)).join('\n') + (delta ? '\n\n' + delta : '') + '\n\n👇 Измените доплату или добавьте новую.', keyboard(s.token, [
+    return render(ctx, s, '➕ Доплаты сверх основной цены\n\n📝 Добавьте все известные сборы.' + (s.category === 'refused_flight' ? '\n✈️ Например: багаж, выбор места или переоформление.' : '\n🎉 Гала-ужин уже указан отдельно? Не добавляйте повторно.') + '\n\n' + list.map((f, i) => (i + 1) + '. ' + feeText(f)).join('\n') + (delta ? '\n\n' + delta : '') + '\n\n👇 Измените доплату или добавьте новую.', keyboard(s.token, [
       [['✅ Доплат нет', 'fee_none']], [['➕ Добавить доплату', 'fee_add']], [['❔ Нужно уточнить', 'fee_unknown']],
       ...(list.length ? [[['✅ Все доплаты указаны', 'fee_done']], ...list.map((f, i) => [['✏️ Изменить ' + (i + 1), 'fee_edit_' + i], ['🗑 Убрать ' + (i + 1), 'fee_remove_' + i]])] : []),
       [['⬅️ К сводке', 'review']],
