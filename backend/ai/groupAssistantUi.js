@@ -34,7 +34,7 @@ function renderSearchUi(ui, now = Date.now()) {
   let text, rows;
   if (ui.awaiting) return { text: '✍️ Свой вариант\n\n' + inputPrompt(ui.awaiting) + '\n\nОтветьте на отдельное сообщение ниже.', rows: nav };
   if (ui.step === 'home') return { text: '✈️ Найдём подходящий тур\n\nВыберите, что ищете, или ответьте на это сообщение пожеланиями.\nНапример: «На двоих, на выходные, до 1000 $».', rows: [[b('🔎 Подобрать тур','tour')], [b('👥 Найти попутчика','companion'),b('🏨 Найти отель','hotel')], [b('💡 Примеры запросов','examples')]] };
-  if (ui.step === 'results') return { text: 'Подбор завершён. Можно начать новый поиск.', rows: [[b('✏️ Изменить условия','edit'),b('🔄 Новый поиск','home')]] };
+  if (ui.step === 'results') return { text: 'Подбор завершён. Можно начать новый поиск.', rows: [[b('✏️ Изменить условия','edit'),b('🔄 Новый поиск','home')],[b('✕ Закрыть подбор','close')]] };
   if (ui.step === 'examples') return { text: '💡 Можно написать по-своему\n\n«Ташкент — Дубай, декабрь, до 1000 USD за человека»\n«На завтра–послезавтра, на двоих, до 1000 $ на всех»\n«Нужна попутчица в Турцию»\n\nПонимаю опечатки, русский и узбекский.', rows: [[b('✍️ Написать запрос','custom_full')], [b('← К выбору','home')]] };
   if (ui.step === 'edit') return { text: 'Что изменить?\n\n' + selections(f), rows: [[b('🌍 Направление','edit_destination'),b('📅 Даты','edit_dates')], [b('👤 Туристы','edit_guests'),b('💰 Бюджет','edit_budget')], ...(f.category !== 'refused_hotel' ? [[b('✈️ Откуда','edit_origin')]] : []), ...(f.companion ? [[b('👥 Кого ищем','edit_gender')]] : []), [b('← К сводке','review')]] };
   if (ui.step === 'review') {

@@ -34,7 +34,7 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
     const origin=state.origin;
     if(!origin || !state.results?.ids?.length)throw new Error('NO_SHARE_RESULTS');
     if(!await store.enabled(origin.groupId)||!await member(ctx,origin,true))return {sent:false,text:'Не удалось подтвердить доступ к исходной группе. Ничего не опубликовано.'};
-    const latest=(await search(state.results.filters)).filter(offer=>state.results.ids.includes(offer.id));
+    const latest=(await search(state.results.filters)).filter(offer=>state.results.ids.includes(offer.id)).slice(0,5);
     if(!latest.length)return {sent:false,text:'Эти предложения уже не соответствуют поиску. Ничего не опубликовано — обновите подбор.'};
     const token=await handoffs.create({groupId:origin.groupId,topicId:origin.topicId,title:origin.title});
     const extra=offerButtons(latest,state.results.language);
@@ -77,7 +77,7 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
         if(!origin||!await store.enabled(origin.groupId)||!await member(ctx,origin))return ctx.reply('Ссылка недоступна или предназначена автору запроса. Откройте новую кнопку подбора в группе.');
         if(origins.size>=1000&&!origins.has(id))return ctx.reply('Сейчас много запросов. Попробуйте позже.');
         const entry={origin,expires:now()+15*60000,revision:randomBytes(6).toString('hex')};origins.set(id,entry);
-        ctx.__travellaAssistantPrivate={origin,isCurrent:()=>origins.get(id)===entry};
+        ctx.__travellaAssistantPrivate={origin,isCurrent:()=>origins.get(id)===entry,onClose:()=>{if(origins.get(id)===entry)origins.delete(id);}};
         return await core.openPrivate(ctx,origin.question||'');
       }catch{return ctx.reply('Не удалось открыть подбор. Попробуйте ещё раз кнопкой из группы.');}
     }
@@ -92,7 +92,7 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
       return next();
     }
     entry.expires=now()+15*60000;
-    ctx.__travellaAssistantPrivate={origin:entry.origin,isCurrent:()=>origins.get(id)===entry};
+    ctx.__travellaAssistantPrivate={origin:entry.origin,isCurrent:()=>origins.get(id)===entry,onClose:()=>{if(origins.get(id)===entry)origins.delete(id);}};
     return core(ctx,next);
   };
   middleware.initialize=async()=>{await handoffs.initialize?.();await core.initialize();};

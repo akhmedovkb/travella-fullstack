@@ -37,8 +37,8 @@ test('button journey edits one panel, preserves selections and searches only aft
   assert.equal(f.calls.filter(c=>c.kind==='model').length,0);assert.equal(f.calls.filter(c=>c.kind==='reserve').length,0);
   const search=f.calls.find(c=>c.kind==='search');assert.equal(search.filters.guests,2);assert.equal(search.filters.priceBasis,'total');assert.equal(search.filters.start,'2026-11-21');assert.equal(search.filters.end,'2026-11-22');assert.ok(search.filters.destination.includes('UAE'));
   assert.equal(f.messages.length,1);assert.ok(f.edits.every(e=>e.id===initialId));assert.ok(f.edits.some(e=>/Ищу подходящие/.test(e.text)));
-  assert.match(f.panel.text,/900 USD/);assert.ok(f.panel.options.reply_markup.inline_keyboard.flat().some(b=>b.url?.endsWith('opened=42')));
-  await f.dispatch({data:oldButton});assert.equal(f.calls.filter(c=>c.kind==='search').length,1);
+  assert.match(f.panel.text,/900 USD/);assert.ok(f.panel.options.reply_markup.inline_keyboard.flat().some(b=>b.callback_data?.includes(':offer_42:')));await f.press('offer_42');assert.ok(f.panel.options.reply_markup.inline_keyboard.flat().some(b=>b.url?.endsWith('opened=42')));
+  const searchesBeforeStale=f.calls.filter(c=>c.kind==='search').length;await f.dispatch({data:oldButton});assert.equal(f.calls.filter(c=>c.kind==='search').length,searchesBeforeStale);
   await f.press('ui_home');assert.match(f.panel.text,/Найдём подходящий тур/);
 });
 test('companion and hotel paths show relevant steps and allow unrestricted dates and budget',()=>{

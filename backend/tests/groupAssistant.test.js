@@ -397,3 +397,5 @@ test('nearest dates always cover seven Tashkent calendar days including today ac
   }
  }
 });
+
+test('paged public search returns more than five and exposes only public pricing inputs in details',async()=>{const {searchGroupOffers}=require('../ai/groupAssistantSearch');const rows=Array.from({length:12},(_,i)=>({id:i+1,title:'TEST',category:'refused_hotel',public_price:'125',currency:'USD',price_basis:'unknown',declared_basis:'room',price_period:'night',surcharges_status:'known',surcharges:[{name:'Tax',amount:20,currency:'USD',required:true,basis:'room',period:'once',passport:'PRIVATE'}],details:{startDate:'2099-12-01',endDate:'2099-12-08'},netPrice:105,provider_phone:'PRIVATE'}));const offers=await searchGroupOffers({query:async()=>({rows})},filters);assert.equal(offers.length,12);assert.equal(require('../ai/bookingPricing').calculate(offers[0].pricing).total,895);assert.ok(!JSON.stringify(offers).includes('PRIVATE'));assert.equal(offers[0].pricing.price,undefined);assert.match(formatOffers([offers[0]],'ru'),/за 1 номер за ночь/);});

@@ -1,3 +1,4 @@
+const {resultView}=require('../../ai/groupAssistantResults');
 const { startSearchUi, renderSearchUi, uiAction, uiText, uiIntent, inputPrompt, uiHtml } = require('../../ai/groupAssistantUi');
 const { isTourRequest, isClarification, appendAutoText } = require('../../ai/groupAssistantAuto');
 const { randomBytes } = require('node:crypto');
@@ -41,7 +42,10 @@ function offerDates(start, end) {
 }
 function priceUnit(offer, language) {
   const w = words[language] || words.ru;
-  if (offer.priceBasis === 'person') return w.person;
+  const basis=offer.declaredBasis||offer.priceBasis;const period=offer.pricePeriod==='night'?({ru:' за ночь',uz:' bir kecha uchun',en:' per night'}[language]||' за ночь'):'';
+  if(basis==='room')return ({ru:'за 1 номер',uz:'bir xona uchun',en:'per room'}[language]||'за 1 номер')+period;
+  if(basis==='person')return w.person+period;
+  if(period)return (basis==='total'?w.total:w.unitUnknown)+period;
   if (offer.priceBasis !== 'total') return w.unitUnknown;
   if (offer.guests) return ({ ru: `за ${offer.guests} взрослых`, uz: `${offer.guests} katta kishi uchun`, en: `for ${offer.guests} adults` }[language] || `за ${offer.guests} взрослых`);
   const key = offer.category === 'refused_hotel' ? 'hotel' : ['refused_tour', 'author_tour'].includes(offer.category) ? 'tour' : 'service';
@@ -85,6 +89,19 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
     ...(ctx.message?.message_id ? { reply_parameters: { message_id: ctx.message.message_id, allow_sending_without_reply: true } } : {}),
     ...(topic(ctx) ? { message_thread_id: topic(ctx) } : {}), ...extra,
   });
+  async function showResults(ctx,state,offers,page=0,detailId=null){
+    state.token=randomBytes(8).toString('hex');state.pending=true;
+    const view=resultView(offers,{language:state.results.language,page,detailId,token:state.token,formatOffers});
+    state.results.page=view.page;state.results.ids=view.ids;state.results.detailId=detailId;state.shares=state.shares||{};state.shareKey=view.ids.join(',');state.shareStatus=state.shares[state.shareKey]||null;
+    const rows=view.rows;
+    if(ctx.__travellaAssistantPrivate&&state.origin&&view.ids.length)rows.push([{text:state.shareStatus==='sent'?'✓ Опубликовано в группе':detailId?'📤 Поделиться вариантом в группе':'📤 Поделиться в группе',callback_data:`grp_ai:share:${state.token}`}]);
+    rows.push([{text:'✏️ Изменить условия',callback_data:`grp_ai:ui_edit:${state.token}`},{text:'🔄 Новый поиск',callback_data:`grp_ai:ui_home:${state.token}`}]);
+    rows.push([{text:'✕ Закрыть подбор',callback_data:`grp_ai:ui_close:${state.token}`}]);
+    state.resultMarkup={inline_keyboard:rows};const extra={reply_markup:state.resultMarkup,disable_web_page_preview:true};
+    const text=view.text+(ctx.__travellaAssistantPrivate&&view.ids.length?'\n\n📤 Группа: '+displayText(state.origin?.title||'исходная группа',60):'');
+    if(state.messageId&&ctx.telegram?.editMessageText){try{await ctx.telegram.editMessageText(ctx.chat.id,state.messageId,undefined,text,extra);return;}catch{}}
+    const message=await reply(ctx,text,extra);state.messageId=message?.message_id;
+  }
   function prune() {
     for (const [id, value] of sessions) if (value.expires <= now()) sessions.delete(id);
     for (const [id, value] of autoEntries) if (value.expires <= now()) autoEntries.delete(id);
@@ -297,17 +314,29 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
         let [, action, token] = data.split(':');
         let uiSearch = false;
         if (!state?.pending || state.token !== token || state.messageId !== ctx.callbackQuery.message?.message_id) return ctx.answerCbQuery('Эта кнопка доступна автору запроса в течение 15 минут.').catch(() => {});
+        if(action==='result_noop')return ctx.answerCbQuery('👇 Выберите вариант или страницу.').catch(()=>{});
+        if(action==='results'||/^page_\d{1,2}$/.test(action)||/^offer_\d+$/.test(action)){
+          if(!state.results?.allIds)return ctx.answerCbQuery('🔄 Запустите поиск заново.').catch(()=>{});
+          const detailId=action.startsWith('offer_')?Number(action.slice(6)):null;
+          if(detailId&&!state.results.allIds.includes(detailId))return ctx.answerCbQuery('Этот вариант недоступен.').catch(()=>{});
+          busy.add(sessionKey);
+          try{await ctx.answerCbQuery().catch(()=>{});const fresh=await search(state.results.filters),byId=new Map(fresh.map(o=>[o.id,o]));const offers=state.results.allIds.map(id=>byId.get(id)).filter(Boolean);
+            if(detailId&&!byId.has(detailId)){await reply(ctx,'⏳ Предложение больше недоступно. Выберите другой вариант.');return showResults(ctx,state,offers,state.results.page);}
+            const page=action.startsWith('page_')?Number(action.slice(5)):state.results.page;
+            return await showResults(ctx,state,offers,page,detailId);
+          }catch{return reply(ctx,'🔄 Не удалось обновить варианты. Повторите нажатие чуть позже.');}finally{busy.delete(sessionKey);}
+        }
         if(action==='share'){
           if(!ctx.__travellaAssistantPrivate||!onShare||!state.results?.ids?.length)return ctx.answerCbQuery('Нет результатов для публикации.').catch(()=>{});
           if(state.shareStatus)return ctx.answerCbQuery(state.shareStatus==='sent'?'Подбор уже опубликован.':'Проверьте группу: предыдущая отправка уже выполнялась.').catch(()=>{});
-          busy.add(sessionKey);state.shareStatus='sending';
+          busy.add(sessionKey);state.shareStatus='sending';if(state.shares)state.shares[state.shareKey]='sending';
           try{
             await ctx.answerCbQuery().catch(()=>{});
             const result=await onShare(ctx,state);
-            state.shareStatus=result.sent?'sent':null;
+            state.shareStatus=result.sent?'sent':null;if(state.shares)state.shares[state.shareKey]=state.shareStatus;
             if(result.sent&&state.resultMarkup){for(const row of state.resultMarkup.inline_keyboard)for(const button of row)if(button.callback_data===data)button.text='✓ Опубликовано в группе';await ctx.editMessageReplyMarkup(state.resultMarkup).catch(()=>{});}
             return reply(ctx,result.text);
-          }catch{state.shareStatus='unknown';return reply(ctx,'Не удалось подтвердить отправку. Проверьте исходную группу, прежде чем повторять публикацию.');}
+          }catch{state.shareStatus='unknown';if(state.shares)state.shares[state.shareKey]='unknown';return reply(ctx,'Не удалось подтвердить отправку. Проверьте исходную группу, прежде чем повторять публикацию.');}
           finally{busy.delete(sessionKey);}
         }
         if(action.startsWith('ui_')&&state.ui){
@@ -316,7 +345,7 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
           try{
             await ctx.answerCbQuery().catch(()=>{});
             const result=uiAction(state.ui,action,now());
-            if(result.close){state.pending=false;state.ui=null;sessions.delete(sessionKey);return ctx.editMessageText('Подбор закрыт. Начать заново можно командой /ask.',{reply_markup:{inline_keyboard:[]}}).catch(()=>{});}
+            if(result.close){ctx.__travellaAssistantPrivate?.onClose?.();state.pending=false;state.ui=null;sessions.delete(sessionKey);return ctx.editMessageText('Подбор закрыт. Начать заново можно командой /ask.',{reply_markup:{inline_keyboard:[]}}).catch(()=>{});}
             if(result.search){state.intent=uiIntent(state.ui);action='search';uiSearch=true;continueSearch=true;}
             else{await showUi(ctx,state);if(result.input)await askUiInput(ctx,state);return;}
           }finally{if(!continueSearch)busy.delete(sessionKey);}
@@ -346,18 +375,9 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
           await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
           if(uiSearch||ctx.__travellaAssistantPrivate){
             if(!state.ui){state.ui=startSearchUi(ctx.message?.message_id);state.ui.filters={...state.intent.filters};}
-            const options=offerButtons(offers,state.intent.language);
-            options.reply_markup=options.reply_markup||{inline_keyboard:[]};
-            state.token=randomBytes(8).toString('hex');state.pending=true;state.ui.step='results';
-            state.results={ids:offers.map(offer=>offer.id),filters:structuredClone(state.intent.filters),language:state.intent.language};state.shareStatus=null;
-            if(ctx.__travellaAssistantPrivate&&state.origin&&offers.length)options.reply_markup.inline_keyboard.push([{text:'📤 Поделиться в группе',callback_data:`grp_ai:share:${state.token}`}]);
-            options.reply_markup.inline_keyboard.push([{text:'✏️ Изменить условия',callback_data:`grp_ai:ui_edit:${state.token}`},{text:'🔄 Новый поиск',callback_data:`grp_ai:ui_home:${state.token}`}]);
-            state.resultMarkup=options.reply_markup;
-            const resultText=formatOffers(offers,state.intent.language)+(ctx.__travellaAssistantPrivate&&offers.length?'\n\n📤 Группа для публикации: '+displayText(state.origin?.title||'исходная группа',70):'');
-            if(uiSearch&&ctx.telegram?.editMessageText){
-              try{await ctx.telegram.editMessageText(ctx.chat.id,state.messageId,undefined,resultText,options);return;}catch{}
-            }
-            const message=await reply(ctx,resultText,options);state.messageId=message?.message_id;return;
+            state.ui.step='results';state.shares={};
+            state.results={allIds:offers.slice(0,30).map(offer=>offer.id),ids:[],page:0,filters:structuredClone(state.intent.filters),language:state.intent.language};
+            return await showResults(ctx,state,offers.slice(0,30));
           }
           return reply(ctx, formatOffers(offers, state.intent.language), offerButtons(offers, state.intent.language));
         } finally { busy.delete(sessionKey); }

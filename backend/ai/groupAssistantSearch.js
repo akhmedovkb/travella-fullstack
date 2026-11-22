@@ -41,20 +41,21 @@ function buildSearch(filters) {
     jsonb_build_object('startDate',s.details->>'startDate','endDate',s.details->>'endDate','checkInDate',s.details->>'checkInDate','checkOutDate',s.details->>'checkOutDate',
       'departureFlightDate',s.details->>'departureFlightDate','returnFlightDate',s.details->>'returnFlightDate','expiration',s.details->>'expiration','isActive',s.details->>'isActive') AS details,
     s.details->>'directionFrom' AS origin,s.details->>'directionTo' AS destination,s.details->>'directionCountry' AS country,
-    s.details->>'hotel' AS hotel,s.details->'companion'->>'gender' AS companion_gender,s.details->'companion'->>'room' AS companion_room,
+    s.details->>'pricePeriod' AS price_period,s.details->>'priceBasis' AS declared_basis,s.details->>'surchargesStatus' AS surcharges_status,s.details->'surcharges' AS surcharges,s.details->>'hotel' AS hotel,s.details->>'food' AS food,s.details->>'accommodation' AS accommodation,COALESCE(s.details->>'roomCategory',s.details->>'accommodationCategory') AS room_category,s.details->'companion'->>'gender' AS companion_gender,s.details->'companion'->>'room' AS companion_room,
     s.details->'companion'->>'enabled' AS companion_enabled, s.details->'galaDinner'->>'status' AS gala_status,
     s.details->'galaDinner'->>'adultPrice' AS gala_adult_price,s.details->'galaDinner'->>'currency' AS gala_currency
     FROM services s WHERE ${where.join(' AND ')} ORDER BY s.created_at DESC,s.id DESC LIMIT 30`, args };
 }
+function publicPricing(row){if(!row.price_period&&!row.surcharges_status)return null;if(String(row.currency).toUpperCase()!=='USD')return null;try{const d={category:row.category,grossPrice:Number(row.public_price),priceBasis:row.declared_basis,startDate:row.details?.startDate,endDate:row.details?.endDate,...(row.price_period?{pricePeriod:row.price_period}:{}),...(row.surcharges_status?{surchargesStatus:row.surcharges_status,surcharges:row.surcharges}:{} )};const safe=require('./bookingPricing').normalizePricing(d);return {...safe,category:d.category,grossPrice:d.grossPrice,priceBasis:d.priceBasis,startDate:d.startDate,endDate:d.endDate,...(row.gala_status?{galaDinner:{status:clean(row.gala_status,20),adultPrice:clean(row.gala_adult_price,20),currency:clean(row.gala_currency,3)}}:{})};}catch{return null;}}
 async function searchGroupOffers(pool, filters) {
   const { sql, args } = buildSearch(filters);
   const result = await pool.query(sql, args);
-  return result.rows.filter(row => isServiceActual(row.details, row)).slice(0, 5).map(row => ({
+  return result.rows.filter(row => isServiceActual(row.details, row)).slice(0, 30).map(row => ({
     id: Number(row.id), title: clean(row.title), category: row.category,
-    origin: clean(row.origin, 60), destination: clean(row.destination || row.country, 60), hotel: clean(row.hotel),
+    origin: clean(row.origin, 60), destination: clean(row.destination || row.country, 60), hotel: clean(row.hotel),food:clean(row.food,30),accommodation:clean(row.accommodation,60),roomCategory:clean(row.room_category,100),
     start: clean(row.details?.startDate || row.details?.checkInDate || row.details?.departureFlightDate, 10),
     end: clean(row.details?.endDate || row.details?.checkOutDate || row.details?.returnFlightDate, 10),
-    price: row.public_price === null || row.public_price === undefined ? null : Number(row.public_price), currency: clean(row.currency, 3), priceBasis: row.price_basis, guests: row.adults && !Number(row.children) && !Number(row.infants) ? Number(row.adults) : null,
+    price: row.public_price === null || row.public_price === undefined ? null : Number(row.public_price), currency: clean(row.currency, 3), priceBasis: row.price_basis,declaredBasis:clean(row.declared_basis,10),pricePeriod:clean(row.price_period,10),pricing:publicPricing(row), guests: row.adults && !Number(row.children) && !Number(row.infants) ? Number(row.adults) : null,
     gala: ['mandatory','optional'].includes(row.gala_status) ? { status: row.gala_status, adultPrice: clean(row.gala_adult_price, 20), currency: clean(row.gala_currency, 3) } : null,
     companion: row.companion_enabled === 'true', gender: row.companion_gender, room: row.companion_room,
     url: `https://travella.uz/marketplace?opened=${Number(row.id)}`,
