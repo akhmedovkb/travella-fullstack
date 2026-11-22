@@ -7354,6 +7354,7 @@ function buildDraftProofSummary(ctx, serviceId, count = 0) {
   if (draft.startDate || draft.endDate) lines.push(`📅 ${escapeHtml([draft.startDate, draft.endDate].filter(Boolean).join(" → "))}`);
   if (draft.price) lines.push(`💰 Цена поставщика: ${escapeHtml(draft.price)}`);
   if (draft.grossPrice) lines.push(`💳 Клиенту: ${escapeHtml(draft.grossPrice)}`);
+  if (draft.pricePeriod || draft.surchargesStatus) lines.push(escapeHtml(require('../ai/bookingPricing').pricingText(draft)));
   lines.push(`📎 Подтверждений: <b>${Number(count || 0)}</b>`);
   return lines.join("\n");
 }
