@@ -3020,7 +3020,7 @@ function buildDraftDetailText(svc) {
     firstNonEmptyValue(d.directionTo, d.toCity, d.city, d.location),
   ].filter(Boolean).join(" → ");
   const objectLabel = category === "refused_flight"
-    ? firstNonEmptyValue(d.airline, d.flightNumber, d.flightDetails)
+    ? firstNonEmptyValue(d.flightDetails, d.flightNumber, d.airline)
     : firstNonEmptyValue(d.hotel, d.hotelName, d.eventName, d.venue, d.location);
   const dates = [
     firstNonEmptyValue(d.startDate, d.start_date, d.startFlightDate, d.departureFlightDate, d.eventDate),
@@ -3045,7 +3045,7 @@ function buildDraftDetailText(svc) {
       : category === "refused_event_ticket" || category === "refused_ticket"
         ? "🎫 <b>Мероприятие/локация:</b>"
         : "🏨 <b>Отель/объект:</b>";
-    html += `\n${objectCaption} ${escapeHtml(objectLabel)}`;
+    html += `\n${objectCaption} ${category === "refused_flight" ? "\n" + require("../utils/telegramBookingLabels").bookingLabelHtml(require("../utils/bookingFlightDisplay").formatFlightDetails(objectLabel)) : escapeHtml(objectLabel)}`;
   }
   if (dates) html += `\n🗓 <b>Даты:</b> ${escapeHtml(dates.split(" → ").map(prettyDateTime).join(" → "))}`;
   html += `\n🤝 <b>Цена для коллег:</b> ${colleaguePrice !== "" ? escapeHtml(String(colleaguePrice)) + " " + escapeHtml(currency) : "не указана"} (внутренняя)`;
