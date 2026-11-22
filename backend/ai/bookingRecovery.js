@@ -1,6 +1,6 @@
 const keys=['category','queue','draft','files','manualFields','conflicts','warnings','fieldSources','changeLines','sourceChangeBefore'];
 function checkpoint(s,label){s.undo={label,data:structuredClone(Object.fromEntries(keys.filter(k=>Object.hasOwn(s,k)).map(k=>[k,s[k]]))) };}
 function undo(s){if(!s.undo)return false;const previous=s.undo;for(const key of keys)delete s[key];Object.assign(s,previous.data);for(const key of ['undo','previewShown','previewConfirmed','duplicateAck','checksAck','updatePending','field','replaceIndex'])delete s[key];s.stage=s.draft?'review':'consent';s.changeLines=['↩️ Отменено: '+previous.label];return true;}
-const errors={IMAGE_SIZE:'Изображение больше 6 МБ. Сожмите его или отправьте менее крупный скриншот.',IMAGE_DOWNLOAD:'Не удалось скачать изображение из Telegram. Повторите попытку.',UNREADABLE_BOOKING:'Не удалось прочитать бронь. Пришлите чёткий скриншот с отелем, маршрутом и датами.',AI_UNAVAILABLE:'Обработка временно недоступна. Повторите попытку позже.'};
-function imageError(e){return errors[e?.message]||'Не удалось обработать изображение. Попробуйте ещё раз или замените скриншот.';}
+const errors={IMAGE_SIZE:'📎 Изображение больше 6 МБ. Сожмите его или отправьте менее крупный скриншот.',IMAGE_DOWNLOAD:'⚠️ Не удалось скачать изображение из Telegram. Повторите попытку.',UNREADABLE_BOOKING:'🔎 Не удалось прочитать бронь. Пришлите чёткий скриншот с отелем, маршрутом и датами.',AI_UNAVAILABLE:'⏳ Обработка временно недоступна. Повторите попытку позже.'};
+function imageError(e){return errors[e?.message]||'⚠️ Не удалось обработать изображение. Попробуйте ещё раз или замените скриншот.';}
 module.exports={checkpoint,undo,imageError};

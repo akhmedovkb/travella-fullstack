@@ -7334,7 +7334,7 @@ function buildProofKeyboard(serviceId, count = 0, category = "") {
       { text: "✏️ Редактировать", callback_data: `proof:edit:${Number(serviceId || 0)}:details` },
       { text: "📎 Подтверждение", callback_data: `proof:add_more:${Number(serviceId || 0)}` },
     ]);
-    rows.push([{ text: "👀 Просмотреть proof", callback_data: `proof:view:${Number(serviceId || 0)}` }]);
+    rows.push([{ text: "👀 Посмотреть подтверждения", callback_data: `proof:view:${Number(serviceId || 0)}` }]);
     rows.push([{ text: "🗑 Удалить последнее", callback_data: "proof:delete_last" }]);
     rows.push([{ text: "✅ Отправить на модерацию", callback_data: `proof:submit:${Number(serviceId || 0)}` }]);
   }
@@ -7354,7 +7354,7 @@ function buildDraftProofSummary(ctx, serviceId, count = 0) {
   if (draft.startDate || draft.endDate) lines.push(`📅 ${escapeHtml([draft.startDate, draft.endDate].filter(Boolean).join(" → "))}`);
   if (draft.price) lines.push(`💰 Цена поставщика: ${escapeHtml(draft.price)}`);
   if (draft.grossPrice) lines.push(`💳 Клиенту: ${escapeHtml(draft.grossPrice)}`);
-  lines.push(`📎 Доказательств: <b>${Number(count || 0)}</b>`);
+  lines.push(`📎 Подтверждений: <b>${Number(count || 0)}</b>`);
   return lines.join("\n");
 }
 
@@ -7412,11 +7412,11 @@ async function replyProofUploadPrompt(ctx, { serviceId, category, isEditMode = f
       `• <b>Тур / отель:</b> бронь или ваучер из кабинета туроператора / отеля.\n` +
       `• <b>Авиабилет / мероприятие:</b> билет или подтверждение бронирования.\n` +
       `• <b>Переписка с поставщиком:</b> сообщение, где он подтверждает услугу, даты и цену.\n\n` +
-      `<b>Что должно быть видно:</b> какая это услуга, её даты и подтверждение брони / наличия. Цену покажите на этом же скриншоте или отдельным сообщением поставщика.\n\n` +
+      `🔎 <b>Что должно быть видно:</b> какая это услуга, её даты и подтверждение брони / наличия. Цену покажите на этом же скриншоте или отдельным сообщением поставщика.\n\n` +
       `🔒 ФИО туристов, паспортные данные, QR-коды и данные оплаты можно закрыть. Подтверждение используется для проверки и не добавляется в публичную карточку.\n\n` +
       `❌ Фото отеля, рекламная картинка или ваш текст с ценой не подтверждают наличие услуги. Если документ в PDF — отправьте скриншот нужной страницы <b>как фото</b>.\n\n` +
       `${buildDraftProofSummary(ctx, serviceId, count)}\n\n` +
-      `<b>Как отправить:</b> нажмите 📎 у поля сообщения → выберите фото / скриншот → отправьте. Можно несколько изображений. После первой загрузки появится кнопка <b>«✅ Отправить на модерацию»</b>.`,
+      `📲 <b>Как отправить:</b> нажмите 📎 у поля сообщения → выберите фото / скриншот → отправьте. Можно несколько изображений. После первой загрузки появится кнопка <b>«✅ Отправить на модерацию»</b>.`,
     {
       parse_mode: "HTML",
       ...buildProofKeyboard(serviceId, count, ctx.session?.awaitingProofForCategory || ctx.session?.serviceDraft?.category),
