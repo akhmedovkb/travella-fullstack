@@ -7,8 +7,8 @@ const compactFields={
  pricePeriod:{label:'⏱ Период основной цены',hint:'👇 Выберите, за какой период указаны обе основные цены.'},
  surcharges:{label:'➕ Доплаты'},
  priceBasis:{label:'💵 За что указана цена',hint:'👇 За что указаны обе цены — поставщика и клиента?'},
- price:{label:'💰 Цена поставщика',hint:'💰 Напишите цену поставщика в USD. Например: 1000. Клиенты эту цену не увидят.'},
- grossPrice:{label:'💵 Цена для клиента',hint:'💵 Напишите цену для клиента в USD. Например: 1100. Эту сумму покажем в карточке.'},
+ price:{label:'💰 Цена поставщика',hint:'💰 Цена поставщика в USD. Например: 1000.\n🔒 Клиенты её не увидят.'},
+ grossPrice:{label:'💵 Цена для клиента',hint:'💵 Цена клиента в USD. Например: 1100.\n👀 Покажем её в карточке.'},
  expiration:{label:'⏳ Срок актуальности',hint:'📅 До какого дня можно купить предложение? Напишите ДД.ММ.ГГГГ или «без срока».'},
  transferIncluded:{label:'🚐 Трансфер',optional:true,boolean:true},insuranceIncluded:{label:'🛡 Страховка',optional:true,boolean:true},
  visaIncluded:{label:'🛂 Виза',optional:true,boolean:true},earlyCheckIn:{label:'🕒 Ранний заезд',optional:true,boolean:true},arrivalFastTrack:{label:'⚡ Fast Track',optional:true,boolean:true},
@@ -20,7 +20,7 @@ const compactFields={
 function requiredMissing(d){const fields=stepFieldsFor(d.category);return [...new Set(getServiceCategoryContract(d.category,d).filter(f=>f.required&&f.createStep&&!shouldSkipField(f,d)).map(f=>fields[f.createStep]).filter(k=>{if(!k)return false;if(d[k]===undefined||d[k]===null||d[k]==='')return true;if(k.endsWith('Date')){try{validateEdit(k,d[k],d);}catch{return true;}}return false;}))];}
 function validateCompact(field,text,d){
  const v=String(text).trim();if(field==='pricePeriod')return require('./bookingPricing').validatePeriod(v,d);if(field==='priceBasis'){if(!priceBases[v])throw Error('Выберите: за всех, за человека или за номер.');if(v==='room'&&d.category==='refused_flight')throw Error('Для авиабилета выберите за всех или за человека.');return v;}if(compactFields[field]?.boolean){if(/^(не знаю|unknown)$/i.test(v))return null;if(/^(да|нет)$/i.test(v))return v.toLowerCase()==='да';throw Error('Выберите «Включено», «Не включено» или «Не знаю».');}
- if(['price','grossPrice'].includes(field)){const clean=v.replace(/\s*USD$/i,'').replace(/\s/g,'').replace(',','.');if(!/^\d+(?:\.\d{1,2})?$/.test(clean)||+clean<=0||+clean>10000000)throw Error('💰 Нужна сумма больше нуля в USD. Например: 1100.');if(field==='grossPrice'&&+clean<Number(d.price))throw Error('⚠️ Цена клиента ниже цены поставщика. Проверьте сумму.');if(field==='price'&&d.grossPrice&&+clean>Number(d.grossPrice))throw Error('⚠️ Цена поставщика выше цены клиента. Сначала измените цену клиента.');return +clean;}
+ if(['price','grossPrice'].includes(field)){const clean=v.replace(/\s*USD$/i,'').replace(/\s/g,'').replace(',','.');if(!/^\d+(?:\.\d{1,2})?$/.test(clean)||+clean<=0||+clean>10000000)throw Error('💰 Нужна сумма больше нуля. Например: 1100 USD.');if(field==='grossPrice'&&+clean<Number(d.price))throw Error('⚠️ Цена клиента ниже цены поставщика. Проверьте сумму.');if(field==='price'&&d.grossPrice&&+clean>Number(d.grossPrice))throw Error('⚠️ Цена поставщика выше цены клиента. Сначала измените цену клиента.');return +clean;}
  if(field==='expiration'){if(/^(без срока|нет)$/i.test(v))return null;const day=dateValue(v);const end=new Date(day+'T23:59:00+05:00');if(+end<Date.now())throw Error('📅 Эта дата уже прошла. Выберите будущую дату.');const start=d.startDate||d.departureFlightDate;if(start&&day>start)throw Error('📅 Срок продажи позже начала поездки. Выберите более раннюю дату.');return end.toISOString();}
  return require('./bookingImportReview').validateEdit(field,text,d);
 }

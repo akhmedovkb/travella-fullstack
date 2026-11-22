@@ -29,13 +29,13 @@ function mergeRecognition(s,incoming,source){
  for(const warning of incoming.bookingWarnings||[]){if(s.manualFields.includes(warning.field))continue;if(!s.warnings.some(w=>w.field===warning.field))s.warnings.push(warning);}
  refreshTitle(s);
 }
-function dateValue(text){let v=text.trim();if(/^\d{2}[./]\d{2}[./]\d{4}$/.test(v))v=v.split(/[./]/).reverse().join('-');if(!/^\d{4}-\d{2}-\d{2}$/.test(v))throw Error('Введите дату в формате ДД.ММ.ГГГГ.');const d=new Date(v+'T12:00:00Z');if(!Number.isFinite(+d)||d.toISOString().slice(0,10)!==v)throw Error('Такой даты не существует.');return v;}
+function dateValue(text){let v=text.trim();if(/^\d{2}[./]\d{2}[./]\d{4}$/.test(v))v=v.split(/[./]/).reverse().join('-');if(!/^\d{4}-\d{2}-\d{2}$/.test(v))throw Error('📅 Введите дату: ДД.ММ.ГГГГ.');const d=new Date(v+'T12:00:00Z');if(!Number.isFinite(+d)||d.toISOString().slice(0,10)!==v)throw Error('📅 Такой даты не существует.');return v;}
 function validateEdit(field,text,draft){
- let value=String(text||'').replace(/\s+/g,' ').trim();if(!value)throw Error('Введите значение.');
+ let value=String(text||'').replace(/\s+/g,' ').trim();if(!value)throw Error('✍️ Введите значение.');
  if(dateKeys.includes(field)){
-  value=dateValue(value);const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tashkent',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());if(value<today)throw Error('Дата уже прошла. Укажите будущую дату.');
+  value=dateValue(value);const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tashkent',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());if(value<today)throw Error('📅 Дата уже прошла. Выберите будущую дату.');
  }else if(['transferIncluded','insuranceIncluded'].includes(field)){
-  if(!/^(да|нет|yes|no)$/i.test(value))throw Error('Напишите «да» или «нет».');value=/^(да|yes)$/i.test(value);
+  if(!/^(да|нет|yes|no)$/i.test(value))throw Error('👇 Напишите «да» или «нет».');value=/^(да|yes)$/i.test(value);
  }else if(field==='flightType'){
   if(/^(в одну сторону|one_way|one way|1)$/i.test(value))value='one_way';else if(/^(туда.?обратно|round_trip|round trip|2)$/i.test(value))value='round_trip';else throw Error('Напишите «в одну сторону» или «туда-обратно».');
  }else if(field==='food'){
@@ -44,8 +44,8 @@ function validateEdit(field,text,draft){
   value=value.toUpperCase();if(!['SGL','DBL','TRPL','QDRPL'].includes(value))throw Error('Укажите SGL, DBL, TRPL или QDRPL.');
  }else if(value.length<(field==='flightDetails'?1:2)||value.length>(field==='flightDetails'?2000:200))throw Error('Проверьте длину значения: от 2 до 200 символов.');
  const next={...draft,[field]:value};
- if(next.startDate&&next.endDate&&next.startDate>next.endDate)throw Error('Окончание раньше начала. Сначала исправьте связанную дату.');
- if(next.departureFlightDate&&next.returnFlightDate&&next.flightType!=='one_way'&&next.departureFlightDate>next.returnFlightDate)throw Error('Обратный вылет раньше вылета туда.');
+ if(next.startDate&&next.endDate&&next.startDate>next.endDate)throw Error('⚠️ Окончание раньше начала.\n📅 Сначала исправьте связанную дату.');
+ if(next.departureFlightDate&&next.returnFlightDate&&next.flightType!=='one_way'&&next.departureFlightDate>next.returnFlightDate)throw Error('⚠️ Обратный вылет раньше вылета туда.');
  return value;
 }
 function setField(s,field,value){if(field==='flightDetails')delete s.draft.bookingFlightDates;s.draft[field]=value;s.manualFields=[...new Set([...(s.manualFields||[]),field])];s.conflicts=(s.conflicts||[]).filter(c=>c.field!==field);s.warnings=(s.warnings||[]).filter(w=>w.field!==field);delete s.duplicateAck;refreshTitle(s);}

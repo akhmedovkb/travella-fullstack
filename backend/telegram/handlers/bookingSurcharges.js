@@ -21,7 +21,7 @@ function createBookingSurcharges({ render, keyboard, onDone }) {
     s.stage = 'surcharges'; delete s.field; clear(s);
     const list = s.draft.surcharges || [];
     const delta = (s.changeLines || []).filter(x => x.startsWith('🧮 Итог:')).join('\n');
-    return render(ctx, s, '➕ Доплаты сверх основной цены\n\nУкажите все известные доплаты. Гала-ужин, если он уже заполнен отдельно, повторно не добавляйте.\n' + list.map((f, i) => (i + 1) + '. ' + feeText(f)).join('\n') + (delta ? '\n\n' + delta : '') + '\n\nВыберите доплату для изменения или добавьте новую.', keyboard(s.token, [
+    return render(ctx, s, '➕ Доплаты сверх основной цены\n\n📝 Добавьте все известные сборы.\n🎉 Гала-ужин уже указан отдельно? Не добавляйте повторно.\n\n' + list.map((f, i) => (i + 1) + '. ' + feeText(f)).join('\n') + (delta ? '\n\n' + delta : '') + '\n\n👇 Измените доплату или добавьте новую.', keyboard(s.token, [
       [['✅ Доплат нет', 'fee_none']], [['➕ Добавить доплату', 'fee_add']], [['❔ Нужно уточнить', 'fee_unknown']],
       ...(list.length ? [[['✅ Все доплаты указаны', 'fee_done']], ...list.map((f, i) => [['✏️ Изменить ' + (i + 1), 'fee_edit_' + i], ['🗑 Убрать ' + (i + 1), 'fee_remove_' + i]])] : []),
       [['⬅️ К сводке', 'review']],
@@ -31,7 +31,7 @@ function createBookingSurcharges({ render, keyboard, onDone }) {
     const f = s.feeDraft, rows = []; let text;
     switch (s.feeStep) {
       case 'name':
-        text = '✍️ Как называется доплата?\nВыберите шаблон или напишите своё название — до 80 символов. Шаблон подставит только название.';
+        text = '✍️ Название доплаты\n👇 Выберите шаблон или напишите своё · до 80 символов.\n🧾 Шаблон подставит только название.';
         if (!editing(s)) for (const [key, value] of Object.entries(templates)) if (value.categories.includes(s.category)) rows.push([[value.label, 'fee_template_' + key]]);
         break;
       case 'amount': text = '💰 ' + f.name + '\nНапишите сумму доплаты. Например: 25.50.'; break;
@@ -85,7 +85,7 @@ function createBookingSurcharges({ render, keyboard, onDone }) {
       if (text) {
         if (s.feeStep === 'name') { const name = text.trim(); if (!name || name.length > 80) throw Error('✍️ Назовите доплату: от 1 до 80 символов.'); f.name = name; next(s, 'amount'); }
         else if (s.feeStep === 'amount') { f.amount = amount(text); next(s, 'currency'); }
-        else return ctx.reply('👇 Выберите условие доплаты кнопкой под текущим вопросом. Введённые данные сохранены.');
+        else return ctx.reply('👇 Выберите условие доплаты кнопкой.\n💾 Введённые данные сохранены.');
       } else if (s.feeStep === 'currency' && /^fee_currency_(USD|EUR|UZS)$/.test(action)) { f.currency = action.slice(13); next(s, 'required'); }
       else if (s.feeStep === 'required' && /^fee_required_(yes|no)$/.test(action)) { f.required = action.endsWith('_yes'); next(s, 'basis'); }
       else if (s.feeStep === 'basis' && /^fee_basis_(total|person|room)$/.test(action)) {
@@ -94,7 +94,7 @@ function createBookingSurcharges({ render, keyboard, onDone }) {
         const period = action.slice(11); validateFee({ ...f, period }, s.draft); f.period = period; next(s, 'confirm');
       } else if (['confirm', 'edit'].includes(s.feeStep) && action === 'fee_confirm') {
         const fee = validateFee(f, s.draft), before = structuredClone(s.draft);
-        if (editing(s) && JSON.stringify(s.draft.surcharges?.[s.feeEditIndex]) !== s.feeEditVersion) throw Error('🔄 Доплата изменилась. Откройте её заново из списка.');
+        if (editing(s) && JSON.stringify(s.draft.surcharges?.[s.feeEditIndex]) !== s.feeEditVersion) throw Error('🔄 Доплата изменилась.\n👇 Откройте её заново из списка.');
         checkpoint(s, editing(s) ? 'изменение доплаты' : 'добавление доплаты');
         if (editing(s)) s.draft.surcharges[s.feeEditIndex] = fee; else s.draft.surcharges = [...(s.draft.surcharges || []), fee];
         s.draft.surchargesStatus = 'known'; changed(s, before, editing(s) ? '✏️ Доплата изменена.' : '➕ Доплата добавлена.'); return show(ctx, s);
