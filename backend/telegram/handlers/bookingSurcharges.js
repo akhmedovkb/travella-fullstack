@@ -35,12 +35,12 @@ function createBookingSurcharges({ render, keyboard, onDone }) {
         if (!editing(s)) for (const [key, value] of Object.entries(templates)) if (value.categories.includes(s.category)) rows.push([[value.label, 'fee_template_' + key]]);
         break;
       case 'amount': text = '💰 ' + f.name + '\nНапишите сумму доплаты. Например: 25.50.'; break;
-      case 'currency': text = '💱 В какой валюте указана доплата?'; rows.push([['USD', 'fee_currency_USD'], ['EUR', 'fee_currency_EUR'], ['UZS', 'fee_currency_UZS']]); break;
-      case 'required': text = '📌 Эту доплату нужно платить обязательно?'; rows.push([['✅ Обязательно', 'fee_required_yes'], ['☑️ По желанию', 'fee_required_no']]); break;
-      case 'basis': text = '👥 За кого указана сумма доплаты?'; rows.push([['👥 За всех', 'fee_basis_total'], ['👤 За человека', 'fee_basis_person']], ...(s.category === 'refused_flight' ? [] : [[['🛏 За номер', 'fee_basis_room']]])); break;
-      case 'period': text = '⏱ Как часто платится доплата?'; rows.push([['1️⃣ Однократно', 'fee_period_once']], ...(s.category === 'refused_flight' ? [] : [[['🌙 За каждую ночь', 'fee_period_night']]])); break;
+      case 'currency': text = '💱 Валюта доплаты\n📎 ' + f.name + '\n👇 Выберите валюту.'; rows.push([['USD', 'fee_currency_USD'], ['EUR', 'fee_currency_EUR'], ['UZS', 'fee_currency_UZS']]); break;
+      case 'required': text = '📌 Обязательность\n📎 ' + f.name + '\n👇 Эту доплату нужно платить обязательно?'; rows.push([['✅ Обязательно', 'fee_required_yes'], ['☑️ По желанию', 'fee_required_no']]); break;
+      case 'basis': text = '👥 За кого указана сумма?\n📎 ' + f.name; rows.push([['👥 За всех', 'fee_basis_total'], ['👤 За человека', 'fee_basis_person']], ...(s.category === 'refused_flight' ? [] : [[['🛏 За номер', 'fee_basis_room']]])); break;
+      case 'period': text = '⏱ Как часто платится доплата?\n📎 ' + f.name; rows.push([['1️⃣ Однократно', 'fee_period_once']], ...(s.category === 'refused_flight' ? [] : [[['🌙 За каждую ночь', 'fee_period_night']]])); break;
       default:
-        text = (editing(s) ? '✏️ Изменить доплату ' + (s.feeEditIndex + 1) : '🔎 Проверьте доплату') + '\n\n' + feeText(f);
+        text = (editing(s) ? '✏️ Изменить доплату ' + (s.feeEditIndex + 1) : '🔎 Проверьте доплату') + '\n\n' + feeText(f) + (editing(s) ? '\n\n📝 Правки ещё не применены.\n💾 Нажмите «Сохранить изменения».' : '\n\n👇 Нажмите «Добавить», чтобы сохранить доплату.');
         if (editing(s)) {
           const buttons = Object.entries(fields).map(([key, label]) => [label, 'fee_field_' + key]);
           for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2));
@@ -49,6 +49,8 @@ function createBookingSurcharges({ render, keyboard, onDone }) {
     }
     if (editing(s) && s.feeStep !== 'edit') rows.push([['⬅️ К изменению доплаты', 'fee_editback']]);
     rows.push([['↩️ К доплатам', 'fee_menu']]);
+    const index=['name','amount','currency','required','basis','period'].indexOf(s.feeStep);
+    if(!editing(s)&&index>=0)text='➕ Новая доплата · '+(index+1)+' из 6\n\n'+text;
     return render(ctx, s, text, keyboard(s.token, rows));
   }
   function next(s, value) { s.feeStep = editing(s) ? 'edit' : value; }

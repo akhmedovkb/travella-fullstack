@@ -92,7 +92,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   const fields=stepFieldsFor(s.category);
   const draft={...s.draft,bookingImportVersion:2,bookingDuplicateAcknowledged:signature,bookingSourceFiles:s.files.filter(f=>f.processed&&f.proofEligible!==false).map(f=>({id:f.id,kind:f.kind||'photo'})),bookingImportSkip:Object.entries(fields).filter(([,key])=>s.draft[key]!==undefined&&s.draft[key]!==null&&s.draft[key]!=='').map(([step])=>step)};
   if(compact)draft.bookingCompact=true;
-  if(busy.has(ctx.from.id))return;busy.add(ctx.from.id);try{await onAccept(ctx,draft,null);await afterSave(ctx,s);}finally{busy.delete(ctx.from.id);}
+  if(busy.has(ctx.from.id))return;busy.add(ctx.from.id);s.saving=true;try{await render(ctx,s,'💾 Сохраняю черновик…\n⏳ Дождитесь подтверждения.',{reply_markup:{inline_keyboard:[]}});await onAccept(ctx,draft,null);await afterSave(ctx,s);}finally{delete s.saving;busy.delete(ctx.from.id);}
  }
  function inputHint(s){
   if(s.stage==='field'){if(['price','grossPrice'].includes(s.field))return '💰 Сейчас нужна сумма. Напишите, например: 1000.';if(s.field?.endsWith('Date')||s.field==='expiration')return '📅 Введите дату: ДД.ММ.ГГГГ\n👇 Или выберите кнопкой.';if(s.field==='priceBasis'||s.field==='pricePeriod'||compactFields[s.field]?.boolean||s.field==='flightType')return '👇 Выберите ответ кнопкой под вопросом.';return '✍️ Сейчас нужно значение поля «'+(labels[s.field]||compactFields[s.field]?.label||'Данные')+'» — напишите его сообщением.';}
@@ -110,6 +110,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   const p=ctx.message?.photo?.at(-1),doc=ctx.message?.document;
   const file=p?{id:p.file_id,size:p.file_size,kind:'photo'}:doc&&['image/jpeg','image/png','image/webp'].includes(doc.mime_type)?{id:doc.file_id,size:doc.file_size,kind:'document'}:null;
   let s=active(ctx);
+  if(s?.saving&&busy.has(ctx.from.id)){if(ctx.callbackQuery)await ctx.answerCbQuery('💾 Сохранение выполняется').catch(()=>{});return ctx.reply('💾 Сохраняю черновик. Дождитесь подтверждения.');}
   if(s&&/^\/(?!frombooking(?:@|\s|$))/.test(text)){if(compact)s.stage='paused';else delete ctx.session.bookingImport;return next();}
   const ownsInput=s&&s.stage!=='paused'&&!blocked(ctx);
   if(ownsInput&&/^(?:🏠 Главное меню|🧳 Мои услуги|👤 (?:Мой профиль|Профиль)|🆘 Поддержка)$/.test(text)){s.stage='paused';return next();}
@@ -128,7 +129,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
    if(!s||token!==s.token||s.expires<=now())return ctx.reply('🔄 Эта кнопка устарела. Напишите /frombooking — откроем актуальное создание.');
    if(data.split(':')[1]==='cancel'){delete ctx.session.bookingImport;return ctx.reply('↩️ Распознавание отменено. Вернуться к созданию можно через «Мои услуги».');}
   }
-  if(busy.has(ctx.from.id))return ctx.reply('⏳ Уже обрабатываю изображения. Покажу сводку, как только закончу.');
+  if(busy.has(ctx.from.id))return ctx.reply(s?.saving?'💾 Сохраняю черновик. Дождитесь подтверждения.':'⏳ Обрабатываю скриншоты. Дождитесь сводки.');
   if(file){
    if(file.size>6*1024*1024)return ctx.reply('📷 Изображение больше 6 МБ. Сожмите его или пришлите скриншот меньшего размера.');
    if(!s||s.expires<=now())s=session(ctx);
@@ -222,7 +223,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
    if(s.previewConfirmed!==draftFingerprint(s.draft)||requiredMissing(s.draft).length||checks(s.draft).some(c=>c.hard))return showReview(ctx,s);
    const id=Number(action.split('_')[1]),matches=await findDuplicates(ctx,s.draft);if(!matches.some(m=>Number(m.id)===id&&m.status==='draft'))return ctx.reply('🔄 Этот черновик больше нельзя обновить. Вернитесь к сводке и проверьте актуальную карточку.');
    if(loadUpdate){const current=await loadUpdate(ctx,id,s.draft),p=s.updatePending;if(!action.startsWith('commitupdate_')||!p||p.id!==id||p.version!==current.version||p.draftHash!==draftFingerprint(s.draft)){s.updatePending={id,version:current.version,draftHash:draftFingerprint(s.draft)};return ctx.reply(current.text+(action.startsWith('commitupdate_')?'\n🔄 Карточка изменилась после просмотра. Сравните значения ещё раз.':''),keyboard(s.token,[[['✅ Подтвердить обновление',`commitupdate_${id}`]],[['⬅️ К сводке','review']]]));}}
-   if(busy.has(ctx.from.id))return;busy.add(ctx.from.id);try{await onUpdate(ctx,id,s.draft,s.files.filter(f=>f.processed&&f.proofEligible!==false),s.updatePending?.version);await afterSave(ctx,s);}finally{busy.delete(ctx.from.id);}return;
+   if(busy.has(ctx.from.id))return;busy.add(ctx.from.id);s.saving=true;try{await render(ctx,s,'💾 Обновляю черновик…\n⏳ Дождитесь подтверждения.',{reply_markup:{inline_keyboard:[]}});await onUpdate(ctx,id,s.draft,s.files.filter(f=>f.processed&&f.proofEligible!==false),s.updatePending?.version);await afterSave(ctx,s);}finally{delete s.saving;busy.delete(ctx.from.id);}return;
   }
 
   if(action==='add')return ctx.reply('📎 Пришлите следующий скриншот этой брони. Уже распознанные данные сохранятся.');
@@ -244,7 +245,7 @@ function createBookingScreenshotFlow({authorize,onAccept,read=createBookingReade
   if(!compact||!store||ctx.chat?.type!=='private'||String(ctx.chat.id)!==String(ctx.from?.id))return handle(ctx,next);
   const relevant=String(ctx.callbackQuery?.data||'').startsWith('booking:')||/^\/frombooking(?:@|\s|$)/i.test(ctx.message?.text||'')||ctx.session?.bookingImport;
   if(!relevant)return handle(ctx,next);
-  try{if(!await authorize(ctx))return handle(ctx,next);if(!ctx.session.bookingImport){const saved=await store.load(ctx.from.id);if(saved){if(saved.stage==='reading')saved.stage=saved.draft?'review':'consent';ctx.session.bookingImport=saved;}}try{await handle(ctx,next);}finally{await store.save(ctx.from.id,ctx.session.bookingImport||null);}}catch(e){const s=active(ctx);await ctx.reply(e?.message==='DRAFT_CHANGED'?'Карточка изменилась. Сравните изменения перед обновлением ещё раз.':'🔄 Не удалось завершить действие.\n💾 Заполненные поля сохранены — откройте сводку и попробуйте ещё раз.',s?keyboard(s.token,[[['⬅️ Открыть сводку','review']]]):undefined);}
+  try{if(!await authorize(ctx))return handle(ctx,next);if(!ctx.session.bookingImport){const saved=await store.load(ctx.from.id);if(saved){delete saved.saving;if(saved.stage==='reading')saved.stage=saved.draft?'review':'consent';ctx.session.bookingImport=saved;}}try{await handle(ctx,next);}finally{await store.save(ctx.from.id,ctx.session.bookingImport||null);}}catch(e){const s=active(ctx);await ctx.reply(e?.message==='DRAFT_CHANGED'?'Карточка изменилась. Сравните изменения перед обновлением ещё раз.':'🔄 Не удалось завершить действие.\n💾 Заполненные поля сохранены — откройте сводку и попробуйте ещё раз.',s?keyboard(s.token,[[['⬅️ Открыть сводку','review']]]):undefined);}
  };
 }
 module.exports={createBookingScreenshotFlow};
