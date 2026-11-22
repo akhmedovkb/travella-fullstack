@@ -1,13 +1,9 @@
-const {AIRLINE_CODE_LABELS}=require('./flightDetailsNormalizer');
-const cities={TAS:'Ташкент',MLE:'Мале'};
-const displayCity=value=>cities[String(value||'').trim().toUpperCase()]||value;
-const displayAirline=value=>AIRLINE_CODE_LABELS[value]||value;
-function displayBookingTitle(value){return /^Отказной (?:тур|авиабилет) — /i.test(value||'')?String(value).replace(/\b(?:TAS|MLE)\b/g,displayCity):value;}
+const {displayCity,displayAirline,displayBookingTitle,isPlaceCode}=require('./aviationDirectory');
 function formatFlightDetails(value){
  return String(value||'').split('\n').map(line=>{
   const p=line.split(/\s*·\s*/).map(s=>s.trim());
   const i=p.findIndex(s=>/^\d{4}-\d{2}-\d{2}$/.test(s));
-  if(i<2||!p.slice(i-2,i).every(s=>/^[A-Z]{3}$/.test(s)))return line;
+  if(i<2||!p.slice(i-2,i).every(isPlaceCode))return line;
   const date=new Date(p[i]+'T12:00:00Z');
   if(!Number.isFinite(+date)||date.toISOString().slice(0,10)!==p[i])return line;
   const times=p.slice(i+1).filter(s=>/^\d{2}:\d{2}$/.test(s));

@@ -4,6 +4,7 @@
 // still receives airline + flightNumber with stable keys.
 
 const AIRLINE_CODE_LABELS = {
+  ...require("../data/aviation/directory.json").airlines,
   HY: "Uzbekistan Airways",
   HH: "Qanot Sharq",
   TK: "Turkish Airlines",
