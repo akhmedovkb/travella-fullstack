@@ -3026,14 +3026,15 @@ function buildDraftDetailText(svc) {
     firstNonEmptyValue(d.startDate, d.start_date, d.startFlightDate, d.departureFlightDate, d.eventDate),
     firstNonEmptyValue(d.endDate, d.end_date, d.returnDate, d.returnFlightDate, d.endFlightDate),
   ].filter(Boolean).join(" → ");
-  const price = firstNonEmptyValue(d.grossPrice, d.netPrice, d.price, svc?.price);
+  const colleaguePrice = firstNonEmptyValue(d.netPrice, d.price, svc?.price);
+  const touristPrice = firstNonEmptyValue(d.grossPrice, svc?.gross_price);
   const currency = firstNonEmptyValue(d.currency, svc?.price_currency, svc?.currency, "USD");
-  const created = svc?.created_at ? prettyDateTime(svc.created_at) : "";
+  const created = svc?.created_at ? formatTelegramExpiration(svc.created_at) : "";
   const { filled, total, checks } = countDraftFilledFields(svc);
   const bar = buildDraftProgressBar(filled, total);
 
   const checklist = checks
-    .map((item, idx) => `${idx + 1}️⃣ ${item.ok ? "✅" : "▫️"} ${escapeHtml(item.label)}`)
+    .map((item) => `${item.ok ? "✅" : "▫️"} ${escapeHtml(({ "Цена нетто": "Цена для коллег", "Цена для клиента": "Цена для туристов", "Цена для клиента не ниже нетто": "Цена для туристов не ниже цены для коллег" })[item.label] || item.label)}`)
     .join("\n");
 
   let html =
@@ -3052,8 +3053,13 @@ function buildDraftDetailText(svc) {
         : "🏨 <b>Отель/объект:</b>";
     html += `\n${objectCaption} ${escapeHtml(objectLabel)}`;
   }
-  if (dates) html += `\n🗓 <b>Даты:</b> ${escapeHtml(dates)}`;
-  if (price) html += `\n💰 <b>Цена:</b> ${escapeHtml(String(price))} ${escapeHtml(currency)}`;
+  if (dates) html += `\n🗓 <b>Даты:</b> ${escapeHtml(dates.split(" → ").map(prettyDateTime).join(" → "))}`;
+  html += `\n🤝 <b>Цена для коллег:</b> ${colleaguePrice !== "" ? escapeHtml(String(colleaguePrice)) + " " + escapeHtml(currency) : "не указана"} (внутренняя)`;
+  html += `\n💰 <b>Цена для туристов:</b> ${touristPrice !== "" ? escapeHtml(String(touristPrice)) + " " + escapeHtml(currency) : "не указана"}`;
+  if ((d.pricePeriod || d.surchargesStatus) && String(currency).toUpperCase() === "USD") {
+    html += `\n${escapeHtml(require("../ai/bookingPricing").pricingText({ ...d, category, price: colleaguePrice, grossPrice: touristPrice }))}`;
+  }
+  if (d.expiration) html += `\n⏳ <b>Актуально до:</b> ${escapeHtml(formatTelegramExpiration(d.expiration))}`;
   if (created) html += `\n🕒 <b>Создан:</b> ${escapeHtml(created)}`;
 
   html +=
