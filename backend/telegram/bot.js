@@ -4321,7 +4321,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_price":
       await safeReply(
         ctx,
-        `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
+        `💰 Цена для коллег${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -4329,7 +4329,7 @@ async function promptEditState(ctx, state) {
     case "svc_edit_grossPrice":
       await safeReply(
         ctx,
-        `💳 Цена для клиента${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
+        `💳 Цена для туристов${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`,
         editWizNavKeyboard()
       );
       return;
@@ -6340,8 +6340,8 @@ async function replyProviderDraftResumePrompt(ctx, row) {
     svc_hotel_early_checkin: "Ранний заезд",
     svc_hotel_fast_track: "Fast Track",
   
-    svc_create_price: "Цена поставщика",
-    svc_create_grossPrice: "Цена для клиента",
+    svc_create_price: "Цена для коллег",
+    svc_create_grossPrice: "Цена для туристов",
     svc_create_expiration: "Срок актуальности",
     svc_create_photo: "Фото услуги",
   };
@@ -7352,8 +7352,8 @@ function buildDraftProofSummary(ctx, serviceId, count = 0) {
   const route = [draft.country, draft.fromCity, draft.toCity].filter(Boolean).join(" → ");
   if (route) lines.push(`🌍 ${escapeHtml(route)}`);
   if (draft.startDate || draft.endDate) lines.push(`📅 ${escapeHtml([draft.startDate, draft.endDate].filter(Boolean).join(" → "))}`);
-  if (draft.price) lines.push(`💰 Цена поставщика: ${escapeHtml(draft.price)}`);
-  if (draft.grossPrice) lines.push(`💳 Клиенту: ${escapeHtml(draft.grossPrice)}`);
+  if (draft.price) lines.push(`💰 Цена для коллег: ${escapeHtml(draft.price)}`);
+  if (draft.grossPrice) lines.push(`💳 Для туристов: ${escapeHtml(draft.grossPrice)}`);
   if (draft.pricePeriod || draft.surchargesStatus) lines.push(escapeHtml(require('../ai/bookingPricing').pricingText(draft)));
   lines.push(`📎 Подтверждений: <b>${Number(count || 0)}</b>`);
   return lines.join("\n");
@@ -8070,7 +8070,7 @@ async function validateGrossNotLessThanNet(ctx, netStr, grossStr, backToState) {
   if (net !== null && gross < net) {
     await ctx.reply(
       `⚠️ Цена *ЦЕНА ДЛЯ КЛИЕНТА* не может быть меньше *ЦЕНА ПОСТАВЩИКА*.\n` +
-        `Цена поставщика: *${net}*\nЦена для клиента: *${gross}*\n\nВведите корректную цену для клиента.`,
+        `Цена для коллег: *${net}*\nЦена для туристов: *${gross}*\n\nВведите корректную цену для туристов.`,
       { parse_mode: "Markdown", ...wizNavKeyboard() }
     );
     if (backToState) ctx.session.state = backToState;
@@ -8152,8 +8152,8 @@ function wizardCurrentPreview(ctx, state) {
     svc_hotel_early_checkin: ["Ранний заезд", bool(d.earlyCheckIn)],
     svc_hotel_fast_track: ["Fast Track", bool(d.arrivalFastTrack)],
 
-    svc_create_price: ["Цена поставщика", d.price || d.netPrice],
-    svc_create_grossPrice: ["Цена для клиента", d.grossPrice],
+    svc_create_price: ["Цена для коллег", d.price || d.netPrice],
+    svc_create_grossPrice: ["Цена для туристов", d.grossPrice],
     svc_create_expiration: ["Актуально до", d.expiration],
     svc_create_photo: ["Фото", Array.isArray(d.images) ? `${d.images.length} шт.` : ""],
   };
@@ -8741,7 +8741,7 @@ async function promptWizardState(ctx, state) {
               ? "за билет"
               : "за тур";
       await ctx.reply(
-        `💰 Укажите *цену поставщика* (${label})\nПример: *1130* или *1130 USD*`,
+        `💰 Укажите *цену для коллег* (${label})\nПример: *1130* или *1130 USD*`,
         { parse_mode: "Markdown", ...wizNavKeyboard() }
       );
       return;
@@ -8758,7 +8758,7 @@ async function promptWizardState(ctx, state) {
               ? "за билет"
               : "за тур";
       await ctx.reply(
-        `💳 Укажите *цену для клиента* (${label})\nПример: *1250* или *1250 USD*\n` +
+        `💳 Укажите *цену для туристов* (${label})\nПример: *1250* или *1250 USD*\n` +
           `Или нажмите «⏭ Пропустить» — посчитаю автоматически (+${
             DEFAULT_GROSS_MARKUP_PERCENT || 10
           }%).`,
@@ -8837,7 +8837,7 @@ async function finishCreateServiceFromWizard(ctx) {
     const grossNum = normalizePrice(draft.grossPrice);
     if (grossNum === null && String(draft.grossPrice || "").trim()) {
       await ctx.reply(
-        "😕 Не понял цену для клиента.\nВведите число (например *1250*) или нажмите «⏭ Пропустить».",
+        "😕 Не понял цену для туристов.\nВведите число (например *1250*) или нажмите «⏭ Пропустить».",
         { parse_mode: "Markdown" }
       );
       ctx.session.state = "svc_create_grossPrice";
@@ -8855,7 +8855,7 @@ async function finishCreateServiceFromWizard(ctx) {
       await ctx.reply(
         `⚠️ Цена *ЦЕНА ДЛЯ КЛИЕНТА* не может быть меньше *ЦЕНА ПОСТАВЩИКА*.\n` +
           `Сейчас: поставщик=${priceNum}, клиент=${grossNumFinal}.\n\n` +
-          `Введите цену для клиента заново (например: *1250* или *1250 USD*) ` +
+          `Введите цену для туристов заново (например: *1250* или *1250 USD*) ` +
           `или нажмите «⏭ Пропустить».`,
         { parse_mode: "Markdown" }
       );
@@ -16868,7 +16868,7 @@ async function handleSvcEditWizardText(ctx) {
 
         await go(
           "svc_edit_price",
-          `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          `💰 Цена для коллег${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -17035,7 +17035,7 @@ async function handleSvcEditWizardText(ctx) {
         if (draft.category === "refused_flight") {
           await go(
             "svc_edit_price",
-            `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+            `💰 Цена для коллег${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
           );
           return true;
         }
@@ -17183,7 +17183,7 @@ async function handleSvcEditWizardText(ctx) {
       
         await go(
           "svc_edit_price",
-          `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          `💰 Цена для коллег${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -17416,7 +17416,7 @@ async function handleSvcEditWizardText(ctx) {
         
           await go(
             "svc_edit_price",
-            `💰 Цена поставщика${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+            `💰 Цена для коллег${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.price || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
           );
           return true;
         }
@@ -17436,7 +17436,7 @@ async function handleSvcEditWizardText(ctx) {
 
         await go(
           "svc_edit_grossPrice",
-          `💳 Цена для клиента${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
+          `💳 Цена для туристов${draft.companion?.priceBasis === "per_person" ? " за одного попутчика" : ""} (текущее: ${draft.grossPrice || "(пусто)"}).\nВведите число или нажмите «⏭ Пропустить»:`
         );
         return true;
       }
@@ -17839,7 +17839,7 @@ bot.on("text", async (ctx, next) => {
           const priceWithCur = formatPriceWithCurrency(priceRaw);
 
           if (title) titleLine = `🏷 ${escapeMarkdown(title)}\n`;
-          if (priceWithCur) priceLine = `💳 Цена для клиента: *${escapeMarkdown(priceWithCur)}*\n`;
+          if (priceWithCur) priceLine = `💳 Цена для туристов: *${escapeMarkdown(priceWithCur)}*\n`;
         }
 
         const serviceUrl = SERVICE_URL_TEMPLATE
@@ -17925,7 +17925,7 @@ bot.on("text", async (ctx, next) => {
           const priceWithCur = formatPriceWithCurrency(priceRaw);
       
           if (title) titleLine = `🏷 ${escapeMarkdown(title)}\n`;
-          if (priceWithCur) priceLine = `💳 Цена для клиента: *${escapeMarkdown(priceWithCur)}*\n`;
+          if (priceWithCur) priceLine = `💳 Цена для туристов: *${escapeMarkdown(priceWithCur)}*\n`;
         }
       
         const serviceUrl = SERVICE_URL_TEMPLATE

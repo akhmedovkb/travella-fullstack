@@ -53,7 +53,7 @@ function missingFields(draft){
  const fields=stepFieldsFor(draft.category);const out=[];
  for(const f of getServiceCategoryContract(draft.category,draft))if(f.required&&f.createStep){const key=fields[f.createStep];if(key&&(draft[key]===undefined||draft[key]===''))out.push(labels[key]||f.label);}
  if(!draft.bookingPartyConfirmed)out.push(draft.category==='refused_flight'?'Состав пассажиров':'Состав гостей');
- if(!draft.price)out.push('Цена поставщика');if(!draft.grossPrice)out.push('Цена для клиента');if(!Object.hasOwn(draft,'expiration'))out.push('Срок актуальности');return [...new Set(out)];
+ if(!draft.price)out.push('Цена для коллег');if(!draft.grossPrice)out.push('Цена для туристов');if(!Object.hasOwn(draft,'expiration'))out.push('Срок актуальности');return [...new Set(out)];
 }
 function reviewText(s,categoryLabel,showMissing=true){
  const d=s.draft;const filled=Object.keys(labels).filter(k=>d[k]!==undefined&&d[k]!==null&&d[k]!=='');const lines=filled.map(k=>{const value=display(d[k],k),limit=k==='flightDetails'?280:k==='title'?120:60;return `${s.warnings?.some(w=>w.field===k)?'⚠️':fieldIcons[k]||'📌'} ${labels[k]}: ${value.length>limit?value.slice(0,limit)+'…':value}`;});

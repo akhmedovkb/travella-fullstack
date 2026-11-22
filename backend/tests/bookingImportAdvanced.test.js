@@ -13,7 +13,7 @@ function fixture(){
 test('unreadable fields stay empty while uncertainty uses safe field identifiers only',()=>{
  const d=normalizeBooking({toCity:'Фукуок',hotel:'Hotel',startDate:'2099-12-01',uncertainFields:[{field:'startDate',reason:'unreadable'},{field:'hotel',reason:'partial'},{field:'passport',reason:'unreadable'},{field:'hotel',reason:'PRIVATE TEXT'}]});
  assert.equal(d.startDate,undefined);assert.equal(d.hotel,'Hotel');assert.equal(d.bookingWarnings.length,2);assert.ok(!JSON.stringify(d).includes('PRIVATE TEXT'));
- assert.ok(missingFields(d).includes('Заезд / начало'));assert.ok(missingFields(d).includes('Цена поставщика'));assert.ok(missingFields(d).includes('Срок актуальности'));
+ assert.ok(missingFields(d).includes('Заезд / начало'));assert.ok(missingFields(d).includes('Цена для коллег'));assert.ok(missingFields(d).includes('Срок актуальности'));
 });
 test('complementary screenshots merge but contradictory hotel values require an explicit choice',async()=>{
  const f=fixture();f.state.sources=[{country:'Вьетнам',toCity:'Фукуок',hotel:'TEST A',startDate:'2099-12-01',endDate:'2099-12-08'},{hotel:'TEST B',food:'BB',roomCategory:'Deluxe'}];
