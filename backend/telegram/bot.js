@@ -3057,16 +3057,17 @@ function buildDraftDetailText(svc) {
   if (created) html += `\n🕒 <b>Создан:</b> ${escapeHtml(created)}`;
 
   html +=
-    `\n\n✏️ Нажмите «Редактировать», чтобы изменить данные.`;
+    `\n\n📝 <b>Черновик ещё не опубликован.</b>\n\n${escapeHtml(require("../utils/telegramDraftReadiness").draftNextAction(svc).text)}`;
 
   return html;
 }
 
-function buildDraftDetailKeyboard(serviceId) {
+function buildDraftDetailKeyboard(serviceId, service) {
+  const next = require("../utils/telegramDraftReadiness").draftNextAction(service);
   return {
     inline_keyboard: [
-      [{ text: "📎 Добавить подтверждение", callback_data: `proof:add_more:${serviceId}` }],
-      [{ text: "✏️ Редактировать", callback_data: `draft:continue:${serviceId}` }],
+      [{ text: next.label, callback_data: `${next.action}:${serviceId}` }],
+      ...(next.action === "draft:continue" ? [] : [[{ text: "✏️ Редактировать", callback_data: `draft:continue:${serviceId}` }]]),
       [{ text: "🌐 Открыть в веб", url: `${SITE_URL}/dashboard/services/marketplace?tab=draft&service_id=${serviceId}&from=tg` }],
       [{ text: "🗑 Удалить черновик", callback_data: `svc_delete:${serviceId}` }],
       [{ text: "⬅️ Назад к черновикам", callback_data: "drafts:open" }],
@@ -4742,7 +4743,7 @@ bot.action(/^draft:item:(\d+)$/, async (ctx) => {
     }
 
     const text = buildDraftDetailText(svc);
-    const reply_markup = buildDraftDetailKeyboard(serviceId);
+    const reply_markup = buildDraftDetailKeyboard(serviceId, svc);
 
     try {
       await ctx.editMessageText(text, { parse_mode: "HTML", reply_markup, disable_web_page_preview: true });

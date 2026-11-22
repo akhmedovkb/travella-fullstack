@@ -9,3 +9,5 @@ test('optional fields do not lower readiness and public photos do not count as p
 test('missing required data and expired sale remain visible',()=>{
  const text=draftReadiness({...flight,details:{...flight.details,grossPrice:null,expiration:'2000-01-01'}});assert.match(text,/цена для туристов/);assert.match(text,/Срок продажи истёк/);assert.doesNotMatch(text,/Основные данные заполнены/);
 });
+
+test('next action leads through missing data, proof upload and explicit moderation',()=>{const {draftNextAction}=require('../utils/telegramDraftReadiness');assert.equal(draftNextAction(flight).action,'proof:add_more');assert.match(draftNextAction(flight).text,/После загрузки/);assert.equal(draftNextAction({...flight,details:{...flight.details,grossPrice:null}}).action,'draft:continue');assert.equal(draftNextAction({...flight,details:{...flight.details,proofImages:['proof']}}).action,'proof:submit');assert.equal(draftNextAction({...flight,details:{...flight.details,proofImages:['proof'],expiration:'2000-01-01'}}).action,'draft:continue');});
