@@ -7,7 +7,7 @@ const output=normalizeIntent({kind:'search',language:'ru',filters:{destination:[
 function fixture(extra={}){
  const replies=[],posts=[],calls=[],panels=new Map(),links=new Map();let sequence=0,tokenId=0;
  const state={offers:[{id:42,title:'Отказной тур',category:'refused_tour',origin:'Ташкент',destination:'Вьетнам',start:'2099-12-01',end:'2099-12-10',price:900,currency:'USD',priceBasis:'total',guests:2}],member:true};
- const handoffs={initialize:async()=>{},create:async value=>{const token=String(++tokenId).padStart(48,'0');links.set(token,{...value});return token;},update:async(token,ownerId,question)=>{if(links.get(token)?.ownerId===ownerId)links.get(token).question=question;},get:async(token,actor)=>{const value=links.get(token);return value&&(value.ownerId==null||value.ownerId===actor)?{groupId:value.groupId,topicId:value.topicId,title:value.title,question:value.question}:null;}};
+ const handoffs={initialize:async()=>{},create:async value=>{const token=String(++tokenId).padStart(48,'0');links.set(token,{...value});return token;},update:async(token,ownerId,question)=>{if(links.get(token)?.ownerId===ownerId)links.get(token).question=question;},get:async(token,actor)=>{const value=links.get(token);return value&&(value.ownerId==null||value.ownerId===actor)?{groupId:value.groupId,topicId:value.topicId,title:value.title,question:value.question,intent:value.intent}:null;}};
  const store={initialize:async()=>{},enabled:async()=>true,autoEnabled:async()=>true,reserve:async id=>{calls.push({kind:'quota',id});return true;},activate:async()=>{},setAuto:async()=>{}};
  const options={groupPreview:false,pool:{},handoffs,store,model:{ready:()=>true,interpret:async(text,previous)=>{calls.push({kind:'model',text,previous});return output;}},search:async filters=>{calls.push({kind:'search',filters});return state.offers;}};
  Object.assign(options,extra);
@@ -160,7 +160,7 @@ test('direct group request shows at most three public offers and private continu
  await f.send({text:'ОТКАЗБОТ найди Вьетнам',topic:12});
  const panel=f.panels.get(-100);assert.match(panel.text,/Найдено вариантов: 8/);assert.match(panel.text,/OFFER 3/);assert.doesNotMatch(panel.text,/OFFER 4|SECRET/);
  const buttons=panel.extra.reply_markup.inline_keyboard.flat();assert.equal(buttons.filter(b=>b.url?.includes('marketplace')).length,3);assert.ok(buttons.every(b=>!b.callback_data));assert.equal(panel.extra.message_thread_id,12);
- const link=buttons.at(-1).url;await f.send({chat:7,text:'/start '+new URL(link).searchParams.get('start')});assert.match(f.panels.get(7).text,/Правильно понял/);
+ const link=buttons.at(-1).url;await f.send({chat:7,text:'/start '+new URL(link).searchParams.get('start')});assert.match(f.panels.get(7).text,/Страница 1\/2/);assert.equal(f.calls.filter(c=>c.kind==='model').length,1);
 });
 test('ambiguous and failed group searches fall back to a private link; ordinary messages do not search',async()=>{
  for(const model of [{ready:()=>true,interpret:async()=>({...output,kind:'clarify'})},{ready:()=>true,interpret:async()=>{throw Error('offline');}}]){

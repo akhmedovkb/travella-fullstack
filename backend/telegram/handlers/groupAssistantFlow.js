@@ -409,9 +409,17 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
       return reply(ctx, 'Не удалось обработать запрос. Попробуйте чуть позже.');
     }
   };
-  middleware.openPrivate=async(ctx,question='')=>{
+  middleware.openPrivate=async(ctx,question='',savedIntent=null)=>{
     if(ctx.chat?.type!=='private'||!ctx.__travellaAssistantPrivate)return;
     sessions.delete(key(ctx));autoEntries.delete(key(ctx));
+    if(savedIntent?.kind==='search'){
+      const intent=require('../../ai/groupAssistantModel').normalizeIntent(savedIntent);
+      const offers=await search(intent.filters);
+      if(!ctx.__travellaAssistantPrivate.isCurrent())return;
+      const state={intent,origin:ctx.__travellaAssistantPrivate.origin,expires:now()+15*60000,pending:true,results:{allIds:offers.slice(0,30).map(o=>o.id),ids:[],page:0,filters:structuredClone(intent.filters),language:intent.language}};
+      sessions.set(key(ctx),state);
+      return showResults(ctx,state,offers.slice(0,30));
+    }
     return processQuestion(ctx,question,key(ctx));
   };
   middleware.initialize = async () => {

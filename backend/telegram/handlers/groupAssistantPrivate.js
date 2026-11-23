@@ -35,7 +35,7 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
       if(intent.kind!=='search'||(!intent.filters?.destination?.length&&!intent.filters?.anyDestination))return await entryLink(ctx,question,false,'✏️ Нужно уточнить условия поиска.\n\nПродолжите в личном чате — запрос уже перенесён.');
       const offers=await search(intent.filters);
       if(!await store.enabled(ctx.chat.id))return;
-      const token=await handoffs.create({ownerId:ctx.from.id,groupId:ctx.chat.id,topicId:topic(ctx),title:ctx.chat.title,question});
+      const token=await handoffs.create({ownerId:ctx.from.id,groupId:ctx.chat.id,topicId:topic(ctx),title:ctx.chat.title,question,intent});
       const url=`https://t.me/${username(ctx)}?start=pick_${token}`;
       const count=offers.length,language=intent.language||'ru';
       const heading={ru:`🔎 Найдено вариантов: ${count}${count>3?' · показываю 3':''}`,uz:`🔎 Topildi: ${count}${count>3?' · 3 ta variant':''}`,en:`🔎 Found: ${count}${count>3?' · showing 3':''}`}[language];
@@ -101,7 +101,7 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
         if(origins.size>=1000&&!origins.has(id))return ctx.reply('Сейчас много запросов. Попробуйте позже.');
         const entry={origin,expires:now()+15*60000,revision:randomBytes(6).toString('hex')};origins.set(id,entry);
         ctx.__travellaAssistantPrivate={origin,isCurrent:()=>origins.get(id)===entry,onClose:()=>{if(origins.get(id)===entry)origins.delete(id);}};
-        return await core.openPrivate(ctx,origin.question||'');
+        return await core.openPrivate(ctx,origin.question||'',origin.intent);
       }catch{return ctx.reply('Не удалось открыть подбор. Попробуйте ещё раз кнопкой из группы.');}
     }
     const normalized=text.replace(/[^\p{L}\p{N}\s]/gu,'').trim().toLowerCase();
