@@ -171,3 +171,11 @@ test('ambiguous and failed group searches fall back to a private link; ordinary 
 test('empty group results offer private refinement without invented offers',async()=>{
  const f=fixture({groupPreview:true});f.state.offers=[];await f.send({text:'ОТКАЗБОТ найди Вьетнам'});assert.match(f.panels.get(-100).text,/вариантов сейчас нет/);assert.equal(f.panels.get(-100).extra.reply_markup.inline_keyboard.length,1);
 });
+
+test('consecutive different group requests both search without a hidden cooldown',async()=>{
+ const f=fixture({groupPreview:true});await f.send({text:'ОТКАЗБОТ найди Мальдивы'});await f.send({text:'ОТКАЗБОТ найди Фукуок'});
+ assert.equal(f.calls.filter(c=>c.kind==='search').length,2);assert.equal(f.calls.filter(c=>c.kind==='model').length,2);assert.match(f.panels.get(-100).text,/Найдено вариантов/);
+});
+test('search failure explains the problem instead of silently redirecting',async()=>{
+ const f=fixture({groupPreview:true,search:async()=>{throw Error('private failure');}});await f.send({text:'ОТКАЗБОТ найди Фукуок'});assert.match(f.panels.get(-100).text,/Не удалось выполнить поиск/);assert.doesNotMatch(f.panels.get(-100).text,/private failure/);
+});

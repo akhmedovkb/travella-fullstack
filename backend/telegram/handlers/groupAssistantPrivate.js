@@ -6,7 +6,7 @@ const {createGroupAssistantModel}=require('../../ai/groupAssistantModel');
 const { randomBytes } = require('node:crypto');
 
 function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupAssistantStore(pool), handoffs=createGroupAssistantHandoffs(pool), search=filters=>searchGroupOffers(pool,filters), now=Date.now, groupPreview=true, ...options }={}) {
-  const origins=new Map(),previewBusy=new Set(),previewRates=new Map();
+  const origins=new Map(),previewBusy=new Set();
   const previewModel=options.model||createGroupAssistantModel({env});
   const groupId=id=>Number(id)>0 ? origins.get(String(id))?.origin?.groupId : id;
   const scopedStore={
@@ -17,24 +17,22 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
   };
   const username=ctx=>ctx.botInfo?.username || env.TELEGRAM_CLIENT_BOT_USERNAME || 'OTKAZNYX_TUROV_UZB_BOT';
   const topic=ctx=>{const message=ctx.message||ctx.callbackQuery?.message;return message?.is_topic_message ? message.message_thread_id : null;};
-  async function entryLink(ctx,question='',edit=false) {
+  async function entryLink(ctx,question='',edit=false,reason='') {
     const token=await handoffs.create({ownerId:question ? ctx.from.id : null,groupId:ctx.chat.id,topicId:topic(ctx),title:ctx.chat.title,question});
-    const text='🔎 Подбор — в личном чате\n\nОткройте бота, чтобы выбрать условия и получить предложения. В группу ничего не публикуется без вашего нажатия.';
+    const text=reason||'🔎 Подбор — в личном чате\n\nВыберите условия и получите предложения в боте. Поделиться результатами с группой можно отдельной кнопкой.';
     const extra={reply_markup:{inline_keyboard:[[{text:'🔎 Подобрать в личном чате',url:`https://t.me/${username(ctx)}?start=pick_${token}`}]]}};
     if(edit&&ctx.editMessageText)return ctx.editMessageText(text,extra).catch(()=>{});
     return ctx.reply(text,{...extra,...(topic(ctx)?{message_thread_id:topic(ctx)}:{})});
   }
   async function preview(ctx,question){
     const key=String(ctx.chat.id)+':'+ctx.from.id;
-    if(previewBusy.has(key))return;
-    const recent=previewRates.get(key)||0;
-    if(now()-recent<15000)return entryLink(ctx,question);
-    if(!previewModel.ready()||!await store.reserve(ctx.chat.id))return entryLink(ctx,question);
-    if(previewRates.size>1000)for(const [id,at]of previewRates)if(now()-at>60000)previewRates.delete(id);
-    previewRates.set(key,now());previewBusy.add(key);
+    if(previewBusy.has(key))return entryLink(ctx,question,false,'⏳ Предыдущий поиск ещё выполняется.\n\nЭтот запрос можно продолжить в личном чате.');
+    previewBusy.add(key);
     try{
+      if(!previewModel.ready())return await entryLink(ctx,question,false,'⏳ Поиск временно недоступен. Попробуйте позже в личном чате.');
+      if(!await store.reserve(ctx.chat.id))return await entryLink(ctx,question,false,'⏳ Лимит поиска в группе на сегодня исчерпан. Попробуйте завтра.');
       const intent=await previewModel.interpret(question);
-      if(intent.kind!=='search'||(!intent.filters?.destination?.length&&!intent.filters?.anyDestination))return await entryLink(ctx,question);
+      if(intent.kind!=='search'||(!intent.filters?.destination?.length&&!intent.filters?.anyDestination))return await entryLink(ctx,question,false,'✏️ Нужно уточнить условия поиска.\n\nПродолжите в личном чате — запрос уже перенесён.');
       const offers=await search(intent.filters);
       if(!await store.enabled(ctx.chat.id))return;
       const token=await handoffs.create({ownerId:ctx.from.id,groupId:ctx.chat.id,topicId:topic(ctx),title:ctx.chat.title,question});
@@ -45,7 +43,7 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
       const rows=offers.slice(0,3).map((offer,i)=>[{text:'🌐 '+(i+1)+'. '+({ru:'Открыть карточку',uz:'Taklifni ochish',en:'Open offer'}[language]),url:`https://travella.uz/marketplace?opened=${Number(offer.id)}`}]);
       rows.push([{text:count?({ru:`📋 Все варианты (${count}) →`,uz:`📋 Barcha variantlar (${count}) →`,en:`📋 All offers (${count}) →`}[language]):'✏️ Изменить условия в личке',url}]);
       return await ctx.reply(text,{disable_web_page_preview:true,reply_markup:{inline_keyboard:rows},...(topic(ctx)?{message_thread_id:topic(ctx)}:{})});
-    }catch{return await entryLink(ctx,question);}finally{previewBusy.delete(key);}
+    }catch{return await entryLink(ctx,question,false,'⚠️ Не удалось выполнить поиск.\n\nПовторите запрос или продолжите в личном чате.');}finally{previewBusy.delete(key);}
   }
   async function member(ctx,origin,publish=false) {
     const value=await ctx.telegram.getChatMember(origin.groupId,ctx.from.id);
