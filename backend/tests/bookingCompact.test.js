@@ -122,3 +122,8 @@ test('correcting an unknown city using its full name removes the warning',async(
  const f=fixture('refused_flight');await f.start();await f.commercial();f.session.bookingImport.draft.toCity='ZZZ';await f.press('review');assert.match(f.replies.at(-1).t,/ZZZ — нет в справочнике/);
  await f.press('fix_svc_create_tour_to');assert.equal(f.session.bookingImport.field,'toCity');await f.send({text:'Сингапур'});assert.doesNotMatch(f.replies.at(-1).t,/Проверьте коды городов/);await f.press('accept');assert.match(f.replies.at(-1).t,/Карточка перед сохранением/);
 });
+
+test('a stale check button cannot acknowledge codes changed since the shown warning',async()=>{
+ const f=fixture('refused_flight');await f.start();await f.commercial();f.session.bookingImport.draft.toCity='ZZZ';await f.press('accept');assert.match(f.replies.at(-1).t,/Проверьте коды перед сохранением/);
+ f.session.bookingImport.draft.toCity='QQQ';await f.press('ackchecks');assert.match(f.replies.at(-1).t,/Проверьте коды перед сохранением/);assert.match(f.replies.at(-1).t,/QQQ/);assert.equal(f.accepted.length,0);await f.press('ackchecks');assert.match(f.replies.at(-1).t,/Карточка перед сохранением/);
+});
