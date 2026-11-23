@@ -80,7 +80,7 @@ function clarification(intent) {
   const f = intent.filters;
   return (prompts[intent.language] || prompts.ru)[!f.destination.length && !f.anyDestination ? 0 : f.budget !== null && (!f.currency || !f.priceBasis) ? 1 : 2];
 }
-function createGroupAssistantFlow({ pool, env = process.env, model = createGroupAssistantModel({ env }), store = createGroupAssistantStore(pool), search = filters => searchGroupOffers(pool, filters), now = Date.now, handoffs, onShare } = {}) {
+function createGroupAssistantFlow({ pool, env = process.env, model = createGroupAssistantModel({ env }), store = createGroupAssistantStore(pool), search = filters => searchGroupOffers(pool, filters), now = Date.now, handoffs, onShare, resolveOfferContacts, onContacts } = {}) {
   const sessions = new Map(), busy = new Set(), rates = new Map(), autoEntries = new Map(), autoRates = new Map(), captureWork = new Map();
   const topic = ctx => { const message = ctx.message || ctx.callbackQuery?.message; return message?.is_topic_message ? message.message_thread_id || 0 : 0; };
   const key = ctx => `${ctx.chat.id}:${topic(ctx)}:${ctx.from.id}`;
@@ -91,7 +91,14 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
   });
   async function showResults(ctx,state,offers,page=0,detailId=null){
     state.token=randomBytes(8).toString('hex');state.pending=true;
-    const view=resultView(offers,{language:state.results.language,page,detailId,token:state.token,formatOffers});
+    const privateResults=!!ctx.__travellaAssistantPrivate;
+    let safeOffers=offers.map(o=>({...o,contacts:null}));
+    let view=resultView(safeOffers,{language:state.results.language,page,detailId,token:state.token,formatOffers,showContacts:privateResults});
+    if(privateResults&&resolveOfferContacts){
+      const allowed=new Map(await Promise.all(view.ids.map(async id=>{try{return [id,await resolveOfferContacts(ctx,id)];}catch{return [id,null];}})));
+      safeOffers=safeOffers.map(o=>({...o,contacts:allowed.get(o.id)||null}));
+      view=resultView(safeOffers,{language:state.results.language,page,detailId,token:state.token,formatOffers,showContacts:true});
+    }
     state.results.page=view.page;state.results.ids=view.ids;state.results.detailId=detailId;state.shares=state.shares||{};state.shareKey=view.ids.join(',');state.shareStatus=state.shares[state.shareKey]||null;
     const rows=view.rows;
     if(ctx.__travellaAssistantPrivate&&state.origin&&view.ids.length)rows.push([{text:state.shareStatus==='sent'?'✓ Опубликовано в группе':detailId?'📤 Поделиться вариантом в группе':'📤 Поделиться в группе',callback_data:`grp_ai:share:${state.token}`}]);
@@ -314,6 +321,12 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
         let [, action, token] = data.split(':');
         let uiSearch = false;
         if (!state?.pending || state.token !== token || state.messageId !== ctx.callbackQuery.message?.message_id) return ctx.answerCbQuery('Эта кнопка доступна автору запроса в течение 15 минут.').catch(() => {});
+        if(/^contacts_\d+$/.test(action)){
+          const id=Number(action.slice(9));
+          if(!ctx.__travellaAssistantPrivate||!state.results?.ids?.includes(id)||!onContacts)return ctx.answerCbQuery('Откройте карточку предложения.').catch(()=>{});
+          busy.add(sessionKey);
+          try{const fresh=await search(state.results.filters);if(!fresh.some(o=>o.id===id))return ctx.answerCbQuery('Предложение больше недоступно. Обновите поиск.').catch(()=>{});return await onContacts(ctx,id);}catch{return reply(ctx,'🔄 Не удалось открыть контакты. Попробуйте ещё раз.');}finally{busy.delete(sessionKey);}
+        }
         if(action==='result_noop')return ctx.answerCbQuery('👇 Выберите вариант или страницу.').catch(()=>{});
         if(action==='results'||/^page_\d{1,2}$/.test(action)||/^offer_\d+$/.test(action)){
           if(!state.results?.allIds)return ctx.answerCbQuery('🔄 Запустите поиск заново.').catch(()=>{});

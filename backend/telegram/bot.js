@@ -2191,7 +2191,14 @@ bot.use(async (ctx, next) => {
 });
 
 // Group assistance is read-only and must run before private sessions and draft restoration.
-const groupAssistant = require("./handlers/groupAssistantPrivate").createPrivateGroupAssistant({ pool });
+const groupAssistant = require("./handlers/groupAssistantPrivate").createPrivateGroupAssistant({ pool,
+  resolveOfferContacts:require('../ai/groupAssistantContacts').createAssistantContactResolver({
+    resolveAudience:resolveContactButtonAudience,
+    loadService:loadAssistantContactService,
+    pickContacts:pickServiceProviderContactFields,normalizeTelegram:normalizeTelegramUsernameForLink,
+  }),
+  onContacts:async(ctx,id)=>{const audience=await resolveContactButtonAudience(ctx);return audience.privileged?sendPrivilegedProviderContacts(ctx,id,audience):doUnlockFlow(ctx,id);},
+});
 bot.use(groupAssistant);
 groupAssistant.initialize().then(() => console.info("[group-assistant] storage and public search ready")).catch(() => console.warn("[group-assistant] storage/search initialization unavailable"));
 console.info("[group-assistant] mode loaded", { aiConfigured: Boolean(process.env.OPENAI_API_KEY) && process.env.TELEGRAM_GROUP_AI_ENABLED !== "false" });
@@ -13621,14 +13628,20 @@ function pickServiceProviderContactFields(svc = {}) {
   };
 }
 
+async function loadAssistantContactService(id,role,chatId){
+ const {data}=await axios.get('/api/telegram/service/'+id,{params:{role,chatId}});
+ if(data?.unlocked===true&&data.service){
+   const contact=await pool.query('SELECT p.phone FROM services s JOIN providers p ON p.id=s.provider_id WHERE s.id=$1 AND s.deleted_at IS NULL',[id]);
+   data.service={...data.service,provider_phone:contact.rows[0]?.phone||data.service.provider_phone||''};
+ }
+ return data;
+}
 async function sendPrivilegedProviderContacts(ctx, serviceId, audience = {}) {
   const sid = Number(serviceId || 0);
   const targetChatId = Number(ctx?.from?.id || 0);
   if (!Number.isFinite(sid) || sid <= 0 || !Number.isFinite(targetChatId) || targetChatId <= 0) return false;
 
-  const { data } = await axios.get(`/api/telegram/service/${sid}`, {
-    params: { role: audience?.role || "provider", chatId: targetChatId },
-  });
+  const data = await loadAssistantContactService(sid,audience?.role || "provider",targetChatId);
 
   if (!data?.success || !data?.service) {
     await safeReply(ctx, "❗️Услуга не найдена или уже снята с публикации.");

@@ -4,12 +4,13 @@ const {createPrivateGroupAssistant}=require('../telegram/handlers/groupAssistant
 const {normalizeIntent}=require('../ai/groupAssistantModel');
 const {createGroupAssistantHandoffs}=require('../ai/groupAssistantHandoffs');
 const output=normalizeIntent({kind:'search',language:'ru',filters:{destination:['Вьетнам'],origin:['Ташкент'],start:'2099-12-01',end:'2099-12-31',guests:2,budget:null,category:'refused_tour'}});
-function fixture(){
+function fixture(extra={}){
  const replies=[],posts=[],calls=[],panels=new Map(),links=new Map();let sequence=0,tokenId=0;
  const state={offers:[{id:42,title:'Отказной тур',category:'refused_tour',origin:'Ташкент',destination:'Вьетнам',start:'2099-12-01',end:'2099-12-10',price:900,currency:'USD',priceBasis:'total',guests:2}],member:true};
  const handoffs={initialize:async()=>{},create:async value=>{const token=String(++tokenId).padStart(48,'0');links.set(token,{...value});return token;},update:async(token,ownerId,question)=>{if(links.get(token)?.ownerId===ownerId)links.get(token).question=question;},get:async(token,actor)=>{const value=links.get(token);return value&&(value.ownerId==null||value.ownerId===actor)?{groupId:value.groupId,topicId:value.topicId,title:value.title,question:value.question}:null;}};
  const store={initialize:async()=>{},enabled:async()=>true,autoEnabled:async()=>true,reserve:async id=>{calls.push({kind:'quota',id});return true;},activate:async()=>{},setAuto:async()=>{}};
  const options={pool:{},handoffs,store,model:{ready:()=>true,interpret:async(text,previous)=>{calls.push({kind:'model',text,previous});return output;}},search:async filters=>{calls.push({kind:'search',filters});return state.offers;}};
+ Object.assign(options,extra);
  let flow=createPrivateGroupAssistant(options);
  function record(chat,text,extra,id=++sequence){const item={chat,text,extra,id};if(extra?.reply_markup?.inline_keyboard)panels.set(chat,item);return {message_id:id};}
  const telegram={getChat:async()=>({permissions:{can_send_messages:state.groupCanSend!==false}}),getChatMember:async()=>({status:state.member?(state.memberRole||'member'):'left',is_member:state.member,can_send_messages:state.canSend!==false}),editMessageText:async(chat,id,_inline,text,extra)=>record(chat,text,extra,id),editMessageReplyMarkup:async()=>{},sendMessage:async(chat,text,extra)=>{posts.push({chat,text,extra});return {message_id:++sequence};}};
@@ -143,3 +144,13 @@ test('sharing publishes only the viewed page or selected detail and cannot dupli
 test('withdrawn and arbitrary offers are not exposed through result callbacks and empty pages have no share',async()=>{const f=fixture();await startPaged(f);const panel=f.panels.get(7),token=panel.extra.reply_markup.inline_keyboard.flat().find(b=>b.callback_data?.includes(':offer_')).callback_data.split(':')[2];await f.send({chat:7,data:'grp_ai:offer_999:'+token,messageId:panel.id});assert.equal(f.panels.get(7),panel);f.state.offers=f.state.offers.filter(o=>o.id!==1);await f.press('offer_1');assert.ok(f.replies.some(r=>r.text.includes('больше недоступно')));assert.doesNotMatch(f.panels.get(7).text,/TEST OFFER 1\n/);f.state.offers=[];await f.press('page_1');assert.match(f.panels.get(7).text,/не нашёл/);assert.ok(!f.panels.get(7).extra.reply_markup.inline_keyboard.flat().some(b=>b.callback_data?.includes(':share:')));assert.equal(f.posts.length,0);});
 
 test('closing a private search releases ordinary private input instead of intercepting draft values',async()=>{const f=fixture();await startPaged(f);await f.press('ui_close');const modelCalls=f.calls.filter(c=>c.kind==='model').length;const result=await f.send({chat:7,text:'1000'});assert.equal(result.passed,true);assert.equal(f.calls.filter(c=>c.kind==='model').length,modelCalls);assert.equal(f.posts.length,0);});
+
+test('private results include accessible contacts and card links; contact actions preserve pagination',async()=>{
+ const resolved=[],opened=[];const f=fixture({resolveOfferContacts:async(_ctx,id)=>{resolved.push(id);return {name:'TEST supplier '+id,telegram:'test_supplier_'+id,phone:'+998900000000'};},onContacts:async(ctx,id)=>{opened.push(id);return ctx.reply('TEST CONTACT '+id);}});
+ await startPaged(f);const text=f.panels.get(7).text;assert.match(text,/https:\/\/travella.uz\/marketplace\?opened=1/);assert.match(text,/test_supplier_1/);assert.match(text,/998900000000/);assert.ok(!resolved.includes(6));assert.equal(f.panels.get(7).extra.reply_markup.inline_keyboard.flat().filter(b=>b.callback_data?.includes(':contacts_')).length,5);
+ await f.press('contacts_1');assert.deepEqual(opened,[1]);await f.press('page_1');assert.match(f.panels.get(7).text,/test_supplier_6/);assert.match(f.panels.get(7).text,/opened=6/);await f.press('offer_7');assert.match(f.panels.get(7).text,/test_supplier_7/);assert.match(f.panels.get(7).text,/opened=7/);assert.equal(f.posts.length,0);
+ const panel=f.panels.get(7),button=panel.extra.reply_markup.inline_keyboard.flat().find(b=>b.callback_data?.includes(':contacts_'));await f.send({chat:7,actor:8,data:button.callback_data,messageId:panel.id});assert.deepEqual(opened,[1]);
+});
+test('private contacts never enter group sharing and failed contact lookups do not remove offers',async()=>{
+ const f=fixture({resolveOfferContacts:async(_ctx,id)=>{if(id===2)throw Error('unavailable');return {name:'PRIVATE_NAME',telegram:'private_supplier',phone:'+998900000000'};}});await startPaged(f);assert.match(f.panels.get(7).text,/PRIVATE_NAME/);assert.match(f.panels.get(7).text,/TEST OFFER 2/);await f.press('share');assert.equal(f.posts.length,1);assert.doesNotMatch(f.posts[0].text,/PRIVATE_NAME|private_supplier|998900000000/);assert.ok(!f.posts[0].extra.reply_markup.inline_keyboard.flat().some(b=>b.callback_data?.includes('contacts')));
+});
