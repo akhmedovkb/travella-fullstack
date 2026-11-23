@@ -2,10 +2,12 @@ const { createGroupAssistantFlow, addressed, stripAssistantName, formatOffers, o
 const { createGroupAssistantStore } = require('../../ai/groupAssistantStore');
 const { createGroupAssistantHandoffs } = require('../../ai/groupAssistantHandoffs');
 const { searchGroupOffers } = require('../../ai/groupAssistantSearch');
+const {createGroupAssistantModel}=require('../../ai/groupAssistantModel');
 const { randomBytes } = require('node:crypto');
 
-function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupAssistantStore(pool), handoffs=createGroupAssistantHandoffs(pool), search=filters=>searchGroupOffers(pool,filters), now=Date.now, ...options }={}) {
-  const origins=new Map();
+function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupAssistantStore(pool), handoffs=createGroupAssistantHandoffs(pool), search=filters=>searchGroupOffers(pool,filters), now=Date.now, groupPreview=true, ...options }={}) {
+  const origins=new Map(),previewBusy=new Set(),previewRates=new Map();
+  const previewModel=options.model||createGroupAssistantModel({env});
   const groupId=id=>Number(id)>0 ? origins.get(String(id))?.origin?.groupId : id;
   const scopedStore={
     initialize:()=>store.initialize?.(), enabled:id=>groupId(id) ? store.enabled(groupId(id)) : false,
@@ -21,6 +23,29 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
     const extra={reply_markup:{inline_keyboard:[[{text:'🔎 Подобрать в личном чате',url:`https://t.me/${username(ctx)}?start=pick_${token}`}]]}};
     if(edit&&ctx.editMessageText)return ctx.editMessageText(text,extra).catch(()=>{});
     return ctx.reply(text,{...extra,...(topic(ctx)?{message_thread_id:topic(ctx)}:{})});
+  }
+  async function preview(ctx,question){
+    const key=String(ctx.chat.id)+':'+ctx.from.id;
+    if(previewBusy.has(key))return;
+    const recent=previewRates.get(key)||0;
+    if(now()-recent<15000)return entryLink(ctx,question);
+    if(!previewModel.ready()||!await store.reserve(ctx.chat.id))return entryLink(ctx,question);
+    if(previewRates.size>1000)for(const [id,at]of previewRates)if(now()-at>60000)previewRates.delete(id);
+    previewRates.set(key,now());previewBusy.add(key);
+    try{
+      const intent=await previewModel.interpret(question);
+      if(intent.kind!=='search'||(!intent.filters?.destination?.length&&!intent.filters?.anyDestination))return await entryLink(ctx,question);
+      const offers=await search(intent.filters);
+      if(!await store.enabled(ctx.chat.id))return;
+      const token=await handoffs.create({ownerId:ctx.from.id,groupId:ctx.chat.id,topicId:topic(ctx),title:ctx.chat.title,question});
+      const url=`https://t.me/${username(ctx)}?start=pick_${token}`;
+      const count=offers.length,language=intent.language||'ru';
+      const heading={ru:`🔎 Найдено вариантов: ${count}${count>3?' · показываю 3':''}`,uz:`🔎 Topildi: ${count}${count>3?' · 3 ta variant':''}`,en:`🔎 Found: ${count}${count>3?' · showing 3':''}`}[language];
+      const text=count?heading+'\n\n'+formatOffers(offers.slice(0,3),language).split('\n\n').slice(1).join('\n\n')+'\n\n'+({ru:'👇 Продолжите подбор или измените условия в личном чате.',uz:'👇 Shaxsiy chatda davom eting yoki shartlarni o‘zgartiring.',en:'👇 Continue or change your search in private.'}[language]):({ru:'🔎 Подходящих вариантов сейчас нет.\n\nИзмените даты или направление в личном чате.',uz:'🔎 Mos variantlar topilmadi. Shaxsiy chatda shartlarni o‘zgartiring.',en:'🔎 No matching offers. Change your search in private.'}[language]);
+      const rows=offers.slice(0,3).map((offer,i)=>[{text:'🌐 '+(i+1)+'. '+({ru:'Открыть карточку',uz:'Taklifni ochish',en:'Open offer'}[language]),url:`https://travella.uz/marketplace?opened=${Number(offer.id)}`}]);
+      rows.push([{text:count?({ru:`📋 Все варианты (${count}) →`,uz:`📋 Barcha variantlar (${count}) →`,en:`📋 All offers (${count}) →`}[language]):'✏️ Изменить условия в личке',url}]);
+      return await ctx.reply(text,{disable_web_page_preview:true,reply_markup:{inline_keyboard:rows},...(topic(ctx)?{message_thread_id:topic(ctx)}:{})});
+    }catch{return await entryLink(ctx,question);}finally{previewBusy.delete(key);}
   }
   async function member(ctx,origin,publish=false) {
     const value=await ctx.telegram.getChatMember(origin.groupId,ctx.from.id);
@@ -63,7 +88,7 @@ function createPrivateGroupAssistant({ pool, env=process.env, store=createGroupA
       if(addressed(ctx)){
         if(!await store.enabled(ctx.chat.id))return ctx.reply('Помощник выключен. Администратор может включить его командой /travella_on.');
         const text=stripAssistantName(ctx.message?.text).replace(/^\/(ask|travella_help)(?:@[a-z0-9_]+)?\s*/i,'').replace(new RegExp(`@${username(ctx)}\\b`,'gi'),'').trim();
-        return entryLink(ctx,text);
+        return groupPreview&&text?preview(ctx,text):entryLink(ctx,text);
       }
       return core(ctx,next); // Only local auto detection; invitations are deep links.
     }

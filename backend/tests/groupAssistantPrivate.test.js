@@ -9,7 +9,7 @@ function fixture(extra={}){
  const state={offers:[{id:42,title:'Отказной тур',category:'refused_tour',origin:'Ташкент',destination:'Вьетнам',start:'2099-12-01',end:'2099-12-10',price:900,currency:'USD',priceBasis:'total',guests:2}],member:true};
  const handoffs={initialize:async()=>{},create:async value=>{const token=String(++tokenId).padStart(48,'0');links.set(token,{...value});return token;},update:async(token,ownerId,question)=>{if(links.get(token)?.ownerId===ownerId)links.get(token).question=question;},get:async(token,actor)=>{const value=links.get(token);return value&&(value.ownerId==null||value.ownerId===actor)?{groupId:value.groupId,topicId:value.topicId,title:value.title,question:value.question}:null;}};
  const store={initialize:async()=>{},enabled:async()=>true,autoEnabled:async()=>true,reserve:async id=>{calls.push({kind:'quota',id});return true;},activate:async()=>{},setAuto:async()=>{}};
- const options={pool:{},handoffs,store,model:{ready:()=>true,interpret:async(text,previous)=>{calls.push({kind:'model',text,previous});return output;}},search:async filters=>{calls.push({kind:'search',filters});return state.offers;}};
+ const options={groupPreview:false,pool:{},handoffs,store,model:{ready:()=>true,interpret:async(text,previous)=>{calls.push({kind:'model',text,previous});return output;}},search:async filters=>{calls.push({kind:'search',filters});return state.offers;}};
  Object.assign(options,extra);
  let flow=createPrivateGroupAssistant(options);
  function record(chat,text,extra,id=++sequence){const item={chat,text,extra,id};if(extra?.reply_markup?.inline_keyboard)panels.set(chat,item);return {message_id:id};}
@@ -153,4 +153,21 @@ test('private results include accessible contacts and card links; contact action
 });
 test('private contacts never enter group sharing and failed contact lookups do not remove offers',async()=>{
  const f=fixture({resolveOfferContacts:async(_ctx,id)=>{if(id===2)throw Error('unavailable');return {name:'PRIVATE_NAME',telegram:'private_supplier',phone:'+998900000000'};}});await startPaged(f);assert.match(f.panels.get(7).text,/PRIVATE_NAME/);assert.match(f.panels.get(7).text,/TEST OFFER 2/);await f.press('share');assert.equal(f.posts.length,1);assert.doesNotMatch(f.posts[0].text,/PRIVATE_NAME|private_supplier|998900000000/);assert.ok(!f.posts[0].extra.reply_markup.inline_keyboard.flat().some(b=>b.callback_data?.includes('contacts')));
+});
+
+test('direct group request shows at most three public offers and private continuation, without contacts or paging',async()=>{
+ const f=fixture({groupPreview:true});f.state.offers=Array.from({length:8},(_,i)=>({...f.state.offers[0],id:i+1,title:'OFFER '+(i+1),contacts:{phone:'SECRET'}}));
+ await f.send({text:'ОТКАЗБОТ найди Вьетнам',topic:12});
+ const panel=f.panels.get(-100);assert.match(panel.text,/Найдено вариантов: 8/);assert.match(panel.text,/OFFER 3/);assert.doesNotMatch(panel.text,/OFFER 4|SECRET/);
+ const buttons=panel.extra.reply_markup.inline_keyboard.flat();assert.equal(buttons.filter(b=>b.url?.includes('marketplace')).length,3);assert.ok(buttons.every(b=>!b.callback_data));assert.equal(panel.extra.message_thread_id,12);
+ const link=buttons.at(-1).url;await f.send({chat:7,text:'/start '+new URL(link).searchParams.get('start')});assert.match(f.panels.get(7).text,/Правильно понял/);
+});
+test('ambiguous and failed group searches fall back to a private link; ordinary messages do not search',async()=>{
+ for(const model of [{ready:()=>true,interpret:async()=>({...output,kind:'clarify'})},{ready:()=>true,interpret:async()=>{throw Error('offline');}}]){
+ const f=fixture({groupPreview:true,model});await f.send({text:'ОТКАЗБОТ найди тур'});assert.match(f.panels.get(-100).text,/личном чате/);
+ }
+ const f=fixture({groupPreview:true});await f.send({text:'У кого есть отказной на двоих на завтра?'});assert.equal(f.calls.filter(c=>c.kind==='model'||c.kind==='search').length,0);
+});
+test('empty group results offer private refinement without invented offers',async()=>{
+ const f=fixture({groupPreview:true});f.state.offers=[];await f.send({text:'ОТКАЗБОТ найди Вьетнам'});assert.match(f.panels.get(-100).text,/вариантов сейчас нет/);assert.equal(f.panels.get(-100).extra.reply_markup.inline_keyboard.length,1);
 });
