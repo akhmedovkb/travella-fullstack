@@ -1,12 +1,12 @@
 const clean=(v,n)=>String(v||'').replace(/[<>\u0000-\u001f]/g,' ').replace(/\s+/g,' ').trim().slice(0,n);
 function contactLines(contact,language='ru',index){
  const label={ru:'Контакты',uz:'Kontaktlar',en:'Contacts'}[language]||'Контакты';
- if(!contact)return ['📞 '+label+': '+(index?'«📞 '+index+'»':'👇')];
+ if(!contact)return ['📞 '+label+': '+(index?({ru:'в варианте ',uz:'variantda ',en:'in option '}[language]||'в варианте ')+index:'👇')];
  const lines=[];
  if(contact.name)lines.push('🤝 '+clean(contact.name,60));
  if(/^[A-Za-z0-9_]{3,64}$/.test(contact.telegram||''))lines.push('📲 https://t.me/'+contact.telegram);
  for(const [key,icon]of [['phone','☎️'],['whatsapp','🟢']])if(/^\+?[0-9][0-9 ()-]{5,30}$/.test(contact[key]||'')&&(key!=='whatsapp'||contact[key]!==contact.phone))lines.push(icon+' '+contact[key]);
- return lines.length?lines:['📞 '+label+': '+(index?'«📞 '+index+'»':'👇')];
+ return lines.length?lines:['📞 '+label+': '+(index?({ru:'в варианте ',uz:'variantda ',en:'in option '}[language]||'в варианте ')+index:'👇')];
 }
 function createAssistantContactResolver({resolveAudience,loadService,pickContacts,normalizeTelegram}){
  return async(ctx,id)=>{

@@ -10,5 +10,5 @@ test('contacts require private actor context, allowed service and explicit unloc
 test('contact rendering accepts safe Telegram handles and phones only',()=>{
  assert.match(contactLines({name:'TEST',telegram:'test_supplier',phone:'+998900000000'}).join('\n'),/https:\/\/t.me\/test_supplier/);
  assert.doesNotMatch(contactLines({telegram:'javascript:bad',phone:'https://bad.invalid'}).join('\n'),/javascript|bad.invalid/);
- assert.match(contactLines(null,'ru',2).join('\n'),/📞 2/);
+ assert.match(contactLines(null,'ru',2).join('\n'),/в варианте 2/);
 });
