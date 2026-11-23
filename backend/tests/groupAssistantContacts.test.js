@@ -8,7 +8,14 @@ test('contacts require private actor context, allowed service and explicit unloc
  const n=calls.length;assert.equal(await resolve({...ctx,chat:{id:-100,type:'supergroup'}},42),null);assert.equal(calls.length,n);
 });
 test('contact rendering accepts safe Telegram handles and phones only',()=>{
- assert.match(contactLines({name:'TEST',telegram:'test_supplier',phone:'+998900000000'}).join('\n'),/https:\/\/t.me\/test_supplier/);
+ assert.doesNotMatch(contactLines({name:'TEST',telegram:'test_supplier',phone:'+998900000000'}).join('\n'),/https:/);
  assert.doesNotMatch(contactLines({telegram:'javascript:bad',phone:'https://bad.invalid'}).join('\n'),/javascript|bad.invalid/);
  assert.match(contactLines(null,'ru',2).join('\n'),/в варианте 2/);
+});
+
+test('supplier names link to Telegram with UTF-16 offsets and unsafe handles stay plain',()=>{
+ const {contactEntities}=require('../ai/groupAssistantContacts');
+ const text='🔎 Найдено\n🤝 Мира\n🤝 TEST';
+ const entities=contactEntities(text,[{name:'Мира',telegram:'miratour1'},{name:'TEST',telegram:'bad/link'}]);
+ assert.deepEqual(entities,[{type:'text_link',offset:text.indexOf('Мира'),length:4,url:'https://t.me/miratour1'}]);
 });

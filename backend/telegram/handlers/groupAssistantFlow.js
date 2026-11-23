@@ -1,3 +1,4 @@
+const {contactEntities}=require('../../ai/groupAssistantContacts');
 const {resultView}=require('../../ai/groupAssistantResults');
 const { startSearchUi, renderSearchUi, uiAction, uiText, uiIntent, inputPrompt, uiHtml } = require('../../ai/groupAssistantUi');
 const { isTourRequest, isClarification, appendAutoText } = require('../../ai/groupAssistantAuto');
@@ -106,6 +107,7 @@ function createGroupAssistantFlow({ pool, env = process.env, model = createGroup
     rows.push([{text:'✕ Закрыть подбор',callback_data:`grp_ai:ui_close:${state.token}`}]);
     state.resultMarkup={inline_keyboard:rows};const extra={reply_markup:state.resultMarkup,disable_web_page_preview:true};
     const text=view.text+(ctx.__travellaAssistantPrivate&&view.ids.length?'\n\n📤 Группа: '+displayText(state.origin?.title||'исходная группа',60):'');
+    extra.parse_mode=undefined;extra.entities=contactEntities(view.text,view.ids.map(id=>safeOffers.find(o=>o.id===id)?.contacts));
     if(state.messageId&&ctx.telegram?.editMessageText){try{await ctx.telegram.editMessageText(ctx.chat.id,state.messageId,undefined,text,extra);return;}catch{}}
     const message=await reply(ctx,text,extra);state.messageId=message?.message_id;
   }
