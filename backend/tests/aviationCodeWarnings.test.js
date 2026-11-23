@@ -9,3 +9,5 @@ test('full names, known codes and flight numbers do not produce false warnings',
  assert.deepEqual(aviationCodeIssues({fromCity:'SIN',toCity:'CDG',flightDetails:'SQ · SIN · CDG · 2026-12-04 · 07:50 · 14:10'}),[]);
  assert.match(aviationCodeMessages({flightDetails:'XX123 · ZZZ · MLE · 2026-12-04'})[1],/XX/);
 });
+
+test('manual correction preserves flight lines so unknown codes in later legs are checked',()=>{const {validateEdit}=require('../ai/bookingImportReview');const value=validateEdit('flightDetails','TK · IST · SIN · 2026-12-04 · 10:00 · 20:00\nQ9 · SIN · ZZZ · 2026-12-11 · 09:00 · 16:00',{});assert.ok(value.includes('\n'));const issues=aviationCodeIssues({flightDetails:value});assert.ok(issues.some(x=>x.code==='Q9'));assert.ok(issues.some(x=>x.code==='ZZZ'));});

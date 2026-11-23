@@ -31,7 +31,7 @@ function mergeRecognition(s,incoming,source){
 }
 function dateValue(text){let v=text.trim();if(/^\d{2}[./]\d{2}[./]\d{4}$/.test(v))v=v.split(/[./]/).reverse().join('-');if(!/^\d{4}-\d{2}-\d{2}$/.test(v))throw Error('📅 Введите дату: ДД.ММ.ГГГГ.');const d=new Date(v+'T12:00:00Z');if(!Number.isFinite(+d)||d.toISOString().slice(0,10)!==v)throw Error('📅 Такой даты не существует.');return v;}
 function validateEdit(field,text,draft){
- let value=String(text||'').replace(/\s+/g,' ').trim();if(!value)throw Error('✍️ Введите значение.');
+ let value=String(text||'').trim();value=field==='flightDetails'?value.replace(/\r\n?/g,'\n').replace(/[^\S\n]+/g,' '):value.replace(/\s+/g,' ');if(!value)throw Error('✍️ Введите значение.');
  if(dateKeys.includes(field)){
   value=dateValue(value);const today=new Intl.DateTimeFormat('en-CA',{timeZone:'Asia/Tashkent',year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());if(value<today)throw Error('📅 Дата уже прошла. Выберите будущую дату.');
  }else if(['transferIncluded','insuranceIncluded'].includes(field)){
