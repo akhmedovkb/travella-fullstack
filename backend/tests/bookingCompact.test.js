@@ -109,3 +109,16 @@ test('saving reanchors the confirmation and clears automatic proof input',async(
 test('flight hints and fee templates stay relevant to flights',async()=>{
  const f=fixture('refused_flight');await f.start();await f.press('options');assert.doesNotMatch(f.replies.at(-1).t,/Гала|попутчик/);await f.press('fees');assert.doesNotMatch(f.replies.at(-1).t,/Гала/);await f.press('fee_add');const buttons=JSON.stringify(f.replies.at(-1).e);assert.match(buttons,/Выбор места/);assert.match(buttons,/Переоформление/);assert.doesNotMatch(buttons,/Гала|Туристический сбор/);await f.press('fee_template_seat');assert.equal(f.session.bookingImport.feeDraft.name,'Выбор места');assert.equal(f.session.bookingImport.feeDraft.amount,undefined);
 });
+
+test('unresolved codes require explicit checking before preview and saving',async()=>{
+ const f=fixture('refused_flight');await f.start();await f.commercial();Object.assign(f.session.bookingImport.draft,{fromCity:'ZZZ',toCity:'AMS',flightDetails:'XX · ZZZ · AMS · 2099-12-01 · 10:00 · 20:00'});
+ await f.press('review');assert.match(f.replies.at(-1).t,/ZZZ — нет в справочнике/);assert.match(f.replies.at(-1).t,/AMS — несколько вариантов/);assert.match(JSON.stringify(f.replies.at(-1).e),/Проверить: Город вылета/);
+ await f.press('accept');assert.match(f.replies.at(-1).t,/Проверьте коды перед сохранением/);assert.match(JSON.stringify(f.replies.at(-1).e),/Коды проверены — продолжить/);assert.equal(f.accepted.length,0);
+ await f.press('save');assert.equal(f.accepted.length,0);await f.press('accept');await f.press('ackchecks');assert.match(f.replies.at(-1).t,/Карточка перед сохранением/);assert.match(f.replies.at(-1).t,/ZZZ/);
+ f.session.bookingImport.draft.fromCity='QQQ';await f.press('accept');assert.match(f.replies.at(-1).t,/Проверьте коды перед сохранением/);assert.match(f.replies.at(-1).t,/QQQ/);assert.equal(f.accepted.length,0);
+ await f.press('ackchecks');await f.press('save');assert.equal(f.accepted.length,1);
+});
+test('correcting an unknown city using its full name removes the warning',async()=>{
+ const f=fixture('refused_flight');await f.start();await f.commercial();f.session.bookingImport.draft.toCity='ZZZ';await f.press('review');assert.match(f.replies.at(-1).t,/ZZZ — нет в справочнике/);
+ await f.press('fix_svc_create_tour_to');assert.equal(f.session.bookingImport.field,'toCity');await f.send({text:'Сингапур'});assert.doesNotMatch(f.replies.at(-1).t,/Проверьте коды городов/);await f.press('accept');assert.match(f.replies.at(-1).t,/Карточка перед сохранением/);
+});
