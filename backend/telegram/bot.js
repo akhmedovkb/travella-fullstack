@@ -12748,16 +12748,17 @@ bot.action(/^fd:(\d+)$/, async (ctx) => {
     }
 
     const d = parseDetailsAny(svc.details);
-    const raw = String(d.flightDetails || "").trim();
+    const raw = require("../utils/publicCardPresentation").flightItineraryText(d);
 
     if (!raw) {
       await ctx.answerCbQuery("ℹ️ Детали рейса не указаны", { show_alert: true });
       return;
     }
 
-    // лимит alert — страхуемся
-    const msg = raw.length > 3500 ? raw.slice(0, 3500) + "…" : raw;
-    await ctx.answerCbQuery(msg, { show_alert: true });
+    const chunks=raw.match(/[\s\S]{1,3800}/g)||[];
+    await ctx.answerCbQuery(ctx.chat?.type==='private'?'':'Отправляю детали в личный чат.');
+    for(const chunk of chunks)await ctx.telegram.sendMessage(ctx.from.id,chunk,{parse_mode:undefined,disable_web_page_preview:true});
+
   } catch {
     try {
       await ctx.answerCbQuery("⚠️ Ошибка", { show_alert: true });
