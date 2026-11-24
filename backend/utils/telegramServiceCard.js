@@ -1839,7 +1839,7 @@ const priceKind =
       parts.push(`🛫 Вылет из: <b>${escapeHtml(departureCity)}</b>`);
     }
 
-    if (hotelName) {
+    if (hotelName && !lineContainsValue(offerNameLine, hotelName)) {
       parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
     }
 
@@ -1869,7 +1869,6 @@ const priceKind =
     if (!explicitNoFlight) included.push("авиабилеты");
 
     if (roomCat || hotelName || accommodation) included.push("проживание");
-    if (foodPretty) included.push(`питание ${foodPretty}`);
 
     if (transfers.length) {
       const namedTransfers = transfers.filter((x) => !/^(включ[её]н|included|yes|да)$/i.test(String(x || "").trim()));

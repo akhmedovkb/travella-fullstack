@@ -102,3 +102,10 @@ test('inline refused tour card shows room type and meals separately from occupan
  const card=buildServiceMessage({id:42,title:'TEST',category:'refused_tour',details:{}},'refused_tour','client');
  assert.doesNotMatch(card.text,/Тип номера:|Питание:/);
 });
+
+test('tour card does not repeat meals in inclusions or the hotel title',()=>{
+ const card=buildServiceMessage({id:42,title:'RADISSON BLU RESORT PHU QUOC',category:'refused_tour',details:{hotel:'RADISSON BLU RESORT PHU QUOC',roomCategory:'Deluxe',food:'BB',transferIncluded:true,insuranceIncluded:true}},'refused_tour','client');
+ assert.equal((card.text.match(/BB/g)||[]).length,1);
+ assert.equal((card.text.match(/RADISSON BLU RESORT PHU QUOC/gi)||[]).length,1);
+ assert.match(card.text,/Тип номера/);assert.match(card.text,/трансфер/);assert.match(card.text,/страховка/);
+});
