@@ -1851,9 +1851,11 @@ const priceKind =
     const priceLine = priceHeroLine();
     if (priceLine) parts.push(priceLine);
 
-    const roomCatRaw = d.accommodationCategory || d.roomCategory || d.room || d.roomType || "";
+    const roomCatRaw = d.accommodationCategory || d.roomCategory || d.room_category || svc.room_category || d.room || d.roomType || "";
     const roomCat = shortRoomLabel(stripStarsFromRoomCat(roomCatRaw));
-    const foodPretty = shortMealLabel(d.food || d.meal || d.mealType);
+    const foodPretty = shortMealLabel(d.food || d.meal || d.mealType || svc.food);
+    if (roomCat) parts.push(`🛏 <b>Тип номера:</b> ${escapeHtml(roomCat)}`);
+    if (foodPretty) parts.push(`🍽 <b>Питание:</b> ${escapeHtml(foodPretty)}`);
     const transfers = transferItems();
 
     const included = [];
@@ -1918,9 +1920,9 @@ const priceKind =
     const country2 = firstValue(d.directionCountry, d.country, d.locationCountry);
     if (hotelName && !lineContainsValue(offerNameLine, hotelName)) parts.push(`🏨 <b>${escapeHtml(hotelName)}</b>`);
 
-    const roomCatRaw = d.accommodationCategory || d.roomCategory || d.room || d.roomType || "";
+    const roomCatRaw = d.accommodationCategory || d.roomCategory || d.room_category || svc.room_category || d.room || d.roomType || "";
     const roomCat = shortRoomLabel(stripStarsFromRoomCat(roomCatRaw));
-    const foodPretty = shortMealLabel(d.food || d.meal || d.mealType);
+    const foodPretty = shortMealLabel(d.food || d.meal || d.mealType || svc.food);
     const transfers = transferItems();
 
     const locationLines = hotelLocationLines();

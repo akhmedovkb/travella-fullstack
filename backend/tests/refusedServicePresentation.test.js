@@ -93,3 +93,12 @@ test('explicit screenshot price basis overrides legacy DBL audience inference',(
  const card=buildServiceMessage({id:42,title:'TEST',category:'refused_tour',details:{accommodation:'DBL',adt:2,grossPrice:125,pricePerPerson:125,priceBasis:'person',priceFor:'за 1 человека'}},'refused_tour','client',{unlocked:true});
  assert.match(card.text,/125 USD<\/b> <i>за 1 человека<\/i>/);assert.doesNotMatch(card.text,/125 USD<\/b> <i>за 2/);
 });
+
+test('inline refused tour card shows room type and meals separately from occupancy',()=>{
+ for(const fields of [{details:{roomCategory:'Deluxe',food:'BB'}},{room_category:'Deluxe',food:'BB',details:{}}]){
+  const card=buildServiceMessage({id:42,title:'TEST',category:'refused_tour',...fields},'refused_tour','client');
+  assert.match(card.text,/🛏 <b>Тип номера:<\/b> Deluxe/);assert.match(card.text,/🍽 <b>Питание:<\/b> BB/);
+ }
+ const card=buildServiceMessage({id:42,title:'TEST',category:'refused_tour',details:{}},'refused_tour','client');
+ assert.doesNotMatch(card.text,/Тип номера:|Питание:/);
+});
