@@ -2388,7 +2388,13 @@ function PublishConfirmModal({
   );
 }
 
-function PublishResultModal({ result, saving = false, onClose, onRetry, nextServiceId }) {
+function PublishResultModal({ result, saving = false, onClose, onNext, onRetry, nextServiceId }) {
+  useEffect(() => {
+    if (!result || saving) return;
+    const handleKeyDown = (event) => { if (event.key === 'Escape') { event.preventDefault(); onClose(); } };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [result, saving, onClose]);
   if (!result) return null;
   const broadcast = result.broadcast || {};
   const ok = Boolean(broadcast.ok);
@@ -2399,7 +2405,17 @@ function PublishResultModal({ result, saving = false, onClose, onRetry, nextServ
   return createPortal(
     <div className="fixed inset-0 z-[5700] bg-black/65 flex items-center justify-center p-4">
       <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-        <div className="border-b px-5 py-4">
+        <div className="relative border-b px-5 py-4 pr-16">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={saving}
+            aria-label="Закрыть результат публикации"
+            title="Закрыть"
+            className="absolute right-3 top-3 flex h-10 w-10 items-center justify-center rounded-full text-2xl text-slate-500 hover:bg-slate-100 hover:text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-500 disabled:opacity-50"
+          >
+            <span aria-hidden="true">×</span>
+          </button>
           <div className="text-lg font-bold text-slate-950">Результат публикации</div>
           <div className="mt-1 text-sm text-slate-500">
             #{result.service?.id || result.serviceId} · {result.service?.title || "service"}
@@ -2449,8 +2465,18 @@ function PublishResultModal({ result, saving = false, onClose, onRetry, nextServ
             disabled={saving}
             className="rounded-lg bg-gray-100 px-4 py-2 text-sm font-semibold text-gray-800 hover:bg-gray-200 disabled:opacity-60"
           >
-            {nextServiceId ? "Следующая услуга" : "Закрыть"}
+            Закрыть
           </button>
+          {nextServiceId && (
+            <button
+              type="button"
+              onClick={onNext}
+              disabled={saving}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-black disabled:opacity-60"
+            >
+              Следующая услуга
+            </button>
+          )}
           {!ok && (
             <button
               type="button"
@@ -4208,7 +4234,8 @@ export default function AdminModeration({ embedded = false }) {
         result={publishResult}
         saving={rebroadcastBusy || editSaving || Boolean(actionBusy)}
         nextServiceId={autoNext && ["pending","returned"].includes(tab) && nextAfterPublish?.key===queueKey ? nextAfterPublish.id : null}
-        onClose={() => { setPublishResult(null); const next=nextAfterPublish;setNextAfterPublish(null);if(next?.id && next.key===queueKey && autoNext && ["pending","returned"].includes(tab)) openEdit(next.id); }}
+        onClose={() => { setPublishResult(null); setNextAfterPublish(null); }}
+        onNext={() => { setPublishResult(null); const next=nextAfterPublish;setNextAfterPublish(null);if(next?.id && next.key===queueKey && autoNext && ["pending","returned"].includes(tab)) openEdit(next.id); }}
         onRetry={retryBroadcast}
       />
 
