@@ -1274,20 +1274,22 @@ const priceKind =
     const count = typeof audience === "string" ? 0 : Number(audience.count || 0);
     const perLabel = typeof audience === "string" ? "" : audience.perLabel;
     const note = typeof audience === "string" ? "" : audience.note;
-    const priceNumber = parseMoneyNumber(priceRaw);
-    const currency = extractCurrencyLabel(priceWithCur);
-    const priceLabel = role === 'provider' && Number(priceRaw) !== Number(d.grossPrice) ? 'Цена для коллег' : 'Цена для туристов';
+    const primaryPrice=role === "provider" && Number(d.grossPrice)>0 ? d.grossPrice : priceRaw;
+    const primaryWithCur=formatPriceWithCurrency(primaryPrice);
+    const priceNumber = parseMoneyNumber(primaryPrice);
+    const currency = extractCurrencyLabel(primaryWithCur);
+    const priceLabel = role === 'provider' && !(Number(d.grossPrice)>0) ? 'Цена для коллег' : 'Цена для туристов';
     const lines = [
       `💰 <b>${priceLabel}</b>`,
       totalLabel
-        ? `💵 <b>${escapeHtml(String(priceWithCur))}</b> <i>${escapeHtml(totalLabel)}</i>`
-        : `💵 <b>${escapeHtml(String(priceWithCur))}</b>`,
+        ? `💵 <b>${escapeHtml(String(primaryWithCur))}</b> <i>${escapeHtml(totalLabel)}</i>`
+        : `💵 <b>${escapeHtml(String(primaryWithCur))}</b>`,
     ];
-    if (role === 'provider' && Number(d.grossPrice)>0 && Number(priceRaw)!==Number(d.grossPrice)) lines.push(`💰 <b>Цена для туристов: ${escapeHtml(formatPriceWithCurrency(d.grossPrice))}</b>`);
+    if (role === 'provider' && Number(d.grossPrice)>0 && Number(priceRaw)!==Number(d.grossPrice)) lines.push(`🤝 <b>Цена для коллег: ${escapeHtml(String(priceWithCur))}</b>`);
     if (explicitPerPerson) {
       lines.push(`👤 <b>за 1 человека:</b> ${escapeHtml(String(explicitPerPerson))}`);
     } else if (priceNumber && count > 1 && perLabel) {
-      lines.push(`👤 <b>${escapeHtml(perLabel)}:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
+      lines.push(`👤 <b>${role === "provider" && Number(d.grossPrice)>0 ? "Туристу " : ""}${escapeHtml(perLabel)}:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
     }
     if (note) {
       lines.push(`👥 <b>${escapeHtml(note)}</b>`);
@@ -1298,16 +1300,18 @@ const priceKind =
   const hotelPriceLine = () => {
     if (priceWithCur == null || !String(priceWithCur).trim()) return "";
     const audience = inferPriceAudience();
-    const priceNumber = parseMoneyNumber(priceRaw);
-    const currency = extractCurrencyLabel(priceWithCur);
+    const primaryPrice=role === "provider" && Number(d.grossPrice)>0 ? d.grossPrice : priceRaw;
+    const primaryWithCur=formatPriceWithCurrency(primaryPrice);
+    const priceNumber = parseMoneyNumber(primaryPrice);
+    const currency = extractCurrencyLabel(primaryWithCur);
     const count = Number(audience?.count || 0);
     const lines = [
-      `💰 <b>${role === "provider" && Number(priceRaw) !== Number(d.grossPrice) ? "Цена для коллег" : "Цена для туристов"}</b>`,
-      `💵 <b>${escapeHtml(String(priceWithCur))}</b> <i>${escapeHtml(d.priceBasis === "person" ? "за 1 человека" : d.priceBasis === "total" ? "за всё предложение" : "за номер")}${d.pricePeriod === "night" ? " / за ночь" : d.pricePeriod === "full" ? " / весь период" : " · период уточните"}</i>`,
+      `💰 <b>${role === "provider" && !(Number(d.grossPrice)>0) ? "Цена для коллег" : "Цена для туристов"}</b>`,
+      `💵 <b>${escapeHtml(String(primaryWithCur))}</b> <i>${escapeHtml(d.priceBasis === "person" ? "за 1 человека" : d.priceBasis === "total" ? "за всё предложение" : "за номер")}${d.pricePeriod === "night" ? " / за ночь" : d.pricePeriod === "full" ? " / весь период" : " · период уточните"}</i>`,
     ];
-    if (role === 'provider' && Number(d.grossPrice)>0 && Number(priceRaw)!==Number(d.grossPrice)) lines.push(`💰 <b>Цена для туристов: ${escapeHtml(formatPriceWithCurrency(d.grossPrice))}</b>`);
+    if (role === 'provider' && Number(d.grossPrice)>0 && Number(priceRaw)!==Number(d.grossPrice)) lines.push(`🤝 <b>Цена для коллег: ${escapeHtml(String(priceWithCur))}</b>`);
     if (priceNumber && count > 1 && d.priceBasis !== 'person') {
-      lines.push(`👤 <b>за 1 человека:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
+      lines.push(`👤 <b>${role === "provider" && Number(d.grossPrice)>0 ? "Туристу " : ""}за 1 человека:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
     }
     if (audience?.note) {
       lines.push(`👥 <b>${escapeHtml(audience.note)}</b>`);

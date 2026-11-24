@@ -17,3 +17,9 @@ test('legacy round trip text retains flight numbers, times and next-day arrival'
  assert.match(text,/Туда/);assert.match(text,/Обратно/);assert.match(text,/Прилёт: 17:00 \+1/);assert.match(text,/192OD/);assert.doesNotMatch(text,/Багаж/);
  assert.equal(flightItineraryText({flightDetails:'Уточнить у поставщика'}),'✈️ Информация о перелёте\nУточнить у поставщика');
 });
+
+test('provider card leads with tourist price and calculates its per-person equivalent',()=>{
+ const {buildServiceMessage}=require('../utils/telegramServiceCard');
+ const card=buildServiceMessage({id:42,category:'refused_tour',title:'TEST',details:{price:4010,grossPrice:4180,accommodation:'DBL',adt:2}},'refused_tour','provider',{forceRefused:true});
+ assert.match(card.text,/4180 USD<\/b> <i>за 2/);assert.match(card.text,/Цена для коллег: 4010 USD/);assert.match(card.text,/2.090 USD/);assert.doesNotMatch(card.text,/2.005 USD/);
+});
