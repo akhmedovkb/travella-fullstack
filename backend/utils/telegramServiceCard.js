@@ -551,7 +551,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
       const priceIndex = parts.findIndex(part => /💵|💸|💰|<b>Цена/.test(part));
       const position = priceIndex >= 0 ? priceIndex + 1 : Math.min(2, parts.length);
       const companion = companionText(d.companion ? { ...d.companion, travelers: String(d.companion.travelers || "").slice(0, 100), preferences: String(d.companion.preferences || "").slice(0, 120) } : undefined);
-      return [...parts.slice(0, position), ...(companion ? ["", escapeHtml(companion)] : []), "", escapeHtml(galaDinnerText(compact)), "", ...parts.slice(position)].join("\n");
+      return [...parts.slice(0, position), ...(companion ? ["", escapeHtml(companion)] : []), ...(compact && ["included", "mandatory", "optional", "none"].includes(compact.status) ? ["", escapeHtml(galaDinnerText(compact))] : []), "", ...parts.slice(position)].join("\n");
     }
     return parts.join("\n");
   };
