@@ -21,7 +21,7 @@ const fmt = (n) => new Intl.NumberFormat().format(Number(n || 0));
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || "").replace(/\/+$/, "");
 
 const REJECT_REASON_OPTIONS = [
-  { code: "NO_PROOF", label: "Нет proof/подтверждения", text: "Загрузите фото или документ, подтверждающий отказную услугу." },
+  { code: "NO_PROOF", label: "Нет подтверждения", text: "Загрузите фото или документ, подтверждающий отказную услугу." },
   { code: "BAD_PROOF", label: "Proof нечитаемый", text: "Proof нечитаемый или не подтверждает данные услуги. Загрузите более понятное подтверждение." },
   { code: "NO_DATES", label: "Не хватает дат", text: "Укажите корректные даты услуги: вылет/заезд/дату мероприятия." },
   { code: "BAD_PRICE", label: "Нужно уточнить цену", text: "Проверьте цену и укажите, за одного человека/билет или за весь пакет." },
@@ -636,21 +636,21 @@ function Card({
   const siteUrl = `https://travella.uz?service=${encodeURIComponent(s.id)}`;
 
   return (
-    <div id={`moderation-service-${s.id}`} role="article" aria-label={`Услуга #${s.id}`} tabIndex={-1} className={`border rounded-lg p-4 bg-white shadow-sm flex flex-col relative outline-none ${focused ? "ring-2 ring-violet-400" : "focus:ring-2 focus:ring-violet-400"}`}>
-      <div className="absolute top-3 right-3 z-10">
+    <div id={`moderation-service-${s.id}`} role="article" aria-label={`Услуга #${s.id}`} tabIndex={-1} className={`min-w-0 border border-slate-200 rounded-2xl p-4 bg-white shadow-sm flex flex-col relative outline-none ${focused ? "ring-2 ring-violet-400" : "focus:ring-2 focus:ring-violet-400"}`}>
+      <div className="mb-3 flex justify-end">
         {hasProof ? (
           <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600 text-white text-[11px] font-semibold px-2.5 py-1 shadow">
-            ✔ {t("moderation.proof_exists", { defaultValue: "Есть proof" })}
+            ✔ {t("moderation.proof_exists", { defaultValue: "Есть подтверждение" })}
           </span>
         ) : (
           <span className="inline-flex items-center gap-1 rounded-full bg-gray-300 text-gray-800 text-[11px] font-semibold px-2.5 py-1">
-            {t("moderation.proof_missing", { defaultValue: "Нет proof" })}
+            {t("moderation.proof_missing", { defaultValue: "Нет подтверждения" })}
           </span>
         )}
       </div>
 
-      <div className="flex gap-3 pr-24">
-        <div className="w-24 h-16 bg-gray-100 rounded overflow-hidden shrink-0">
+      <div className="flex min-w-0 gap-3">
+        <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-slate-100">
           {cover ? (
             <img src={cover} alt="" className="w-full h-full object-cover" />
           ) : (
@@ -661,7 +661,7 @@ function Card({
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="font-semibold truncate">
+          <div className="break-words text-sm font-semibold leading-5 line-clamp-2" title={displayTitle}>
             {isRefused ? `#${s.id} — ` : ""}
             {displayTitle}
           </div>
@@ -1434,7 +1434,7 @@ function getDangerIssues(form, details, images) {
   if (!hasProof) {
     issues.push({
       key: "no-proof",
-      title: "Нет proof",
+      title: "Нет подтверждения",
       text: "Нет подтверждения подлинности. Можно сохранить, но публиковать рискованно.",
       blocking: false,
     });
@@ -1521,7 +1521,7 @@ function quickCorrectionOptions(analysis) {
   if (hasIssue("no-proof")) {
     options.push({
       key: "no-proof",
-      label: "Нет proof",
+      label: "Нет подтверждения",
       reasonCode: "NO_PROOF",
       reason:
         "Пожалуйста, загрузите proof/подтверждение подлинности предложения: фото брони, скрин отеля/авиа/поставщика или другой документ. После этого отправьте карточку на модерацию повторно.",
@@ -1611,64 +1611,48 @@ function matchesQueueFilter(svc, filter) {
 
 function QueuePanel({ items, filter, onFilterChange, metricsOverride, query, onQueryChange, sort, onSortChange }) {
   const metrics = metricsOverride || getQueueMetrics(items);
-  const filters = [
-    { key: "all", label: "Все", count: metrics.total, tone: "slate" },
-    { key: "ready", label: "Готовы", count: metrics.ready, tone: "emerald" },
-    { key: "needFix", label: "Нужно исправить", count: metrics.needFix, tone: "rose" },
-    { key: "afterCorrection", label: "После исправления", count: metrics.afterCorrection, tone: "cyan" },
-    { key: "no-proof", label: "Нет proof", count: metrics.noProof, tone: "amber" },
-    { key: "no-photo", label: "Нет фото", count: metrics.noPhoto, tone: "violet" },
-    { key: "no-contact", label: "Нет контакта", count: metrics.noContact, tone: "pink" },
-    { key: "gross-below-net", label: "Цена", count: metrics.badPrice, tone: "orange" },
-    { key: "past-date", label: "Даты прошли", count: metrics.pastDate, tone: "blue" },
+  const summaries = [
+    { key: "all", label: "Всего в очереди", count: metrics.total },
+    { key: "ready", label: "Готовы к публикации", count: metrics.ready },
+    { key: "needFix", label: "Требуют исправлений", count: metrics.needFix },
+    { key: "afterCorrection", label: "После исправлений", count: metrics.afterCorrection },
   ];
-  const toneClass = {
-    slate: "border-slate-200 bg-slate-50 text-slate-800",
-    emerald: "border-emerald-200 bg-emerald-50 text-emerald-800",
-    rose: "border-rose-200 bg-rose-50 text-rose-800",
-    amber: "border-amber-200 bg-amber-50 text-amber-800",
-    violet: "border-violet-200 bg-violet-50 text-violet-800",
-    pink: "border-pink-200 bg-pink-50 text-pink-800",
-    orange: "border-orange-200 bg-orange-50 text-orange-800",
-    blue: "border-blue-200 bg-blue-50 text-blue-800",
-    cyan: "border-cyan-200 bg-cyan-50 text-cyan-800",
-  };
-
+  const issues = [
+    { key: "no-proof", label: "Нет подтверждения", count: metrics.noProof },
+    { key: "no-photo", label: "Нет фото", count: metrics.noPhoto },
+    { key: "no-contact", label: "Нет контакта", count: metrics.noContact },
+    { key: "gross-below-net", label: "Ошибка цены", count: metrics.badPrice },
+    { key: "past-date", label: "Даты прошли", count: metrics.pastDate },
+  ];
   return (
-    <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+    <section aria-label="Рабочая очередь" className="mb-4 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-slate-100 px-4 py-3 sm:px-5">
         <div>
-          <div className="text-sm font-bold uppercase tracking-wide text-slate-500">
-            Рабочая очередь
-          </div>
-          <div className="text-lg font-semibold text-slate-950">
-            Сначала карточки с ошибками, потом готовые к публикации
-          </div>
+          <h2 className="text-base font-bold text-slate-950">Рабочая очередь</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Выберите группу услуг или найдите нужную карточку</p>
         </div>
-        <div className="text-sm text-slate-500">
-          {metrics.ready} готовы · {metrics.needFix} требуют правки
+        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">{metrics.ready} готовы · {metrics.needFix} требуют правки</span>
+      </div>
+      <div className="space-y-4 p-4 sm:p-5">
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+          {summaries.map(item => (
+            <button key={item.key} type="button" aria-pressed={filter === item.key} onClick={() => onFilterChange(item.key)}
+              className={`min-w-0 rounded-xl border px-3 py-3 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${filter === item.key ? 'border-slate-900 bg-slate-900 text-white' : 'border-slate-200 bg-white text-slate-700 hover:border-slate-400 hover:bg-slate-50'}`}>
+              <span className="block text-2xl font-bold tabular-nums leading-none">{item.count}</span>
+              <span className="mt-2 block text-xs font-medium leading-snug">{item.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,1fr)_220px]">
+          <label className="min-w-0"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Поиск услуги</span><input type="search" aria-label="Поиск услуг" value={query} onChange={event=>onQueryChange(event.target.value)} placeholder="Номер, название, отель или поставщик" className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-slate-50 px-3 text-sm focus:border-slate-400 focus:bg-white focus:outline-none" /></label>
+          <label className="min-w-0"><span className="mb-1.5 block text-xs font-semibold text-slate-600">Порядок карточек</span><select aria-label="Сортировка услуг" value={sort} onChange={event=>onSortChange(event.target.value)} className="h-10 w-full min-w-0 rounded-lg border border-slate-200 bg-white px-3 text-sm"><option value="oldest">Дольше всех ожидают</option><option value="priority">Сначала проблемные</option><option value="newest">Сначала новые</option></select></label>
+        </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          <span className="mr-1 text-xs font-semibold text-slate-500">Проверить:</span>
+          {issues.map(item=><button key={item.key} type="button" aria-pressed={filter===item.key} onClick={()=>onFilterChange(filter===item.key?'all':item.key)} className={`inline-flex min-h-8 items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-slate-400 ${filter===item.key?'border-slate-900 bg-slate-900 text-white':'border-slate-200 text-slate-600 hover:bg-slate-50'}`}><span>{item.label}</span><span className={`rounded px-1.5 tabular-nums ${filter===item.key?'bg-white/15':item.count?'bg-amber-50 text-amber-800':'bg-slate-100 text-slate-400'}`}>{item.count}</span></button>)}
         </div>
       </div>
-
-      <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-[1fr_200px]"><input type="search" aria-label="Поиск услуг" value={query} onChange={(event) => onQueryChange(event.target.value)} placeholder="Поиск: #ID, отель, поставщик…" className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm" /><select aria-label="Сортировка услуг" value={sort} onChange={(event) => onSortChange(event.target.value)} className="min-w-0 rounded-xl border border-slate-200 px-3 py-2 text-sm"><option value="oldest">Дольше всех ожидают</option><option value="priority">Сначала проблемные</option><option value="newest">Сначала новые</option></select></div>
-      <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 xl:grid-cols-8 gap-2">
-        {filters.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => onFilterChange(item.key)}
-            className={`rounded-2xl border px-3 py-3 text-left transition ${
-              filter === item.key
-                ? "border-slate-950 bg-slate-950 text-white"
-                : toneClass[item.tone]
-            }`}
-          >
-            <div className="text-2xl font-bold leading-none">{item.count}</div>
-            <div className="mt-1 text-xs font-semibold leading-tight">{item.label}</div>
-          </button>
-        ))}
-      </div>
-    </div>
+    </section>
   );
 }
 
@@ -3368,28 +3352,12 @@ export default function AdminModeration({ embedded = false }) {
   return (
     <>
       <div className={embedded ? "w-full" : "max-w-6xl mx-auto p-4"}>
-        <div className={`mb-4 flex items-center ${embedded ? "justify-end" : "justify-between"}`}>
-          {!embedded && (
-            <h1 className="text-2xl font-bold">
-              {t("moderation.title", { defaultValue: "Модерация услуг" })}
-            </h1>
-          )}
+        {!embedded && <h1 className="mb-4 text-2xl font-bold">{t("moderation.title", {defaultValue:"Модерация услуг"})}</h1>}
+        <div className="mb-4 flex w-full min-w-0 flex-wrap items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
           <button
-            onClick={() => {
-              load(tab);
-              refreshCounts();
-            }}
-            className="px-3 py-1.5 rounded bg-gray-900 text-white text-sm"
-          >
-            {t("common.refresh", { defaultValue: "Обновить" })}
-          </button>
-        </div>
-
-        <div className="mb-5 flex w-fit max-w-full flex-wrap overflow-hidden rounded-2xl bg-white shadow-sm">
-          <button
-            className={`px-4 py-1.5 text-sm font-medium ${
+            className={`rounded-lg px-3 py-2 text-xs sm:text-sm font-medium ${
               tab === "pending"
-                ? "bg-gray-900 text-white"
+                ? "bg-slate-900 text-white"
                 : "text-gray-700 hover:bg-gray-100"
             }`}
             onClick={() => setTab("pending")}
@@ -3401,9 +3369,9 @@ export default function AdminModeration({ embedded = false }) {
           </button>
 
           <button
-            className={`px-4 py-1.5 text-sm font-medium ${
+            className={`rounded-lg px-3 py-2 text-xs sm:text-sm font-medium ${
               tab === "rejected"
-                ? "bg-gray-900 text-white"
+                ? "bg-slate-900 text-white"
                 : "text-gray-700 hover:bg-gray-100"
             }`}
             onClick={() => setTab("rejected")}
@@ -3415,9 +3383,9 @@ export default function AdminModeration({ embedded = false }) {
           </button>
 
           <button
-            className={`px-4 py-1.5 text-sm font-medium ${
+            className={`rounded-lg px-3 py-2 text-xs sm:text-sm font-medium ${
               tab === "published"
-                ? "bg-gray-900 text-white"
+                ? "bg-slate-900 text-white"
                 : "text-gray-700 hover:bg-gray-100"
             }`}
             onClick={() => setTab("published")}
@@ -3426,8 +3394,18 @@ export default function AdminModeration({ embedded = false }) {
             <span className="ml-2 inline-flex items-center justify-center min-w-[22px] h-[22px] px-1 text-xs rounded-full bg-gray-200 text-gray-700">
               {countsLoaded ? counts.published || 0 : "…"}
             </span>
-          </button>          {[['waiting','Ждём исправлений'],['returned','Вернулась на проверку']].map(([status,label])=><button key={status} type="button" onClick={()=>setTab(status)} className={`px-4 py-2 text-sm font-semibold ${tab===status?'bg-violet-700 text-white':'bg-white text-slate-700'}`}>{label} <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-800">{countsLoaded?counts[status]||0:'…'}</span></button>)}
+          </button>          {[['waiting','Ждём исправлений'],['returned','Вернулась на проверку']].map(([status,label])=><button key={status} type="button" onClick={()=>setTab(status)} className={`rounded-lg px-3 py-2 text-xs sm:text-sm font-medium ${tab===status?'bg-slate-900 text-white':'bg-white text-slate-700'}`}>{label} <span className="ml-1 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-800">{countsLoaded?counts[status]||0:'…'}</span></button>)}
 
+          <button
+            onClick={() => {
+              load(tab);
+              refreshCounts();
+            }}
+            type="button"
+            className="ml-auto shrink-0 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50"
+          >
+            {t("common.refresh", { defaultValue: "Обновить" })}
+          </button>
         </div>
 
         {tab !== "published" && (
@@ -3456,7 +3434,7 @@ export default function AdminModeration({ embedded = false }) {
           />
         )}
 
-        {["pending","returned"].includes(tab) && <label className="mb-3 flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" checked={autoNext} onChange={e=>setAutoNext(e.target.checked)}/>Открывать следующую услугу после решения</label>}
+        {["pending","returned"].includes(tab) && <label className="mb-3 flex items-center gap-2 text-xs text-slate-600"><input type="checkbox" checked={autoNext} onChange={e=>setAutoNext(e.target.checked)}/>Открывать следующую услугу после решения</label>}
         {!loading && !queueError && tab === "published" && loadedQueueKey === queueKey && (
           <div className="mb-5 grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -3513,7 +3491,7 @@ export default function AdminModeration({ embedded = false }) {
             По выбранному фильтру карточек нет.
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
             {displayedItems.map((it) => {
               const analysis = analyzeModerationService(it);
               return (
