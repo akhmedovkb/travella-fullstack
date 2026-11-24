@@ -1,6 +1,8 @@
 //frontend/src/App.jsx
 
 import React from "react";
+import { useTranslation } from "react-i18next";
+import i18n from "./i18n";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
 import { ToastMount } from "./shared/toast";
 
@@ -62,16 +64,16 @@ class AppErrorBoundary extends React.Component {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-lg border border-gray-200 bg-white p-6 text-center shadow-sm">
-          <h1 className="text-xl font-semibold text-gray-900">Не удалось загрузить страницу</h1>
+          <h1 className="text-xl font-semibold text-gray-900">{i18n.t("app_audit.load_error")}</h1>
           <p className="mt-2 text-sm text-gray-600">
-            Обновите страницу, чтобы загрузить актуальную версию Travella.
+            {i18n.t("app_audit.load_error_hint")}
           </p>
           <button
             type="button"
             className="mt-5 rounded-md bg-orange-500 px-5 py-2.5 font-medium text-white hover:bg-orange-600"
             onClick={() => window.location.reload()}
           >
-            Обновить страницу
+            {i18n.t("app_audit.refresh")}
           </button>
         </div>
       </div>
@@ -209,6 +211,7 @@ function RouteAwareFooter() {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const [leadOpen, setLeadOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -222,7 +225,7 @@ export default function App() {
       <div className="min-h-screen bg-gray-100 flex flex-col">
         <Header />
         <main className="flex-1 p-4">
-          <React.Suspense fallback={<div className="py-12 text-center text-sm text-gray-500">Загрузка...</div>}>
+          <React.Suspense fallback={<div className="py-12 text-center text-sm text-gray-500">{t("app_audit.loading")}</div>}>
           <Routes>
             {/* --- Главная: сразу MARKETPLACE --- */}
             <Route path="/" element={<Marketplace />} />

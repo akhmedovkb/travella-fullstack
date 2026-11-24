@@ -70,7 +70,16 @@
     "no_dates": "Kamida bitta bo‘sh sanani tanlang",
     "sent": "Bron so‘rovi yuborildi",
     "error": "Bron yuborilmadi"
-  },
+  ,
+"new": "Bron qilish",
+"date_required": "Bron sanasini tanlang",
+"created": "Bron yaratildi",
+"create_error": "Bron yaratib bo‘lmadi",
+"date_from": "Boshlanish sanasi",
+"date_to": "Tugash sanasi",
+"note": "Izoh (ixtiyoriy)",
+"note_ph": "Istaklar va uchrashuv tafsilotlari"
+},
   "balance": {
     "title": "Mijoz balansi",
     "subtitle": "Payme orqali to‘ldirish va kontaktlarni ochish uchun yechish",
@@ -1158,7 +1167,9 @@
       "pending": "Kutilmoqda",
       "rejected": "Rad etilganlar"
     }
-  },
+  ,
+"created_at": "Yaratilgan"
+},
   "mountain_tour": "Tog‘ turi",
   "my_requests": "Mening so‘rovlarim",
   "name": "Nom",
@@ -1209,7 +1220,14 @@
     "cms_pages": "Pastki qism",
     "dashboard": "Kabinet",
     "service_audit": "Ta’minotchilar harakatlari"
-  },
+  ,
+"admin_core": "Operatsion markaz",
+"finance_admin": "Moliya",
+"billing_admin": "To‘lov va kirish",
+"broadcast": "Xabar tarqatish",
+"inside_requests": "India Inside so‘rovlari",
+"client_workspace": "Mijoz kabineti"
+},
   "insurance_included": "Sug'urta kiritilgan",
   "early_check_in": "Erta joylashish",
   "arrival_fast_track": "Kelishda Fast Track",
@@ -3791,5 +3809,18 @@
     "DUPLICATE": "Takroriy xizmat olib tashlandi yoki farqi tushuntirildi",
     "OTHER": "Moderator izohi bo‘yicha tuzatildi"
   }
+}
+,
+"footer": {
+  "partners_community": "Travella hamkorlari hamjamiyati",
+  "apps_hint": "Qulay ishlash uchun ilovani yuklab oling"
+},
+"close": "Yopish",
+"email": "Elektron pochta",
+"app_audit": {
+  "load_error": "Sahifani yuklab bo‘lmadi",
+  "load_error_hint": "Travella’ning joriy versiyasini yuklash uchun sahifani yangilang.",
+  "refresh": "Sahifani yangilash",
+  "loading": "Yuklanmoqda…"
 }
 }

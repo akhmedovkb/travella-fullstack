@@ -17,7 +17,20 @@ i18n
       uz: { translation: uz },
     },
     fallbackLng: "ru",
+    supportedLngs: ["ru", "uz", "en"],
+    load: "languageOnly",
+    detection: {
+      order: ["localStorage", "navigator", "htmlTag"],
+      lookupLocalStorage: "i18nextLng",
+      caches: ["localStorage"],
+    },
     interpolation: { escapeValue: false },
   });
+
+const updateDocumentLanguage = (language) => {
+  if (typeof document !== 'undefined') document.documentElement.lang = String(i18n.resolvedLanguage || language || 'ru').split('-')[0];
+};
+i18n.on('languageChanged', updateDocumentLanguage);
+updateDocumentLanguage(i18n.language);
 
 export default i18n;

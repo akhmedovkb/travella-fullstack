@@ -11,7 +11,7 @@ export default function Footer() {
     let alive = true;
     (async () => {
       try {
-        const lang = i18n.language || "ru";
+        const lang = String(i18n.resolvedLanguage || i18n.language || "ru").split("-")[0];
         const res = await apiGet(`/api/cms/pages?lang=${lang}`);
         if (alive) setPages(Array.isArray(res) ? res : res?.data || []);
       } catch {
@@ -32,7 +32,7 @@ export default function Footer() {
   ];
 
   const map = Object.fromEntries(pages.map(p => [p.slug, p.title]));
-  const lang = i18n.language || "ru";
+  const lang = String(i18n.resolvedLanguage || i18n.language || "ru").split("-")[0];
 
   return (
     <footer className="mt-14 bg-neutral-950 text-white">

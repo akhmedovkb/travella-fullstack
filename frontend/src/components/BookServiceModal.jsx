@@ -117,7 +117,7 @@ export default function BookServiceModal({ open, onClose, service }) {
           <button
             onClick={() => onClose?.()}
             className="text-gray-500 hover:text-gray-800"
-            aria-label="Close"
+            aria-label={t("close")}
           >
             ✕
           </button>
