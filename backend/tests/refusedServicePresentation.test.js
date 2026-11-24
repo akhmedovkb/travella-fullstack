@@ -137,5 +137,6 @@ test('a destination-only tour title is not repeated above its location',()=>{
  const service={id:42,title:'Фукуок',category:'refused_tour',details:{directionTo:'Фукуок',country:'Вьетнам',hotel:'TEST HOTEL',food:'BB',roomCategory:'Deluxe'}};
  const text=buildServiceMessage(service,service.category,'client').text;
  assert.equal(text.split('Фукуок').length-1,1);assert.match(text,/Вьетнам/);assert.match(text,/Deluxe/);
+ const prefixed=buildServiceMessage({...service,title:'Отказной тур Фукуок'},service.category,'client').text;assert.equal(prefixed.split('Фукуок').length-1,1);
  const named=buildServiceMessage({...service,title:'Особый тур на Фукуок'},service.category,'client').text;assert.match(named,/Особый тур/);
 });

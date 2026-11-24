@@ -1810,7 +1810,7 @@ const priceKind =
 
     parts.push(productHeader("ОТКАЗНОЙ ТУР"));
     const offerNameLine = titleLine("generic");
-    if (offerNameLine && !sameDisplayValue(svc.title, firstValue(d.directionTo, d.toCity, d.cityTo, d.resort, d.city))) parts.push(offerNameLine);
+    if (offerNameLine && !sameDisplayValue(offerNameLine.replace(/^📝\s*/u, ''), firstValue(d.directionTo, d.toCity, d.cityTo, d.resort, d.city))) parts.push(offerNameLine);
 
     const departureCity = firstValue(
       d.directionFrom,
