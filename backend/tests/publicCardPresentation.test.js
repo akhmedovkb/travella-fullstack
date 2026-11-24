@@ -23,3 +23,19 @@ test('provider card leads with tourist price and calculates its per-person equiv
  const card=buildServiceMessage({id:42,category:'refused_tour',title:'TEST',details:{price:4010,grossPrice:4180,accommodation:'DBL',adt:2}},'refused_tour','provider',{forceRefused:true});
  assert.match(card.text,/4180 USD<\/b> <i>за 2/);assert.match(card.text,/Цена для коллег: 4010 USD/);assert.match(card.text,/2.090 USD/);assert.doesNotMatch(card.text,/2.005 USD/);
 });
+
+test('clients and shareable inline cards never reveal colleague price regardless of sender role',()=>{
+ const {buildServiceMessage}=require('../utils/telegramServiceCard');
+ for(const category of ['refused_tour','refused_hotel','refused_flight'])for(const [role,options]of [['client',{}],['provider',{isInline:true,forceRefused:true}],['provider',{publicSafe:true,forceRefused:true}],['provider',{priceAudience:'tourist',forceRefused:true}]]){
+  const text=buildServiceMessage({id:42,title:'TEST',category,details:{price:4010,netPrice:4010,grossPrice:4180,accommodation:'DBL',adt:2}},category,role,options).text;
+  assert.doesNotMatch(text,/4010|4.010|коллег|поставщика|2.005/);assert.match(text,/4180/);assert.match(text,/Цена для туристов/);
+ }
+});
+
+test('missing tourist price never falls back to internal colleague price',()=>{
+ const {buildServiceMessage}=require('../utils/telegramServiceCard');
+ for(const category of ['refused_tour','refused_hotel','refused_flight']){
+ const text=buildServiceMessage({id:42,title:'TEST',category,price:4010,details:{price:4010,netPrice:4010}},category,'client').text;
+ assert.doesNotMatch(text,/4010|4.010/);assert.match(text,/Цена для туристов:<\/b> уточните/);
+ }
+});

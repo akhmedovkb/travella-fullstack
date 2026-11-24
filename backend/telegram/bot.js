@@ -20223,6 +20223,8 @@ const data = await getOrFetchCached(
         // Поставщики и админы в личном боте/поиске видят контакты всегда.
         {
           ...cardOptions,
+          priceAudience: "tourist",
+          isInline: true,
           unlocked: roleForInline === "client" ? false : true,
           unlockPrice,
           forceHideProviderContacts: mustHideContactsForInline,

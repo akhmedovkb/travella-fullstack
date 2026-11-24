@@ -272,10 +272,8 @@ function pickPrice(details, svc, role) {
     d.client_price ??
     d.publicPrice ??
     d.public_price ??
-    d.price ??
     svc.grossPrice ??
     svc.gross_price ??
-    svc.price ??
     null
   );
 }
@@ -547,7 +545,7 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
   const serviceId = svc.id;
   const cardText = parts => {
     if (["refused_tour", "refused_hotel", "refused_flight"].includes(category)) {
-      const summary=publicPriceExtras(d,category,role === "provider" ? d.grossPrice ?? priceRaw : priceRaw);
+      const summary=publicPriceExtras(d,category,privatePriceView ? d.grossPrice ?? priceRaw : priceRaw);
       if(summary){const index=parts.findIndex(part=>/💵|💸|💰|<b>Цена/.test(part));parts.splice(index>=0?index+1:parts.length,0,escapeHtml(summary));}
     }
     if (GALA_CATEGORIES.has(category)) {
@@ -658,7 +656,8 @@ function buildServiceMessage(svc, category, role = "client", options = {}) {
   const hotel = norm(d.hotel || d.hotelName);
   const accommodation = norm(d.accommodation);
 
-  const priceRaw = pickPrice(d, svc, role);
+  const privatePriceView = role === 'provider' && options?.priceAudience !== 'tourist' && options?.publicSafe !== true && options?.isInline !== true;
+  const priceRaw = pickPrice(d, svc, privatePriceView ? 'provider' : 'client');
   const priceWithCur = formatPriceWithCurrency(priceRaw);
   // ✅ определяем тип цены (нетто/брутто)
 const priceKind =
@@ -1246,7 +1245,7 @@ const priceKind =
   };
 
   const priceHeroLine = () => {
-    if (priceWithCur == null || !String(priceWithCur).trim()) return "";
+    if (priceWithCur == null || !String(priceWithCur).trim()) return "💰 <b>Цена для туристов:</b> уточните";
     const explicitPerPerson = d.priceBasis === "person" ? "" : formatPriceWithCurrency(firstValue(
       d.pricePerPerson,
       d.price_per_person,
@@ -1274,22 +1273,22 @@ const priceKind =
     const count = typeof audience === "string" ? 0 : Number(audience.count || 0);
     const perLabel = typeof audience === "string" ? "" : audience.perLabel;
     const note = typeof audience === "string" ? "" : audience.note;
-    const primaryPrice=role === "provider" && Number(d.grossPrice)>0 ? d.grossPrice : priceRaw;
+    const primaryPrice=privatePriceView && Number(d.grossPrice)>0 ? d.grossPrice : priceRaw;
     const primaryWithCur=formatPriceWithCurrency(primaryPrice);
     const priceNumber = parseMoneyNumber(primaryPrice);
     const currency = extractCurrencyLabel(primaryWithCur);
-    const priceLabel = role === 'provider' && !(Number(d.grossPrice)>0) ? 'Цена для коллег' : 'Цена для туристов';
+    const priceLabel = privatePriceView && !(Number(d.grossPrice)>0) ? 'Цена для коллег' : 'Цена для туристов';
     const lines = [
       `💰 <b>${priceLabel}</b>`,
       totalLabel
         ? `💵 <b>${escapeHtml(String(primaryWithCur))}</b> <i>${escapeHtml(totalLabel)}</i>`
         : `💵 <b>${escapeHtml(String(primaryWithCur))}</b>`,
     ];
-    if (role === 'provider' && Number(d.grossPrice)>0 && Number(priceRaw)!==Number(d.grossPrice)) lines.push(`🤝 <b>Цена для коллег: ${escapeHtml(String(priceWithCur))}</b>`);
+    if (privatePriceView && Number(d.grossPrice)>0 && Number(priceRaw)!==Number(d.grossPrice)) lines.push(`🤝 <b>Цена для коллег: ${escapeHtml(String(priceWithCur))}</b>`);
     if (explicitPerPerson) {
       lines.push(`👤 <b>за 1 человека:</b> ${escapeHtml(String(explicitPerPerson))}`);
     } else if (priceNumber && count > 1 && perLabel) {
-      lines.push(`👤 <b>${role === "provider" && Number(d.grossPrice)>0 ? "Туристу " : ""}${escapeHtml(perLabel)}:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
+      lines.push(`👤 <b>${privatePriceView && Number(d.grossPrice)>0 ? "Туристу " : ""}${escapeHtml(perLabel)}:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
     }
     if (note) {
       lines.push(`👥 <b>${escapeHtml(note)}</b>`);
@@ -1298,20 +1297,20 @@ const priceKind =
   };
 
   const hotelPriceLine = () => {
-    if (priceWithCur == null || !String(priceWithCur).trim()) return "";
+    if (priceWithCur == null || !String(priceWithCur).trim()) return "💰 <b>Цена для туристов:</b> уточните";
     const audience = inferPriceAudience();
-    const primaryPrice=role === "provider" && Number(d.grossPrice)>0 ? d.grossPrice : priceRaw;
+    const primaryPrice=privatePriceView && Number(d.grossPrice)>0 ? d.grossPrice : priceRaw;
     const primaryWithCur=formatPriceWithCurrency(primaryPrice);
     const priceNumber = parseMoneyNumber(primaryPrice);
     const currency = extractCurrencyLabel(primaryWithCur);
     const count = Number(audience?.count || 0);
     const lines = [
-      `💰 <b>${role === "provider" && !(Number(d.grossPrice)>0) ? "Цена для коллег" : "Цена для туристов"}</b>`,
+      `💰 <b>${privatePriceView && !(Number(d.grossPrice)>0) ? "Цена для коллег" : "Цена для туристов"}</b>`,
       `💵 <b>${escapeHtml(String(primaryWithCur))}</b> <i>${escapeHtml(d.priceBasis === "person" ? "за 1 человека" : d.priceBasis === "total" ? "за всё предложение" : "за номер")}${d.pricePeriod === "night" ? " / за ночь" : d.pricePeriod === "full" ? " / весь период" : " · период уточните"}</i>`,
     ];
-    if (role === 'provider' && Number(d.grossPrice)>0 && Number(priceRaw)!==Number(d.grossPrice)) lines.push(`🤝 <b>Цена для коллег: ${escapeHtml(String(priceWithCur))}</b>`);
+    if (privatePriceView && Number(d.grossPrice)>0 && Number(priceRaw)!==Number(d.grossPrice)) lines.push(`🤝 <b>Цена для коллег: ${escapeHtml(String(priceWithCur))}</b>`);
     if (priceNumber && count > 1 && d.priceBasis !== 'person') {
-      lines.push(`👤 <b>${role === "provider" && Number(d.grossPrice)>0 ? "Туристу " : ""}за 1 человека:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
+      lines.push(`👤 <b>${privatePriceView && Number(d.grossPrice)>0 ? "Туристу " : ""}за 1 человека:</b> ${escapeHtml(formatMoneyCompact(priceNumber / count))} ${escapeHtml(currency)}`);
     }
     if (audience?.note) {
       lines.push(`👥 <b>${escapeHtml(audience.note)}</b>`);
@@ -2163,7 +2162,7 @@ const priceKind =
   if (accommodation) parts.push(`🛏 ${escapeHtml(accommodationLabel(accommodation))}`);
 
   if (priceWithCur != null && String(priceWithCur).trim()) {
-    const kind = role === "provider" ? "цена поставщика" : "цена для клиента";
+    const kind = privatePriceView ? "цена для коллег" : "цена для туристов";
     parts.push(`💸 <b>Цена</b>: ${escapeHtml(String(priceWithCur))} <i>(${escapeHtml(kind)})</i>`);
   }
 
