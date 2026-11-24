@@ -109,3 +109,26 @@ test('tour card does not repeat meals in inclusions or the hotel title',()=>{
  assert.equal((card.text.match(/RADISSON BLU RESORT PHU QUOC/gi)||[]).length,1);
  assert.match(card.text,/Тип номера/);assert.match(card.text,/трансфер/);assert.match(card.text,/страховка/);
 });
+
+test('hotel cards render hotel, meals and occupancy once while retaining distinct room category and dates',()=>{
+ for(const role of ['client','provider']){
+  const service={id:42,title:'TEST HOTEL',category:'refused_hotel',details:{hotel:'TEST HOTEL',roomCategory:'DBL',accommodation:'DBL',food:'BB',city:'Dubai',country:'Dubai',checkInDate:'2099-12-01',checkOutDate:'2099-12-08'}};
+  const text=buildServiceMessage(service,service.category,role,{forceRefused:true}).text;
+  for(const value of ['TEST HOTEL','DBL','BB','Dubai','01.12.2099','08.12.2099'])assert.equal(text.toLowerCase().split(value.toLowerCase()).length-1,1,value);
+  const detailed=buildServiceMessage({...service,details:{...service.details,roomCategory:'Deluxe'}},service.category,role,{forceRefused:true}).text;
+  assert.match(detailed,/Deluxe/);assert.match(detailed,/DBL/);
+ }
+});
+test('flight cards avoid title duplicates but retain distinct outbound and return flight details',()=>{
+ for(const role of ['client','provider']){
+  const service={id:42,title:'Uzbekistan Airways HY101 ECONOMY 20 kg',category:'refused_flight',details:{directionFrom:'Tashkent',directionTo:'London',airline:'Uzbekistan Airways',flightNumber:'HY101',cabinClass:'ECONOMY',baggage:'20 kg',departureTime:'08:00',arrivalTime:'12:00',returnFlightNumber:'HY102',returnFlightTime:'15:00',departureFlightDate:'2099-12-01',returnFlightDate:'2099-12-08'}};
+  const text=buildServiceMessage(service,service.category,role,{forceRefused:true}).text;
+  for(const value of ['Uzbekistan Airways','HY101','20 kg'])assert.equal(text.toLowerCase().split(value.toLowerCase()).length-1,1,value);
+  assert.match(text,/HY102/);assert.match(text,/08:00/);assert.match(text,/12:00/);assert.match(text,/15:00/);
+ }
+});
+
+test('similar flight numbers are not mistaken for duplicates',()=>{
+ const text=buildServiceMessage({id:42,title:'Flight HY101',category:'refused_flight',details:{flightNumber:'HY10',returnFlightNumber:'HY102'}},'refused_flight','client').text;
+ assert.match(text,/№ HY10(?:[^0-9]|$)/);assert.match(text,/HY102/);
+});

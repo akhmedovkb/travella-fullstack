@@ -770,6 +770,24 @@ const priceKind =
     return Boolean(needle && haystack.includes(needle));
   };
 
+  const containsDisplayField = (line, value) => {
+    const text = String(line || '').replace(/<[^>]*>/g, ' ').toLowerCase();
+    const field = String(value || '').trim().toLowerCase();
+    if (!field) return false;
+    let at = text.indexOf(field);
+    while (at >= 0) {
+      const before = text[at - 1] || '', after = text[at + field.length] || '';
+      if (!/[\p{L}\p{N}]/u.test(before) && !/[\p{L}\p{N}]/u.test(after)) return true;
+      at = text.indexOf(field, at + 1);
+    }
+    return false;
+  };
+
+  const sameDisplayValue = (a, b) => {
+    const key = value => String(value || '').normalize('NFKC').replace(/<[^>]*>/g, '').replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim().toLowerCase();
+    return Boolean(key(a) && key(a) === key(b));
+  };
+
   const hasReturnFlight = () => {
     const rr =
       d.returnFlightDate ||
@@ -844,7 +862,7 @@ const priceKind =
       "";
     const lines = [];
     if (city) lines.push(labelLine("🏙", "Город", city));
-    if (country2) lines.push(labelLine("🌍", "Страна", country2));
+    if (country2 && !sameDisplayValue(city, country2)) lines.push(labelLine("🌍", "Страна", country2));
     if (!lines.length && route) lines.push(labelLine("📍", "Локация", route));
     return lines;
   };
@@ -1942,7 +1960,7 @@ const priceKind =
     }
 
     const stayLines = [];
-    if (roomCat) stayLines.push(labelLine("🛏", "Номер", roomCat));
+    if (roomCat && !sameDisplayValue(roomCat, accommodation) && !sameDisplayValue(roomCat, accommodationLabel(accommodation))) stayLines.push(labelLine("🛏", "Номер", roomCat));
     if (accommodation) stayLines.push(labelLine("👥", "Размещение", accommodationLabel(accommodation)));
     if (foodPretty) stayLines.push(labelLine("🍽", "Питание", `${foodPretty}${d.halal ? " Halal" : ""}`));
     if (stayLines.length) {
@@ -2015,11 +2033,11 @@ const priceKind =
     const seats = firstValue(d.seats, d.quantity, d.passengersCount, d.availableSeats, d.places);
 
     const flightBits = [];
-    if (airline) flightBits.push(`🛫 ${airline}`);
-    if (flightNumber) flightBits.push(`№ ${flightNumber}`);
+    if (airline && !containsDisplayField(offerNameLine, airline)) flightBits.push(`🛫 ${airline}`);
+    if (flightNumber && !containsDisplayField(offerNameLine, flightNumber) && !containsDisplayField(airline, flightNumber)) flightBits.push(`№ ${flightNumber}`);
     if (departureTime || arrivalTime) flightBits.push(`🕘 ${[departureTime, arrivalTime].filter(Boolean).join(" → ")}`);
-    if (cabin) flightBits.push(`💺 ${cabin}`);
-    if (baggage) flightBits.push(`🧳 ${baggage}`);
+    if (cabin && !containsDisplayField(offerNameLine, cabin)) flightBits.push(`💺 ${cabin}`);
+    if (baggage && !containsDisplayField(offerNameLine, baggage)) flightBits.push(`🧳 ${baggage}`);
     if (seats) flightBits.push(`👤 ${seats} мест.`);
 
     const priceLine = priceHeroLine();
