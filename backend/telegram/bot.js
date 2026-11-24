@@ -2378,6 +2378,9 @@ bot.use(async (ctx, next) => {
 });
 
 
+bot.use(require('./handlers/publicationReceiptFlow').createPublicationReceiptFlow({pool,isAdmin:isTelegramAdminUserId,
+ recipients:()=>{const manager=String(MANAGER_CHAT_ID||'');return /^\d+$/.test(manager)?[manager]:String(process.env.TELEGRAM_ADMIN_CHAT_IDS||'').split(/[\s,;]+/).filter(x=>/^\d+$/.test(x));},
+ amount:Math.max(1,Math.trunc(Number(process.env.PROVIDER_SUPPORT_FIXED_AMOUNT_SUM||25000)||25000))}));
 // Corrections use the real Telegram actor and run before legacy text/photo wizards.
 const companionFlow = require("./handlers/companionFlow").createCompanionFlow({ pool, onDraftComplete: async ctx => {
   ctx.session.state = "svc_create_price";
@@ -14253,7 +14256,7 @@ async function replyProviderSupportPrompt(ctx, serviceId = null) {
       return;
     }
 
-    await replyProviderSupportCardDetails(ctx, settings);
+    await replyProviderSupportCardDetails(ctx, settings, serviceId);
   } catch (e) {
     console.error("[tg-bot] provider support prompt error:", e?.message || e);
   }
@@ -14322,10 +14325,10 @@ async function replyProviderSupportPaymeClickPrompt(ctx, settings, serviceId = n
   });
 }
 
-function buildProviderSupportCardKeyboard() {
+function buildProviderSupportCardKeyboard(serviceId=null) {
   return {
     inline_keyboard: [
-      [{ text: "✅ Оплатил / отправлю чек", callback_data: "support_project:receipt_hint" }],
+      [{ text: "✅ Оплатил / отправлю чек", callback_data: `support_project:receipt_hint:${Number(serviceId||0)}` }],
       [
         { text: "📋 Мои услуги", callback_data: "prov_services:list" },
         { text: "🗄 Архив", callback_data: "archive:open" },
@@ -14356,10 +14359,10 @@ ${cardOwner ? `👤 Получатель: <b>${cardOwner}</b>\n` : ""}${cardBank
 ${cardNote}`;
 }
 
-async function replyProviderSupportCardDetails(ctx, settings = null) {
+async function replyProviderSupportCardDetails(ctx, settings = null, serviceId=null) {
   await safeReply(ctx, buildProviderSupportCardText(), {
     parse_mode: "HTML",
-    reply_markup: buildProviderSupportCardKeyboard(),
+    reply_markup: buildProviderSupportCardKeyboard(serviceId),
   });
 }
 
