@@ -132,3 +132,10 @@ test('similar flight numbers are not mistaken for duplicates',()=>{
  const text=buildServiceMessage({id:42,title:'Flight HY101',category:'refused_flight',details:{flightNumber:'HY10',returnFlightNumber:'HY102'}},'refused_flight','client').text;
  assert.match(text,/№ HY10(?:[^0-9]|$)/);assert.match(text,/HY102/);
 });
+
+test('a destination-only tour title is not repeated above its location',()=>{
+ const service={id:42,title:'Фукуок',category:'refused_tour',details:{directionTo:'Фукуок',country:'Вьетнам',hotel:'TEST HOTEL',food:'BB',roomCategory:'Deluxe'}};
+ const text=buildServiceMessage(service,service.category,'client').text;
+ assert.equal(text.split('Фукуок').length-1,1);assert.match(text,/Вьетнам/);assert.match(text,/Deluxe/);
+ const named=buildServiceMessage({...service,title:'Особый тур на Фукуок'},service.category,'client').text;assert.match(named,/Особый тур/);
+});
