@@ -179,6 +179,7 @@ app.use("/api/hotel-inspections", hotelInspectionRoutes);
 
 const marketplaceRoutes = require("./routes/marketplaceRoutes");
 app.use("/api/marketplace", marketplaceRoutes);
+app.use("/api/seo", require("./routes/seoRoutes"));
 
 // Social network layer: provider posts, feed, follows, comments
 app.use("/api/social", socialRoutes);
