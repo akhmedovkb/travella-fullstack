@@ -156,3 +156,16 @@ test("approval broadcast cards show meals once for both audiences and omit missi
     }
   }
 });
+
+
+test("inline list cards have exactly one publish action for admins and none for other viewers", () => {
+  for (const category of ['refused_tour','refused_hotel','refused_flight','refused_ticket','author_tour']) {
+    for (const role of ['admin','provider','client']) {
+      const card = buildServiceMessage({id:42,title:'TEST',category,details:{}}, category, role, {forceRefused:true});
+      const buttons = (card.kbExtra?.inline_keyboard || []).flat();
+      assert.equal(buttons.filter(button => button.callback_data === 'publish_public:42').length, role === 'admin' ? 1 : 0, category + ':' + role);
+      const actions = buttons.map(button => button.callback_data || button.url);
+      assert.equal(new Set(actions).size, actions.length, category + ':' + role);
+    }
+  }
+});

@@ -1411,7 +1411,6 @@ const priceKind =
     rows.push(...extraRows);
     rows.push([{ text: "🌐 Открыть на сайте", url: serviceUrl }]);
     rows.push(...adminRows);
-    if (r === "admin") rows.push([{ text: "📢 Опубликовать в канал", callback_data: `publish_public:${serviceId}` }]);
     return { inline_keyboard: rows, replaceDefault: true };
   };
 
