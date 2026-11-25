@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { copy, metadata, headTags, structuredData, languagePath, servicePath, serviceFacts, priceText, staticPages } from '../../../shared/seo';
+import { copy, metadata, headTags, structuredData, languagePath, servicePath, serviceFacts, priceText, staticPages, publicShell } from '../../../shared/seo';
 
 function applyHead(meta, lang, path, item = null) {
   document.title = meta.title;
@@ -21,7 +21,7 @@ export function SeoHead() {
   useEffect(() => {
     if (/^\/services\/\d+/.test(location.pathname)) return;
     const meta = metadata(location.pathname, lang);
-    meta.indexable = meta.indexable && staticPages.includes(location.pathname) && ![...new URLSearchParams(location.search).keys()].some(key => !/^utm_|^(gclid|fbclid)$/.test(key));
+    meta.indexable = meta.indexable && (staticPages.includes(location.pathname) || publicShell(location.pathname)) && ![...new URLSearchParams(location.search).keys()].some(key => !/^utm_|^(gclid|fbclid)$/.test(key));
     if (!meta.indexable) meta.languages = [];
     applyHead(meta, lang, location.pathname);
   }, [location.pathname, location.search, lang]);
@@ -34,9 +34,12 @@ export function SeoNotFound() {
 export default function ServiceDetails() {
   const { idSlug } = useParams(); const id = Number(idSlug.split('-')[0]);
   const { i18n } = useTranslation(); const lang = String(i18n.resolvedLanguage || 'ru').split('-')[0]; const c = copy[lang];
-  const [state, setState] = useState({ loading: true });
+  const [state, setState] = useState(() => {
+    try { const item = JSON.parse(document.getElementById('travella-seo-data')?.textContent || '{}').service; if (item?.id === id) return { item }; } catch { /* Fall back to the public endpoint. */ }
+    return { loading: true };
+  });
   useEffect(() => {
-    const controller = new AbortController(); setState({ loading: true });
+    const controller = new AbortController(); setState(current => current.item?.id === id ? current : { loading: true });
     fetch('/api/seo/services/' + id, { signal: controller.signal }).then(async response => {
       if (!response.ok) throw Object.assign(new Error('unavailable'), { status: response.status });
       return response.json();

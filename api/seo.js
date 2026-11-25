@@ -1,6 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import {SITE,LANGUAGES,copy,staticPages,languagePath,localized,servicePath,metadata,headTags,structuredData,renderBody,esc,json} from '../shared/seo.js';
+import {SITE,LANGUAGES,copy,staticPages,publicShell,languagePath,localized,servicePath,metadata,headTags,structuredData,renderBody,esc,json} from '../shared/seo.js';
 import spaRoutes from '../shared/spaRoutes.json' with {type:'json'};
 let template;
 function htmlTemplate(){if(template)return template;for(const file of ['frontend/dist/index.html','dist/index.html']){try{template=fs.readFileSync(path.join(process.cwd(),file),'utf8');return template;}catch{}}throw Error('SEO_TEMPLATE_MISSING');}
@@ -58,6 +58,7 @@ export default async function handler(req,res){
    const items=(list?.items||[]).filter(s=>page!=='/hotels'||s.category==='refused_hotel');
    return sendHtml(res,{lang,page,items,indexable:![...params.keys()].some(k=>!/^utm_|^(gclid|fbclid)$/.test(k))});
   }
+  if(publicShell(page)){if(!parsed.prefix)return redirect(res,localized(page,lang)+suffix);return sendHtml(res,{lang,page,indexable:!params.size});}
   if(knownSpa(page))return sendHtml(res,{lang,page,indexable:false,canonical:SITE+requested});
   return sendHtml(res,{status:404,lang,indexable:false,error:'notFound'});
  }catch(e){console.error('[seo-page]',e.message);return sendHtml(res,{status:503,lang:languagePath(requested).language,indexable:false,error:'unavailable'});}
