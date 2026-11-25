@@ -140,3 +140,19 @@ test('a destination-only tour title is not repeated above its location',()=>{
  const prefixed=buildServiceMessage({...service,title:'Отказной тур Фукуок'},service.category,'client').text;assert.equal(prefixed.split('Фукуок').length-1,1);
  const named=buildServiceMessage({...service,title:'Особый тур на Фукуок'},service.category,'client').text;assert.match(named,/Особый тур/);
 });
+
+
+test("approval broadcast cards show meals once for both audiences and omit missing values", () => {
+  for (const category of ['refused_tour', 'refused_hotel']) {
+    for (const role of ['provider', 'client']) {
+      for (const field of ['food', 'meal', 'mealType']) {
+        const service = {id:42, title:'TEST', category, details:{[field]:'AI', grossPrice:3100}};
+        const text = buildServiceMessage(service, category, role, {publicSafe:role==='client'}).text;
+        assert.match(text.replace(/<[^>]+>/g, ''), /Питание: AI \(всё включено\)/);
+        assert.equal((text.replace(/<[^>]+>/g, '').match(/Питание:/g) || []).length, 1);
+      }
+      const text = buildServiceMessage({id:42,title:'TEST',category,details:{}}, category, role).text;
+      assert.ok(!text.includes('Питание:'));
+    }
+  }
+});

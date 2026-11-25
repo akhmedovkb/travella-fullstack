@@ -2160,6 +2160,10 @@ const priceKind =
   if (dates) parts.push(`🗓 ${escapeHtml(dates)}${nights ? ` (${nights} ноч.)` : ""}`);
   if (hotel) parts.push(`🏨 ${escapeHtml(hotel)}`);
   if (accommodation) parts.push(`🛏 ${escapeHtml(accommodationLabel(accommodation))}`);
+  const meal = shortMealLabel(d.food || d.meal || d.mealType || svc.food);
+  if (meal && ["refused_tour", "refused_hotel"].includes(catNorm)) {
+    parts.push(`🍽 <b>Питание:</b> ${escapeHtml(meal)}`);
+  }
 
   if (priceWithCur != null && String(priceWithCur).trim()) {
     const kind = privatePriceView ? "цена для коллег" : "цена для туристов";
