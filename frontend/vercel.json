@@ -53,7 +53,7 @@
   ],
   "functions": {
     "api/seo.js": {
-      "includeFiles": "{frontend/dist/index.html,dist/index.html}",
+      "includeFiles": "dist/index.html",
       "maxDuration": 30
     }
   }
