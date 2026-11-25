@@ -9,5 +9,12 @@ export function createTravellaSso(pool,env=process.env){
  const cookieKeys=JSON.parse(env.TRAVELLA_SSO_COOKIE_KEYS||'[]');const jwks=JSON.parse(env.TRAVELLA_SSO_SIGNING_JWKS||'null');
  if(!env.JWT_SECRET||!env.TRAVELLA_SSO_CLIENT_SECRET||cookieKeys.some(k=>typeof k!=='string'||k.length<32))throw Error('SSO credentials required');
  const service=createTravellaIssuer({issuer,cityCallback,clientId:'travella-city',clientSecret:env.TRAVELLA_SSO_CLIENT_SECRET,cookieKeys,jwks,adapter:postgresOidcAdapter(pool),findIdentity:async sub=>{try{return await loadLegacyIdentity({sub,pool})}catch{return undefined}},authenticateLegacy:args=>resolveLegacyIdentity({...args,pool,jwtSecret:env.JWT_SECRET})});
- service.provider.proxy=true;return service.router;
+ service.provider.proxy=true;
+ return (req,res,next)=>{
+  // Railway terminates TLS and may replace forwarded host. Pin OIDC URLs to the approved public issuer.
+  req.headers.host='travella.uz';
+  req.headers['x-forwarded-host']='travella.uz';
+  req.headers['x-forwarded-proto']='https';
+  return service.router(req,res,next);
+ };
 }
