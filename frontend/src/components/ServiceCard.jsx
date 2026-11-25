@@ -1,3 +1,4 @@
+import { localized, servicePath } from "../../../shared/seo";
 import { CompanionSummary } from "./Companion";
 import { GalaDinnerSummary } from "./GalaDinner";
 // frontend/src/components/ServiceCard.jsx
@@ -941,7 +942,7 @@ export default function ServiceCard({
   now = Date.now(),
   className = "",
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const navigate = useNavigate();
 
   const {
@@ -1954,9 +1955,9 @@ return (
           <div className="space-y-3">
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0 flex-1">
-                <div className="text-[15px] sm:text-[16px] font-black leading-snug text-gray-950 line-clamp-2 tracking-[-0.01em]">
-                  {title}
-                </div>
+                <h2 className="text-[15px] sm:text-[16px] font-black leading-snug text-gray-950 line-clamp-2 tracking-[-0.01em]">
+                  <a href={localized(servicePath({id, title: svc.title || title}), String(i18n.resolvedLanguage || 'ru').split('-')[0])} onClick={event => event.stopPropagation()} className="hover:text-orange-600 focus-visible:underline">{title}</a>
+                </h2>
 
                 {(placeText || dates) && (
                   <div className="mt-2.5 space-y-1.5">
