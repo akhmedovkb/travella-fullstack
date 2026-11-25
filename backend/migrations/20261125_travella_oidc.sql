@@ -1,0 +1,1 @@
+CREATE TABLE IF NOT EXISTS travella_oidc_records (model TEXT NOT NULL,id TEXT NOT NULL,data JSONB NOT NULL,expires_at TIMESTAMPTZ NOT NULL,PRIMARY KEY(model,id)); CREATE INDEX IF NOT EXISTS travella_oidc_expiry ON travella_oidc_records(expires_at); CREATE INDEX IF NOT EXISTS travella_oidc_grants ON travella_oidc_records((data->>'grantId'));

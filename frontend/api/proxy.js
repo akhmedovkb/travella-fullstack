@@ -46,6 +46,11 @@ export default async function handler(req, res) {
     headers[key] = Array.isArray(value) ? value.join(", ") : value;
   }
 
+  const isSso = path === 'sso' || path.startsWith('sso/');
+  if (isSso) {
+    headers['x-forwarded-host'] = 'travella.uz';
+    headers['x-forwarded-proto'] = 'https';
+  }
   const hasBody = !["GET", "HEAD"].includes(req.method || "GET");
   const upstream = await fetch(target, {
     method: req.method,
@@ -56,11 +61,18 @@ export default async function handler(req, res) {
 
   res.status(upstream.status);
   upstream.headers.forEach((value, key) => {
-    if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase())) {
+    if (!HOP_BY_HOP_HEADERS.has(key.toLowerCase()) && !(isSso && key.toLowerCase() === 'set-cookie')) {
       res.setHeader(key, value);
     }
   });
 
+  if (isSso) {
+    const cookies = upstream.headers.getSetCookie();
+    if (cookies.length) res.setHeader('Set-Cookie', cookies);
+    res.setHeader('Cache-Control', 'no-store');
+    res.setHeader('Referrer-Policy', 'no-referrer');
+  }
   const body = Buffer.from(await upstream.arrayBuffer());
   res.send(body);
 }
+

@@ -82,6 +82,7 @@ class AppErrorBoundary extends React.Component {
     );
   }
 }
+const SsoAuthorize = lazy(() => import("./pages/SsoAuthorize"));
 const Register = lazy(() => import("./pages/Register"));
 const Login = lazy(() => import("./pages/Login"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
@@ -282,6 +283,7 @@ export default function App() {
             <Route path="/contacts" element={<Navigate to="/india/contacts" replace />} />
 
             {/* Поставщик */}
+            <Route path="/sso/authorize" element={<SsoAuthorize />} />
             <Route path="/register" element={<Register />} />
             <Route path="/login" element={<Login />} />
             <Route
@@ -804,3 +806,4 @@ export default function App() {
     </AppErrorBoundary>
   );
 }
+

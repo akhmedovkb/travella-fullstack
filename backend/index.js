@@ -148,9 +148,14 @@ app.options("*", cors(corsOptions));
 /** ===================== /CORS ===================== */
 
 /** ===================== Body ===================== */
+// OIDC must receive its raw token request stream before the application's body parsers.
+let optionalSsoRouter;
+app.use('/api/sso', (req, res, next) => optionalSsoRouter ? optionalSsoRouter(req, res, next) : next());
 app.use(express.json({ limit: "10mb" }));
 app.use(express.urlencoded({ extended: true }));
-app.use(activityAuditMiddleware());
+const activityAudit = activityAuditMiddleware();
+// OIDC request queries may contain one-time codes; keep them out of generic activity logs.
+app.use((req, res, next) => req.path.startsWith('/api/sso/') ? next() : activityAudit(req, res, next));
 
 // ✅ static для /api (в т.ч. /api/telegram/placeholder/*.png если нужно отдавать файлы из public)
 app.use("/api", express.static(path.join(__dirname, "public")));
@@ -1058,11 +1063,24 @@ app.use("/api", activityEventsRoutes);
 
 /** ===================== Start (в самом конце) ===================== */
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
-  console.log("[CORS] allowed:", Array.from(WHITELIST));
-  console.log(`🚀 Сервер запущен на порту ${PORT}`);
+async function startWithOptionalSso() {
+  if (process.env.TRAVELLA_SSO_ENABLED === '1') {
+    const { createTravellaSso } = await import('./sso/mount.mjs');
+    const { migrationSQL } = await import('./sso/postgres-adapter.mjs');
+    await pool.query(migrationSQL);
+    optionalSsoRouter = createTravellaSso(pool);
+  }
+  app.listen(PORT, () => {
+    console.log("[CORS] allowed:", Array.from(WHITELIST));
+    console.log(`🚀 Сервер запущен на порту ${PORT}`);
+  });
+}
+startWithOptionalSso().catch(() => {
+  console.error('SSO startup configuration rejected');
+  process.exit(1);
 });
 
 /** ===================== UTILS ===================== */
 app.use("/api/passport", passportRoutes);
 app.use("/api/service-stats", serviceStatsRoutes);
+
