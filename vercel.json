@@ -12,13 +12,20 @@
         }
       ],
       "headers": {
-        "Location": "/india/inside"
+        "Location": "https://travella.uz/ru/india/inside"
       },
-      "status": 307
+      "status": 308
+    },
+    {
+      "src": "^/api/seo(?:\\.js)?$",
+      "dest": "/api/seo.js"
     },
     {
       "src": "/api/(.*)",
-      "dest": "/api/proxy.js?path=$1"
+      "dest": "/api/proxy.js?path=$1",
+      "headers": {
+        "X-Robots-Tag": "noindex"
+      }
     },
     {
       "src": "/assets/(.*)",
@@ -28,14 +35,28 @@
       }
     },
     {
+      "src": "/",
+      "dest": "/api/seo.js?path=/"
+    },
+    {
+      "src": "/index.html",
+      "headers": {
+        "Location": "/ru"
+      },
+      "status": 308
+    },
+    {
       "handle": "filesystem"
     },
     {
       "src": "/(.*)",
-      "dest": "/index.html",
-      "headers": {
-        "Cache-Control": "public, max-age=0, must-revalidate"
-      }
+      "dest": "/api/seo.js?path=/$1"
     }
-  ]
+  ],
+  "functions": {
+    "api/seo.js": {
+      "includeFiles": "{frontend/dist/index.html,dist/index.html}",
+      "maxDuration": 30
+    }
+  }
 }

@@ -9,6 +9,8 @@ const LanguageSelector = () => {
     .split("-")[0];
 
   const changeLanguage = (lng) => {
+    const match = window.location.pathname.match(/^\/(ru|uz|en)(?=\/|$)/);
+    if (match) { window.location.assign("/" + lng + window.location.pathname.slice(match[0].length) + window.location.search + window.location.hash); return; }
     i18n.changeLanguage(lng);
     localStorage.setItem("lng", lng); // сохраняем выбор языка
   };

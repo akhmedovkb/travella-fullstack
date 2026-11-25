@@ -1,6 +1,8 @@
 //frontend/src/App.jsx
 
 import React from "react";
+import ServiceDetails, { SeoHead, SeoNotFound } from "./pages/ServiceDetails";
+import { languagePath } from "../../shared/seo";
 import { useTranslation } from "react-i18next";
 import i18n from "./i18n";
 import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from "react-router-dom";
@@ -220,7 +222,8 @@ export default function App() {
 
   return (
     <AppErrorBoundary>
-    <Router>
+    <Router basename={languagePath(window.location.pathname).prefix || "/"}>
+      <SeoHead />
       <ToastMount />
       <div className="min-h-screen bg-gray-100 flex flex-col">
         <Header />
@@ -784,7 +787,8 @@ export default function App() {
             <Route path="/public/donas/investor" element={<DonasInvestor />} />
 
             {/* Fallback — всегда последним */}
-            <Route path="*" element={<Navigate to="/" replace />} />
+            <Route path="/services/:idSlug" element={<ServiceDetails />} />
+            <Route path="*" element={<SeoNotFound />} />
 
           </Routes>
           </React.Suspense>

@@ -17,6 +17,7 @@ i18n
       uz: { translation: uz },
     },
     fallbackLng: "ru",
+    lng: window.location.pathname.match(/^\/(ru|uz|en)(?:\/|$)/)?.[1],
     supportedLngs: ["ru", "uz", "en"],
     load: "languageOnly",
     detection: {
