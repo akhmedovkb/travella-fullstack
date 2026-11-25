@@ -21,7 +21,7 @@ export function SeoHead() {
   useEffect(() => {
     if (/^\/services\/\d+/.test(location.pathname)) return;
     const meta = metadata(location.pathname, lang);
-    meta.indexable = meta.indexable && staticPages.includes(location.pathname) && !location.search;
+    meta.indexable = meta.indexable && staticPages.includes(location.pathname) && ![...new URLSearchParams(location.search).keys()].some(key => !/^utm_|^(gclid|fbclid)$/.test(key));
     if (!meta.indexable) meta.languages = [];
     applyHead(meta, lang, location.pathname);
   }, [location.pathname, location.search, lang]);
