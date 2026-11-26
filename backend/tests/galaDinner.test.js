@@ -100,7 +100,7 @@ test('Telegram stale fields, foreign services and groups cannot write gala dinne
 
 test('Telegram cards omit unspecified or unknown gala terms and keep explicit supplier terms',()=>{
  for(const category of ['refused_tour','refused_hotel']){
-  for(const galaDinner of [undefined,{status:'unknown'}]){
+  for(const galaDinner of [undefined,{status:'unknown'},{status:'none'}]){
    const card=buildServiceMessage({id:42,title:'TEST',category,details:{galaDinner}},category,'provider');
    assert.doesNotMatch(card.text,/Гала-ужин|Нужно уточнить/);
   }

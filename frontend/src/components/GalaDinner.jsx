@@ -56,9 +56,9 @@ export function GalaDinnerEditor({ category, value, onChange }) {
 }
 export function GalaDinnerSummary({ category, value }) {
   const { i18n } = useTranslation();
-  if (!supported(category)) return null;
+  if (!supported(category) || !['included', 'mandatory', 'optional'].includes(value?.status)) return null;
   const text = COPY[i18n.language?.slice(0, 2)] || COPY.ru;
-  const gala = value || { status: 'unknown' };
+  const gala = value;
   const paid = ['mandatory', 'optional'].includes(gala.status);
   return <section aria-label={text.title} className="min-w-0 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-slate-900">
     <strong>🎉 {text.title}{gala.date ? ` · ${String(gala.date).split('-').reverse().join('.')}` : ''}</strong>
