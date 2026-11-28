@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import axios from "axios";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useTranslation } from "react-i18next";
 import { Eye, EyeOff } from "lucide-react";
 
@@ -16,6 +16,9 @@ const Login = () => {
   const [showTelegramLogin, setShowTelegramLogin] = useState(false);
 
   const navigate = useNavigate();
+  const location = useLocation();
+  const rawRedirect = new URLSearchParams(location.search).get("redirect") || "";
+  const safeRedirect = /^\/sso\/authorize\?uid=[a-zA-Z0-9_-]{8,200}&account=provider$/.test(rawRedirect) ? rawRedirect : "/dashboard";
 
   const providerBotUsername = useMemo(() => {
     return String(import.meta.env.VITE_TELEGRAM_PROVIDER_BOT_USERNAME || "")
@@ -35,7 +38,7 @@ const Login = () => {
 
         if (response.data?.token) {
           localStorage.setItem("token", response.data.token);
-          navigate("/dashboard");
+          navigate(safeRedirect, { replace: true });
           return;
         }
 
@@ -58,7 +61,7 @@ const Login = () => {
     return () => {
       delete window.onTelegramProviderLogin;
     };
-  }, [navigate, t]);
+  }, [navigate, t, safeRedirect]);
 
   useEffect(() => {
     if (!showTelegramLogin) return;
@@ -108,7 +111,7 @@ const Login = () => {
       );
 
       localStorage.setItem("token", response.data.token);
-      navigate("/dashboard");
+      navigate(safeRedirect, { replace: true });
     } catch (err) {
       setError(t("login.error"));
     }
