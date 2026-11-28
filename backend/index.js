@@ -1015,6 +1015,7 @@ const adminJobsRoutes = require("./routes/adminJobsRoutes");
 app.use("/api/admin", adminJobsRoutes);
 
 /** ===================== Donas Dosas ===================== */
+app.use("/api/admin/donas/knowledge", require("./routes/adminDonasKnowledgeRoutes"));
 app.use("/api/admin/donas", adminDonasShiftRoutes);
 app.use("/api/admin/donas", adminDonasPurchasesRoutes);
 app.use("/api/admin/donas", adminDonasRecipeRoutes);

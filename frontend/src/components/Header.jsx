@@ -820,6 +820,8 @@ export default function Header() {
 
                     {donasOpen && (
                       <div className="bg-black/20">
+                        <DropdownItem to="/admin/donas-dosas/business-concept" label="Business Concept" icon={<IconDoc />} />
+                        <DropdownItem to="/admin/donas-dosas/product-bible" label="Product Bible" icon={<IconDoc />} />
                         <DropdownItem to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
                         <DropdownItem to="/admin/donas-dosas/inventory" label="Inventory" icon={<IconDoc />} />
                         <DropdownItem to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />
@@ -969,6 +971,8 @@ export default function Header() {
 
                 {donasMobileOpen && (
                   <div className="bg-black/20">
+                    <NavItemMobileDark to="/admin/donas-dosas/business-concept" label="Business Concept" icon={<IconDoc />} />
+                    <NavItemMobileDark to="/admin/donas-dosas/product-bible" label="Product Bible" icon={<IconDoc />} />
                     <NavItemMobileDark to="/admin/donas-dosas/finance" label="Finance" icon={<IconDoc />} />
                     <NavItemMobileDark to="/admin/donas-dosas/inventory" label="Inventory" icon={<IconDoc />} />
                     <NavItemMobileDark to="/admin/donas-dosas/menu" label="Menu" icon={<IconDoc />} />

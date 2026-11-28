@@ -104,6 +104,7 @@ const AdminRefusedActual = lazy(() => import("./pages/admin/AdminRefusedActual")
 const IndiaInside = lazy(() => import("./pages/landing/IndiaInside"));
 const AdminBroadcast = lazy(() => import("./pages/admin/AdminBroadcast"));
 const AdminTelegramSupport = lazy(() => import("./pages/admin/AdminTelegramSupport"));
+const DonasKnowledge = lazy(() => import("./pages/admin/DonasKnowledge"));
 const DonasInvestor = lazy(() => import("./pages/admin/DonasInvestor"));
 const DonasMenuItems = lazy(() => import("./pages/admin/DonasMenuItems"));
 const DonasIngredients = lazy(() => import("./pages/admin/DonasIngredients"));
@@ -692,6 +693,8 @@ export default function App() {
               }
             />            
             <Route path="/admin/telegram-support" element={<PrivateRoute><AdminRoute><AdminTelegramSupport /></AdminRoute></PrivateRoute>} />
+            <Route path="/admin/donas-dosas/business-concept" element={<PrivateRoute><AdminRoute><DonasKnowledge key="business-concept" kind="business-concept" /></AdminRoute></PrivateRoute>} />
+            <Route path="/admin/donas-dosas/product-bible" element={<PrivateRoute><AdminRoute><DonasKnowledge key="product-bible" kind="product-bible" /></AdminRoute></PrivateRoute>} />
             <Route
                 path="/admin/donas-dosas/inventory"
                 element={
